@@ -1,6 +1,5 @@
 import { app, BrowserWindow, shell } from 'electron'
 import { join } from 'path'
-import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { registerIPCHandlers } from './ipc/index'
 import { ircManager } from './irc/manager'
 import { initDatabase, closeDatabase, saveDatabase } from './storage/database'
@@ -39,7 +38,7 @@ function createWindow(): void {
   ircManager.setMainWindow(mainWindow)
 
   // Load the renderer
-  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+  if (!app.isPackaged && process.env['ELECTRON_RENDERER_URL']) {
     mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
   } else {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
