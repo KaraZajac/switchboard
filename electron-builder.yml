@@ -1,0 +1,37 @@
+appId: com.switchboard.irc
+productName: Switchboard
+directories:
+  buildResources: resources
+  output: dist
+files:
+  - '!**/.vscode/*'
+  - '!src/*'
+  - '!electron.vite.config.*'
+  - '!{.eslintrc,.prettierrc,tsconfig.*}'
+  - '!{PLAN,README}.md'
+asarUnpack:
+  - resources/**
+  - node_modules/sql.js/dist/**
+mac:
+  target:
+    - target: dmg
+      arch:
+        - x64
+        - arm64
+  category: public.app-category.social-networking
+linux:
+  target:
+    - AppImage
+    - deb
+    - rpm
+  maintainer: switchboard-irc
+  category: Network;Chat;IRCClient
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true

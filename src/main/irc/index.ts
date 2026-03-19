@@ -1,0 +1,6 @@
+export { IRCClient } from './client'
+export { IRCConnection } from './connection'
+export { ConnectionState } from './state'
+export { parseMessage } from './parser'
+export { serializeMessage, cmd } from './serializer'
+export type { ClientEvents } from './client'
