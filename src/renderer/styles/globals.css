@@ -1,19 +1,21 @@
 @import 'tailwindcss';
 
+:root {
+  --chat-font-size: 14px;
+}
+
 /* ── Light theme overrides ──────────────────────────────────────── */
 [data-theme='light'] {
-  --tw-bg-gray-950: #f2f3f5;
-  --tw-bg-gray-900: #ffffff;
-  --tw-bg-gray-800: #f2f3f5;
-  --tw-bg-gray-700: #e3e5e8;
-  --tw-bg-gray-600: #d4d7dc;
-  --tw-text-gray-100: #2e3338;
-  --tw-text-gray-200: #4f5660;
-  --tw-text-gray-300: #6a7480;
-  --tw-text-gray-400: #96a0aa;
-  --tw-text-gray-500: #b9bbbe;
-  --tw-border-gray-900: #e3e5e8;
-  --tw-border-gray-700: #d4d7dc;
+  --color-gray-950: #e8eaed;
+  --color-gray-900: #f2f3f5;
+  --color-gray-800: #ffffff;
+  --color-gray-700: #e3e5e8;
+  --color-gray-600: #d4d7dc;
+  --color-gray-500: #b9bbbe;
+  --color-gray-400: #96a0aa;
+  --color-gray-300: #6a7480;
+  --color-gray-200: #4f5660;
+  --color-gray-100: #2e3338;
 }
 
 /* Custom scrollbar styling */
@@ -40,6 +42,11 @@
 
 [data-theme='light'] ::-webkit-scrollbar-thumb:hover {
   background: #b9bbbe;
+}
+
+/* Chat font size (controlled by settings) */
+.chat-messages {
+  font-size: var(--chat-font-size);
 }
 
 /* Prevent text selection on UI elements */

@@ -32,6 +32,13 @@ export interface MainToRendererEvents {
   'irc:read-marker': { serverId: string; channel: string; timestamp: string }
   'irc:cap': { serverId: string; capabilities: string[] }
   'irc:raw': { serverId: string; direction: 'in' | 'out'; line: string }
+  'irc:account-registered': { serverId: string; account: string; message: string }
+  'irc:channel-rename': { serverId: string; oldName: string; newName: string; reason: string | null }
+  'irc:chathistory': { serverId: string; channel: string; messages: ChatMessage[] }
+  'irc:netsplit': { serverId: string; server1: string; server2: string; nicks: string[] }
+  'irc:netjoin': { serverId: string; server1: string; server2: string; nicks: string[] }
+  'menu:add-server': Record<string, never>
+  'menu:settings': Record<string, never>
 }
 
 // ── Renderer → Main invocations ─────────────────────────────────────
@@ -46,15 +53,23 @@ export interface RendererToMainInvocations {
   'channel:join': (serverId: string, channel: string, key?: string) => Promise<void>
   'channel:part': (serverId: string, channel: string) => Promise<void>
   'channel:topic': (serverId: string, channel: string, topic: string) => Promise<void>
+  'channel:list': (serverId: string) => Promise<{ name: string; userCount: number; topic: string }[]>
   'message:send': (serverId: string, channel: string, text: string) => Promise<void>
   'message:reply': (serverId: string, channel: string, text: string, replyTo: string) => Promise<void>
   'message:react': (serverId: string, channel: string, msgid: string, emoji: string) => Promise<void>
   'message:redact': (serverId: string, channel: string, msgid: string, reason?: string) => Promise<void>
   'message:typing': (serverId: string, channel: string) => Promise<void>
+  'message:search': (serverId: string, query: string, channel?: string) => Promise<ChatMessage[]>
   'user:whois': (serverId: string, nick: string) => Promise<Record<string, string>>
   'user:kick': (serverId: string, channel: string, nick: string, reason?: string) => Promise<void>
+  'account:register': (serverId: string, email: string | null, password: string) => Promise<boolean>
   'history:fetch': (serverId: string, channel: string, before?: string, limit?: number) => Promise<ChatMessage[]>
+  'chathistory:request': (serverId: string, channel: string, before?: string, limit?: number) => Promise<void>
+  'notification:send': (title: string, body: string) => Promise<void>
+  'tray:set-badge': (count: number) => Promise<void>
   'settings:get': (key: string) => Promise<unknown>
   'settings:set': (key: string, value: unknown) => Promise<void>
   'read-marker:set': (serverId: string, channel: string, timestamp: string) => Promise<void>
+  'read-marker:get': (serverId: string, channel: string) => Promise<string | null>
+  'read-marker:get-all': (serverId: string) => Promise<Record<string, string>>
 }

@@ -15,6 +15,8 @@ interface ChannelState {
   channels: Record<string, ChannelInfo[]>
   /** Currently active channel per server: serverId -> channelName */
   activeChannel: Record<string, string>
+  /** Read marker timestamps: `serverId:channel` -> ISO timestamp */
+  readMarkers: Record<string, string>
 
   // Actions
   addChannel: (serverId: string, name: string) => void
@@ -23,12 +25,17 @@ interface ChannelState {
   setTopic: (serverId: string, name: string, topic: string, setBy: string | null) => void
   incrementUnread: (serverId: string, name: string, mention?: boolean) => void
   clearUnread: (serverId: string, name: string) => void
+  toggleMute: (serverId: string, name: string) => void
+  renameChannel: (serverId: string, oldName: string, newName: string) => void
+  setReadMarker: (serverId: string, channel: string, timestamp: string) => void
+  setReadMarkers: (serverId: string, markers: Record<string, string>) => void
   clearServerChannels: (serverId: string) => void
 }
 
 export const useChannelStore = create<ChannelState>((set) => ({
   channels: {},
   activeChannel: {},
+  readMarkers: {},
 
   addChannel: (serverId, name) =>
     set((state) => {
@@ -117,6 +124,49 @@ export const useChannelStore = create<ChannelState>((set) => ({
         [serverId]: (state.channels[serverId] || []).map((ch) =>
           ch.name.toLowerCase() === name.toLowerCase()
             ? { ...ch, unreadCount: 0, mentionCount: 0 }
+            : ch
+        )
+      }
+    })),
+
+  renameChannel: (serverId, oldName, newName) =>
+    set((state) => {
+      const channels = (state.channels[serverId] || []).map((ch) =>
+        ch.name.toLowerCase() === oldName.toLowerCase()
+          ? { ...ch, name: newName }
+          : ch
+      )
+      const active = state.activeChannel[serverId]
+      return {
+        channels: { ...state.channels, [serverId]: channels },
+        activeChannel: {
+          ...state.activeChannel,
+          [serverId]: active?.toLowerCase() === oldName.toLowerCase() ? newName : active || ''
+        }
+      }
+    }),
+
+  setReadMarker: (serverId, channel, timestamp) =>
+    set((state) => ({
+      readMarkers: { ...state.readMarkers, [`${serverId}:${channel}`]: timestamp }
+    })),
+
+  setReadMarkers: (serverId, markers) =>
+    set((state) => {
+      const updated = { ...state.readMarkers }
+      for (const [channel, timestamp] of Object.entries(markers)) {
+        updated[`${serverId}:${channel}`] = timestamp
+      }
+      return { readMarkers: updated }
+    }),
+
+  toggleMute: (serverId, name) =>
+    set((state) => ({
+      channels: {
+        ...state.channels,
+        [serverId]: (state.channels[serverId] || []).map((ch) =>
+          ch.name.toLowerCase() === name.toLowerCase()
+            ? { ...ch, muted: !ch.muted }
             : ch
         )
       }

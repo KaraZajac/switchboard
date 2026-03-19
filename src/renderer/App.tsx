@@ -1,7 +1,8 @@
-import { useEffect, Component, type ReactNode } from 'react'
+import { useEffect, useCallback, Component, type ReactNode } from 'react'
 import { AppLayout } from './components/layout/AppLayout'
 import { useIRCEvents } from './hooks/useIRC'
 import { useServerStore } from './stores/serverStore'
+import { useUIStore } from './stores/uiStore'
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
   state: { error: Error | null } = { error: null }
@@ -41,6 +42,30 @@ function AppInner() {
       console.error('Failed to load servers:', err)
     })
   }, [])
+
+  // Global keyboard shortcuts
+  const handleGlobalKeyDown = useCallback((e: KeyboardEvent) => {
+    const isMod = e.metaKey || e.ctrlKey
+
+    if (isMod && e.key === 'k') {
+      e.preventDefault()
+      useUIStore.getState().openModal('quick-switcher')
+    } else if (isMod && e.key === 'f') {
+      e.preventDefault()
+      useUIStore.getState().openModal('search')
+    } else if (isMod && e.key === ',') {
+      e.preventDefault()
+      useUIStore.getState().openModal('settings')
+    } else if (isMod && e.key === 'n') {
+      e.preventDefault()
+      useUIStore.getState().openModal('add-server')
+    }
+  }, [])
+
+  useEffect(() => {
+    window.addEventListener('keydown', handleGlobalKeyDown)
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown)
+  }, [handleGlobalKeyDown])
 
   return <AppLayout />
 }

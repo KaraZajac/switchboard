@@ -113,6 +113,20 @@ function processBatch(client: { events: { emit: (event: string, ...args: unknown
       })
       break
 
+    case 'draft/multiline': {
+      // Concatenate all PRIVMSG content into a single message
+      const target = batch.params[0] || ''
+      const multilineMessages = batch.messages.filter((m) => m.command === 'PRIVMSG')
+      if (multilineMessages.length > 0) {
+        const combinedContent = multilineMessages.map((m) => m.params[1] || '').join('\n')
+        // Create a synthetic message with combined content
+        const first = multilineMessages[0]
+        const syntheticMsg = { ...first, params: [target, combinedContent] }
+        dispatchMessage(client, syntheticMsg)
+      }
+      break
+    }
+
     case 'labeled-response':
       // Labeled response — process contained messages normally
       // The label tag on individual messages correlates request/response

@@ -1,11 +1,19 @@
 import { create } from 'zustand'
 import type { ChatMessage } from '@shared/types/message'
 
+export interface ReplyTarget {
+  id: string
+  nick: string
+  content: string
+}
+
 interface MessageState {
   /** Messages per channel: `${serverId}:${channel}` -> messages */
   messages: Record<string, ChatMessage[]>
   /** Typing indicators: `${serverId}:${channel}` -> nick[] */
   typing: Record<string, string[]>
+  /** Active reply target per channel */
+  replyTarget: Record<string, ReplyTarget | null>
 
   // Actions
   addMessage: (serverId: string, channel: string, message: ChatMessage) => void
@@ -15,15 +23,18 @@ interface MessageState {
   removeMessage: (serverId: string, channel: string, msgid: string) => void
   setTyping: (serverId: string, channel: string, nick: string, active: boolean) => void
   clearTyping: (serverId: string, channel: string) => void
+  setReplyTarget: (serverId: string, channel: string, target: ReplyTarget | null) => void
+  getMessageById: (serverId: string, channel: string, msgid: string) => ChatMessage | undefined
 }
 
 function channelKey(serverId: string, channel: string): string {
   return `${serverId}:${channel}`
 }
 
-export const useMessageStore = create<MessageState>((set) => ({
+export const useMessageStore = create<MessageState>((set, get) => ({
   messages: {},
   typing: {},
+  replyTarget: {},
 
   addMessage: (serverId, channel, message) =>
     set((state) => {
@@ -104,5 +115,15 @@ export const useMessageStore = create<MessageState>((set) => ({
   clearTyping: (serverId, channel) =>
     set((state) => ({
       typing: { ...state.typing, [channelKey(serverId, channel)]: [] }
-    }))
+    })),
+
+  setReplyTarget: (serverId, channel, target) =>
+    set((state) => ({
+      replyTarget: { ...state.replyTarget, [channelKey(serverId, channel)]: target }
+    })),
+
+  getMessageById: (serverId, channel, msgid) => {
+    const key = channelKey(serverId, channel)
+    return (get().messages[key] || []).find((m) => m.id === msgid)
+  }
 }))

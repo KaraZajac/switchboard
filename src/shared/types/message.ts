@@ -1,5 +1,5 @@
 /** Message types */
-export type MessageType = 'privmsg' | 'notice' | 'action' | 'system' | 'tagmsg'
+export type MessageType = 'privmsg' | 'notice' | 'action' | 'system' | 'tagmsg' | 'motd'
 
 /** A chat message */
 export interface ChatMessage {
@@ -18,4 +18,6 @@ export interface ChatMessage {
   pending: boolean
   /** Reactions grouped by emoji */
   reactions: Record<string, string[]>
+  /** Channel context for PMs (draft/channel-context) */
+  channelContext: string | null
 }

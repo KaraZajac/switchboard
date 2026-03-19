@@ -3,27 +3,28 @@ import { parseMessageContent, isImageUrl, type MessageSegment } from '../../util
 
 interface MessageContentProps {
   text: string
+  highlightNick?: string
 }
 
 /**
  * Renders message text with IRC formatting, URLs, and code blocks.
  */
-export function MessageContent({ text }: MessageContentProps) {
+export function MessageContent({ text, highlightNick }: MessageContentProps) {
   const segments = parseMessageContent(text)
 
   return (
     <span>
       {segments.map((segment, i) => (
-        <Segment key={i} segment={segment} />
+        <Segment key={i} segment={segment} highlightNick={highlightNick} />
       ))}
     </span>
   )
 }
 
-function Segment({ segment }: { segment: MessageSegment }) {
+function Segment({ segment, highlightNick }: { segment: MessageSegment; highlightNick?: string }) {
   switch (segment.type) {
     case 'text':
-      return <FormattedText text={segment.content} />
+      return <FormattedText text={segment.content} highlightNick={highlightNick} />
 
     case 'link':
       return (
@@ -70,12 +71,12 @@ function Segment({ segment }: { segment: MessageSegment }) {
   }
 }
 
-function FormattedText({ text }: { text: string }) {
+function FormattedText({ text, highlightNick }: { text: string; highlightNick?: string }) {
   const spans = parseIRCFormatting(text)
 
-  // If no formatting, just return plain text
+  // If no formatting, just return plain text (with possible highlighting)
   if (spans.length === 1 && !hasFormatting(spans[0])) {
-    return <>{spans[0].text}</>
+    return <>{highlightNick ? highlightMentions(spans[0].text, highlightNick) : spans[0].text}</>
   }
 
   return (
@@ -101,11 +102,27 @@ function FormattedText({ text }: { text: string }) {
 
         return (
           <span key={i} className={classes.join(' ')} style={style}>
-            {span.text}
+            {highlightNick ? highlightMentions(span.text, highlightNick) : span.text}
           </span>
         )
       })}
     </>
+  )
+}
+
+function highlightMentions(text: string, nick: string): React.ReactNode {
+  if (!nick) return text
+  const regex = new RegExp(`(\\b${nick.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b)`, 'gi')
+  const parts = text.split(regex)
+  if (parts.length === 1) return text
+  return parts.map((part, i) =>
+    regex.test(part) ? (
+      <span key={i} className="rounded bg-amber-500/20 px-0.5 font-semibold text-amber-300">
+        {part}
+      </span>
+    ) : (
+      part
+    )
   )
 }
 

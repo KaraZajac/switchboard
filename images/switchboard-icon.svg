@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 680" width="680" height="680" style="--sb-bg:#1a1a2e;--sb-fg:#e8d5b7;">
+  <!-- Background: set --sb-bg and --sb-fg to theme the icon -->
+  <rect x="100" y="100" width="480" height="480" rx="96" fill="var(--sb-bg)"/>
+
+  <!-- Panel body -->
+  <rect x="190" y="210" width="300" height="260" rx="12" fill="none" stroke="var(--sb-fg)" stroke-width="6"/>
+
+  <!-- Top row of jacks -->
+  <circle cx="240" cy="265" r="12" fill="none" stroke="var(--sb-fg)" stroke-width="5"/>
+  <circle cx="295" cy="265" r="12" fill="none" stroke="var(--sb-fg)" stroke-width="5"/>
+  <circle cx="350" cy="265" r="12" fill="none" stroke="var(--sb-fg)" stroke-width="5"/>
+  <circle cx="405" cy="265" r="12" fill="none" stroke="var(--sb-fg)" stroke-width="5"/>
+  <circle cx="440" cy="265" r="12" fill="none" stroke="var(--sb-fg)" stroke-width="5"/>
+
+  <!-- Bottom row of jacks -->
+  <circle cx="240" cy="390" r="12" fill="none" stroke="var(--sb-fg)" stroke-width="5"/>
+  <circle cx="295" cy="390" r="12" fill="none" stroke="var(--sb-fg)" stroke-width="5"/>
+  <circle cx="350" cy="390" r="12" fill="none" stroke="var(--sb-fg)" stroke-width="5"/>
+  <circle cx="405" cy="390" r="12" fill="none" stroke="var(--sb-fg)" stroke-width="5"/>
+  <circle cx="440" cy="390" r="12" fill="none" stroke="var(--sb-fg)" stroke-width="5"/>
+
+  <!-- Patch cables -->
+  <path d="M240 277 C240 330 295 330 295 378" fill="none" stroke="var(--sb-fg)" stroke-width="5" stroke-linecap="round"/>
+  <path d="M295 277 C295 310 405 310 405 378" fill="none" stroke="var(--sb-fg)" stroke-width="5" stroke-linecap="round"/>
+  <path d="M350 277 C350 345 240 345 240 378" fill="none" stroke="var(--sb-fg)" stroke-width="5" stroke-linecap="round"/>
+  <path d="M405 277 C405 305 440 305 440 378" fill="none" stroke="var(--sb-fg)" stroke-width="5" stroke-linecap="round"/>
+
+  <!-- Plugged-in indicators -->
+  <circle cx="240" cy="265" r="5" fill="var(--sb-fg)"/>
+  <circle cx="295" cy="265" r="5" fill="var(--sb-fg)"/>
+  <circle cx="295" cy="390" r="5" fill="var(--sb-fg)"/>
+  <circle cx="405" cy="390" r="5" fill="var(--sb-fg)"/>
+</svg>

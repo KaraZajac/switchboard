@@ -1,6 +1,7 @@
 import { EventEmitter } from 'events'
 import * as net from 'net'
 import * as tls from 'tls'
+import WebSocket from 'ws'
 import type { IRCMessage } from '@shared/types/irc'
 import type { ServerConfig } from '@shared/types/server'
 import { parseMessage } from './parser'
@@ -33,6 +34,8 @@ export declare interface IRCConnection {
 export class IRCConnection extends EventEmitter {
   readonly config: ServerConfig
   private socket: net.Socket | tls.TLSSocket | null = null
+  private ws: WebSocket | null = null
+  private useWebSocket = false
   private buffer = ''
   private _connected = false
   private reconnectAttempts = 0
@@ -63,13 +66,18 @@ export class IRCConnection extends EventEmitter {
    * Connect to the IRC server.
    */
   connect(): void {
-    if (this.socket) {
-      this.cleanup()
-    }
-
+    this.cleanup()
     this.intentionalDisconnect = false
     this.buffer = ''
 
+    // WebSocket transport
+    if (this.config.websocketUrl) {
+      this.useWebSocket = true
+      this.connectWebSocket(this.config.websocketUrl)
+      return
+    }
+
+    this.useWebSocket = false
     const options = {
       host: this.config.host,
       port: this.config.port
@@ -91,8 +99,6 @@ export class IRCConnection extends EventEmitter {
     this.socket.on('connect', () => this.onConnect())
     this.socket.on('secureConnect', () => {
       // For TLS, 'connect' fires first, then 'secureConnect' after handshake.
-      // We handle registration in onConnect which fires on 'connect' for plain
-      // and 'secureConnect' for TLS. So we need to check.
     })
     this.socket.on('data', (data: string) => this.onData(data))
     this.socket.on('error', (err: Error) => this.onError(err))
@@ -105,6 +111,22 @@ export class IRCConnection extends EventEmitter {
         this.onConnect()
       })
     }
+  }
+
+  private connectWebSocket(url: string): void {
+    this.ws = new WebSocket(url, ['irc'], {
+      rejectUnauthorized: true
+    })
+
+    this.ws.on('open', () => this.onConnect())
+
+    this.ws.on('message', (data: WebSocket.Data) => {
+      const str = typeof data === 'string' ? data : data.toString('utf8')
+      this.onData(str + '\r\n')
+    })
+
+    this.ws.on('error', (err: Error) => this.onError(err))
+    this.ws.on('close', () => this.onClose())
   }
 
   /**
@@ -124,12 +146,16 @@ export class IRCConnection extends EventEmitter {
    * Appends \r\n automatically.
    */
   sendRaw(line: string): void {
-    if (!this.socket || this.socket.destroyed) {
-      return
-    }
     // Prevent injection: strip any embedded newlines
     const sanitized = line.replace(/[\r\n]/g, '')
-    this.socket.write(sanitized + '\r\n')
+
+    if (this.useWebSocket) {
+      if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return
+      this.ws.send(sanitized)
+    } else {
+      if (!this.socket || this.socket.destroyed) return
+      this.socket.write(sanitized + '\r\n')
+    }
     this.emit('raw', 'out', sanitized)
   }
 
@@ -266,6 +292,12 @@ export class IRCConnection extends EventEmitter {
   private cleanup(): void {
     this.stopPingTimer()
     this._connected = false
+
+    if (this.ws) {
+      this.ws.removeAllListeners()
+      this.ws.close()
+      this.ws = null
+    }
 
     if (this.socket) {
       this.socket.removeAllListeners()

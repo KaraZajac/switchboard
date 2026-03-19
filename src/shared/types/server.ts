@@ -17,6 +17,8 @@ export interface ServerConfig {
   autoConnect: boolean
   autoJoin: string[]
   sortOrder: number
+  /** WebSocket URL (ws:// or wss://) — if set, connect via WebSocket instead of TCP */
+  websocketUrl: string | null
 }
 
 /** Runtime server state (not persisted) */
