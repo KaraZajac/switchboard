@@ -54,6 +54,12 @@ export class ConnectionState {
   /** Latency from last PING/PONG round-trip (ms) */
   latencyMs: number | null = null
 
+  /** LIST response accumulator */
+  listEntries: { name: string; userCount: number; topic: string }[] = []
+
+  /** Whether a LIST response is being received */
+  listInProgress = false
+
   /** Reset all state for a new connection */
   reset(): void {
     this.registrationState = 'disconnected'
@@ -69,6 +75,8 @@ export class ConnectionState {
     this.motdInProgress = false
     this.whoisData = null
     this.latencyMs = null
+    this.listEntries = []
+    this.listInProgress = false
   }
 
   /** Get or create channel state */

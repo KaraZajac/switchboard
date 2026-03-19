@@ -39,7 +39,9 @@ export const REQUESTED_CAPS = [
   'draft/multiline',
   'draft/message-redaction',
   'draft/channel-rename',
-  'draft/account-registration'
+  'draft/account-registration',
+  '+draft/channel-context',
+  'UTF8ONLY'
 ] as const
 
 /** Tag escaping map per IRCv3 message-tags spec */
@@ -77,3 +79,11 @@ export const TYPING_ACTIVE_TIMEOUT_MS = 6000
 
 /** Typing paused timeout (ms) */
 export const TYPING_PAUSED_TIMEOUT_MS = 30000
+
+/** IRC channel prefixes — names starting with these are channels, not DMs */
+const CHANNEL_PREFIXES = new Set(['#', '&', '!', '+'])
+
+/** Check if a target name is an IRC channel (vs a private message nick) */
+export function isChannelName(name: string): boolean {
+  return name.length > 0 && CHANNEL_PREFIXES.has(name[0])
+}

@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron'
+import { ipcMain, Notification, app } from 'electron'
 import { ircManager } from '../irc/manager'
 import {
   getAllServers,
@@ -7,8 +7,9 @@ import {
   updateServer,
   removeServer
 } from '../storage/models/server'
-import { getMessages } from '../storage/models/message'
+import { getMessages, searchMessages } from '../storage/models/message'
 import { getSetting, setSetting } from '../storage/models/settings'
+import { getReadMarker, setReadMarker, getAllReadMarkers } from '../storage/models/readmarker'
 
 /**
  * Register all IPC handlers.
@@ -65,6 +66,26 @@ export function registerIPCHandlers(): void {
     client.setTopic(channel, topic)
   })
 
+  ipcMain.handle('channel:list', async (_event, serverId: string) => {
+    const client = ircManager.getClient(serverId)
+    if (!client) throw new Error('Not connected')
+
+    return new Promise<{ name: string; userCount: number; topic: string }[]>((resolve) => {
+      const timeout = setTimeout(() => {
+        client.events.off('channelList', onList)
+        resolve([])
+      }, 15000)
+
+      const onList = (channels: { name: string; userCount: number; topic: string }[]) => {
+        clearTimeout(timeout)
+        resolve(channels)
+      }
+
+      client.events.once('channelList', onList)
+      client.connection.send('LIST')
+    })
+  })
+
   // ── Message operations ───────────────────────────────────────────
 
   ipcMain.handle('message:send', async (_event, serverId: string, channel: string, text: string) => {
@@ -74,6 +95,11 @@ export function registerIPCHandlers(): void {
     // Handle /me action
     if (text.startsWith('/me ')) {
       client.action(channel, text.slice(4))
+    } else if (text.includes('\n') && client.state.capabilities.has('draft/multiline')) {
+      // Multiline message — send as batch
+      const { sendMultilineMessage } = await import('../irc/features/multiline')
+      const lines = text.split('\n')
+      sendMultilineMessage(client, channel, lines)
     } else {
       client.say(channel, text)
     }
@@ -134,6 +160,48 @@ export function registerIPCHandlers(): void {
     return getMessages(serverId, channel, { before, limit })
   })
 
+  ipcMain.handle('chathistory:request', async (_event, serverId: string, channel: string, before?: string, limit?: number) => {
+    const client = ircManager.getClient(serverId)
+    if (!client) return
+    const { requestChathistory } = await import('../irc/features/chathistory')
+    const reference = before ? `timestamp=${before}` : '*'
+    requestChathistory(client, channel, {
+      direction: before ? 'BEFORE' : 'LATEST',
+      reference,
+      limit: limit || 50
+    })
+  })
+
+  // ── Account registration ────────────────────────────────────
+
+  ipcMain.handle('account:register', async (_event, serverId: string, email: string | null, password: string) => {
+    const client = ircManager.getClient(serverId)
+    if (!client) throw new Error('Not connected')
+    const { registerAccount } = await import('../irc/features/account-registration')
+    return registerAccount(client, email, password)
+  })
+
+  // ── Search ──────────────────────────────────────────────────
+
+  ipcMain.handle('message:search', async (_event, serverId: string, query: string, channel?: string) => {
+    return searchMessages(serverId, query, { channel, limit: 50 })
+  })
+
+  // ── Notifications ───────────────────────────────────────────
+
+  ipcMain.handle('notification:send', async (_event, title: string, body: string) => {
+    if (Notification.isSupported()) {
+      const notification = new Notification({ title, body, silent: false })
+      notification.show()
+    }
+  })
+
+  ipcMain.handle('tray:set-badge', async (_event, count: number) => {
+    if (process.platform === 'darwin') {
+      app.dock?.setBadge(count > 0 ? count.toString() : '')
+    }
+  })
+
   // ── Settings ─────────────────────────────────────────────────────
 
   ipcMain.handle('settings:get', async (_event, key: string) => {
@@ -147,9 +215,21 @@ export function registerIPCHandlers(): void {
   // ── Read markers ─────────────────────────────────────────────────
 
   ipcMain.handle('read-marker:set', async (_event, serverId: string, channel: string, timestamp: string) => {
+    // Persist locally
+    setReadMarker(serverId, channel, timestamp)
+
+    // Sync with server if supported
     const client = ircManager.getClient(serverId)
     if (client && client.state.capabilities.has('draft/read-marker')) {
       client.connection.send('MARKREAD', channel, `timestamp=${timestamp}`)
     }
+  })
+
+  ipcMain.handle('read-marker:get', async (_event, serverId: string, channel: string) => {
+    return getReadMarker(serverId, channel)
+  })
+
+  ipcMain.handle('read-marker:get-all', async (_event, serverId: string) => {
+    return getAllReadMarkers(serverId)
   })
 }

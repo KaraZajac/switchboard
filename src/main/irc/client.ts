@@ -83,6 +83,9 @@ export interface ClientEvents {
   // WHOIS
   whois: (data: Record<string, string>) => void
 
+  // Channel list (LIST)
+  channelList: (channels: { name: string; userCount: number; topic: string }[]) => void
+
   // Raw (for debug view)
   raw: (direction: 'in' | 'out', line: string) => void
 }

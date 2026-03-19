@@ -1,10 +1,19 @@
+import { useState, useCallback } from 'react'
 import { useServerStore } from '../../stores/serverStore'
 import { useChannelStore } from '../../stores/channelStore'
 import { useUserStore } from '../../stores/userStore'
+import { useUIStore } from '../../stores/uiStore'
+import { ContextMenu, type ContextMenuItem } from '../common/ContextMenu'
 import type { ChannelUser } from '@shared/types/channel'
 import { PREFIX_RANKS } from '@shared/types/channel'
 
 const EMPTY_USERS: ChannelUser[] = []
+
+interface UserContextState {
+  x: number
+  y: number
+  user: ChannelUser
+}
 
 export function UserList() {
   const activeServerId = useServerStore((s) => s.activeServerId)
@@ -19,6 +28,36 @@ export function UserList() {
 
   // Group users by highest prefix
   const groups = groupUsersByPrefix(users)
+  const [contextMenu, setContextMenu] = useState<UserContextState | null>(null)
+
+  const handleContextMenu = useCallback((e: React.MouseEvent, user: ChannelUser) => {
+    e.preventDefault()
+    setContextMenu({ x: e.clientX, y: e.clientY, user })
+  }, [])
+
+  const handleWhois = useCallback((nick: string) => {
+    if (!activeServerId) return
+    window.switchboard.invoke('user:whois', activeServerId, nick)
+  }, [activeServerId])
+
+  const handleMessage = useCallback((nick: string) => {
+    if (!activeServerId) return
+    useChannelStore.getState().addChannel(activeServerId, nick)
+    useChannelStore.getState().setActiveChannel(activeServerId, nick)
+    useUIStore.getState().setDmMode(true)
+  }, [activeServerId])
+
+  const handleKick = useCallback((nick: string) => {
+    if (!activeServerId || !activeChannel) return
+    window.switchboard.invoke('user:kick', activeServerId, activeChannel, nick)
+  }, [activeServerId, activeChannel])
+
+  const contextMenuItems: ContextMenuItem[] = contextMenu ? [
+    { label: 'User Info (WHOIS)', onClick: () => handleWhois(contextMenu.user.nick) },
+    { label: 'Message', onClick: () => handleMessage(contextMenu.user.nick) },
+    { label: '', onClick: () => {}, separator: true },
+    { label: 'Kick', onClick: () => handleKick(contextMenu.user.nick), danger: true }
+  ] : []
 
   return (
     <div className="w-60 overflow-y-auto bg-gray-800 px-2 py-4 no-select">
@@ -28,7 +67,7 @@ export function UserList() {
             {group.label} — {group.users.length}
           </div>
           {group.users.map((user) => (
-            <UserItem key={user.nick} user={user} />
+            <UserItem key={user.nick} user={user} onContextMenu={handleContextMenu} />
           ))}
         </div>
       ))}
@@ -36,13 +75,31 @@ export function UserList() {
       {users.length === 0 && (
         <div className="px-2 text-sm text-gray-500">No users</div>
       )}
+
+      {/* User context menu */}
+      {contextMenu && (
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          items={contextMenuItems}
+          onClose={() => setContextMenu(null)}
+        />
+      )}
     </div>
   )
 }
 
-function UserItem({ user }: { user: ChannelUser }) {
+function UserItem({ user, onContextMenu }: { user: ChannelUser; onContextMenu: (e: React.MouseEvent, user: ChannelUser) => void }) {
+  const tooltipParts = [user.nick]
+  if (user.account) tooltipParts.push(`Account: ${user.account}`)
+  if (user.away && user.awayMessage) tooltipParts.push(`Away: ${user.awayMessage}`)
+
   return (
-    <div className="group flex items-center gap-2 rounded px-2 py-1 hover:bg-gray-700/50">
+    <div
+      className="group flex items-center gap-2 rounded px-2 py-1 hover:bg-gray-700/50"
+      onContextMenu={(e) => onContextMenu(e, user)}
+      title={tooltipParts.join('\n')}
+    >
       {/* Avatar */}
       <div className="relative flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-gray-600 text-xs font-bold text-gray-200">
         {user.nick.charAt(0).toUpperCase()}

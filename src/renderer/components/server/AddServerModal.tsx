@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { Modal } from '../common/Modal'
 import { useUIStore } from '../../stores/uiStore'
 import { useServerStore } from '../../stores/serverStore'
+import type { ServerConfig } from '@shared/types/server'
+import type { SASLMechanism } from '@shared/types/irc'
 import {
   DEFAULT_PORT_TLS,
   DEFAULT_PORT,
@@ -10,33 +12,46 @@ import {
   DEFAULT_REALNAME
 } from '@shared/constants'
 
-export function AddServerModal() {
+interface AddServerModalProps {
+  editServer?: ServerConfig
+}
+
+export function AddServerModal({ editServer }: AddServerModalProps = {}) {
   const closeModal = useUIStore((s) => s.closeModal)
   const addServer = useServerStore((s) => s.addServer)
+  const updateServer = useServerStore((s) => s.updateServer)
 
-  const [name, setName] = useState('')
-  const [host, setHost] = useState('')
-  const [port, setPort] = useState(DEFAULT_PORT_TLS.toString())
-  const [tls, setTls] = useState(true)
-  const [nick, setNick] = useState(DEFAULT_NICK)
-  const [username, setUsername] = useState(DEFAULT_USERNAME)
-  const [realname, setRealname] = useState(DEFAULT_REALNAME)
-  const [password, setPassword] = useState('')
-  const [saslMechanism, setSaslMechanism] = useState<string>('')
-  const [saslUsername, setSaslUsername] = useState('')
-  const [saslPassword, setSaslPassword] = useState('')
-  const [autoConnect, setAutoConnect] = useState(false)
-  const [autoJoin, setAutoJoin] = useState('')
-  const [showAdvanced, setShowAdvanced] = useState(false)
+  const isEdit = !!editServer
+
+  const [name, setName] = useState(editServer?.name ?? '')
+  const [host, setHost] = useState(editServer?.host ?? '')
+  const [port, setPort] = useState((editServer?.port ?? DEFAULT_PORT_TLS).toString())
+  const [tls, setTls] = useState(editServer?.tls ?? true)
+  const [nick, setNick] = useState(editServer?.nick ?? DEFAULT_NICK)
+  const [username, setUsername] = useState(editServer?.username ?? DEFAULT_USERNAME)
+  const [realname, setRealname] = useState(editServer?.realname ?? DEFAULT_REALNAME)
+  const [password, setPassword] = useState(editServer?.password ?? '')
+  const [saslMechanism, setSaslMechanism] = useState<string>(editServer?.saslMechanism ?? '')
+  const [saslUsername, setSaslUsername] = useState(editServer?.saslUsername ?? '')
+  const [saslPassword, setSaslPassword] = useState(editServer?.saslPassword ?? '')
+  const [autoConnect, setAutoConnect] = useState(editServer?.autoConnect ?? false)
+  const [autoJoin, setAutoJoin] = useState(editServer?.autoJoin?.join(', ') ?? '')
+  const [websocketUrl, setWebsocketUrl] = useState(editServer?.websocketUrl ?? '')
+  const [showAdvanced, setShowAdvanced] = useState(isEdit)
+  const [error, setError] = useState<string | null>(null)
 
   const handleTlsToggle = (checked: boolean) => {
     setTls(checked)
-    setPort(checked ? DEFAULT_PORT_TLS.toString() : DEFAULT_PORT.toString())
+    if (!isEdit) {
+      setPort(checked ? DEFAULT_PORT_TLS.toString() : DEFAULT_PORT.toString())
+    }
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!name.trim() || !host.trim() || !nick.trim()) return
+
+    setError(null)
 
     const config = {
       name: name.trim(),
@@ -47,23 +62,33 @@ export function AddServerModal() {
       username: username.trim() || nick.trim(),
       realname: realname.trim() || nick.trim(),
       password: password || null,
-      saslMechanism: saslMechanism || null,
+      saslMechanism: (saslMechanism as SASLMechanism) || null,
       saslUsername: saslUsername || null,
       saslPassword: saslPassword || null,
       autoConnect,
       autoJoin: autoJoin
         .split(',')
         .map((ch) => ch.trim())
-        .filter(Boolean)
+        .filter(Boolean),
+      websocketUrl: websocketUrl.trim() || null
     }
 
-    const id = await window.switchboard.invoke('server:add', config as never)
-    addServer({ ...config, id, sortOrder: 0 } as never)
-    closeModal()
+    try {
+      if (isEdit && editServer) {
+        await window.switchboard.invoke('server:update', editServer.id, config as never)
+        updateServer(editServer.id, config)
+      } else {
+        const id = await window.switchboard.invoke('server:add', config as never)
+        addServer({ ...config, id, sortOrder: 0 } as never)
+      }
+      closeModal()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save server')
+    }
   }
 
   return (
-    <Modal title="Add Server" onClose={closeModal}>
+    <Modal title={isEdit ? 'Edit Server' : 'Add Server'} onClose={closeModal}>
       <form onSubmit={handleSubmit} className="space-y-4">
         {/* Server info */}
         <div className="grid grid-cols-2 gap-4">
@@ -206,6 +231,21 @@ export function AddServerModal() {
               />
             </div>
 
+            {/* WebSocket */}
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-300">
+                WebSocket URL (optional)
+              </label>
+              <input
+                type="text"
+                value={websocketUrl}
+                onChange={(e) => setWebsocketUrl(e.target.value)}
+                placeholder="wss://irc.example.com/webirc/websocket/"
+                className="w-full rounded bg-gray-900 px-3 py-2 text-gray-100 outline-none ring-1 ring-gray-700 focus:ring-indigo-500"
+              />
+              <p className="mt-1 text-xs text-gray-500">If set, connects via WebSocket instead of TCP</p>
+            </div>
+
             {/* SASL */}
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-300">
@@ -252,6 +292,11 @@ export function AddServerModal() {
           </div>
         )}
 
+        {/* Error */}
+        {error && (
+          <div className="rounded bg-red-900/50 px-3 py-2 text-sm text-red-300">{error}</div>
+        )}
+
         {/* Submit */}
         <div className="flex justify-end gap-3 pt-2">
           <button
@@ -265,7 +310,7 @@ export function AddServerModal() {
             type="submit"
             className="rounded bg-indigo-500 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-600"
           >
-            Add Server
+            {isEdit ? 'Save Changes' : 'Add Server'}
           </button>
         </div>
       </form>

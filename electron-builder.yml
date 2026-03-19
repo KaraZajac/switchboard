@@ -12,7 +12,9 @@ files:
 asarUnpack:
   - resources/**
   - node_modules/sql.js/dist/**
+icon: resources/icon.png
 mac:
+  icon: resources/icon.png
   target:
     - target: dmg
       arch:

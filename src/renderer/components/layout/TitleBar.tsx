@@ -1,6 +1,7 @@
 import { useServerStore } from '../../stores/serverStore'
 import { useChannelStore } from '../../stores/channelStore'
 import { useUIStore } from '../../stores/uiStore'
+import { isChannelName } from '@shared/constants'
 
 const EMPTY_CHANNELS: { name: string; topic: string | null }[] = []
 
@@ -18,21 +19,33 @@ export function TitleBar() {
     (ch) => ch.name.toLowerCase() === activeChannel?.toLowerCase()
   )
 
+  const isDM = activeChannel ? !isChannelName(activeChannel) : false
+
   return (
     <div
       className="flex h-12 items-center justify-between border-b border-gray-900 px-4 shadow-sm"
       style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
     >
-      <div className="flex items-center gap-2">
-        {activeChannel && (
+      <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
+        {activeChannel && isDM && (
           <>
-            <span className="text-xl text-gray-500">#</span>
-            <span className="font-semibold text-gray-100">
+            <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gray-600 text-xs font-bold text-gray-200">
+              {activeChannel.charAt(0).toUpperCase()}
+            </div>
+            <span className="shrink-0 font-semibold text-gray-100">
+              {activeChannel}
+            </span>
+          </>
+        )}
+        {activeChannel && !isDM && (
+          <>
+            <span className="shrink-0 text-xl text-gray-500">#</span>
+            <span className="shrink-0 font-semibold text-gray-100">
               {activeChannel.replace(/^#/, '')}
             </span>
             {channelInfo?.topic && (
               <>
-                <span className="mx-2 text-gray-600">|</span>
+                <span className="shrink-0 mx-2 text-gray-600">|</span>
                 <span className="truncate text-sm text-gray-400">{channelInfo.topic}</span>
               </>
             )}
@@ -41,6 +54,18 @@ export function TitleBar() {
       </div>
 
       <div className="flex items-center gap-2" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
+        {/* Search */}
+        <button
+          onClick={() => useUIStore.getState().openModal('search')}
+          className="rounded p-1.5 text-gray-400 transition-colors hover:bg-gray-700 hover:text-gray-100"
+          title="Search messages (Ctrl+F)"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="11" cy="11" r="8" />
+            <path d="M21 21l-4.35-4.35" />
+          </svg>
+        </button>
+
         {/* Toggle user list */}
         <button
           onClick={() => useUIStore.getState().toggleUserList()}

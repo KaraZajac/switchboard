@@ -172,5 +172,52 @@ function runMigrations(): void {
     db.run("INSERT INTO migrations (name) VALUES ('001_initial')")
   }
 
+  // Migration 002: FTS5 for message search
+  if (!applied.has('002_fts_search')) {
+    try {
+      db.run(`
+        CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
+          id UNINDEXED,
+          server_id UNINDEXED,
+          channel UNINDEXED,
+          nick,
+          content,
+          timestamp UNINDEXED,
+          content='messages',
+          content_rowid='rowid'
+        )
+      `)
+
+      // Triggers to keep FTS in sync with messages table
+      db.run(`
+        CREATE TRIGGER IF NOT EXISTS messages_ai AFTER INSERT ON messages BEGIN
+          INSERT INTO messages_fts(rowid, id, server_id, channel, nick, content, timestamp)
+          VALUES (new.rowid, new.id, new.server_id, new.channel, new.nick, new.content, new.timestamp);
+        END
+      `)
+
+      db.run(`
+        CREATE TRIGGER IF NOT EXISTS messages_ad AFTER DELETE ON messages BEGIN
+          INSERT INTO messages_fts(messages_fts, rowid, id, server_id, channel, nick, content, timestamp)
+          VALUES ('delete', old.rowid, old.id, old.server_id, old.channel, old.nick, old.content, old.timestamp);
+        END
+      `)
+
+      // Populate FTS from existing messages
+      db.run(`INSERT INTO messages_fts(rowid, id, server_id, channel, nick, content, timestamp)
+              SELECT rowid, id, server_id, channel, nick, content, timestamp FROM messages`)
+
+      db.run("INSERT INTO migrations (name) VALUES ('002_fts_search')")
+    } catch (err) {
+      console.warn('Migration 002 (FTS5) failed — full-text search will be unavailable:', err)
+    }
+  }
+
+  // Migration 003: Add websocket_url column to servers
+  if (!applied.has('003_websocket_url')) {
+    db.run('ALTER TABLE servers ADD COLUMN websocket_url TEXT DEFAULT NULL')
+    db.run("INSERT INTO migrations (name) VALUES ('003_websocket_url')")
+  }
+
   saveDatabase()
 }

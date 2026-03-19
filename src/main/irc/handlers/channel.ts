@@ -231,6 +231,32 @@ registerHandler('INVITE', (client, msg) => {
   client.events.emit('invite', { channel, by, target, isMe })
 })
 
+/**
+ * RPL_LIST (322) — Channel list entry
+ */
+registerHandler('322', (client, msg) => {
+  // params: <nick> <channel> <user_count> :<topic>
+  const name = msg.params[1]
+  const userCount = parseInt(msg.params[2]) || 0
+  const topic = msg.params[3] || ''
+
+  if (!client.state.listInProgress) {
+    client.state.listInProgress = true
+    client.state.listEntries = []
+  }
+
+  client.state.listEntries.push({ name, userCount, topic })
+})
+
+/**
+ * RPL_LISTEND (323) — End of channel list
+ */
+registerHandler('323', (client, _msg) => {
+  client.state.listInProgress = false
+  client.events.emit('channelList', client.state.listEntries)
+  client.state.listEntries = []
+})
+
 // ── Helpers ────────────────────────────────────────────────────────
 
 /**

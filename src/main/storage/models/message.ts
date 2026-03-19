@@ -57,6 +57,44 @@ export function getMessages(
   return rows[0].values.map(rowToMessage).reverse()
 }
 
+export function searchMessages(
+  serverId: string,
+  query: string,
+  options: { channel?: string; limit?: number } = {}
+): ChatMessage[] {
+  const db = getDb()
+  const limit = options.limit || 50
+
+  // Escape FTS5 special characters and add prefix matching
+  const ftsQuery = query.replace(/['"]/g, '').trim()
+  if (!ftsQuery) return []
+
+  let sql: string
+  let params: unknown[]
+
+  if (options.channel) {
+    sql = `SELECT m.* FROM messages m
+           JOIN messages_fts fts ON m.rowid = fts.rowid
+           WHERE fts.content MATCH ? AND m.server_id = ? AND m.channel = ?
+           ORDER BY m.timestamp DESC LIMIT ?`
+    params = [ftsQuery, serverId, options.channel, limit]
+  } else {
+    sql = `SELECT m.* FROM messages m
+           JOIN messages_fts fts ON m.rowid = fts.rowid
+           WHERE fts.content MATCH ? AND m.server_id = ?
+           ORDER BY m.timestamp DESC LIMIT ?`
+    params = [ftsQuery, serverId, limit]
+  }
+
+  try {
+    const rows = db.exec(sql, params as number[])
+    if (rows.length === 0) return []
+    return rows[0].values.map(rowToMessage).reverse()
+  } catch {
+    return []
+  }
+}
+
 function rowToMessage(row: unknown[]): ChatMessage {
   return {
     id: row[0] as string,
@@ -71,6 +109,7 @@ function rowToMessage(row: unknown[]): ChatMessage {
     timestamp: row[9] as string,
     account: null,
     pending: false,
-    reactions: {}
+    reactions: {},
+    channelContext: null
   }
 }
