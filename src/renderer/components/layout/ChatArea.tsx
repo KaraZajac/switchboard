@@ -7,20 +7,23 @@ import { MessageComposer } from '../chat/MessageComposer'
 import { TypingIndicator } from '../chat/TypingIndicator'
 import type { ChatMessage } from '@shared/types/message'
 
+const EMPTY_MESSAGES: ChatMessage[] = []
+const EMPTY_NICKS: string[] = []
+
 export function ChatArea() {
   const activeServerId = useServerStore((s) => s.activeServerId)
   const activeChannel = useChannelStore((s) =>
-    activeServerId ? s.activeChannel[activeServerId] : null
+    activeServerId ? s.activeChannel[activeServerId] ?? null : null
   )
   const connectionStatus = useServerStore((s) =>
-    activeServerId ? s.connectionStatus[activeServerId] : 'disconnected'
+    activeServerId ? s.connectionStatus[activeServerId] ?? 'disconnected' : 'disconnected'
   )
 
   const key = activeServerId && activeChannel
     ? `${activeServerId}:${activeChannel}`
     : null
-  const messages = useMessageStore((s) => (key ? s.messages[key] || [] : []))
-  const typingNicks = useMessageStore((s) => (key ? s.typing[key] || [] : []))
+  const messages = useMessageStore((s) => (key ? s.messages[key] ?? EMPTY_MESSAGES : EMPTY_MESSAGES))
+  const typingNicks = useMessageStore((s) => (key ? s.typing[key] ?? EMPTY_NICKS : EMPTY_NICKS))
 
   const scrollRef = useRef<HTMLDivElement>(null)
   const [autoScroll, setAutoScroll] = useState(true)

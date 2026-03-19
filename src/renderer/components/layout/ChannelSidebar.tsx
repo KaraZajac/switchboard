@@ -1,27 +1,27 @@
 import { useServerStore } from '../../stores/serverStore'
 import { useChannelStore } from '../../stores/channelStore'
 
+const EMPTY_CHANNELS: { name: string; serverId: string; topic: string | null; topicSetBy: string | null; unreadCount: number; mentionCount: number; muted: boolean }[] = []
+
 export function ChannelSidebar() {
   const activeServerId = useServerStore((s) => s.activeServerId)
   const servers = useServerStore((s) => s.servers)
   const channels = useChannelStore((s) =>
-    activeServerId ? s.channels[activeServerId] || [] : []
+    activeServerId ? s.channels[activeServerId] ?? EMPTY_CHANNELS : EMPTY_CHANNELS
   )
   const activeChannel = useChannelStore((s) =>
-    activeServerId ? s.activeChannel[activeServerId] : null
+    activeServerId ? s.activeChannel[activeServerId] ?? null : null
   )
-  const setActiveChannel = useChannelStore((s) => s.setActiveChannel)
-  const clearUnread = useChannelStore((s) => s.clearUnread)
   const connectionStatus = useServerStore((s) =>
-    activeServerId ? s.connectionStatus[activeServerId] : 'disconnected'
+    activeServerId ? s.connectionStatus[activeServerId] ?? 'disconnected' : 'disconnected'
   )
 
   const server = servers.find((s) => s.id === activeServerId)
 
   const handleChannelClick = (name: string) => {
     if (!activeServerId) return
-    setActiveChannel(activeServerId, name)
-    clearUnread(activeServerId, name)
+    useChannelStore.getState().setActiveChannel(activeServerId, name)
+    useChannelStore.getState().clearUnread(activeServerId, name)
   }
 
   const handleConnect = () => {

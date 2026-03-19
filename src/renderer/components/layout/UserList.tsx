@@ -4,16 +4,18 @@ import { useUserStore } from '../../stores/userStore'
 import type { ChannelUser } from '@shared/types/channel'
 import { PREFIX_RANKS } from '@shared/types/channel'
 
+const EMPTY_USERS: ChannelUser[] = []
+
 export function UserList() {
   const activeServerId = useServerStore((s) => s.activeServerId)
   const activeChannel = useChannelStore((s) =>
-    activeServerId ? s.activeChannel[activeServerId] : null
+    activeServerId ? s.activeChannel[activeServerId] ?? null : null
   )
 
   const key = activeServerId && activeChannel
     ? `${activeServerId}:${activeChannel}`
     : null
-  const users = useUserStore((s) => (key ? s.users[key] || [] : []))
+  const users = useUserStore((s) => (key ? s.users[key] ?? EMPTY_USERS : EMPTY_USERS))
 
   // Group users by highest prefix
   const groups = groupUsersByPrefix(users)

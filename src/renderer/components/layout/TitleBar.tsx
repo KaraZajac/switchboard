@@ -2,15 +2,16 @@ import { useServerStore } from '../../stores/serverStore'
 import { useChannelStore } from '../../stores/channelStore'
 import { useUIStore } from '../../stores/uiStore'
 
+const EMPTY_CHANNELS: { name: string; topic: string | null }[] = []
+
 export function TitleBar() {
   const activeServerId = useServerStore((s) => s.activeServerId)
   const activeChannel = useChannelStore((s) =>
-    activeServerId ? s.activeChannel[activeServerId] : null
+    activeServerId ? s.activeChannel[activeServerId] ?? null : null
   )
   const channels = useChannelStore((s) =>
-    activeServerId ? s.channels[activeServerId] || [] : []
+    activeServerId ? s.channels[activeServerId] ?? EMPTY_CHANNELS : EMPTY_CHANNELS
   )
-  const toggleUserList = useUIStore((s) => s.toggleUserList)
   const showUserList = useUIStore((s) => s.showUserList)
 
   const channelInfo = channels.find(
@@ -39,7 +40,7 @@ export function TitleBar() {
       <div className="flex items-center gap-2">
         {/* Toggle user list */}
         <button
-          onClick={toggleUserList}
+          onClick={() => useUIStore.getState().toggleUserList()}
           className={`rounded p-1.5 transition-colors ${
             showUserList ? 'text-gray-100' : 'text-gray-400'
           } hover:bg-gray-700`}
