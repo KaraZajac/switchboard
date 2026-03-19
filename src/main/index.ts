@@ -1,4 +1,4 @@
-import { app, BrowserWindow, shell } from 'electron'
+import { app, BrowserWindow, session, shell } from 'electron'
 import { join } from 'path'
 import { registerIPCHandlers } from './ipc/index'
 import { ircManager } from './irc/manager'
@@ -26,6 +26,9 @@ function createWindow(): void {
 
   mainWindow.on('ready-to-show', () => {
     mainWindow?.show()
+    if (!app.isPackaged) {
+      mainWindow?.webContents.openDevTools()
+    }
   })
 
   // Open external links in browser
@@ -47,10 +50,28 @@ function createWindow(): void {
 
 app.whenReady().then(async () => {
   // Initialize database
-  await initDatabase()
+  try {
+    await initDatabase()
+  } catch (err) {
+    console.error('Failed to initialize database:', err)
+  }
 
   // Register IPC handlers
   registerIPCHandlers()
+
+  // Set CSP for production
+  if (app.isPackaged) {
+    session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+      callback({
+        responseHeaders: {
+          ...details.responseHeaders,
+          'Content-Security-Policy': [
+            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:;"
+          ]
+        }
+      })
+    })
+  }
 
   // Create window
   createWindow()
