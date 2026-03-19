@@ -15,6 +15,12 @@ export function AppLayout() {
 
   return (
     <div className="flex h-screen w-screen flex-col overflow-hidden bg-gray-900 text-gray-100">
+      {/* Draggable title bar region for macOS window controls */}
+      <div
+        className="h-9 w-full flex-shrink-0 bg-gray-950"
+        style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
+      />
+
       <div className="flex flex-1 overflow-hidden">
         {/* Server Rail */}
         <ServerRail />

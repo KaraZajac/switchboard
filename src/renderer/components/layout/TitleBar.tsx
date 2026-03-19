@@ -19,7 +19,10 @@ export function TitleBar() {
   )
 
   return (
-    <div className="flex h-12 items-center justify-between border-b border-gray-900 px-4 shadow-sm">
+    <div
+      className="flex h-12 items-center justify-between border-b border-gray-900 px-4 shadow-sm"
+      style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
+    >
       <div className="flex items-center gap-2">
         {activeChannel && (
           <>
@@ -37,7 +40,7 @@ export function TitleBar() {
         )}
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
         {/* Toggle user list */}
         <button
           onClick={() => useUIStore.getState().toggleUserList()}
