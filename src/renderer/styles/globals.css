@@ -1,0 +1,61 @@
+@import 'tailwindcss';
+
+/* ── Light theme overrides ──────────────────────────────────────── */
+[data-theme='light'] {
+  --tw-bg-gray-950: #f2f3f5;
+  --tw-bg-gray-900: #ffffff;
+  --tw-bg-gray-800: #f2f3f5;
+  --tw-bg-gray-700: #e3e5e8;
+  --tw-bg-gray-600: #d4d7dc;
+  --tw-text-gray-100: #2e3338;
+  --tw-text-gray-200: #4f5660;
+  --tw-text-gray-300: #6a7480;
+  --tw-text-gray-400: #96a0aa;
+  --tw-text-gray-500: #b9bbbe;
+  --tw-border-gray-900: #e3e5e8;
+  --tw-border-gray-700: #d4d7dc;
+}
+
+/* Custom scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #1e1f22;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #2b2d31;
+}
+
+[data-theme='light'] ::-webkit-scrollbar-thumb {
+  background: #d4d7dc;
+}
+
+[data-theme='light'] ::-webkit-scrollbar-thumb:hover {
+  background: #b9bbbe;
+}
+
+/* Prevent text selection on UI elements */
+.no-select {
+  user-select: none;
+}
+
+/* Reset transition for text inputs */
+input,
+textarea,
+select {
+  transition: none;
+}
+
+/* Focus ring */
+*:focus-visible {
+  outline: 2px solid rgb(99 102 241);
+  outline-offset: -2px;
+}
