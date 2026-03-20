@@ -21,10 +21,6 @@ mac:
         - x64
         - arm64
   category: public.app-category.social-networking
-  hardenedRuntime: true
-  gatekeeperAssess: false
-  entitlements: resources/entitlements.mac.plist
-  entitlementsInherit: resources/entitlements.mac.plist
 linux:
   target:
     - AppImage
