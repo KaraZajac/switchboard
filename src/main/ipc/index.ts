@@ -199,6 +199,11 @@ export function registerIPCHandlers(): void {
     } else {
       client.connection.sendRaw(`METADATA * SET ${key} ${value}`)
     }
+    // Persist avatar URL locally so it survives restarts
+    if (key === 'avatar') {
+      updateServer(serverId, { avatarUrl: value || null })
+      client.config.avatarUrl = value || null
+    }
   })
 
   // ── History ──────────────────────────────────────────────────────

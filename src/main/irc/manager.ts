@@ -318,6 +318,16 @@ export class IRCManager {
 
     client.events.on('capNegotiated', (caps) => {
       this.send('irc:cap', { serverId, capabilities: caps })
+
+      // Re-set avatar from saved config if metadata is supported
+      if (caps.includes('draft/metadata-2') && client.config.avatarUrl) {
+        const url = client.config.avatarUrl
+        if (url.includes(' ') || url.startsWith(':')) {
+          client.connection.sendRaw(`METADATA * SET avatar :${url}`)
+        } else {
+          client.connection.sendRaw(`METADATA * SET avatar ${url}`)
+        }
+      }
     })
 
     client.events.on('whois', (data) => {

@@ -21,6 +21,8 @@ export interface ServerConfig {
   sortOrder: number
   /** WebSocket URL (ws:// or wss://) — if set, connect via WebSocket instead of TCP */
   websocketUrl: string | null
+  /** Locally persisted avatar URL for draft/metadata-2 */
+  avatarUrl: string | null
 }
 
 /** Runtime server state (not persisted) */
