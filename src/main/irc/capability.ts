@@ -17,7 +17,6 @@ import { parseSTSValue, setSTSPolicy } from './features/sts'
 
 // Accumulator for multi-line CAP LS responses
 let pendingCapLs: Map<string, string | null> = new Map()
-let capLsMultiline = false
 
 registerHandler('CAP', (client, msg) => {
   // params: <nick-or-*> <subcommand> [* (multiline)] :<cap list>
@@ -43,7 +42,6 @@ registerHandler('CAP', (client, msg) => {
       }
 
       if (isMultiline) {
-        capLsMultiline = true
         return // Wait for more lines
       }
 
@@ -67,7 +65,6 @@ registerHandler('CAP', (client, msg) => {
             // The client manager should handle reconnecting with TLS
             client.connection.disconnect('STS upgrade required')
             pendingCapLs = new Map()
-            capLsMultiline = false
             return
           }
         }
@@ -83,7 +80,6 @@ registerHandler('CAP', (client, msg) => {
 
       // Reset accumulator
       pendingCapLs = new Map()
-      capLsMultiline = false
 
       if (toRequest.length > 0) {
         client.connection.send('CAP', 'REQ', toRequest.join(' '))

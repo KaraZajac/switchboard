@@ -81,6 +81,7 @@ describe('Registration Handlers', () => {
   })
 
   it('auto-joins channels on 001', () => {
+    vi.useFakeTimers()
     const { client, sentLines } = createMockClient({
       autoJoin: ['#general', '#dev']
     })
@@ -88,8 +89,11 @@ describe('Registration Handlers', () => {
     const msg = parseMessage(':server 001 TestUser :Welcome')
     dispatchMessage(client, msg)
 
+    vi.runAllTimers()
+
     expect(sentLines).toContain('JOIN #general')
     expect(sentLines).toContain('JOIN #dev')
+    vi.useRealTimers()
   })
 
   it('handles RPL_ISUPPORT (005)', () => {
