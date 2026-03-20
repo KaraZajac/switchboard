@@ -4,6 +4,7 @@ import { useChannelStore } from '../stores/channelStore'
 import { useMessageStore } from '../stores/messageStore'
 import { useUserStore } from '../stores/userStore'
 import { useUIStore } from '../stores/uiStore'
+import { isChannelName } from '@shared/constants'
 
 /**
  * Hook that sets up all IPC event listeners from the main process.
@@ -21,8 +22,11 @@ export function useIRCEvents(): void {
 
     // Connection events
     cleanups.push(
-      api.on('irc:connected', ({ serverId }) => {
+      api.on('irc:connected', ({ serverId, nick }) => {
         useServerStore.getState().setConnectionStatus(serverId, 'connected')
+        if (nick) {
+          useServerStore.getState().setCurrentNick(serverId, nick)
+        }
       })
     )
 
@@ -35,6 +39,11 @@ export function useIRCEvents(): void {
     cleanups.push(
       api.on('irc:cap', ({ serverId, capabilities }) => {
         useServerStore.getState().setCapabilities(serverId, capabilities)
+
+        // Request our own avatar if metadata is supported
+        if (capabilities.includes('draft/metadata-2')) {
+          api.invoke('metadata:get', serverId, '*', 'avatar').catch(() => {})
+        }
       })
     )
 
@@ -60,7 +69,7 @@ export function useIRCEvents(): void {
       api.on('irc:chathistory', ({ serverId, channel, messages }) => {
         if (messages.length > 0) {
           const store = useMessageStore.getState()
-          const existing = store.messages[`${serverId}:${channel}`] || []
+          const existing = store.messages[`${serverId}:${channel.toLowerCase()}`] || []
           // Merge: deduplicate by id, sort by timestamp
           const merged = [...existing]
           for (const msg of messages) {
@@ -98,20 +107,28 @@ export function useIRCEvents(): void {
       })
     )
 
-    // Track our nick per server
+    // Track our nick per server (local cache for mention detection)
     const currentNicks: Record<string, string> = {}
 
     cleanups.push(
-      api.on('irc:connected', ({ serverId: sid }) => {
-        // Get nick from server config
-        const server = useServerStore.getState().servers.find((s) => s.id === sid)
-        if (server) currentNicks[sid] = server.nick
+      api.on('irc:connected', ({ serverId: sid, nick: connNick }) => {
+        if (connNick) {
+          currentNicks[sid] = connNick
+        } else {
+          const server = useServerStore.getState().servers.find((s) => s.id === sid)
+          if (server) currentNicks[sid] = server.nick
+        }
       })
     )
 
     // Message events
     cleanups.push(
       api.on('irc:message', ({ serverId, channel, message }) => {
+        // Auto-create channel entry for incoming DMs (only for real messages, not server notices)
+        if (!isChannelName(channel) && channel !== '*' && (message.type === 'privmsg' || message.type === 'action')) {
+          useChannelStore.getState().addChannel(serverId, channel)
+        }
+
         useMessageStore.getState().addMessage(serverId, channel, message)
 
         // Check if this channel is currently active
@@ -124,7 +141,7 @@ export function useIRCEvents(): void {
         const isMention = myNick
           ? new RegExp(`\\b${myNick.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(message.content)
           : false
-        const isPrivate = !channel.startsWith('#') && !channel.startsWith('&')
+        const isPrivate = !isChannelName(channel) && channel !== '*'
 
         if (!isActiveChannel) {
           useChannelStore.getState().incrementUnread(serverId, channel, isMention || isPrivate)
@@ -155,6 +172,12 @@ export function useIRCEvents(): void {
     cleanups.push(
       api.on('irc:nick', ({ serverId, oldNick, newNick }) => {
         useUserStore.getState().renameUser(serverId, oldNick, newNick)
+
+        // If this is our own nick change, update the store
+        if (currentNicks[serverId]?.toLowerCase() === oldNick.toLowerCase()) {
+          currentNicks[serverId] = newNick
+          useServerStore.getState().setCurrentNick(serverId, newNick)
+        }
       })
     )
 
@@ -194,11 +217,36 @@ export function useIRCEvents(): void {
       })
     )
 
+    // Typing indicators with auto-clear timeout
+    const typingTimers = new Map<string, ReturnType<typeof setTimeout>>()
+
     cleanups.push(
       api.on('irc:typing', ({ serverId, channel, nick, status }) => {
-        useMessageStore.getState().setTyping(serverId, channel, nick, status === 'active' || status === 'paused')
+        const isTyping = status === 'active' || status === 'paused'
+        useMessageStore.getState().setTyping(serverId, channel, nick, isTyping)
+
+        // Clear any existing timer for this user
+        const timerKey = `${serverId}:${channel}:${nick}`
+        const existing = typingTimers.get(timerKey)
+        if (existing) clearTimeout(existing)
+
+        if (isTyping) {
+          // Auto-clear after 6 seconds if no update
+          typingTimers.set(timerKey, setTimeout(() => {
+            useMessageStore.getState().setTyping(serverId, channel, nick, false)
+            typingTimers.delete(timerKey)
+          }, 6000))
+        } else {
+          typingTimers.delete(timerKey)
+        }
       })
     )
+
+    // Clean up typing timers on unmount
+    cleanups.push(() => {
+      for (const timer of typingTimers.values()) clearTimeout(timer)
+      typingTimers.clear()
+    })
 
     cleanups.push(
       api.on('irc:react', ({ serverId, channel, nick, msgid, emoji }) => {
@@ -209,6 +257,28 @@ export function useIRCEvents(): void {
     cleanups.push(
       api.on('irc:redact', ({ serverId, channel, msgid }) => {
         useMessageStore.getState().removeMessage(serverId, channel, msgid)
+      })
+    )
+
+    // Setname (realname change)
+    cleanups.push(
+      api.on('irc:setname', ({ serverId, nick, realname }) => {
+        const userStore = useUserStore.getState()
+        for (const key of Object.keys(userStore.users)) {
+          if (key.startsWith(serverId + ':')) {
+            const channel = key.slice(serverId.length + 1)
+            userStore.updateUser(serverId, channel, nick, { realname })
+          }
+        }
+      })
+    )
+
+    // Metadata updates (avatar, etc.)
+    cleanups.push(
+      api.on('irc:metadata', ({ serverId, target, key, value }) => {
+        if (key === 'avatar') {
+          useServerStore.getState().setUserAvatar(serverId, target, value)
+        }
       })
     )
 
@@ -315,8 +385,8 @@ export function useIRCEvents(): void {
 
     // WHOIS response
     cleanups.push(
-      api.on('irc:whois', ({ data }) => {
-        useUIStore.getState().showWhois({
+      api.on('irc:whois', ({ serverId, data }) => {
+        const whoisResult: import('../stores/uiStore').WhoisData = {
           nick: data.nick || '',
           user: data.user,
           host: data.host,
@@ -329,7 +399,21 @@ export function useIRCEvents(): void {
           signon: data.signon,
           isOperator: data.isOperator === 'true',
           isBot: data.isBot === 'true'
-        })
+        }
+
+        const uiState = useUIStore.getState()
+        if (uiState.popupWhoisNick?.toLowerCase() === whoisResult.nick.toLowerCase()) {
+          uiState.setPopupWhoisData(whoisResult)
+          uiState.setPopupWhoisNick(null)
+        } else {
+          uiState.showWhois(whoisResult)
+        }
+
+        // Request avatar metadata for this user if supported
+        const caps = useServerStore.getState().capabilities[serverId] ?? []
+        if (caps.includes('draft/metadata-2') && data.nick) {
+          api.invoke('metadata:get', serverId, data.nick, 'avatar').catch(() => {})
+        }
       })
     )
 

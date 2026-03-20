@@ -4,18 +4,56 @@
   --chat-font-size: 14px;
 }
 
-/* ── Light theme overrides ──────────────────────────────────────── */
+/* ── Catppuccin Mocha (dark theme — default) ───────────────────── */
+:root {
+  --color-gray-950: #11111b;  /* Crust  — server rail, title bar */
+  --color-gray-900: #181825;  /* Mantle — root bg */
+  --color-gray-800: #1e1e2e;  /* Base   — sidebars, modals */
+  --color-gray-700: #313244;  /* Surface0 — active states, inputs */
+  --color-gray-600: #45475a;  /* Surface1 — borders, dividers */
+  --color-gray-500: #6c7086;  /* Overlay0 — muted text, placeholders */
+  --color-gray-400: #7f849c;  /* Overlay1 — secondary text, icons */
+  --color-gray-300: #a6adc8;  /* Subtext0 — labels, headings */
+  --color-gray-200: #bac2de;  /* Subtext1 — body text */
+  --color-gray-100: #cdd6f4;  /* Text    — primary text */
+
+  /* Accent overrides — Catppuccin Mocha */
+  --color-indigo-400: #b4befe;  /* Lavender */
+  --color-indigo-500: #89b4fa;  /* Blue */
+  --color-indigo-600: #7ba3e8;  /* Blue dimmed */
+  --color-red-400: #f38ba8;     /* Red */
+  --color-red-500: #f38ba8;     /* Red */
+  --color-red-900: #45172a;     /* Red bg */
+  --color-green-400: #a6e3a1;   /* Green */
+  --color-green-500: #a6e3a1;   /* Green */
+  --color-green-600: #74c7a4;   /* Green dimmed */
+  --color-yellow-500: #f9e2af;  /* Yellow */
+}
+
+/* ── Catppuccin Latte (light theme) ────────────────────────────── */
 [data-theme='light'] {
-  --color-gray-950: #e8eaed;
-  --color-gray-900: #f2f3f5;
-  --color-gray-800: #ffffff;
-  --color-gray-700: #e3e5e8;
-  --color-gray-600: #d4d7dc;
-  --color-gray-500: #b9bbbe;
-  --color-gray-400: #96a0aa;
-  --color-gray-300: #6a7480;
-  --color-gray-200: #4f5660;
-  --color-gray-100: #2e3338;
+  --color-gray-950: #dce0e8;  /* Crust   — server rail, title bar */
+  --color-gray-900: #eff1f5;  /* Base    — root bg, chat area */
+  --color-gray-800: #e6e9ef;  /* Mantle  — sidebars, modals */
+  --color-gray-700: #ccd0da;  /* Surface0 — active states, inputs */
+  --color-gray-600: #bcc0cc;  /* Surface1 — borders, dividers */
+  --color-gray-500: #9ca0b0;  /* Overlay0 — muted text, placeholders */
+  --color-gray-400: #8c8fa1;  /* Overlay1 — secondary text, icons */
+  --color-gray-300: #6c6f85;  /* Subtext0 — labels, headings */
+  --color-gray-200: #5c5f77;  /* Subtext1 — body text */
+  --color-gray-100: #4c4f69;  /* Text    — primary text */
+
+  /* Accent overrides — Catppuccin Latte */
+  --color-indigo-400: #7287fd;  /* Lavender */
+  --color-indigo-500: #1e66f5;  /* Blue */
+  --color-indigo-600: #1a5ad4;  /* Blue dimmed */
+  --color-red-400: #d20f39;     /* Red */
+  --color-red-500: #d20f39;     /* Red */
+  --color-red-900: #f5dde3;     /* Red bg (light) */
+  --color-green-400: #40a02b;   /* Green */
+  --color-green-500: #40a02b;   /* Green */
+  --color-green-600: #368a24;   /* Green dimmed */
+  --color-yellow-500: #df8e1d;  /* Yellow */
 }
 
 /* Custom scrollbar styling */
@@ -28,20 +66,20 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #1e1f22;
+  background: #45475a;  /* Surface1 Mocha */
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #2b2d31;
+  background: #585b70;  /* Surface2 Mocha */
 }
 
 [data-theme='light'] ::-webkit-scrollbar-thumb {
-  background: #d4d7dc;
+  background: #bcc0cc;  /* Surface1 Latte */
 }
 
 [data-theme='light'] ::-webkit-scrollbar-thumb:hover {
-  background: #b9bbbe;
+  background: #acb0be;  /* Surface2 Latte */
 }
 
 /* Chat font size (controlled by settings) */
@@ -63,6 +101,6 @@ select {
 
 /* Focus ring */
 *:focus-visible {
-  outline: 2px solid rgb(99 102 241);
+  outline: 2px solid var(--color-indigo-500);
   outline-offset: -2px;
 }

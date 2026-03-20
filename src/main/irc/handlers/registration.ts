@@ -14,11 +14,21 @@ registerHandler('001', (client, msg) => {
     message: msg.params[1] || ''
   })
 
-  // Auto-join channels
+  // Run identify command then join channels
+  // If there's an identify command, delay joining so the server can process auth
+  const hasIdentify = !!client.config.identifyCommand?.trim()
+
+  if (hasIdentify) {
+    runIdentifyCommand(client)
+  }
+
+  const joinDelay = hasIdentify ? 2000 : 0
   if (client.config.autoJoin.length > 0) {
-    for (const channel of client.config.autoJoin) {
-      client.connection.send('JOIN', channel)
-    }
+    setTimeout(() => {
+      for (const channel of client.config.autoJoin) {
+        client.connection.send('JOIN', channel)
+      }
+    }, joinDelay)
   }
 })
 
@@ -156,3 +166,32 @@ registerHandler('NICK', (client, msg) => {
 
   client.events.emit('nick', { oldNick, newNick })
 })
+
+// ── Helpers ──────────────────────────────────────────────────────
+
+import type { IRCClient } from '../client'
+
+function runIdentifyCommand(client: IRCClient): void {
+  const cmd = client.config.identifyCommand?.trim()
+  if (!cmd || !cmd.startsWith('/')) return
+
+  const stripped = cmd.slice(1)
+  const spaceIdx = stripped.indexOf(' ')
+  if (spaceIdx === -1) return
+
+  const command = stripped.slice(0, spaceIdx).toUpperCase()
+  const rest = stripped.slice(spaceIdx + 1)
+
+  if (command === 'MSG' || command === 'PRIVMSG') {
+    const targetSpaceIdx = rest.indexOf(' ')
+    if (targetSpaceIdx !== -1) {
+      const target = rest.slice(0, targetSpaceIdx)
+      const message = rest.slice(targetSpaceIdx + 1)
+      client.connection.send('PRIVMSG', target, message)
+    }
+  } else if (command === 'QUOTE' || command === 'RAW') {
+    client.connection.sendRaw(rest)
+  } else {
+    client.connection.send(command, ...rest.split(' '))
+  }
+}

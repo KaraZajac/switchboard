@@ -1,4 +1,5 @@
 import { ipcMain, Notification, app } from 'electron'
+import { autoUpdater } from 'electron-updater'
 import { ircManager } from '../irc/manager'
 import {
   getAllServers,
@@ -7,7 +8,7 @@ import {
   updateServer,
   removeServer
 } from '../storage/models/server'
-import { getMessages, searchMessages } from '../storage/models/message'
+import { getMessages, searchMessages, deleteMessage } from '../storage/models/message'
 import { getSetting, setSetting } from '../storage/models/settings'
 import { getReadMarker, setReadMarker, getAllReadMarkers } from '../storage/models/readmarker'
 
@@ -125,6 +126,11 @@ export function registerIPCHandlers(): void {
   ipcMain.handle('message:redact', async (_event, serverId: string, channel: string, msgid: string, reason?: string) => {
     const client = ircManager.getClient(serverId)
     if (!client) throw new Error('Not connected')
+
+    // Delete from local database
+    deleteMessage(msgid)
+
+    // Send REDACT to the server
     if (reason) {
       client.connection.send('REDACT', channel, msgid, reason)
     } else {
@@ -132,10 +138,10 @@ export function registerIPCHandlers(): void {
     }
   })
 
-  ipcMain.handle('message:typing', async (_event, serverId: string, channel: string) => {
+  ipcMain.handle('message:typing', async (_event, serverId: string, channel: string, status: 'active' | 'done' = 'active') => {
     const client = ircManager.getClient(serverId)
     if (!client) throw new Error('Not connected')
-    client.connection.sendRaw(`@+typing=active TAGMSG ${channel}`)
+    client.connection.sendRaw(`@+typing=${status} TAGMSG ${channel}`)
   })
 
   // ── User operations ──────────────────────────────────────────────
@@ -152,6 +158,47 @@ export function registerIPCHandlers(): void {
     const client = ircManager.getClient(serverId)
     if (!client) throw new Error('Not connected')
     client.kick(channel, nick, reason)
+  })
+
+  ipcMain.handle('user:nick', async (_event, serverId: string, nick: string) => {
+    const client = ircManager.getClient(serverId)
+    if (!client) throw new Error('Not connected')
+    client.setNick(nick)
+  })
+
+  ipcMain.handle('user:setname', async (_event, serverId: string, realname: string) => {
+    const client = ircManager.getClient(serverId)
+    if (!client) throw new Error('Not connected')
+    if (!client.state.capabilities.has('setname')) {
+      throw new Error('Server does not support SETNAME')
+    }
+    client.connection.send('SETNAME', realname)
+  })
+
+  // ── Metadata ────────────────────────────────────────────────────
+
+  ipcMain.handle('metadata:get', async (_event, serverId: string, target: string, key: string) => {
+    const client = ircManager.getClient(serverId)
+    if (!client) throw new Error('Not connected')
+    if (!client.state.capabilities.has('draft/metadata-2')) {
+      throw new Error('Server does not support metadata')
+    }
+    client.connection.send('METADATA', target, 'GET', key)
+  })
+
+  ipcMain.handle('metadata:set', async (_event, serverId: string, key: string, value: string) => {
+    const client = ircManager.getClient(serverId)
+    if (!client) throw new Error('Not connected')
+    if (!client.state.capabilities.has('draft/metadata-2')) {
+      throw new Error('Server does not support metadata')
+    }
+    // Use sendRaw to avoid the serializer adding a trailing ':' prefix
+    // which some server implementations incorrectly store as part of the value
+    if (value.includes(' ') || value.startsWith(':')) {
+      client.connection.sendRaw(`METADATA * SET ${key} :${value}`)
+    } else {
+      client.connection.sendRaw(`METADATA * SET ${key} ${value}`)
+    }
   })
 
   // ── History ──────────────────────────────────────────────────────
@@ -200,6 +247,18 @@ export function registerIPCHandlers(): void {
     if (process.platform === 'darwin') {
       app.dock?.setBadge(count > 0 ? count.toString() : '')
     }
+  })
+
+  // ── Auto-update ────────────────────────────────────────────────
+
+  ipcMain.handle('updater:install', async () => {
+    autoUpdater.quitAndInstall(false, true)
+  })
+
+  ipcMain.handle('updater:check', async () => {
+    if (!app.isPackaged) return { available: false }
+    const result = await autoUpdater.checkForUpdates()
+    return { available: !!result?.updateInfo, version: result?.updateInfo?.version }
   })
 
   // ── Settings ─────────────────────────────────────────────────────

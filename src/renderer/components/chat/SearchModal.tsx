@@ -160,8 +160,9 @@ export function SearchModal() {
 function formatSearchTime(iso: string): string {
   try {
     const d = new Date(iso)
+    const hour12 = useUIStore.getState().timeFormat === '12h'
     return d.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }) +
-      ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12 })
   } catch {
     return ''
   }

@@ -18,6 +18,7 @@ interface AddServerModalProps {
 
 export function AddServerModal({ editServer }: AddServerModalProps = {}) {
   const closeModal = useUIStore((s) => s.closeModal)
+  const openModal = useUIStore((s) => s.openModal)
   const addServer = useServerStore((s) => s.addServer)
   const updateServer = useServerStore((s) => s.updateServer)
 
@@ -36,6 +37,7 @@ export function AddServerModal({ editServer }: AddServerModalProps = {}) {
   const [saslPassword, setSaslPassword] = useState(editServer?.saslPassword ?? '')
   const [autoConnect, setAutoConnect] = useState(editServer?.autoConnect ?? false)
   const [autoJoin, setAutoJoin] = useState(editServer?.autoJoin?.join(', ') ?? '')
+  const [identifyCommand, setIdentifyCommand] = useState(editServer?.identifyCommand ?? '')
   const [websocketUrl, setWebsocketUrl] = useState(editServer?.websocketUrl ?? '')
   const [showAdvanced, setShowAdvanced] = useState(isEdit)
   const [error, setError] = useState<string | null>(null)
@@ -70,6 +72,7 @@ export function AddServerModal({ editServer }: AddServerModalProps = {}) {
         .split(',')
         .map((ch) => ch.trim())
         .filter(Boolean),
+      identifyCommand: identifyCommand.trim() || null,
       websocketUrl: websocketUrl.trim() || null
     }
 
@@ -77,11 +80,13 @@ export function AddServerModal({ editServer }: AddServerModalProps = {}) {
       if (isEdit && editServer) {
         await window.switchboard.invoke('server:update', editServer.id, config as never)
         updateServer(editServer.id, config)
+        // Return to settings page instead of closing everything
+        openModal('settings')
       } else {
         const id = await window.switchboard.invoke('server:add', config as never)
         addServer({ ...config, id, sortOrder: 0 } as never)
+        closeModal()
       }
-      closeModal()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save server')
     }
@@ -261,6 +266,23 @@ export function AddServerModal({ editServer }: AddServerModalProps = {}) {
                 <option value="EXTERNAL">EXTERNAL (client cert)</option>
                 <option value="SCRAM-SHA-256">SCRAM-SHA-256</option>
               </select>
+            </div>
+
+            {/* Identify command */}
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-300">
+                Identify Command
+              </label>
+              <input
+                type="text"
+                value={identifyCommand}
+                onChange={(e) => setIdentifyCommand(e.target.value)}
+                placeholder="/msg NickServ IDENTIFY username password"
+                className="w-full rounded bg-gray-900 px-3 py-2 text-gray-100 outline-none ring-1 ring-gray-700 focus:ring-indigo-500"
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                Runs after connecting. For servers that don't support SASL.
+              </p>
             </div>
 
             {(saslMechanism === 'PLAIN' || saslMechanism === 'SCRAM-SHA-256') && (

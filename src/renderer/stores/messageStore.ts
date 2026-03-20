@@ -28,7 +28,7 @@ interface MessageState {
 }
 
 function channelKey(serverId: string, channel: string): string {
-  return `${serverId}:${channel}`
+  return `${serverId}:${channel.toLowerCase()}`
 }
 
 export const useMessageStore = create<MessageState>((set, get) => ({

@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useServerStore } from '../../stores/serverStore'
 import { useChannelStore } from '../../stores/channelStore'
 import { useUserStore } from '../../stores/userStore'
@@ -22,7 +22,7 @@ export function UserList() {
   )
 
   const key = activeServerId && activeChannel
-    ? `${activeServerId}:${activeChannel}`
+    ? `${activeServerId}:${activeChannel.toLowerCase()}`
     : null
   const users = useUserStore((s) => (key ? s.users[key] ?? EMPTY_USERS : EMPTY_USERS))
 
@@ -60,7 +60,7 @@ export function UserList() {
   ] : []
 
   return (
-    <div className="w-60 overflow-y-auto bg-gray-800 px-2 py-4 no-select">
+    <div className="w-60 shrink-0 overflow-y-auto bg-gray-800 px-2 py-4 no-select">
       {groups.map((group) => (
         <div key={group.label}>
           <div className="mb-1 mt-4 px-2 text-xs font-semibold uppercase tracking-wide text-gray-400 first:mt-0">
@@ -90,6 +90,12 @@ export function UserList() {
 }
 
 function UserItem({ user, onContextMenu }: { user: ChannelUser; onContextMenu: (e: React.MouseEvent, user: ChannelUser) => void }) {
+  const activeServerId = useServerStore((s) => s.activeServerId)
+  const userAvatars = useServerStore((s) => s.userAvatars)
+  const avatarUrl = activeServerId
+    ? userAvatars[`${activeServerId}:${user.nick.toLowerCase()}`] ?? null
+    : null
+
   const tooltipParts = [user.nick]
   if (user.account) tooltipParts.push(`Account: ${user.account}`)
   if (user.away && user.awayMessage) tooltipParts.push(`Away: ${user.awayMessage}`)
@@ -101,13 +107,7 @@ function UserItem({ user, onContextMenu }: { user: ChannelUser; onContextMenu: (
       title={tooltipParts.join('\n')}
     >
       {/* Avatar */}
-      <div className="relative flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-gray-600 text-xs font-bold text-gray-200">
-        {user.nick.charAt(0).toUpperCase()}
-        {/* Away indicator */}
-        {user.away && (
-          <div className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-gray-800 bg-gray-500" />
-        )}
-      </div>
+      <UserAvatar nick={user.nick} avatarUrl={avatarUrl} away={user.away} />
 
       <div className="flex flex-1 items-center overflow-hidden">
         {/* Prefix */}
@@ -179,4 +179,29 @@ function groupUsersByPrefix(users: ChannelUser[]): UserGroup[] {
   // Sort groups by rank (highest first)
   groups.sort((a, b) => b.rank - a.rank)
   return groups
+}
+
+function UserAvatar({ nick, avatarUrl, away }: { nick: string; avatarUrl: string | null; away: boolean }) {
+  const [failed, setFailed] = useState(false)
+  useEffect(() => { setFailed(false) }, [avatarUrl])
+
+  return (
+    <div className="relative flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-gray-600 text-xs font-bold text-gray-200">
+      {avatarUrl && !failed ? (
+        <img
+          src={avatarUrl}
+          alt={nick}
+          referrerPolicy="no-referrer"
+          crossOrigin="anonymous"
+          className="h-8 w-8 rounded-full object-cover"
+          onError={() => setFailed(true)}
+        />
+      ) : (
+        nick.charAt(0).toUpperCase()
+      )}
+      {away && (
+        <div className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-gray-800 bg-gray-500" />
+      )}
+    </div>
+  )
 }

@@ -23,22 +23,22 @@ export function ServerRail() {
   }
 
   return (
-    <div className="flex w-[72px] flex-col items-center gap-2 bg-gray-950 py-3 no-select">
+    <div className="flex w-[72px] shrink-0 flex-col items-center gap-2 bg-gray-950 py-3 no-select">
       {/* Switchboard icon — Direct Messages */}
       <div className="group relative">
         {dmMode && (
-          <div className="absolute -left-0.5 top-1/2 h-10 w-1 -translate-y-1/2 rounded-r bg-white" />
+          <div className="absolute -left-0.5 top-1/2 h-10 w-1 -translate-y-1/2 rounded-r bg-gray-100" />
         )}
         <button
           onClick={handleSwitchboardClick}
           className={`flex h-12 w-12 items-center justify-center transition-all ${
             dmMode
-              ? 'rounded-xl bg-indigo-500'
-              : 'rounded-2xl bg-gray-700 hover:rounded-xl hover:bg-indigo-500'
+              ? 'rounded-xl bg-indigo-500 text-white'
+              : 'rounded-2xl bg-gray-700 text-gray-100 hover:rounded-xl hover:bg-indigo-500 hover:text-white'
           }`}
           title="Direct Messages"
         >
-          <SwitchboardIcon size={40} bg="transparent" fg="white" />
+          <SwitchboardIcon size={40} bg="transparent" fg="currentColor" />
         </button>
 
         {totalDmUnread > 0 && !dmMode && (
@@ -62,16 +62,18 @@ export function ServerRail() {
         const status = connectionStatus[server.id] || 'disconnected'
         const initial = server.name.charAt(0).toUpperCase()
         const serverChannels = allChannels[server.id] || []
-        const totalMentions = serverChannels.reduce((sum, ch) => sum + ch.mentionCount, 0)
-        const hasUnread = serverChannels.some((ch) => ch.unreadCount > 0)
+        // Exclude DMs from server badge — those show on the Switchboard icon
+        const channelOnly = serverChannels.filter((ch) => isChannelName(ch.name) || ch.name === '*')
+        const totalMentions = channelOnly.reduce((sum, ch) => sum + ch.mentionCount, 0)
+        const hasUnread = channelOnly.some((ch) => ch.unreadCount > 0)
 
         return (
           <div key={server.id} className="group relative">
             {/* Active indicator */}
             {isActive && !dmMode ? (
-              <div className="absolute -left-0.5 top-1/2 h-10 w-1 -translate-y-1/2 rounded-r bg-white" />
+              <div className="absolute -left-0.5 top-1/2 h-10 w-1 -translate-y-1/2 rounded-r bg-gray-100" />
             ) : hasUnread && (
-              <div className="absolute -left-0.5 top-1/2 h-2 w-1 -translate-y-1/2 rounded-r bg-white" />
+              <div className="absolute -left-0.5 top-1/2 h-2 w-1 -translate-y-1/2 rounded-r bg-gray-100" />
             )}
 
             <button
