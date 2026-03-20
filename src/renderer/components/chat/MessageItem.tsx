@@ -4,6 +4,7 @@ import { MessageContent } from './MessageContent'
 import { useMessageStore } from '../../stores/messageStore'
 import { useUIStore } from '../../stores/uiStore'
 import { useServerStore } from '../../stores/serverStore'
+import { nickColor } from '../../utils/nickColor'
 
 interface MessageItemProps {
   message: ChatMessage
@@ -346,10 +347,38 @@ function NickWithPopup({ nick, serverId, className }: { nick: string; serverId: 
   const userAvatars = useServerStore((s) => s.userAvatars)
   const nickAvatarUrl = userAvatars[`${serverId}:${nick.toLowerCase()}`] ?? null
   const [showPopup, setShowPopup] = useState(false)
-  const [popupPos, setPopupPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 })
+  const [popupStyle, setPopupStyle] = useState<React.CSSProperties>({})
   const [fetched, setFetched] = useState(false)
   const hoverTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
   const hideTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const popupRef = useRef<HTMLDivElement>(null)
+  const nickRect = useRef<DOMRect | null>(null)
+
+  // Reposition popup after it renders (and when content changes from loading → data)
+  useEffect(() => {
+    if (!showPopup || !popupRef.current || !nickRect.current) return
+    const rect = nickRect.current
+    const popup = popupRef.current.getBoundingClientRect()
+    const pad = 8
+
+    let top = rect.bottom + 4
+    let left = rect.left
+
+    // Flip above if not enough room below
+    if (top + popup.height + pad > window.innerHeight) {
+      top = rect.top - popup.height - 4
+    }
+    // Clamp to top
+    if (top < pad) top = pad
+
+    // Clamp horizontally
+    if (left + popup.width + pad > window.innerWidth) {
+      left = window.innerWidth - popup.width - pad
+    }
+    if (left < pad) left = pad
+
+    setPopupStyle({ left, top })
+  }, [showPopup, popupWhoisData])
 
   const fetchWhois = useCallback(() => {
     if (fetched) return
@@ -364,8 +393,8 @@ function NickWithPopup({ nick, serverId, className }: { nick: string; serverId: 
       hideTimeout.current = null
     }
     hoverTimeout.current = setTimeout(() => {
-      const rect = (e.target as HTMLElement).getBoundingClientRect()
-      setPopupPos({ x: rect.left, y: rect.bottom + 4 })
+      nickRect.current = (e.target as HTMLElement).getBoundingClientRect()
+      setPopupStyle({ left: nickRect.current.left, top: nickRect.current.bottom + 4 })
       setShowPopup(true)
       fetchWhois()
     }, 400)
@@ -406,8 +435,9 @@ function NickWithPopup({ nick, serverId, className }: { nick: string; serverId: 
 
       {showPopup && (
         <div
+          ref={popupRef}
           className="fixed z-50 w-72 rounded-lg border border-gray-700 bg-gray-800 p-3 shadow-xl"
-          style={{ left: popupPos.x, top: popupPos.y }}
+          style={popupStyle}
           onMouseEnter={handlePopupEnter}
           onMouseLeave={handlePopupLeave}
         >
@@ -476,6 +506,7 @@ function NickWithPopup({ nick, serverId, className }: { nick: string; serverId: 
   )
 }
 
+
 function WhoisAvatar({ nick, avatarUrl }: { nick: string; avatarUrl: string | null }) {
   const [failed, setFailed] = useState(false)
   useEffect(() => { setFailed(false) }, [avatarUrl])
@@ -493,7 +524,7 @@ function WhoisAvatar({ nick, avatarUrl }: { nick: string; avatarUrl: string | nu
     )
   }
   return (
-    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-sm font-bold text-white">
+    <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${nickColor(nick)} text-sm font-bold text-white`}>
       {nick.charAt(0).toUpperCase()}
     </div>
   )
@@ -518,7 +549,7 @@ function MessageAvatar({ nick, avatarUrl }: { nick: string; avatarUrl: string | 
   }
 
   return (
-    <div className="mr-3 mt-0.5 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-indigo-600 text-sm font-bold text-white">
+    <div className={`mr-3 mt-0.5 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full ${nickColor(nick)} text-sm font-bold text-white`}>
       {nick.charAt(0).toUpperCase()}
     </div>
   )

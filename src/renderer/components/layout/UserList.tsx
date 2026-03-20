@@ -3,6 +3,7 @@ import { useServerStore } from '../../stores/serverStore'
 import { useChannelStore } from '../../stores/channelStore'
 import { useUserStore } from '../../stores/userStore'
 import { useUIStore } from '../../stores/uiStore'
+import { nickColor } from '../../utils/nickColor'
 import { ContextMenu, type ContextMenuItem } from '../common/ContextMenu'
 import type { ChannelUser } from '@shared/types/channel'
 import { PREFIX_RANKS } from '@shared/types/channel'
@@ -186,7 +187,7 @@ function UserAvatar({ nick, avatarUrl, away }: { nick: string; avatarUrl: string
   useEffect(() => { setFailed(false) }, [avatarUrl])
 
   return (
-    <div className="relative flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-gray-600 text-xs font-bold text-gray-200">
+    <div className={`relative flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full ${avatarUrl && !failed ? 'bg-gray-600' : nickColor(nick)} text-xs font-bold text-white`}>
       {avatarUrl && !failed ? (
         <img
           src={avatarUrl}
