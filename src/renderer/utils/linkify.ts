@@ -31,20 +31,12 @@ export type MessageSegment = TextSegment | LinkSegment | CodeSegment
 const URL_REGEX =
   /https?:\/\/[^\s<>"\])}]+|ftp:\/\/[^\s<>"\])}]+/gi
 
-/** Inline code regex: `code` */
-const INLINE_CODE_REGEX = /`([^`\n]+)`/g
-
-/** Code block regex: ```code``` */
-const CODE_BLOCK_REGEX = /```(?:\w*\n)?([\s\S]*?)```/g
-
 /**
  * Parse message text into segments (text, links, code blocks).
  */
 export function parseMessageContent(text: string): MessageSegment[] {
   const segments: MessageSegment[] = []
 
-  // First extract code blocks
-  const remaining = text
   const codeBlocks: { start: number; end: number; content: string; inline: boolean }[] = []
 
   // Find code blocks (``` ... ```)

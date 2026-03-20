@@ -1,5 +1,3 @@
-import { registerHandler } from '../handlers/registry'
-
 /**
  * Strict Transport Security (STS) — IRCv3
  *

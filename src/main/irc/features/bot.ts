@@ -1,5 +1,3 @@
-import { registerHandler } from '../handlers/registry'
-
 /**
  * bot-mode — Identify bots in the user list.
  *

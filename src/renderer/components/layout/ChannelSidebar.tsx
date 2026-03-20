@@ -1,10 +1,10 @@
 import { useState, useCallback, useMemo } from 'react'
 import { useServerStore } from '../../stores/serverStore'
 import { useChannelStore } from '../../stores/channelStore'
-import { ContextMenu, type ContextMenuItem } from '../common/ContextMenu'
+import { ContextMenu } from '../common/ContextMenu'
 import { ChannelBrowser } from '../channel/ChannelBrowser'
 import { UserProfilePanel } from '../user/UserProfilePanel'
-import { isChannelName, isServiceNick } from '@shared/constants'
+import { isChannelName } from '@shared/constants'
 
 const EMPTY_CHANNELS: { name: string; serverId: string; topic: string | null; topicSetBy: string | null; unreadCount: number; mentionCount: number; muted: boolean }[] = []
 
