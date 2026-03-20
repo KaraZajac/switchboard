@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect, type KeyboardEvent } from 'react'
+import { useState, useRef, useCallback, type KeyboardEvent } from 'react'
 import type { ReplyTarget } from '../../stores/messageStore'
 import type { ChannelUser } from '@shared/types/channel'
 import { TYPING_THROTTLE_MS } from '@shared/constants'
@@ -73,6 +73,7 @@ export function MessageComposer({
         completionState.current.active = false
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [text, onSend, onSendReply, replyTarget, onCancelReply, disabled, users, channels]
   )
 

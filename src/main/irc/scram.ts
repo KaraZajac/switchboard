@@ -1,5 +1,4 @@
 import * as crypto from 'crypto'
-import { registerHandler } from './handlers/registry'
 import { SASL_CHUNK_SIZE } from '@shared/constants'
 
 /**

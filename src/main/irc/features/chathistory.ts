@@ -1,4 +1,3 @@
-import type { IRCMessage } from '@shared/types/irc'
 
 /**
  * draft/chathistory — Server-side message history.

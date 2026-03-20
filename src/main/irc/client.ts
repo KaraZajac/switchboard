@@ -5,8 +5,6 @@ import type { ChannelUser } from '@shared/types/channel'
 import { IRCConnection } from './connection'
 import { ConnectionState } from './state'
 import { dispatchMessage, registerAllHandlers } from './handlers/index'
-import { REQUESTED_CAPS } from '@shared/constants'
-import { cmd } from './serializer'
 
 // Register all handlers once at module load
 registerAllHandlers()

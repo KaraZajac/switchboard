@@ -17,7 +17,6 @@ import { parseSTSValue, setSTSPolicy } from './features/sts'
 
 // Accumulator for multi-line CAP LS responses
 let pendingCapLs: Map<string, string | null> = new Map()
-let capLsMultiline = false
 
 registerHandler('CAP', (client, msg) => {
   // params: <nick-or-*> <subcommand> [* (multiline)] :<cap list>
@@ -127,9 +126,6 @@ registerHandler('CAP', (client, msg) => {
     case 'NAK': {
       // Server rejected our cap request
       // Try to continue without the rejected caps
-      const capStr = msg.params[2] || ''
-      const rejected = capStr.split(' ').filter(Boolean)
-
       // We could retry with a subset, but for simplicity just end negotiation
       client.connection.send('CAP', 'END')
       client.state.capNegotiating = false

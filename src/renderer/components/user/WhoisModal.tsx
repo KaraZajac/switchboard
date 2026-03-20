@@ -1,5 +1,5 @@
 import { Modal } from '../common/Modal'
-import { useUIStore, type WhoisData } from '../../stores/uiStore'
+import { useUIStore } from '../../stores/uiStore'
 
 export function WhoisModal() {
   const closeModal = useUIStore((s) => s.closeModal)

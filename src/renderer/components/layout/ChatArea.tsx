@@ -1,7 +1,7 @@
 import { useRef, useEffect, useState, useCallback, useMemo } from 'react'
 import { useServerStore } from '../../stores/serverStore'
 import { useChannelStore } from '../../stores/channelStore'
-import { useMessageStore, type ReplyTarget } from '../../stores/messageStore'
+import { useMessageStore } from '../../stores/messageStore'
 import { useUserStore } from '../../stores/userStore'
 import type { ChannelUser } from '@shared/types/channel'
 import { SwitchboardIcon } from '../common/SwitchboardIcon'
@@ -59,6 +59,7 @@ export function ChatArea() {
   const initialReadMarker = useRef<string | null>(null)
   useEffect(() => {
     initialReadMarker.current = readMarkerTimestamp
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]) // Only reset when channel changes, not when readMarkerTimestamp updates
 
   // Mark channel as read when viewing it
@@ -69,6 +70,7 @@ export function ChatArea() {
       window.switchboard.invoke('read-marker:set', activeServerId, activeChannel, lastMsg.timestamp)
       useChannelStore.getState().setReadMarker(activeServerId, activeChannel, lastMsg.timestamp)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeServerId, activeChannel, messages.length])
 
   // Auto-scroll to bottom when new messages arrive

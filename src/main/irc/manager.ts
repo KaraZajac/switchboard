@@ -2,7 +2,6 @@ import { BrowserWindow } from 'electron'
 import type { ServerConfig } from '@shared/types/server'
 import type { IRCMessage } from '@shared/types/irc'
 import type { ChatMessage } from '@shared/types/message'
-import type { ChannelUser } from '@shared/types/channel'
 import { IRCClient } from './client'
 import { storeMessage, deleteMessage } from '../storage/models/message'
 import { v4 as uuid } from 'uuid'
@@ -65,7 +64,7 @@ export class IRCManager {
    * Disconnect all servers and clean up.
    */
   destroyAll(): void {
-    for (const [id, client] of this.clients) {
+    for (const [, client] of this.clients) {
       client.destroy()
     }
     this.clients.clear()
