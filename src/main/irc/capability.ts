@@ -17,6 +17,7 @@ import { parseSTSValue, setSTSPolicy } from './features/sts'
 
 // Accumulator for multi-line CAP LS responses
 let pendingCapLs: Map<string, string | null> = new Map()
+let capLsMultiline = false
 
 registerHandler('CAP', (client, msg) => {
   // params: <nick-or-*> <subcommand> [* (multiline)] :<cap list>

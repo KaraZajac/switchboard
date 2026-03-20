@@ -92,13 +92,10 @@ export interface ClientEvents {
   raw: (direction: 'in' | 'out', line: string) => void
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging
-export declare interface IRCClient {
-  events: EventEmitter & {
-    on<K extends keyof ClientEvents>(event: K, listener: ClientEvents[K]): EventEmitter
-    off<K extends keyof ClientEvents>(event: K, listener: ClientEvents[K]): EventEmitter
-    emit<K extends keyof ClientEvents>(event: K, ...args: Parameters<ClientEvents[K]>): boolean
-  }
+export type TypedEventEmitter = EventEmitter & {
+  on<K extends keyof ClientEvents>(event: K, listener: ClientEvents[K]): EventEmitter
+  off<K extends keyof ClientEvents>(event: K, listener: ClientEvents[K]): EventEmitter
+  emit<K extends keyof ClientEvents>(event: K, ...args: Parameters<ClientEvents[K]>): boolean
 }
 
 /**
@@ -109,18 +106,17 @@ export declare interface IRCClient {
  *   client.events.on('privmsg', (data) => { ... })
  *   client.connect()
  */
-// eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging
 export class IRCClient {
   readonly config: ServerConfig
   readonly connection: IRCConnection
   readonly state: ConnectionState
-  readonly events: EventEmitter
+  readonly events: TypedEventEmitter
 
   constructor(config: ServerConfig) {
     this.config = config
     this.connection = new IRCConnection(config)
     this.state = new ConnectionState()
-    this.events = new EventEmitter()
+    this.events = new EventEmitter() as TypedEventEmitter
 
     this.state.desiredNick = config.nick
     this.state.username = config.username || config.nick
