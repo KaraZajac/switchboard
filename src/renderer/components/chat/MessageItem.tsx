@@ -160,6 +160,8 @@ function MessageActions({ message, onReply }: { message: ChatMessage; onReply?: 
     setShowEmojiPicker(false)
   }
 
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+
   const handleRedact = () => {
     // Optimistic removal from UI immediately
     useMessageStore.getState().removeMessage(message.serverId, message.channel, message.id)
@@ -169,6 +171,27 @@ function MessageActions({ message, onReply }: { message: ChatMessage; onReply?: 
 
   return (
     <div className="absolute -top-3 right-2 z-10 flex gap-0.5 rounded border border-gray-700 bg-gray-800 opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
+      {/* Delete confirmation popup */}
+      {showDeleteConfirm && (
+        <div className="absolute -top-1 right-0 z-30 -translate-y-full rounded-lg border border-gray-700 bg-gray-800 p-3 shadow-xl">
+          <p className="mb-2 whitespace-nowrap text-sm text-gray-300">Delete this message?</p>
+          <div className="flex justify-end gap-2">
+            <button
+              onClick={() => setShowDeleteConfirm(false)}
+              className="rounded px-3 py-1 text-xs text-gray-400 hover:bg-gray-700 hover:text-gray-200"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => { handleRedact(); setShowDeleteConfirm(false) }}
+              className="rounded bg-red-600 px-3 py-1 text-xs text-white hover:bg-red-500"
+            >
+              Delete
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* React */}
       <div className="relative" ref={pickerRef}>
         <button
@@ -217,7 +240,7 @@ function MessageActions({ message, onReply }: { message: ChatMessage; onReply?: 
 
       {/* Delete (redact) */}
       <button
-        onClick={handleRedact}
+        onClick={() => setShowDeleteConfirm(true)}
         className="rounded px-2 py-1 text-gray-400 hover:bg-red-900/50 hover:text-red-400"
         title="Delete message"
       >
