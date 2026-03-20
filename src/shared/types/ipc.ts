@@ -10,7 +10,7 @@ import type { ChannelUser } from './channel'
 // ── Main → Renderer events ──────────────────────────────────────────
 
 export interface MainToRendererEvents {
-  'irc:connected': { serverId: string }
+  'irc:connected': { serverId: string; nick: string }
   'irc:disconnected': { serverId: string; reason: string }
   'irc:message': { serverId: string; channel: string; message: ChatMessage }
   'irc:join': { serverId: string; channel: string; user: ChannelUser }
@@ -32,6 +32,8 @@ export interface MainToRendererEvents {
   'irc:read-marker': { serverId: string; channel: string; timestamp: string }
   'irc:cap': { serverId: string; capabilities: string[] }
   'irc:raw': { serverId: string; direction: 'in' | 'out'; line: string }
+  'irc:setname': { serverId: string; nick: string; realname: string }
+  'irc:metadata': { serverId: string; target: string; key: string; value: string }
   'irc:account-registered': { serverId: string; account: string; message: string }
   'irc:channel-rename': { serverId: string; oldName: string; newName: string; reason: string | null }
   'irc:chathistory': { serverId: string; channel: string; messages: ChatMessage[] }
@@ -39,6 +41,11 @@ export interface MainToRendererEvents {
   'irc:netjoin': { serverId: string; server1: string; server2: string; nicks: string[] }
   'menu:add-server': Record<string, never>
   'menu:settings': Record<string, never>
+  'updater:checking': Record<string, never>
+  'updater:available': { version: string }
+  'updater:not-available': Record<string, never>
+  'updater:progress': { percent: number }
+  'updater:ready': { version: string }
 }
 
 // ── Renderer → Main invocations ─────────────────────────────────────
@@ -58,10 +65,14 @@ export interface RendererToMainInvocations {
   'message:reply': (serverId: string, channel: string, text: string, replyTo: string) => Promise<void>
   'message:react': (serverId: string, channel: string, msgid: string, emoji: string) => Promise<void>
   'message:redact': (serverId: string, channel: string, msgid: string, reason?: string) => Promise<void>
-  'message:typing': (serverId: string, channel: string) => Promise<void>
+  'message:typing': (serverId: string, channel: string, status?: 'active' | 'done') => Promise<void>
   'message:search': (serverId: string, query: string, channel?: string) => Promise<ChatMessage[]>
   'user:whois': (serverId: string, nick: string) => Promise<Record<string, string>>
   'user:kick': (serverId: string, channel: string, nick: string, reason?: string) => Promise<void>
+  'user:nick': (serverId: string, nick: string) => Promise<void>
+  'user:setname': (serverId: string, realname: string) => Promise<void>
+  'metadata:get': (serverId: string, target: string, key: string) => Promise<void>
+  'metadata:set': (serverId: string, key: string, value: string) => Promise<void>
   'account:register': (serverId: string, email: string | null, password: string) => Promise<boolean>
   'history:fetch': (serverId: string, channel: string, before?: string, limit?: number) => Promise<ChatMessage[]>
   'chathistory:request': (serverId: string, channel: string, before?: string, limit?: number) => Promise<void>
@@ -72,4 +83,6 @@ export interface RendererToMainInvocations {
   'read-marker:set': (serverId: string, channel: string, timestamp: string) => Promise<void>
   'read-marker:get': (serverId: string, channel: string) => Promise<string | null>
   'read-marker:get-all': (serverId: string) => Promise<Record<string, string>>
+  'updater:install': () => Promise<void>
+  'updater:check': () => Promise<{ available: boolean; version?: string }>
 }

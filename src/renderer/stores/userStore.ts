@@ -15,7 +15,7 @@ interface UserState {
 }
 
 function channelKey(serverId: string, channel: string): string {
-  return `${serverId}:${channel}`
+  return `${serverId}:${channel.toLowerCase()}`
 }
 
 export const useUserStore = create<UserState>((set) => ({

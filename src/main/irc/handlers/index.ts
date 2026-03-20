@@ -26,6 +26,7 @@ import '../features/labeled'
 import '../features/readmarker'
 import '../features/rename'
 import '../features/redact'
+import '../features/metadata'
 import '../features/account-registration'
 
 /** No-op — handlers are registered via side-effect imports above */

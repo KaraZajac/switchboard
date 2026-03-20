@@ -1,6 +1,9 @@
+import { useState, useRef, useEffect } from 'react'
 import { useServerStore } from '../../stores/serverStore'
 import { useChannelStore } from '../../stores/channelStore'
-import { isChannelName } from '@shared/constants'
+import { useUIStore } from '../../stores/uiStore'
+import { UserProfilePanel } from '../user/UserProfilePanel'
+import { isChannelName, isServiceNick } from '@shared/constants'
 
 interface DMEntry {
   serverId: string
@@ -17,13 +20,22 @@ export function DMSidebar() {
   const activeChannel = useChannelStore((s) =>
     activeServerId ? s.activeChannel[activeServerId] ?? null : null
   )
+  const [showInput, setShowInput] = useState(false)
+  const [newNick, setNewNick] = useState('')
+  const inputRef = useRef<HTMLInputElement>(null)
 
-  // Collect all DMs across all servers
+  useEffect(() => {
+    if (showInput && inputRef.current) {
+      inputRef.current.focus()
+    }
+  }, [showInput])
+
+  // Collect all DMs across all servers (exclude services and server console)
   const dms: DMEntry[] = []
   for (const server of servers) {
     const channels = allChannels[server.id] || []
     for (const ch of channels) {
-      if (!isChannelName(ch.name) && ch.name !== '*') {
+      if (!isChannelName(ch.name) && ch.name !== '*' && !isServiceNick(ch.name)) {
         dms.push({
           serverId: server.id,
           serverName: server.name,
@@ -45,22 +57,59 @@ export function DMSidebar() {
     useChannelStore.getState().removeChannel(serverId, nick)
   }
 
+  const handleNewDM = () => {
+    const nick = newNick.trim()
+    if (!nick || !activeServerId) return
+    useChannelStore.getState().addChannel(activeServerId, nick)
+    useChannelStore.getState().setActiveChannel(activeServerId, nick)
+    useUIStore.getState().setDmMode(true)
+    setNewNick('')
+    setShowInput(false)
+  }
+
   return (
-    <div className="flex w-60 flex-col bg-gray-800 no-select">
+    <div className="flex w-60 shrink-0 flex-col bg-gray-800 no-select">
       {/* Header */}
-      <div className="flex h-12 items-center border-b border-gray-900 px-4 shadow-sm">
+      <div className="flex h-12 items-center justify-between border-b border-gray-700 px-4 shadow-sm">
         <span className="font-semibold">Direct Messages</span>
+        <button
+          onClick={() => setShowInput(!showInput)}
+          className="rounded p-0.5 text-gray-400 hover:bg-gray-700 hover:text-gray-200"
+          title="New message"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
+          </svg>
+        </button>
       </div>
+
+      {/* New DM input */}
+      {showInput && (
+        <div className="border-b border-gray-700 px-3 py-2">
+          <input
+            ref={inputRef}
+            type="text"
+            value={newNick}
+            onChange={(e) => setNewNick(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleNewDM()
+              if (e.key === 'Escape') { setShowInput(false); setNewNick('') }
+            }}
+            placeholder="Enter a nickname..."
+            className="w-full rounded bg-gray-900 px-2 py-1.5 text-sm text-gray-100 placeholder-gray-500 outline-none focus:ring-1 focus:ring-indigo-500"
+          />
+        </div>
+      )}
 
       {/* DM list */}
       <div className="flex-1 overflow-y-auto px-2 py-2">
-        {dms.length === 0 && (
+        {dms.length === 0 && !showInput && (
           <p className="px-2 py-4 text-center text-sm text-gray-500">
-            No conversations yet. Right-click a user to send a message.
+            No conversations yet. Click + to start one.
           </p>
         )}
 
-        {dms.map((dm) => {
+        {dms.map((dm: DMEntry) => {
           const isActive =
             dm.serverId === activeServerId &&
             activeChannel?.toLowerCase() === dm.nick.toLowerCase()
@@ -116,6 +165,9 @@ export function DMSidebar() {
           )
         })}
       </div>
+
+      {/* User profile */}
+      <UserProfilePanel />
     </div>
   )
 }

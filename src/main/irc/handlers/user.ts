@@ -29,7 +29,7 @@ registerHandler('312', (client, msg) => {
  */
 registerHandler('313', (client, _msg) => {
   if (client.state.whoisData) {
-    client.state.whoisData.operator = 'true'
+    client.state.whoisData.isOperator = 'true'
   }
 })
 
@@ -66,7 +66,7 @@ registerHandler('330', (client, msg) => {
  */
 registerHandler('335', (client, _msg) => {
   if (client.state.whoisData) {
-    client.state.whoisData.bot = 'true'
+    client.state.whoisData.isBot = 'true'
   }
 })
 

@@ -10,6 +10,10 @@ interface ServerState {
   connectionStatus: Record<string, 'disconnected' | 'connecting' | 'connected'>
   /** Server capabilities */
   capabilities: Record<string, string[]>
+  /** Our current nick per server */
+  currentNick: Record<string, string>
+  /** User avatars from metadata: `${serverId}:${nick}` -> URL */
+  userAvatars: Record<string, string>
 
   // Actions
   setServers: (servers: ServerConfig[]) => void
@@ -19,6 +23,8 @@ interface ServerState {
   setActiveServer: (id: string | null) => void
   setConnectionStatus: (id: string, status: 'disconnected' | 'connecting' | 'connected') => void
   setCapabilities: (id: string, caps: string[]) => void
+  setCurrentNick: (id: string, nick: string) => void
+  setUserAvatar: (serverId: string, nick: string, url: string) => void
 }
 
 export const useServerStore = create<ServerState>((set) => ({
@@ -26,6 +32,8 @@ export const useServerStore = create<ServerState>((set) => ({
   activeServerId: null,
   connectionStatus: {},
   capabilities: {},
+  currentNick: {},
+  userAvatars: {},
 
   setServers: (servers) => set({ servers }),
 
@@ -58,5 +66,15 @@ export const useServerStore = create<ServerState>((set) => ({
   setCapabilities: (id, caps) =>
     set((state) => ({
       capabilities: { ...state.capabilities, [id]: caps }
+    })),
+
+  setCurrentNick: (id, nick) =>
+    set((state) => ({
+      currentNick: { ...state.currentNick, [id]: nick }
+    })),
+
+  setUserAvatar: (serverId, nick, url) =>
+    set((state) => ({
+      userAvatars: { ...state.userAvatars, [`${serverId}:${nick.toLowerCase()}`]: url }
     }))
 }))

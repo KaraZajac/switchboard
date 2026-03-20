@@ -69,6 +69,10 @@ export interface ClientEvents {
   away: (data: { nick: string; message: string | null }) => void
   account: (data: { nick: string; account: string | null }) => void
 
+  // Metadata
+  metadata: (data: { target: string; key: string; value: string }) => void
+  setname: (data: { nick: string; realname: string }) => void
+
   // Server events
   motd: (lines: string[]) => void
   isupport: (tokens: Record<string, string | true>) => void

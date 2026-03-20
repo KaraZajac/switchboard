@@ -39,8 +39,8 @@ export function addServer(config: Omit<ServerConfig, 'id' | 'sortOrder'>): strin
 
   db.run(
     `INSERT INTO servers (id, name, host, port, tls, password, nick, username, realname,
-     sasl_mechanism, sasl_username, sasl_password, auto_connect, auto_join, sort_order, websocket_url)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     sasl_mechanism, sasl_username, sasl_password, auto_connect, auto_join, sort_order, websocket_url, identify_command)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       id,
       config.name,
@@ -57,7 +57,8 @@ export function addServer(config: Omit<ServerConfig, 'id' | 'sortOrder'>): strin
       config.autoConnect ? 1 : 0,
       JSON.stringify(config.autoJoin),
       sortOrder,
-      (config as Record<string, unknown>).websocketUrl || null
+      (config as Record<string, unknown>).websocketUrl || null,
+      (config as Record<string, unknown>).identifyCommand || null
     ]
   )
 
@@ -85,6 +86,7 @@ export function updateServer(id: string, updates: Partial<ServerConfig>): void {
   if (updates.autoJoin !== undefined) { fields.push('auto_join = ?'); values.push(JSON.stringify(updates.autoJoin)) }
   if (updates.sortOrder !== undefined) { fields.push('sort_order = ?'); values.push(updates.sortOrder) }
   if (updates.websocketUrl !== undefined) { fields.push('websocket_url = ?'); values.push(updates.websocketUrl) }
+  if (updates.identifyCommand !== undefined) { fields.push('identify_command = ?'); values.push(updates.identifyCommand) }
 
   if (fields.length === 0) return
 
@@ -120,7 +122,8 @@ function rowToConfig(row: unknown[]): ServerConfig {
     autoConnect: (row[12] as number) === 1,
     autoJoin: JSON.parse((row[13] as string) || '[]'),
     sortOrder: row[14] as number,
-    websocketUrl: (row[17] as string) || null
+    websocketUrl: (row[17] as string) || null,
+    identifyCommand: (row[18] as string) || null
   }
 }
 
@@ -141,6 +144,7 @@ function objectToConfig(row: Record<string, unknown>): ServerConfig {
     autoConnect: (row['auto_connect'] as number) === 1,
     autoJoin: JSON.parse((row['auto_join'] as string) || '[]'),
     sortOrder: row['sort_order'] as number,
-    websocketUrl: (row['websocket_url'] as string) || null
+    websocketUrl: (row['websocket_url'] as string) || null,
+    identifyCommand: (row['identify_command'] as string) || null
   }
 }

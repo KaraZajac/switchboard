@@ -34,6 +34,9 @@ interface UIState {
   whoisData: WhoisData | null
   editServerId: string | null
   dmMode: boolean
+  /** Nick being fetched for the hover popup (suppresses modal) */
+  popupWhoisNick: string | null
+  popupWhoisData: WhoisData | null
 
   // Actions
   setTheme: (theme: Theme) => void
@@ -49,6 +52,8 @@ interface UIState {
   setNotificationSound: (enabled: boolean) => void
   showWhois: (data: WhoisData) => void
   setEditServerId: (id: string | null) => void
+  setPopupWhoisNick: (nick: string | null) => void
+  setPopupWhoisData: (data: WhoisData | null) => void
 }
 
 export const useUIStore = create<UIState>((set) => ({
@@ -64,6 +69,8 @@ export const useUIStore = create<UIState>((set) => ({
   whoisData: null,
   editServerId: null,
   dmMode: false,
+  popupWhoisNick: null,
+  popupWhoisData: null,
 
   setTheme: (theme) => {
     document.documentElement.setAttribute('data-theme', theme)
@@ -90,5 +97,7 @@ export const useUIStore = create<UIState>((set) => ({
   setNotificationSound: (enabled) => set({ notificationSound: enabled }),
   showWhois: (data) => set({ activeModal: 'whois', whoisData: data }),
   setEditServerId: (id) => set({ editServerId: id, activeModal: id ? 'edit-server' : null }),
-  setDmMode: (dm) => set({ dmMode: dm })
+  setDmMode: (dm) => set({ dmMode: dm }),
+  setPopupWhoisNick: (nick) => set(nick ? { popupWhoisNick: nick, popupWhoisData: null } : { popupWhoisNick: null }),
+  setPopupWhoisData: (data) => set({ popupWhoisData: data })
 }))

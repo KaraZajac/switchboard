@@ -4,7 +4,7 @@ import type { IRCMessage } from '@shared/types/irc'
 import type { ChatMessage } from '@shared/types/message'
 import type { ChannelUser } from '@shared/types/channel'
 import { IRCClient } from './client'
-import { storeMessage } from '../storage/models/message'
+import { storeMessage, deleteMessage } from '../storage/models/message'
 import { v4 as uuid } from 'uuid'
 
 /**
@@ -82,7 +82,7 @@ export class IRCManager {
   private bindClientEvents(serverId: string, client: IRCClient): void {
     // Connection events
     client.events.on('registered', (data) => {
-      this.send('irc:connected', { serverId })
+      this.send('irc:connected', { serverId, nick: data.nick })
     })
 
     client.events.on('disconnected', (reason) => {
@@ -216,12 +216,26 @@ export class IRCManager {
       this.send('irc:react', { serverId, ...data })
     })
 
+    client.events.on('redact', (data: { channel: string; msgid: string; nick: string; reason: string | null }) => {
+      // Delete from local database
+      deleteMessage(data.msgid)
+      this.send('irc:redact', { serverId, channel: data.channel, msgid: data.msgid })
+    })
+
     client.events.on('away', (data) => {
       this.send('irc:away', { serverId, ...data })
     })
 
     client.events.on('account', (data) => {
       this.send('irc:account', { serverId, ...data })
+    })
+
+    client.events.on('setname', (data: { nick: string; realname: string }) => {
+      this.send('irc:setname', { serverId, ...data })
+    })
+
+    client.events.on('metadata', (data: { target: string; key: string; value: string }) => {
+      this.send('irc:metadata', { serverId, ...data })
     })
 
     // Account registration

@@ -1,7 +1,7 @@
 import { useServerStore } from '../../stores/serverStore'
 import { useChannelStore } from '../../stores/channelStore'
 import { useUIStore } from '../../stores/uiStore'
-import { isChannelName } from '@shared/constants'
+import { isChannelName, isServiceNick } from '@shared/constants'
 
 const EMPTY_CHANNELS: { name: string; topic: string | null }[] = []
 
@@ -19,14 +19,32 @@ export function TitleBar() {
     (ch) => ch.name.toLowerCase() === activeChannel?.toLowerCase()
   )
 
-  const isDM = activeChannel ? !isChannelName(activeChannel) : false
+  const isServer = activeChannel === '*'
+  const isService = activeChannel ? isServiceNick(activeChannel) : false
+  const isDM = activeChannel ? !isChannelName(activeChannel) && !isServer && !isService : false
 
   return (
     <div
-      className="flex h-12 items-center justify-between border-b border-gray-900 px-4 shadow-sm"
+      className="flex h-12 items-center justify-between border-b border-gray-700 px-4 shadow-sm"
       style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
     >
       <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
+        {activeChannel && isServer && (
+          <>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className="shrink-0 text-gray-400">
+              <path d="M20 3H4c-1.1 0-2 .9-2 2v4c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 6H4V5h16v4zm0 4H4c-1.1 0-2 .9-2 2v4c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2v-4c0-1.1-.9-2-2-2zm0 6H4v-4h16v4zM6 7.5c.55 0 1-.45 1-1s-.45-1-1-1-1 .45-1 1 .45 1 1 1zm0 8c.55 0 1-.45 1-1s-.45-1-1-1-1 .45-1 1 .45 1 1 1z" />
+            </svg>
+            <span className="shrink-0 font-semibold text-gray-100">Server</span>
+          </>
+        )}
+        {activeChannel && isService && (
+          <>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className="shrink-0 text-gray-400">
+              <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z" />
+            </svg>
+            <span className="shrink-0 font-semibold text-gray-100">{activeChannel}</span>
+          </>
+        )}
         {activeChannel && isDM && (
           <>
             <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gray-600 text-xs font-bold text-gray-200">
@@ -37,7 +55,7 @@ export function TitleBar() {
             </span>
           </>
         )}
-        {activeChannel && !isDM && (
+        {activeChannel && !isDM && !isServer && !isService && (
           <>
             <span className="shrink-0 text-xl text-gray-500">#</span>
             <span className="shrink-0 font-semibold text-gray-100">

@@ -3,7 +3,8 @@ import { useServerStore } from '../../stores/serverStore'
 import { useChannelStore } from '../../stores/channelStore'
 import { ContextMenu, type ContextMenuItem } from '../common/ContextMenu'
 import { ChannelBrowser } from '../channel/ChannelBrowser'
-import { isChannelName } from '@shared/constants'
+import { UserProfilePanel } from '../user/UserProfilePanel'
+import { isChannelName, isServiceNick } from '@shared/constants'
 
 const EMPTY_CHANNELS: { name: string; serverId: string; topic: string | null; topicSetBy: string | null; unreadCount: number; mentionCount: number; muted: boolean }[] = []
 
@@ -53,6 +54,8 @@ export function ChannelSidebar() {
 
   const handleChannelClick = (name: string) => {
     if (!activeServerId) return
+    // Ensure channel entry exists (needed for services like NickServ/ChanServ)
+    useChannelStore.getState().addChannel(activeServerId, name)
     useChannelStore.getState().setActiveChannel(activeServerId, name)
     useChannelStore.getState().clearUnread(activeServerId, name)
   }
@@ -69,9 +72,9 @@ export function ChannelSidebar() {
   }
 
   return (
-    <div className="flex w-60 flex-col bg-gray-800 no-select">
+    <div className="flex w-60 shrink-0 flex-col bg-gray-800 no-select">
       {/* Server name header */}
-      <div className="flex h-12 items-center justify-between border-b border-gray-900 px-4 shadow-sm">
+      <div className="flex h-12 items-center justify-between border-b border-gray-700 px-4 shadow-sm">
         <span className="truncate font-semibold">{server?.name || 'No Server'}</span>
         {connectionStatus === 'connected' ? (
           <button
@@ -94,6 +97,15 @@ export function ChannelSidebar() {
 
       {/* Channel list */}
       <div className="flex-1 overflow-y-auto px-2 py-2">
+        {/* Services — Server, NickServ, ChanServ */}
+        {connectionStatus === 'connected' && (
+          <ServiceItems
+            activeChannel={activeChannel}
+            allChannels={allChannels}
+            onChannelClick={handleChannelClick}
+          />
+        )}
+
         {(channels.length > 0 || connectionStatus === 'connected') && (
           <div className="mb-1 flex items-center justify-between px-1">
             <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">
@@ -166,6 +178,9 @@ export function ChannelSidebar() {
         )}
       </div>
 
+      {/* User profile */}
+      <UserProfilePanel />
+
       {/* Channel browser */}
       {showBrowser && <ChannelBrowser onClose={() => setShowBrowser(false)} />}
 
@@ -189,6 +204,71 @@ export function ChannelSidebar() {
           ]}
         />
       )}
+    </div>
+  )
+}
+
+const SERVICE_ENTRIES = [
+  { name: '*', label: 'Server', icon: 'server' as const },
+  { name: 'NickServ', label: 'NickServ', icon: 'service' as const },
+  { name: 'ChanServ', label: 'ChanServ', icon: 'service' as const }
+]
+
+function ServiceIcon({ type }: { type: 'server' | 'service' }) {
+  if (type === 'server') {
+    return (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className="shrink-0 text-gray-500">
+        <path d="M20 3H4c-1.1 0-2 .9-2 2v4c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 6H4V5h16v4zm0 4H4c-1.1 0-2 .9-2 2v4c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2v-4c0-1.1-.9-2-2-2zm0 6H4v-4h16v4zM6 7.5c.55 0 1-.45 1-1s-.45-1-1-1-1 .45-1 1 .45 1 1 1zm0 8c.55 0 1-.45 1-1s-.45-1-1-1-1 .45-1 1 .45 1 1 1z" />
+      </svg>
+    )
+  }
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className="shrink-0 text-gray-500">
+      <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z" />
+    </svg>
+  )
+}
+
+interface ServiceItemsProps {
+  activeChannel: string | null
+  allChannels: { name: string; unreadCount: number; mentionCount: number }[]
+  onChannelClick: (name: string) => void
+}
+
+function ServiceItems({ activeChannel, allChannels, onChannelClick }: ServiceItemsProps) {
+  return (
+    <div className="mb-2">
+      {SERVICE_ENTRIES.map((entry) => {
+        const isActive = activeChannel === entry.name ||
+          (entry.name !== '*' && activeChannel?.toLowerCase() === entry.name.toLowerCase())
+        const chInfo = allChannels.find((ch) => ch.name.toLowerCase() === entry.name.toLowerCase())
+        const hasUnread = (chInfo?.unreadCount ?? 0) > 0
+        const hasMention = (chInfo?.mentionCount ?? 0) > 0
+
+        return (
+          <button
+            key={entry.name}
+            onClick={() => onChannelClick(entry.name)}
+            className={`mb-0.5 flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm transition-colors ${
+              isActive
+                ? 'bg-gray-700 text-white'
+                : hasUnread
+                  ? 'text-gray-100 hover:bg-gray-700/50'
+                  : 'text-gray-400 hover:bg-gray-700/50 hover:text-gray-200'
+            }`}
+          >
+            <ServiceIcon type={entry.icon} />
+            <span className={`truncate ${hasUnread && !isActive ? 'font-semibold' : ''}`}>
+              {entry.label}
+            </span>
+            {hasMention && (
+              <span className="ml-auto flex h-4 min-w-[16px] items-center justify-center rounded-full bg-red-500 px-1 text-xs font-bold text-white">
+                {chInfo!.mentionCount}
+              </span>
+            )}
+          </button>
+        )
+      })}
     </div>
   )
 }

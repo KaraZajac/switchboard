@@ -148,14 +148,14 @@ export const useChannelStore = create<ChannelState>((set) => ({
 
   setReadMarker: (serverId, channel, timestamp) =>
     set((state) => ({
-      readMarkers: { ...state.readMarkers, [`${serverId}:${channel}`]: timestamp }
+      readMarkers: { ...state.readMarkers, [`${serverId}:${channel.toLowerCase()}`]: timestamp }
     })),
 
   setReadMarkers: (serverId, markers) =>
     set((state) => {
       const updated = { ...state.readMarkers }
       for (const [channel, timestamp] of Object.entries(markers)) {
-        updated[`${serverId}:${channel}`] = timestamp
+        updated[`${serverId}:${channel.toLowerCase()}`] = timestamp
       }
       return { readMarkers: updated }
     }),

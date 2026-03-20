@@ -95,6 +95,12 @@ export function searchMessages(
   }
 }
 
+export function deleteMessage(msgid: string): void {
+  const db = getDb()
+  db.run('DELETE FROM messages WHERE id = ?', [msgid])
+  saveDatabase()
+}
+
 function rowToMessage(row: unknown[]): ChatMessage {
   return {
     id: row[0] as string,

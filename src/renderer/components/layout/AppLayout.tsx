@@ -12,12 +12,16 @@ import { AddServerModal } from '../server/AddServerModal'
 import { WhoisModal } from '../user/WhoisModal'
 import { SearchModal } from '../chat/SearchModal'
 import { QuickSwitcher } from '../common/QuickSwitcher'
+import { WelcomeScreen } from '../onboarding/WelcomeScreen'
 
 export function AppLayout() {
   const showUserList = useUIStore((s) => s.showUserList)
   const activeModal = useUIStore((s) => s.activeModal)
   const activeServerId = useServerStore((s) => s.activeServerId)
+  const servers = useServerStore((s) => s.servers)
   const dmMode = useUIStore((s) => s.dmMode)
+
+  const isFirstRun = servers.length === 0
 
   return (
     <div className="flex h-screen w-screen flex-col overflow-hidden bg-gray-900 text-gray-100">
@@ -27,22 +31,26 @@ export function AppLayout() {
         style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
       />
 
-      <div className="flex flex-1 overflow-hidden">
-        {/* Server Rail */}
-        <ServerRail />
+      {isFirstRun ? (
+        <WelcomeScreen />
+      ) : (
+        <div className="flex flex-1 overflow-hidden">
+          {/* Server Rail */}
+          <ServerRail />
 
-        {/* Sidebar — DMs or Channels */}
-        {dmMode ? <DMSidebar /> : activeServerId && <ChannelSidebar />}
+          {/* Sidebar — DMs or Channels */}
+          {dmMode ? <DMSidebar /> : activeServerId && <ChannelSidebar />}
 
-        {/* Chat Area */}
-        <div className="flex flex-1 flex-col">
-          <TitleBar />
-          <ChatArea />
+          {/* Chat Area */}
+          <div className="flex min-w-0 flex-1 flex-col">
+            <TitleBar />
+            <ChatArea />
+          </div>
+
+          {/* User List — hide for DMs */}
+          {activeServerId && showUserList && !dmMode && <UserList />}
         </div>
-
-        {/* User List — hide for DMs */}
-        {activeServerId && showUserList && !dmMode && <UserList />}
-      </div>
+      )}
 
       {/* Modals */}
       {activeModal === 'settings' && <SettingsModal />}

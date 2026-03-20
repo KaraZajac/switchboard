@@ -1,5 +1,6 @@
 import { app, BrowserWindow, Menu, Tray, session, shell, nativeImage } from 'electron'
 import { join } from 'path'
+import { autoUpdater } from 'electron-updater'
 import { registerIPCHandlers } from './ipc/index'
 import { ircManager } from './irc/manager'
 import { initDatabase, closeDatabase, saveDatabase } from './storage/database'
@@ -185,6 +186,47 @@ function createTray(): void {
   })
 }
 
+// ── Auto-update ──────────────────────────────────────────────────────
+
+function setupAutoUpdater(): void {
+  if (!app.isPackaged) return
+
+  autoUpdater.autoDownload = true
+  autoUpdater.autoInstallOnAppQuit = true
+
+  autoUpdater.on('checking-for-update', () => {
+    sendToRenderer('updater:checking', {})
+  })
+
+  autoUpdater.on('update-available', (info) => {
+    sendToRenderer('updater:available', { version: info.version })
+  })
+
+  autoUpdater.on('update-not-available', () => {
+    sendToRenderer('updater:not-available', {})
+  })
+
+  autoUpdater.on('download-progress', (progress) => {
+    sendToRenderer('updater:progress', { percent: Math.round(progress.percent) })
+  })
+
+  autoUpdater.on('update-downloaded', (info) => {
+    sendToRenderer('updater:ready', { version: info.version })
+  })
+
+  autoUpdater.on('error', (err) => {
+    console.error('Auto-updater error:', err.message)
+  })
+
+  autoUpdater.checkForUpdatesAndNotify()
+}
+
+function sendToRenderer(channel: string, data: unknown): void {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send(channel, data)
+  }
+}
+
 // Track whether we're quitting vs just closing the window
 let isQuitting = false
 
@@ -221,6 +263,9 @@ app.whenReady().then(async () => {
 
   // Create tray icon
   createTray()
+
+  // Set up auto-updater
+  setupAutoUpdater()
 
   // Auto-connect servers
   const servers = getAllServers()

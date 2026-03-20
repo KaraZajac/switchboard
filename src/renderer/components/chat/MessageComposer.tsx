@@ -1,6 +1,7 @@
-import { useState, useRef, useCallback, type KeyboardEvent } from 'react'
+import { useState, useRef, useCallback, useEffect, type KeyboardEvent } from 'react'
 import type { ReplyTarget } from '../../stores/messageStore'
 import type { ChannelUser } from '@shared/types/channel'
+import { TYPING_THROTTLE_MS } from '@shared/constants'
 
 const IRC_COMMANDS = [
   '/me', '/join', '/part', '/nick', '/msg', '/whois', '/kick',
@@ -8,6 +9,7 @@ const IRC_COMMANDS = [
 ]
 
 interface MessageComposerProps {
+  serverId: string
   channel: string
   onSend: (text: string) => void
   onSendReply?: (text: string, replyTo: string) => void
@@ -21,11 +23,12 @@ interface MessageComposerProps {
 }
 
 export function MessageComposer({
-  channel, onSend, onSendReply, replyTarget, onCancelReply,
+  serverId, channel, onSend, onSendReply, replyTarget, onCancelReply,
   disabled, users = [], channels = []
 }: MessageComposerProps) {
   const [text, setText] = useState('')
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const lastTypingSent = useRef(0)
 
   // Tab completion state
   const completionState = useRef<{
@@ -47,6 +50,7 @@ export function MessageComposer({
             onSend(text.trim())
           }
           setText('')
+          sendTypingDone()
           onCancelReply?.()
           completionState.current.active = false
         }
@@ -145,6 +149,24 @@ export function MessageComposer({
     [text, users, channels]
   )
 
+  const sendTyping = useCallback(() => {
+    if (disabled) return
+    const now = Date.now()
+    if (now - lastTypingSent.current > TYPING_THROTTLE_MS) {
+      lastTypingSent.current = now
+      window.switchboard.invoke('message:typing', serverId, channel, 'active')
+    }
+  }, [serverId, channel, disabled])
+
+  const sendTypingDone = useCallback(() => {
+    if (disabled) return
+    // Only send done if we actually sent an active recently
+    if (lastTypingSent.current > 0) {
+      lastTypingSent.current = 0
+      window.switchboard.invoke('message:typing', serverId, channel, 'done')
+    }
+  }, [serverId, channel, disabled])
+
   const handleInput = useCallback(() => {
     if (inputRef.current) {
       inputRef.current.style.height = 'auto'
@@ -183,6 +205,11 @@ export function MessageComposer({
             setText(e.target.value)
             handleInput()
             completionState.current.active = false
+            if (e.target.value.trim()) {
+              sendTyping()
+            } else {
+              sendTypingDone()
+            }
           }}
           onKeyDown={handleKeyDown}
           placeholder={disabled ? 'Not connected' : `Message ${channel}`}

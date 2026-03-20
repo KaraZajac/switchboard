@@ -219,5 +219,11 @@ function runMigrations(): void {
     db.run("INSERT INTO migrations (name) VALUES ('003_websocket_url')")
   }
 
+  // Migration 004: Add identify_command column to servers
+  if (!applied.has('004_identify_command')) {
+    db.run('ALTER TABLE servers ADD COLUMN identify_command TEXT DEFAULT NULL')
+    db.run("INSERT INTO migrations (name) VALUES ('004_identify_command')")
+  }
+
   saveDatabase()
 }
