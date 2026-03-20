@@ -21,6 +21,7 @@ interface MessageState {
   prependMessages: (serverId: string, channel: string, messages: ChatMessage[]) => void
   addReaction: (serverId: string, channel: string, msgid: string, nick: string, emoji: string) => void
   removeMessage: (serverId: string, channel: string, msgid: string) => void
+  editMessage: (serverId: string, channel: string, msgid: string, newContent: string, editedAt: string) => void
   setTyping: (serverId: string, channel: string, nick: string, active: boolean) => void
   clearTyping: (serverId: string, channel: string) => void
   setReplyTarget: (serverId: string, channel: string, target: ReplyTarget | null) => void
@@ -94,7 +95,22 @@ export const useMessageStore = create<MessageState>((set, get) => ({
       return {
         messages: {
           ...state.messages,
-          [key]: (state.messages[key] || []).filter((m) => m.id !== msgid)
+          [key]: (state.messages[key] || []).map((m) =>
+            m.id === msgid ? { ...m, deleted: true, content: '' } : m
+          )
+        }
+      }
+    }),
+
+  editMessage: (serverId, channel, msgid, newContent, editedAt) =>
+    set((state) => {
+      const key = channelKey(serverId, channel)
+      return {
+        messages: {
+          ...state.messages,
+          [key]: (state.messages[key] || []).map((m) =>
+            m.id === msgid ? { ...m, content: newContent, editedAt } : m
+          )
         }
       }
     }),

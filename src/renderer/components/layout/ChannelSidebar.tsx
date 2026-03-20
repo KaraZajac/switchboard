@@ -47,9 +47,9 @@ export function ChannelSidebar() {
     useChannelStore.getState().removeChannel(activeServerId, channelName)
   }, [activeServerId])
 
-  const handleToggleMute = useCallback((channelName: string) => {
+  const handleToggleMute = useCallback((channelName: string, durationMs?: number) => {
     if (!activeServerId) return
-    useChannelStore.getState().toggleMute(activeServerId, channelName)
+    useChannelStore.getState().toggleMute(activeServerId, channelName, durationMs)
   }, [activeServerId])
 
   const handleChannelClick = (name: string) => {
@@ -190,18 +190,48 @@ export function ChannelSidebar() {
           x={contextMenu.x}
           y={contextMenu.y}
           onClose={() => setContextMenu(null)}
-          items={[
-            {
-              label: contextMenu.muted ? 'Unmute Channel' : 'Mute Channel',
-              onClick: () => handleToggleMute(contextMenu.channelName)
-            },
-            { label: '', onClick: () => {}, separator: true },
-            {
-              label: 'Leave Channel',
-              onClick: () => handleLeaveChannel(contextMenu.channelName),
-              danger: true
-            }
-          ]}
+          items={contextMenu.muted
+            ? [
+                {
+                  label: 'Unmute Channel',
+                  onClick: () => handleToggleMute(contextMenu.channelName)
+                },
+                { label: '', onClick: () => {}, separator: true },
+                {
+                  label: 'Leave Channel',
+                  onClick: () => handleLeaveChannel(contextMenu.channelName),
+                  danger: true
+                }
+              ]
+            : [
+                {
+                  label: 'Mute for 15 minutes',
+                  onClick: () => handleToggleMute(contextMenu.channelName, 15 * 60 * 1000)
+                },
+                {
+                  label: 'Mute for 1 hour',
+                  onClick: () => handleToggleMute(contextMenu.channelName, 60 * 60 * 1000)
+                },
+                {
+                  label: 'Mute for 8 hours',
+                  onClick: () => handleToggleMute(contextMenu.channelName, 8 * 60 * 60 * 1000)
+                },
+                {
+                  label: 'Mute for 24 hours',
+                  onClick: () => handleToggleMute(contextMenu.channelName, 24 * 60 * 60 * 1000)
+                },
+                {
+                  label: 'Mute until turned back on',
+                  onClick: () => handleToggleMute(contextMenu.channelName)
+                },
+                { label: '', onClick: () => {}, separator: true },
+                {
+                  label: 'Leave Channel',
+                  onClick: () => handleLeaveChannel(contextMenu.channelName),
+                  danger: true
+                }
+              ]
+          }
         />
       )}
     </div>

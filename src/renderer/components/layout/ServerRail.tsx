@@ -1,7 +1,9 @@
+import { useState } from 'react'
 import { useServerStore } from '../../stores/serverStore'
 import { useChannelStore } from '../../stores/channelStore'
 import { useUIStore } from '../../stores/uiStore'
 import { SwitchboardIcon } from '../common/SwitchboardIcon'
+import { ContextMenu } from '../common/ContextMenu'
 import { isChannelName } from '@shared/constants'
 
 export function ServerRail() {
@@ -12,6 +14,8 @@ export function ServerRail() {
   const openModal = useUIStore((s) => s.openModal)
   const dmMode = useUIStore((s) => s.dmMode)
   const allChannels = useChannelStore((s) => s.channels)
+  const mutedServers = useServerStore((s) => s.mutedServers)
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; serverId: string } | null>(null)
 
   // Count total unread DMs across all servers
   const totalDmUnread = Object.values(allChannels).reduce((total, chs) => {
@@ -81,6 +85,10 @@ export function ServerRail() {
                 setActiveServer(server.id)
                 useUIStore.getState().setDmMode(false)
               }}
+              onContextMenu={(e) => {
+                e.preventDefault()
+                setContextMenu({ x: e.clientX, y: e.clientY, serverId: server.id })
+              }}
               className={`flex h-12 w-12 items-center justify-center text-base font-bold transition-all ${
                 isActive && !dmMode
                   ? 'rounded-xl bg-indigo-500 text-white'
@@ -131,6 +139,31 @@ export function ServerRail() {
       >
         +
       </button>
+
+      {/* Server context menu */}
+      {contextMenu && (() => {
+        const isMuted = mutedServers[contextMenu.serverId] !== undefined
+        const store = useServerStore.getState()
+        return (
+          <ContextMenu
+            x={contextMenu.x}
+            y={contextMenu.y}
+            onClose={() => setContextMenu(null)}
+            items={isMuted
+              ? [
+                  { label: 'Unmute Server', onClick: () => store.unmuteServer(contextMenu.serverId) }
+                ]
+              : [
+                  { label: 'Mute for 15 minutes', onClick: () => store.muteServer(contextMenu.serverId, 15 * 60 * 1000) },
+                  { label: 'Mute for 1 hour', onClick: () => store.muteServer(contextMenu.serverId, 60 * 60 * 1000) },
+                  { label: 'Mute for 8 hours', onClick: () => store.muteServer(contextMenu.serverId, 8 * 60 * 60 * 1000) },
+                  { label: 'Mute for 24 hours', onClick: () => store.muteServer(contextMenu.serverId, 24 * 60 * 60 * 1000) },
+                  { label: 'Mute until turned back on', onClick: () => store.muteServer(contextMenu.serverId) }
+                ]
+            }
+          />
+        )
+      })()}
     </div>
   )
 }

@@ -1,4 +1,4 @@
-import { ipcMain, Notification, app } from 'electron'
+import { ipcMain, Notification, app, net } from 'electron'
 import { autoUpdater } from 'electron-updater'
 import { ircManager } from '../irc/manager'
 import {
@@ -136,6 +136,13 @@ export function registerIPCHandlers(): void {
     } else {
       client.connection.send('REDACT', channel, msgid)
     }
+  })
+
+  ipcMain.handle('message:edit', async (_event, serverId: string, channel: string, msgid: string, newText: string) => {
+    const client = ircManager.getClient(serverId)
+    if (!client) throw new Error('Not connected')
+    // Send edited message with +draft/edit tag pointing to original message ID
+    client.connection.sendRaw(`@+draft/edit=${msgid} PRIVMSG ${channel} :${newText}`)
   })
 
   ipcMain.handle('message:typing', async (_event, serverId: string, channel: string, status: 'active' | 'done' = 'active') => {
@@ -296,4 +303,97 @@ export function registerIPCHandlers(): void {
   ipcMain.handle('read-marker:get-all', async (_event, serverId: string) => {
     return getAllReadMarkers(serverId)
   })
+
+  // ── Link previews ──────────────────────────────────────────────────
+
+  const linkPreviewCache = new Map<string, { data: import('@shared/types/ipc').LinkPreviewData | null; ts: number }>()
+  const PREVIEW_CACHE_TTL = 10 * 60 * 1000 // 10 minutes
+
+  ipcMain.handle('link-preview:fetch', async (_event, url: string) => {
+    // Don't fetch previews for images/media — they're rendered inline
+    if (/\.(jpg|jpeg|png|gif|webp|svg|mp4|webm)(\?.*)?$/i.test(url)) return null
+
+    const cached = linkPreviewCache.get(url)
+    if (cached && Date.now() - cached.ts < PREVIEW_CACHE_TTL) return cached.data
+
+    try {
+      const response = await net.fetch(url, {
+        headers: { 'User-Agent': 'Switchboard IRC Client/1.0' },
+        redirect: 'follow'
+      })
+
+      const contentType = response.headers.get('content-type') || ''
+      if (!contentType.includes('text/html')) {
+        linkPreviewCache.set(url, { data: null, ts: Date.now() })
+        return null
+      }
+
+      // Only read first 32KB for metadata
+      const buffer = await response.arrayBuffer()
+      const html = new TextDecoder().decode(buffer.slice(0, 32768))
+
+      const get = (property: string): string | undefined => {
+        // Try og: tags first, then twitter: fallback
+        const ogMatch = html.match(new RegExp(`<meta[^>]+property=["']og:${property}["'][^>]+content=["']([^"']+)["']`, 'i'))
+          || html.match(new RegExp(`<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:${property}["']`, 'i'))
+        if (ogMatch) return decodeHTMLEntities(ogMatch[1])
+
+        const twMatch = html.match(new RegExp(`<meta[^>]+name=["']twitter:${property}["'][^>]+content=["']([^"']+)["']`, 'i'))
+          || html.match(new RegExp(`<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:${property}["']`, 'i'))
+        if (twMatch) return decodeHTMLEntities(twMatch[1])
+
+        return undefined
+      }
+
+      const title = get('title') || html.match(/<title[^>]*>([^<]+)<\/title>/i)?.[1]?.trim()
+      const description = get('description')
+      const siteName = get('site_name')
+      let image = get('image')
+
+      // Resolve relative image URLs
+      if (image && !image.startsWith('http')) {
+        try {
+          image = new URL(image, url).href
+        } catch { /* ignore */ }
+      }
+
+      // Get favicon
+      let favicon: string | undefined
+      const iconMatch = html.match(/<link[^>]+rel=["'](?:shortcut )?icon["'][^>]+href=["']([^"']+)["']/i)
+        || html.match(/<link[^>]+href=["']([^"']+)["'][^>]+rel=["'](?:shortcut )?icon["']/i)
+      if (iconMatch) {
+        favicon = iconMatch[1]
+        if (!favicon.startsWith('http')) {
+          try { favicon = new URL(favicon, url).href } catch { /* ignore */ }
+        }
+      } else {
+        try { favicon = new URL('/favicon.ico', url).href } catch { /* ignore */ }
+      }
+
+      if (!title && !description && !image) {
+        linkPreviewCache.set(url, { data: null, ts: Date.now() })
+        return null
+      }
+
+      const data: import('@shared/types/ipc').LinkPreviewData = {
+        url, title, description, siteName, image, favicon
+      }
+      linkPreviewCache.set(url, { data, ts: Date.now() })
+      return data
+    } catch {
+      linkPreviewCache.set(url, { data: null, ts: Date.now() })
+      return null
+    }
+  })
+}
+
+function decodeHTMLEntities(str: string): string {
+  return str
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&#x([0-9a-f]+);/gi, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
+    .replace(/&#(\d+);/g, (_, dec) => String.fromCodePoint(parseInt(dec)))
 }

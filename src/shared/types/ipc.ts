@@ -29,6 +29,7 @@ export interface MainToRendererEvents {
   'irc:whois': { serverId: string; data: Record<string, string> }
   'irc:react': { serverId: string; channel: string; nick: string; msgid: string; emoji: string }
   'irc:redact': { serverId: string; channel: string; msgid: string }
+  'irc:edit': { serverId: string; channel: string; originalId: string; newContent: string; editedAt: string }
   'irc:read-marker': { serverId: string; channel: string; timestamp: string }
   'irc:cap': { serverId: string; capabilities: string[] }
   'irc:raw': { serverId: string; direction: 'in' | 'out'; line: string }
@@ -65,6 +66,7 @@ export interface RendererToMainInvocations {
   'message:reply': (serverId: string, channel: string, text: string, replyTo: string) => Promise<void>
   'message:react': (serverId: string, channel: string, msgid: string, emoji: string) => Promise<void>
   'message:redact': (serverId: string, channel: string, msgid: string, reason?: string) => Promise<void>
+  'message:edit': (serverId: string, channel: string, msgid: string, newText: string) => Promise<void>
   'message:typing': (serverId: string, channel: string, status?: 'active' | 'done') => Promise<void>
   'message:search': (serverId: string, query: string, channel?: string) => Promise<ChatMessage[]>
   'user:whois': (serverId: string, nick: string) => Promise<Record<string, string>>
@@ -85,4 +87,15 @@ export interface RendererToMainInvocations {
   'read-marker:get-all': (serverId: string) => Promise<Record<string, string>>
   'updater:install': () => Promise<void>
   'updater:check': () => Promise<{ available: boolean; version?: string }>
+  'link-preview:fetch': (url: string) => Promise<LinkPreviewData | null>
+}
+
+/** OpenGraph metadata for link previews */
+export interface LinkPreviewData {
+  url: string
+  title?: string
+  description?: string
+  siteName?: string
+  image?: string
+  favicon?: string
 }

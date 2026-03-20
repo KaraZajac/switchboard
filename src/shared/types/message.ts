@@ -20,4 +20,8 @@ export interface ChatMessage {
   reactions: Record<string, string[]>
   /** Channel context for PMs (draft/channel-context) */
   channelContext: string | null
+  /** Message has been deleted/redacted */
+  deleted?: boolean
+  /** Timestamp when message was last edited */
+  editedAt?: string
 }

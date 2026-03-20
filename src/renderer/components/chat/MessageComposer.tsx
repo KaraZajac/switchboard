@@ -2,6 +2,7 @@ import { useState, useRef, useCallback, type KeyboardEvent } from 'react'
 import type { ReplyTarget } from '../../stores/messageStore'
 import type { ChannelUser } from '@shared/types/channel'
 import { TYPING_THROTTLE_MS } from '@shared/constants'
+import { GifPicker } from './GifPicker'
 
 const IRC_COMMANDS = [
   '/me', '/join', '/part', '/nick', '/msg', '/whois', '/kick',
@@ -27,6 +28,7 @@ export function MessageComposer({
   disabled, users = [], channels = []
 }: MessageComposerProps) {
   const [text, setText] = useState('')
+  const [showGifPicker, setShowGifPicker] = useState(false)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const lastTypingSent = useRef(0)
 
@@ -198,27 +200,52 @@ export function MessageComposer({
         </div>
       )}
 
-      <div className={`rounded-lg bg-gray-700 ${replyTarget ? 'rounded-t-none' : ''}`}>
-        <textarea
-          ref={inputRef}
-          value={text}
-          onChange={(e) => {
-            setText(e.target.value)
-            handleInput()
-            completionState.current.active = false
-            if (e.target.value.trim()) {
-              sendTyping()
-            } else {
-              sendTypingDone()
-            }
-          }}
-          onKeyDown={handleKeyDown}
-          placeholder={disabled ? 'Not connected' : `Message ${channel}`}
-          disabled={disabled}
-          rows={1}
-          className="w-full resize-none bg-transparent px-4 py-3 text-gray-100 placeholder-gray-400 outline-none disabled:cursor-not-allowed disabled:opacity-50"
-          style={{ maxHeight: '200px' }}
-        />
+      <div className={`relative rounded-lg bg-gray-700 ${replyTarget ? 'rounded-t-none' : ''}`}>
+        <div className="flex items-end">
+          <textarea
+            ref={inputRef}
+            value={text}
+            onChange={(e) => {
+              setText(e.target.value)
+              handleInput()
+              completionState.current.active = false
+              if (e.target.value.trim()) {
+                sendTyping()
+              } else {
+                sendTypingDone()
+              }
+            }}
+            onKeyDown={handleKeyDown}
+            placeholder={disabled ? 'Not connected' : `Message ${channel}`}
+            disabled={disabled}
+            rows={1}
+            className="flex-1 resize-none bg-transparent px-4 py-3 text-gray-100 placeholder-gray-400 outline-none disabled:cursor-not-allowed disabled:opacity-50"
+            style={{ maxHeight: '200px' }}
+          />
+
+          {/* GIF button */}
+          <button
+            onClick={() => setShowGifPicker(!showGifPicker)}
+            disabled={disabled}
+            className="mb-2 mr-2 rounded p-1.5 text-gray-400 hover:bg-gray-600 hover:text-gray-200 disabled:opacity-50"
+            title="Search GIFs"
+          >
+            <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14zm-7-2h2v-4h-2v2h-2v-2H8v4h2v-2h2v2zm4-4h2v-2h-2v2zm0 4h2v-2h-2v2z" />
+            </svg>
+          </button>
+        </div>
+
+        {/* GIF picker panel */}
+        {showGifPicker && (
+          <GifPicker
+            onSelect={(url) => {
+              onSend(url)
+              setShowGifPicker(false)
+            }}
+            onClose={() => setShowGifPicker(false)}
+          />
+        )}
       </div>
     </div>
   )

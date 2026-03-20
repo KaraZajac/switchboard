@@ -38,6 +38,7 @@ export const REQUESTED_CAPS = [
   'draft/read-marker',
   'draft/multiline',
   'draft/message-redaction',
+  'draft/edit',
   'draft/channel-rename',
   'draft/account-registration',
   'draft/metadata-2',
@@ -91,7 +92,7 @@ export function isChannelName(name: string): boolean {
 }
 
 /** Well-known IRC service nicks — shown in the channel sidebar, not DMs */
-export const IRC_SERVICES = new Set(['nickserv', 'chanserv', 'memoserv', 'operserv', 'botserv', 'hostserv', 'saslserv'])
+export const IRC_SERVICES = new Set(['nickserv', 'chanserv', 'memoserv', 'operserv', 'botserv', 'hostserv', 'saslserv', 'ctcpserv'])
 
 /** Check if a nick is a known IRC service */
 export function isServiceNick(name: string): boolean {
