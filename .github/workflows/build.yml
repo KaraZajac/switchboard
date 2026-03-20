@@ -1,0 +1,69 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: build-${{ github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+
+  build:
+    needs: check
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            script: build:mac
+            artifact: macos
+            paths: |
+              dist/*.dmg
+          - os: ubuntu-latest
+            script: build:linux
+            artifact: linux
+            paths: |
+              dist/*.AppImage
+              dist/*.deb
+              dist/*.rpm
+          - os: windows-latest
+            script: build:win
+            artifact: windows
+            paths: |
+              dist/*.exe
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+
+      - name: Build
+        run: npm run ${{ matrix.script }}
+        env:
+          # Skip code signing for CI builds (only sign on release)
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: switchboard-${{ matrix.artifact }}
+          path: ${{ matrix.paths }}
+          retention-days: 14
