@@ -15,6 +15,7 @@ export interface ConnectionEvents {
   error: (error: Error) => void
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging
 export declare interface IRCConnection {
   on<K extends keyof ConnectionEvents>(event: K, listener: ConnectionEvents[K]): this
   off<K extends keyof ConnectionEvents>(event: K, listener: ConnectionEvents[K]): this
@@ -31,6 +32,7 @@ export declare interface IRCConnection {
  * - Automatic PING/PONG keepalive
  * - Reconnection with exponential backoff
  */
+// eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging
 export class IRCConnection extends EventEmitter {
   readonly config: ServerConfig
   private socket: net.Socket | tls.TLSSocket | null = null

@@ -44,7 +44,7 @@ export function parseMessageContent(text: string): MessageSegment[] {
   const segments: MessageSegment[] = []
 
   // First extract code blocks
-  let remaining = text
+  const remaining = text
   const codeBlocks: { start: number; end: number; content: string; inline: boolean }[] = []
 
   // Find code blocks (``` ... ```)
