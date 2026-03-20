@@ -2,9 +2,11 @@
 
 A modern, cross-platform IRC client with a Discord-like interface, built on Electron and fully implementing the IRCv3 specification.
 
-![Status](https://img.shields.io/badge/status-alpha-orange)
+![Status](https://img.shields.io/badge/status-beta-yellow)
 ![Platform](https://img.shields.io/badge/platform-linux%20%7C%20macos%20%7C%20windows-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
+
+![Switchboard](images/switchboard.png)
 
 ## Features
 
@@ -12,10 +14,14 @@ A modern, cross-platform IRC client with a Discord-like interface, built on Elec
 - **Full IRCv3 support** — CAP 302 negotiation, SASL authentication (PLAIN/EXTERNAL/SCRAM-SHA-256), STS, message tags, labeled-response, batch processing, and more
 - **Multi-server** — Connect to multiple IRC networks simultaneously
 - **Rich text** — IRC color codes, bold/italic/underline/strikethrough/monospace rendering, inline code, code blocks, URL detection with image previews
-- **Modern messaging** — Threaded replies, emoji reactions, typing indicators, read markers, message redaction
+- **Modern messaging** — Threaded replies, emoji reactions, typing indicators, read markers, message redaction with confirmation
+- **User profiles** — Nickname, realname, and avatar editing via `draft/metadata-2`
 - **Rich presence** — Away status, account tracking, bot badges, friend list via MONITOR, WHOX user queries
 - **Message history** — Local SQLite storage with server-side chathistory support
+- **Search** — Full-text message search across channels, quick switcher (`Ctrl+K`)
 - **Themes** — Dark (default) and light themes
+- **Auto-update** — Built-in update system via GitHub Releases
+- **First-run onboarding** — Guided setup for new users
 - **Cross-platform** — Linux, macOS, and Windows
 
 ## Tech Stack
@@ -35,16 +41,19 @@ A modern, cross-platform IRC client with a Discord-like interface, built on Elec
 
 ### Prerequisites
 
-- Node.js 20+
-- npm 10+
+- Node.js 22+
+- npm
 
-### Install & Run
+### Download
+
+Pre-built binaries for macOS, Linux, and Windows are available on the [Releases](https://github.com/KaraZajac/switchboard/releases) page.
+
+### Install & Run (Development)
 
 ```bash
-# Install dependencies
+git clone https://github.com/KaraZajac/switchboard.git
+cd switchboard
 npm install
-
-# Start in development mode (with hot reload)
 npm run dev
 ```
 
@@ -96,7 +105,9 @@ src/
 │   │   ├── chat/          # MessageItem, MessageContent, MessageComposer, TypingIndicator
 │   │   ├── server/        # AddServerModal
 │   │   ├── settings/      # SettingsModal
-│   │   └── common/        # Modal
+│   │   ├── user/          # UserProfilePanel, WhoisModal
+│   │   ├── onboarding/    # WelcomeScreen (first-run)
+│   │   └── common/        # Modal, ContextMenu, QuickSwitcher, SwitchboardIcon
 │   ├── stores/            # Zustand state (server, channel, message, user, ui)
 │   ├── hooks/             # useIRCEvents
 │   └── utils/             # IRC formatting parser, URL linkifier
@@ -142,8 +153,9 @@ src/
 | draft/channel-rename | Implemented |
 | bot-mode | Implemented |
 | WHOX | Implemented |
-| draft/multiline | Planned |
-| draft/account-registration | Planned |
+| draft/multiline | Implemented |
+| draft/account-registration | Implemented |
+| draft/metadata-2 | Implemented |
 
 ## Architecture
 
