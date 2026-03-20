@@ -222,6 +222,10 @@ export function useIRCEvents(): void {
 
     cleanups.push(
       api.on('irc:typing', ({ serverId, channel, nick, status }) => {
+        // Don't show our own typing indicator
+        const ourNick = useServerStore.getState().currentNick[serverId]
+        if (ourNick && nick.toLowerCase() === ourNick.toLowerCase()) return
+
         const isTyping = status === 'active' || status === 'paused'
         useMessageStore.getState().setTyping(serverId, channel, nick, isTyping)
 
