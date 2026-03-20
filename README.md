@@ -1,54 +1,42 @@
 # Switchboard
 
-A modern, cross-platform IRC client with a Discord-like interface, built on Electron and fully implementing the IRCv3 specification.
+A modern IRC client with a familiar, Discord-like interface. Built with Electron and packed with IRCv3 support.
 
 ![Status](https://img.shields.io/badge/status-beta-yellow)
 ![Platform](https://img.shields.io/badge/platform-linux%20%7C%20macos%20%7C%20windows-blue)
-![License](https://img.shields.io/badge/license-MIT-green)
+![License](https://img.shields.io/badge/license-BSD--3--Clause-blue)
 
 ![Switchboard](images/switchboard.png)
 
-## Features
-
-- **Discord-like UI** — Server rail, channel sidebar, chat area, and user list in a familiar 4-pane layout
-- **Full IRCv3 support** — CAP 302 negotiation, SASL authentication (PLAIN/EXTERNAL/SCRAM-SHA-256), STS, message tags, labeled-response, batch processing, and more
-- **Multi-server** — Connect to multiple IRC networks simultaneously
-- **Rich text** — IRC color codes, bold/italic/underline/strikethrough/monospace rendering, inline code, code blocks, URL detection with image previews
-- **Modern messaging** — Threaded replies, emoji reactions, typing indicators, read markers, message redaction with confirmation
-- **User profiles** — Nickname, realname, and avatar editing via `draft/metadata-2`
-- **Rich presence** — Away status, account tracking, bot badges, friend list via MONITOR, WHOX user queries
-- **Message history** — Local SQLite storage with server-side chathistory support
-- **Search** — Full-text message search across channels, quick switcher (`Ctrl+K`)
-- **Themes** — Dark (default) and light themes
-- **Auto-update** — Built-in update system via GitHub Releases
-- **First-run onboarding** — Guided setup for new users
-- **Cross-platform** — Linux, macOS, and Windows
-
-## Tech Stack
-
-| Layer | Technology |
-|-------|------------|
-| Shell | Electron 33 |
-| Language | TypeScript (strict mode) |
-| UI | React 19 + Zustand 5 |
-| Styling | Tailwind CSS 4 |
-| Build | electron-vite 5 + electron-builder |
-| Database | sql.js (pure JS SQLite — no native compilation) |
-| IRC | Custom IRCv3 protocol library |
-| Testing | Vitest (135 tests across 9 suites) |
-
-## Getting Started
-
-### Prerequisites
-
-- Node.js 22+
-- npm
-
-### Download
+## Download
 
 Pre-built binaries for macOS, Linux, and Windows are available on the [Releases](https://github.com/KaraZajac/switchboard/releases) page.
 
-### Install & Run (Development)
+## Features
+
+- **Multi-server** — Connect to as many IRC networks as you want, all at once
+- **Rich messaging** — Replies, reactions, typing indicators, read markers, message deletion, inline image previews, and full IRC color/formatting support
+- **User profiles** — Edit your nickname, realname, and avatar (via `draft/metadata-2`)
+- **Chat history** — Messages are stored locally in SQLite and fetched from the server via `draft/chathistory`
+- **Search** — Full-text search across all your messages; quick channel switcher with `Ctrl+K`
+- **Auto-update** — Get notified of new releases and update in-app
+- **Cross-platform** — macOS (.dmg), Linux (.AppImage, .deb, .rpm), and Windows (.exe)
+
+## IRCv3 Support
+
+Switchboard negotiates and supports a wide range of IRCv3 capabilities:
+
+**Authentication** — SASL (PLAIN, EXTERNAL, SCRAM-SHA-256), STS, in-band account registration
+
+**Messaging** — message-tags, message-ids, server-time, echo-message, batch, labeled-response, standard-replies, draft/chathistory, draft/multiline, draft/message-redaction, +typing, +draft/react
+
+**Users** — account-notify, account-tag, away-notify, chghost, setname, extended-join, multi-prefix, userhost-in-names, monitor, invite-notify, bot, WHOX, draft/metadata-2
+
+**Channels** — draft/read-marker, draft/channel-rename, +draft/channel-context
+
+## Development
+
+Requires Node.js 22+ and npm.
 
 ```bash
 git clone https://github.com/KaraZajac/switchboard.git
@@ -60,135 +48,32 @@ npm run dev
 ### Build
 
 ```bash
-# Build for current platform
-npm run build
-
-# Build for specific platforms
-npm run build:linux
-npm run build:mac
-npm run build:win
+npm run build:mac     # macOS .dmg (x64 + arm64)
+npm run build:linux   # AppImage, .deb, .rpm
+npm run build:win     # Windows .exe installer
 ```
 
-### Test
+### Test & Lint
 
 ```bash
-# Run all tests
-npm test
-
-# Run tests in watch mode
-npm run test:watch
+npm test              # Run all tests
+npm run lint          # ESLint
+npm run typecheck     # TypeScript strict checks
 ```
 
-## Project Structure
+## Tech Stack
 
-```
-src/
-├── main/                  # Electron main process
-│   ├── irc/               # IRC protocol engine
-│   │   ├── parser.ts      # IRCv3 message parser
-│   │   ├── serializer.ts  # Message serializer
-│   │   ├── connection.ts  # TCP/TLS socket management
-│   │   ├── state.ts       # Connection state tracking
-│   │   ├── client.ts      # High-level IRC client API
-│   │   ├── manager.ts     # Multi-server manager
-│   │   ├── capability.ts  # CAP negotiation
-│   │   ├── sasl.ts        # SASL authentication
-│   │   ├── scram.ts       # SCRAM-SHA-256 implementation
-│   │   ├── handlers/      # IRC command handlers
-│   │   └── features/      # IRCv3 extension handlers
-│   ├── storage/           # SQLite persistence layer
-│   └── ipc/               # IPC bridge (main ↔ renderer)
-├── preload/               # Electron preload (contextBridge)
-├── renderer/              # React UI
-│   ├── components/        # UI components
-│   │   ├── layout/        # AppLayout, ServerRail, ChannelSidebar, ChatArea, UserList, TitleBar
-│   │   ├── chat/          # MessageItem, MessageContent, MessageComposer, TypingIndicator
-│   │   ├── server/        # AddServerModal
-│   │   ├── settings/      # SettingsModal
-│   │   ├── user/          # UserProfilePanel, WhoisModal
-│   │   ├── onboarding/    # WelcomeScreen (first-run)
-│   │   └── common/        # Modal, ContextMenu, QuickSwitcher, SwitchboardIcon
-│   ├── stores/            # Zustand state (server, channel, message, user, ui)
-│   ├── hooks/             # useIRCEvents
-│   └── utils/             # IRC formatting parser, URL linkifier
-└── shared/                # Shared types and constants
-```
-
-## IRCv3 Specification Coverage
-
-### Ratified
-
-| Spec | Status |
-|------|--------|
-| CAP 302 (capability negotiation) | Implemented |
-| SASL 3.2 (PLAIN, EXTERNAL, SCRAM-SHA-256) | Implemented |
-| STS (Strict Transport Security) | Implemented |
-| message-tags | Implemented |
-| batch | Implemented |
-| labeled-response | Implemented |
-| standard-replies (FAIL/WARN/NOTE) | Implemented |
-| echo-message | Implemented |
-| server-time | Implemented |
-| message-ids (msgid) | Implemented |
-| multi-prefix | Implemented |
-| userhost-in-names | Implemented |
-| extended-join | Implemented |
-| account-notify | Implemented |
-| account-tag | Implemented |
-| away-notify | Implemented |
-| chghost | Implemented |
-| setname | Implemented |
-| monitor | Implemented |
-| invite-notify | Implemented |
-
-### Draft
-
-| Spec | Status |
-|------|--------|
-| +typing (typing indicators) | Implemented |
-| +draft/react (reactions) | Implemented |
-| draft/chathistory | Implemented |
-| draft/read-marker | Implemented |
-| draft/message-redaction | Implemented |
-| draft/channel-rename | Implemented |
-| bot-mode | Implemented |
-| WHOX | Implemented |
-| draft/multiline | Implemented |
-| draft/account-registration | Implemented |
-| draft/metadata-2 | Implemented |
-
-## Architecture
-
-```
-┌─────────────┐     IPC      ┌──────────────┐
-│  Renderer    │◄────────────►│    Main       │
-│  (React)     │  (typed)     │  (Node.js)   │
-│              │              │              │
-│  Zustand ────┤              ├── IRCClient  │
-│  stores      │              │   ├── parser │
-│              │              │   ├── state  │
-│  Components  │              │   └── conn   │
-│  ├── Layout  │              │              │
-│  ├── Chat    │              ├── Storage    │
-│  └── Server  │              │   └── sql.js │
-└─────────────┘              └──────────────┘
-```
-
-**Data flow:** IRC server → socket → parser → handler → state update → IPC emit → Zustand store → React re-render
-
-## Development
-
-```bash
-# Type checking
-npm run typecheck
-
-# Linting
-npm run lint
-
-# Code formatting
-npm run format
-```
+| | |
+|---|---|
+| Framework | Electron 33, React 19 |
+| State | Zustand 5 |
+| Styling | Tailwind CSS 4 |
+| Database | sql.js (SQLite in pure JS) |
+| Build | electron-vite, electron-builder |
+| Tests | Vitest |
 
 ## License
 
-MIT
+BSD-3-Clause &mdash; see [LICENSE](LICENSE) for details.
+
+Copyright (c) 2026 .leviathan.
