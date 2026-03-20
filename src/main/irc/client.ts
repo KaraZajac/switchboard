@@ -94,6 +94,7 @@ export interface ClientEvents {
   raw: (direction: 'in' | 'out', line: string) => void
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging
 export declare interface IRCClient {
   events: EventEmitter & {
     on<K extends keyof ClientEvents>(event: K, listener: ClientEvents[K]): EventEmitter
@@ -110,6 +111,7 @@ export declare interface IRCClient {
  *   client.events.on('privmsg', (data) => { ... })
  *   client.connect()
  */
+// eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging
 export class IRCClient {
   readonly config: ServerConfig
   readonly connection: IRCConnection

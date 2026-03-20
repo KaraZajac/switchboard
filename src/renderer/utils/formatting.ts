@@ -147,13 +147,14 @@ export function parseIRCFormatting(text: string): FormattedSpan[] {
         break
       }
 
-      case 0x16: // Reverse
+      case 0x16: { // Reverse
         if (current.text) { spans.push({ ...current }); current = { ...current, text: '' } }
         const temp = current.fg
         current.fg = current.bg
         current.bg = temp
         i++
         break
+      }
 
       case 0x0f: // Reset
         if (current.text) { spans.push({ ...current }) }
@@ -187,8 +188,10 @@ export function parseIRCFormatting(text: string): FormattedSpan[] {
  * Strip all IRC formatting codes from text.
  */
 export function stripIRCFormatting(text: string): string {
+  /* eslint-disable no-control-regex */
   return text
     .replace(/\x02|\x1d|\x1f|\x1e|\x11|\x16|\x0f/g, '')
     .replace(/\x03(\d{1,2}(,\d{1,2})?)?/g, '')
     .replace(/\x04([0-9a-fA-F]{6}(,[0-9a-fA-F]{6})?)?/g, '')
+  /* eslint-enable no-control-regex */
 }
