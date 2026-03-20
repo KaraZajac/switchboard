@@ -140,6 +140,7 @@ const QUICK_EMOJIS = ['👍', '❤️', '😂', '🎉', '😢', '🤔', '👀', 
 /** Hover actions for a message (react, reply, delete) */
 function MessageActions({ message, onReply }: { message: ChatMessage; onReply?: (message: ChatMessage) => void }) {
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const pickerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -159,8 +160,6 @@ function MessageActions({ message, onReply }: { message: ChatMessage; onReply?: 
     window.switchboard.invoke('message:react', message.serverId, message.channel, message.id, emoji)
     setShowEmojiPicker(false)
   }
-
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
   const handleRedact = () => {
     // Optimistic removal from UI immediately
