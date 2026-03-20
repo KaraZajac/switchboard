@@ -8,6 +8,8 @@ interface ChannelInfo {
   unreadCount: number
   mentionCount: number
   muted: boolean
+  /** Timestamp when mute expires (0 = permanent until manually unmuted) */
+  muteUntil: number
 }
 
 interface ChannelState {
@@ -25,7 +27,7 @@ interface ChannelState {
   setTopic: (serverId: string, name: string, topic: string, setBy: string | null) => void
   incrementUnread: (serverId: string, name: string, mention?: boolean) => void
   clearUnread: (serverId: string, name: string) => void
-  toggleMute: (serverId: string, name: string) => void
+  toggleMute: (serverId: string, name: string, durationMs?: number) => void
   renameChannel: (serverId: string, oldName: string, newName: string) => void
   setReadMarker: (serverId: string, channel: string, timestamp: string) => void
   setReadMarkers: (serverId: string, markers: Record<string, string>) => void
@@ -55,7 +57,8 @@ export const useChannelStore = create<ChannelState>((set) => ({
               topicSetBy: null,
               unreadCount: 0,
               mentionCount: 0,
-              muted: false
+              muted: false,
+              muteUntil: 0
             }
           ]
         },
@@ -105,15 +108,22 @@ export const useChannelStore = create<ChannelState>((set) => ({
     set((state) => ({
       channels: {
         ...state.channels,
-        [serverId]: (state.channels[serverId] || []).map((ch) =>
-          ch.name.toLowerCase() === name.toLowerCase()
-            ? {
-                ...ch,
-                unreadCount: ch.unreadCount + 1,
-                mentionCount: mention ? ch.mentionCount + 1 : ch.mentionCount
-              }
-            : ch
-        )
+        [serverId]: (state.channels[serverId] || []).map((ch) => {
+          if (ch.name.toLowerCase() !== name.toLowerCase()) return ch
+          // Check if timed mute has expired
+          const isMuted = ch.muted && (ch.muteUntil === 0 || ch.muteUntil > Date.now())
+          if (isMuted) return ch
+          // Auto-unmute if time has passed
+          const updates: Partial<typeof ch> = ch.muted && ch.muteUntil > 0 && ch.muteUntil <= Date.now()
+            ? { muted: false, muteUntil: 0 }
+            : {}
+          return {
+            ...ch,
+            ...updates,
+            unreadCount: ch.unreadCount + 1,
+            mentionCount: mention ? ch.mentionCount + 1 : ch.mentionCount
+          }
+        })
       }
     })),
 
@@ -160,15 +170,23 @@ export const useChannelStore = create<ChannelState>((set) => ({
       return { readMarkers: updated }
     }),
 
-  toggleMute: (serverId, name) =>
+  toggleMute: (serverId, name, durationMs) =>
     set((state) => ({
       channels: {
         ...state.channels,
-        [serverId]: (state.channels[serverId] || []).map((ch) =>
-          ch.name.toLowerCase() === name.toLowerCase()
-            ? { ...ch, muted: !ch.muted }
-            : ch
-        )
+        [serverId]: (state.channels[serverId] || []).map((ch) => {
+          if (ch.name.toLowerCase() !== name.toLowerCase()) return ch
+          if (ch.muted) {
+            // Unmute
+            return { ...ch, muted: false, muteUntil: 0 }
+          }
+          // Mute with optional duration
+          return {
+            ...ch,
+            muted: true,
+            muteUntil: durationMs ? Date.now() + durationMs : 0
+          }
+        })
       }
     })),
 

@@ -1,5 +1,8 @@
 import { registerHandler } from './registry'
 
+/** App name and version for CTCP VERSION replies */
+const APP_VERSION = 'Switchboard IRC Client 1.0'
+
 /**
  * PRIVMSG — Channel or private message
  */
@@ -7,6 +10,31 @@ registerHandler('PRIVMSG', (client, msg) => {
   const target = msg.params[0]
   const text = msg.params[1] || ''
   const nick = msg.source?.nick || ''
+
+  // Handle CTCP requests (wrapped in \x01, but not ACTION)
+  if (text.startsWith('\x01') && text.endsWith('\x01') && !text.startsWith('\x01ACTION ')) {
+    const ctcpContent = text.slice(1, -1)
+    const spaceIdx = ctcpContent.indexOf(' ')
+    const ctcpCommand = spaceIdx === -1 ? ctcpContent : ctcpContent.slice(0, spaceIdx)
+    const ctcpArgs = spaceIdx === -1 ? '' : ctcpContent.slice(spaceIdx + 1)
+
+    switch (ctcpCommand.toUpperCase()) {
+      case 'VERSION':
+        client.connection.sendRaw(`NOTICE ${nick} :\x01VERSION ${APP_VERSION}\x01`)
+        break
+      case 'TIME':
+        client.connection.sendRaw(`NOTICE ${nick} :\x01TIME ${new Date().toISOString()}\x01`)
+        break
+      case 'PING':
+        client.connection.sendRaw(`NOTICE ${nick} :\x01PING ${ctcpArgs}\x01`)
+        break
+      case 'SOURCE':
+        client.connection.sendRaw(`NOTICE ${nick} :\x01SOURCE https://github.com/KaraZajac/switchboard\x01`)
+        break
+    }
+    // Don't display CTCP requests to the user
+    return
+  }
 
   // Determine if this is an ACTION (/me)
   const isAction = text.startsWith('\x01ACTION ') && text.endsWith('\x01')
@@ -23,6 +51,7 @@ registerHandler('PRIVMSG', (client, msg) => {
   const account = typeof msg.tags['account'] === 'string' ? msg.tags['account'] : undefined
   const replyTo = typeof msg.tags['+reply'] === 'string' ? msg.tags['+reply'] : undefined
   const label = typeof msg.tags['label'] === 'string' ? msg.tags['label'] : undefined
+  const editOf = typeof msg.tags['+draft/edit'] === 'string' ? msg.tags['+draft/edit'] : undefined
 
   // Check if this is an echo of our own message
   const isEcho = nick.toLowerCase() === client.state.nick.toLowerCase()
@@ -38,6 +67,7 @@ registerHandler('PRIVMSG', (client, msg) => {
     time,
     account,
     replyTo,
+    editOf,
     label,
     userHost: msg.source
       ? `${msg.source.user || ''}@${msg.source.host || ''}`
@@ -53,6 +83,11 @@ registerHandler('NOTICE', (client, msg) => {
   const target = msg.params[0]
   const text = msg.params[1] || ''
   const nick = msg.source?.nick || ''
+
+  // Filter out CTCP replies (wrapped in \x01)
+  if (text.startsWith('\x01') && text.endsWith('\x01')) {
+    return
+  }
 
   const isPrivate =
     target.toLowerCase() === client.state.nick.toLowerCase() || target === '*'

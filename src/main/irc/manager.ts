@@ -152,6 +152,18 @@ export class IRCManager {
 
     // Message events
     client.events.on('privmsg', (data) => {
+      // Handle message edits (draft/edit spec)
+      if (data.editOf) {
+        this.send('irc:edit', {
+          serverId,
+          channel: data.channel,
+          originalId: data.editOf,
+          newContent: data.content,
+          editedAt: data.time
+        })
+        return
+      }
+
       const message: ChatMessage = {
         id: data.msgid || uuid(),
         serverId,

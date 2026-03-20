@@ -4,7 +4,7 @@ import { useChannelStore } from '../stores/channelStore'
 import { useMessageStore } from '../stores/messageStore'
 import { useUserStore } from '../stores/userStore'
 import { useUIStore } from '../stores/uiStore'
-import { isChannelName } from '@shared/constants'
+import { isChannelName, isServiceNick } from '@shared/constants'
 
 /**
  * Hook that sets up all IPC event listeners from the main process.
@@ -142,13 +142,16 @@ export function useIRCEvents(): void {
           ? new RegExp(`\\b${myNick.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(message.content)
           : false
         const isPrivate = !isChannelName(channel) && channel !== '*'
+        const isService = isServiceNick(channel)
 
         if (!isActiveChannel) {
-          useChannelStore.getState().incrementUnread(serverId, channel, isMention || isPrivate)
+          // Service messages get unread but not mention badges
+          useChannelStore.getState().incrementUnread(serverId, channel, !isService && (isMention || isPrivate))
         }
 
-        // Desktop notification for mentions and PMs (if enabled and not focused)
-        if ((isMention || isPrivate) && !isActiveChannel) {
+        // Desktop notification for mentions and PMs (not for services or muted servers)
+        const isServerMuted = useServerStore.getState().isServerMuted(serverId)
+        if ((isMention || isPrivate) && !isActiveChannel && !isService && !isServerMuted) {
           const uiState = useUIStore.getState()
           if (uiState.notificationsEnabled) {
             const title = isPrivate
@@ -261,6 +264,13 @@ export function useIRCEvents(): void {
     cleanups.push(
       api.on('irc:redact', ({ serverId, channel, msgid }) => {
         useMessageStore.getState().removeMessage(serverId, channel, msgid)
+      })
+    )
+
+    // Message edits (draft/edit)
+    cleanups.push(
+      api.on('irc:edit', ({ serverId, channel, originalId, newContent, editedAt }) => {
+        useMessageStore.getState().editMessage(serverId, channel, originalId, newContent, editedAt)
       })
     )
 

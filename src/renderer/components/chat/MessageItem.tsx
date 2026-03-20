@@ -14,10 +14,35 @@ interface MessageItemProps {
 export function MessageItem({ message, prevMessage, onReply }: MessageItemProps) {
   const userAvatars = useServerStore((s) => s.userAvatars)
   const avatarUrl = userAvatars[`${message.serverId}:${message.nick.toLowerCase()}`] ?? null
+  const currentNick = useServerStore((s) => s.currentNick[message.serverId] ?? '')
+  const [editing, setEditing] = useState(false)
+  const [editText, setEditText] = useState('')
 
   const isAction = message.type === 'action'
   const isNotice = message.type === 'notice'
   const isSystem = message.type === 'system'
+  const isDeleted = message.deleted === true
+  const isOwn = currentNick.toLowerCase() === message.nick.toLowerCase()
+  const isEdited = !!message.editedAt
+
+  const handleEditStart = () => {
+    setEditText(message.content)
+    setEditing(true)
+  }
+
+  const handleEditSave = () => {
+    const trimmed = editText.trim()
+    if (trimmed && trimmed !== message.content) {
+      // Optimistic update
+      useMessageStore.getState().editMessage(message.serverId, message.channel, message.id, trimmed, new Date().toISOString())
+      window.switchboard.invoke('message:edit', message.serverId, message.channel, message.id, trimmed)
+    }
+    setEditing(false)
+  }
+
+  const handleEditCancel = () => {
+    setEditing(false)
+  }
 
   // Group messages from same nick within 5 minutes
   const isGrouped =
@@ -31,6 +56,17 @@ export function MessageItem({ message, prevMessage, onReply }: MessageItemProps)
 
   const time = formatTime(message.timestamp)
 
+  if (isDeleted) {
+    return (
+      <div className="flex items-start px-2 py-0.5">
+        <span className="mr-2 mt-0.5 min-w-[48px] text-right text-xs text-gray-500 opacity-0">
+          {time}
+        </span>
+        <span className="text-sm italic text-gray-600">this message was deleted</span>
+      </div>
+    )
+  }
+
   if (isAction) {
     return (
       <div className="group relative flex items-start px-2 py-0.5 hover:bg-gray-800/30">
@@ -42,7 +78,7 @@ export function MessageItem({ message, prevMessage, onReply }: MessageItemProps)
             <NickWithPopup nick={message.nick} serverId={message.serverId} className="font-medium text-gray-100" />{' '}
             <MessageContent text={message.content} />
           </span>
-          <MessageActions message={message} onReply={onReply} />
+          <MessageActions message={message} onReply={onReply} isOwn={isOwn} onEdit={handleEditStart} />
         </div>
       </div>
     )
@@ -66,13 +102,18 @@ export function MessageItem({ message, prevMessage, onReply }: MessageItemProps)
           {time}
         </span>
         <div className="flex-1">
-          <span className={isNotice ? 'text-gray-400' : 'text-gray-200'}>
-            <MessageContent text={message.content} />
-          </span>
+          {editing ? (
+            <EditInput text={editText} onChange={setEditText} onSave={handleEditSave} onCancel={handleEditCancel} />
+          ) : (
+            <span className={isNotice ? 'text-gray-400' : 'text-gray-200'}>
+              <MessageContent text={message.content} />
+              {isEdited && <span className="ml-1 text-[10px] text-gray-500">(edited)</span>}
+            </span>
+          )}
           {Object.keys(message.reactions).length > 0 && (
             <Reactions reactions={message.reactions} />
           )}
-          <MessageActions message={message} onReply={onReply} />
+          <MessageActions message={message} onReply={onReply} isOwn={isOwn} onEdit={handleEditStart} />
         </div>
       </div>
     )
@@ -101,13 +142,43 @@ export function MessageItem({ message, prevMessage, onReply }: MessageItemProps)
             <span className="text-xs text-gray-600">sending...</span>
           )}
         </div>
-        <div className={isNotice ? 'text-gray-400' : 'text-gray-200'}>
-          <MessageContent text={message.content} />
-        </div>
+        {editing ? (
+          <EditInput text={editText} onChange={setEditText} onSave={handleEditSave} onCancel={handleEditCancel} />
+        ) : (
+          <div className={isNotice ? 'text-gray-400' : 'text-gray-200'}>
+            <MessageContent text={message.content} />
+            {isEdited && <span className="ml-1 text-[10px] text-gray-500">(edited)</span>}
+          </div>
+        )}
         {Object.keys(message.reactions).length > 0 && (
           <Reactions reactions={message.reactions} />
         )}
-        <MessageActions message={message} onReply={onReply} />
+        <MessageActions message={message} onReply={onReply} isOwn={isOwn} onEdit={handleEditStart} />
+      </div>
+    </div>
+  )
+}
+
+/** Inline edit input */
+function EditInput({ text, onChange, onSave, onCancel }: {
+  text: string; onChange: (t: string) => void; onSave: () => void; onCancel: () => void
+}) {
+  return (
+    <div className="my-1">
+      <textarea
+        autoFocus
+        value={text}
+        onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onSave() }
+          if (e.key === 'Escape') onCancel()
+        }}
+        className="w-full resize-none rounded bg-gray-700 px-3 py-2 text-sm text-gray-100 outline-none focus:ring-1 focus:ring-indigo-500"
+        rows={1}
+      />
+      <div className="mt-1 flex gap-2 text-xs text-gray-500">
+        <span>escape to <button onClick={onCancel} className="text-blue-400 hover:underline">cancel</button></span>
+        <span>enter to <button onClick={onSave} className="text-blue-400 hover:underline">save</button></span>
       </div>
     </div>
   )
@@ -137,8 +208,8 @@ function ReplyPreview({ serverId, channel, msgid }: { serverId: string; channel:
 
 const QUICK_EMOJIS = ['👍', '❤️', '😂', '🎉', '😢', '🤔', '👀', '🔥']
 
-/** Hover actions for a message (react, reply, delete) */
-function MessageActions({ message, onReply }: { message: ChatMessage; onReply?: (message: ChatMessage) => void }) {
+/** Hover actions for a message (react, reply, edit, delete) */
+function MessageActions({ message, onReply, isOwn, onEdit }: { message: ChatMessage; onReply?: (message: ChatMessage) => void; isOwn?: boolean; onEdit?: () => void }) {
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const pickerRef = useRef<HTMLDivElement>(null)
@@ -233,6 +304,20 @@ function MessageActions({ message, onReply }: { message: ChatMessage; onReply?: 
           <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M9 17l-5-5 5-5" />
             <path d="M4 12h12a4 4 0 0 1 0 8h-1" />
+          </svg>
+        </button>
+      )}
+
+      {/* Edit (own messages only) */}
+      {isOwn && onEdit && (
+        <button
+          onClick={onEdit}
+          className="rounded px-2 py-1 text-gray-400 hover:bg-gray-700 hover:text-gray-200"
+          title="Edit message"
+        >
+          <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
           </svg>
         </button>
       )}
