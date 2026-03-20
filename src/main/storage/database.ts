@@ -225,5 +225,11 @@ function runMigrations(): void {
     db.run("INSERT INTO migrations (name) VALUES ('004_identify_command')")
   }
 
+  // Migration 005: Add avatar_url column to servers
+  if (!applied.has('005_avatar_url')) {
+    db.run('ALTER TABLE servers ADD COLUMN avatar_url TEXT DEFAULT NULL')
+    db.run("INSERT INTO migrations (name) VALUES ('005_avatar_url')")
+  }
+
   saveDatabase()
 }

@@ -38,6 +38,12 @@ function AppInner() {
       if (servers.length > 0 && !useServerStore.getState().activeServerId) {
         useServerStore.getState().setActiveServer(servers[0].id)
       }
+      // Seed avatar store from saved server configs
+      for (const server of servers) {
+        if (server.avatarUrl && server.nick) {
+          useServerStore.getState().setUserAvatar(server.id, server.nick, server.avatarUrl)
+        }
+      }
     }).catch((err) => {
       console.error('Failed to load servers:', err)
     })

@@ -98,14 +98,16 @@ registerHandler('TAGMSG', (client, msg) => {
   const isPrivate = target.toLowerCase() === client.state.nick.toLowerCase()
   const channel = isPrivate ? nick : target
 
-  // Handle typing notifications
+  // Handle typing notifications (skip our own echoed typing)
   const typing = msg.tags['+typing']
   if (typeof typing === 'string') {
-    client.events.emit('typing', {
-      channel,
-      nick,
-      status: typing as 'active' | 'paused' | 'done'
-    })
+    if (nick.toLowerCase() !== client.state.nick.toLowerCase()) {
+      client.events.emit('typing', {
+        channel,
+        nick,
+        status: typing as 'active' | 'paused' | 'done'
+      })
+    }
     return
   }
 
