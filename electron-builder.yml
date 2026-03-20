@@ -25,7 +25,6 @@ mac:
   gatekeeperAssess: false
   entitlements: resources/entitlements.mac.plist
   entitlementsInherit: resources/entitlements.mac.plist
-  notarize: true
 linux:
   target:
     - AppImage
@@ -40,12 +39,11 @@ win:
         - x64
   signingHashAlgorithms:
     - sha256
-  sign: true
 nsis:
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true
 publish:
   provider: github
-  owner: switchboard-irc
+  owner: KaraZajac
   repo: switchboard
