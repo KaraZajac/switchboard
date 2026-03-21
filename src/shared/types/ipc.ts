@@ -37,6 +37,8 @@ export interface MainToRendererEvents {
   'irc:metadata': { serverId: string; target: string; key: string; value: string }
   'irc:account-registered': { serverId: string; account: string; message: string }
   'irc:channel-rename': { serverId: string; oldName: string; newName: string; reason: string | null }
+  'irc:network-icon': { serverId: string; url: string }
+  'irc:filehost': { serverId: string; url: string }
   'irc:chathistory': { serverId: string; channel: string; messages: ChatMessage[] }
   'irc:netsplit': { serverId: string; server1: string; server2: string; nicks: string[] }
   'irc:netjoin': { serverId: string; server1: string; server2: string; nicks: string[] }
@@ -88,6 +90,7 @@ export interface RendererToMainInvocations {
   'updater:install': () => Promise<void>
   'updater:check': () => Promise<{ available: boolean; version?: string }>
   'link-preview:fetch': (url: string) => Promise<LinkPreviewData | null>
+  'file:upload': (serverId: string) => Promise<string | null>
 }
 
 /** OpenGraph metadata for link previews */

@@ -15,10 +15,15 @@ Pre-built binaries for macOS, Linux, and Windows are available on the [Releases]
 ## Features
 
 - **Multi-server** — Connect to as many IRC networks as you want, all at once
-- **Rich messaging** — Replies, reactions, typing indicators, read markers, message deletion, inline image previews, and full IRC color/formatting support
+- **Rich messaging** — Replies, reactions, typing indicators, read markers, message editing, message deletion, inline image previews, and full IRC color/formatting support
+- **Text formatting** — Markdown-style bold, italic, strikethrough, spoilers, and headings alongside IRC formatting codes
+- **GIF picker** — Search and send GIFs, stickers, clips, memes, and emoji via Klipy
+- **Link previews** — OpenGraph metadata cards for shared URLs with title, description, and thumbnail
+- **File uploads** — Upload files directly to IRC via `draft/filehost` with the + button
 - **User profiles** — Edit your nickname, realname, and avatar (via `draft/metadata-2`)
 - **Chat history** — Messages are stored locally in SQLite and fetched from the server via `draft/chathistory`
 - **Search** — Full-text search across all your messages; quick channel switcher with `Ctrl+K`
+- **Muting** — Timed or permanent mute for channels and servers
 - **Auto-update** — Get notified of new releases and update in-app
 - **Cross-platform** — macOS (.dmg), Linux (.AppImage, .deb, .rpm), and Windows (.exe)
 
@@ -28,11 +33,13 @@ Switchboard negotiates and supports a wide range of IRCv3 capabilities:
 
 **Authentication** — SASL (PLAIN, EXTERNAL, SCRAM-SHA-256), STS, in-band account registration
 
-**Messaging** — message-tags, message-ids, server-time, echo-message, batch, labeled-response, standard-replies, draft/chathistory, draft/multiline, draft/message-redaction, +typing, +draft/react
+**Messaging** — message-tags, message-ids, server-time, echo-message, batch, labeled-response, standard-replies, draft/chathistory, draft/multiline, draft/message-redaction, draft/edit, +typing, +draft/react
 
 **Users** — account-notify, account-tag, away-notify, chghost, setname, extended-join, multi-prefix, userhost-in-names, monitor, invite-notify, bot, WHOX, draft/metadata-2
 
 **Channels** — draft/read-marker, draft/channel-rename, +draft/channel-context
+
+**Server** — draft/network-icon, draft/filehost
 
 ## Development
 
