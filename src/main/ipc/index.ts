@@ -1,6 +1,8 @@
 import { ipcMain, Notification, app, net, dialog } from 'electron'
 import { readFile } from 'fs/promises'
 import { basename, extname } from 'path'
+import https from 'node:https'
+import http from 'node:http'
 import { autoUpdater } from 'electron-updater'
 import { ircManager } from '../irc/manager'
 import {
@@ -306,6 +308,38 @@ export function registerIPCHandlers(): void {
     return getAllReadMarkers(serverId)
   })
 
+  // ── Monitor (friend list) ──────────────────────────────────────────
+
+  ipcMain.handle('monitor:add', async (_event, serverId: string, nicks: string[]) => {
+    const { addToMonitorList } = await import('../storage/models/monitor')
+    addToMonitorList(serverId, nicks)
+    const client = ircManager.getClient(serverId)
+    if (client) {
+      client.connection.send('MONITOR', '+', nicks.join(','))
+    }
+  })
+
+  ipcMain.handle('monitor:remove', async (_event, serverId: string, nicks: string[]) => {
+    const { removeFromMonitorList } = await import('../storage/models/monitor')
+    removeFromMonitorList(serverId, nicks)
+    const client = ircManager.getClient(serverId)
+    if (client) {
+      client.connection.send('MONITOR', '-', nicks.join(','))
+    }
+  })
+
+  ipcMain.handle('monitor:list', async (_event, serverId: string) => {
+    const { getMonitorList } = await import('../storage/models/monitor')
+    return getMonitorList(serverId)
+  })
+
+  ipcMain.handle('monitor:status', async (_event, serverId: string) => {
+    const client = ircManager.getClient(serverId)
+    if (client) {
+      client.connection.send('MONITOR', 'S')
+    }
+  })
+
   // ── File upload (draft/FILEHOST) ────────────────────────────────────
 
   ipcMain.handle('file:upload', async (_event, serverId: string) => {
@@ -350,31 +384,42 @@ export function registerIPCHandlers(): void {
 
     const config = getServer(serverId)
     if (config?.saslUsername && config?.saslPassword) {
-      if (config.saslMechanism === 'PLAIN' || !config.saslMechanism) {
-        const credentials = Buffer.from(`${config.saslUsername}:${config.saslPassword}`).toString('base64')
-        headers['Authorization'] = `Basic ${credentials}`
-      }
+      const credentials = Buffer.from(`${config.saslUsername}:${config.saslPassword}`).toString('base64')
+      headers['Authorization'] = `Basic ${credentials}`
     }
 
-    const response = await net.fetch(filehostUrl, {
-      method: 'POST',
-      headers,
-      body: fileData
+    // Use Node http/https directly — Electron patches global fetch with net.fetch
+    // which rejects Buffer bodies with ERR_INVALID_ARGUMENT
+    const url = new URL(filehostUrl)
+    const httpMod = url.protocol === 'https:' ? https : http
+
+    const location = await new Promise<string>((resolve, reject) => {
+      const req = httpMod.request(url, {
+        method: 'POST',
+        headers,
+        rejectUnauthorized: false
+      }, (res) => {
+        let body = ''
+        res.on('data', (chunk: Buffer) => { body += chunk.toString() })
+        res.on('end', () => {
+          if (res.statusCode !== 201) {
+            reject(new Error(`Upload failed (${res.statusCode}): ${body}`))
+            return
+          }
+          const loc = res.headers['location'] || body.trim()
+          if (!loc) {
+            reject(new Error('Server did not return a file URL'))
+            return
+          }
+          // Resolve relative URLs
+          resolve(loc.startsWith('http') ? loc : new URL(loc, filehostUrl).href)
+        })
+      })
+
+      req.on('error', reject)
+      req.write(fileData)
+      req.end()
     })
-
-    if (response.status !== 201) {
-      const body = await response.text()
-      throw new Error(`Upload failed (${response.status}): ${body}`)
-    }
-
-    // Server returns Location header with the uploaded file URL
-    let location = response.headers.get('Location')
-    if (!location) throw new Error('Server did not return a file URL')
-
-    // Resolve relative URLs
-    if (!location.startsWith('http')) {
-      location = new URL(location, filehostUrl).href
-    }
 
     return location
   })

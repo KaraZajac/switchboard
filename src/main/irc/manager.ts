@@ -4,6 +4,7 @@ import type { IRCMessage } from '@shared/types/irc'
 import type { ChatMessage } from '@shared/types/message'
 import { IRCClient } from './client'
 import { storeMessage, deleteMessage } from '../storage/models/message'
+import { getMonitorList } from '../storage/models/monitor'
 import { v4 as uuid } from 'uuid'
 
 /**
@@ -82,6 +83,14 @@ export class IRCManager {
     // Connection events
     client.events.on('registered', (data) => {
       this.send('irc:connected', { serverId, nick: data.nick })
+
+      // Re-send monitor list on connect
+      const monitorNicks = getMonitorList(serverId)
+      if (monitorNicks.length > 0) {
+        client.connection.send('MONITOR', '+', monitorNicks.join(','))
+        // Request current status
+        client.connection.send('MONITOR', 'S')
+      }
     })
 
     client.events.on('disconnected', (reason) => {
@@ -351,6 +360,14 @@ export class IRCManager {
       if (typeof filehostUrl === 'string') {
         this.send('irc:filehost', { serverId, url: filehostUrl })
       }
+    })
+
+    client.events.on('monitorOnline', (data) => {
+      this.send('irc:monitor-online', { serverId, ...data })
+    })
+
+    client.events.on('monitorOffline', (data) => {
+      this.send('irc:monitor-offline', { serverId, ...data })
     })
 
     client.events.on('whois', (data) => {

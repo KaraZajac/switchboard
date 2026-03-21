@@ -62,16 +62,16 @@ export function ChatArea() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]) // Only reset when channel changes, not when readMarkerTimestamp updates
 
-  // Mark channel as read when viewing it
+  // Mark channel as read when viewing it (on channel switch or when new messages arrive at bottom)
   useEffect(() => {
-    if (!activeServerId || !activeChannel || messages.length === 0) return
+    if (!activeServerId || !activeChannel || messages.length === 0 || !autoScroll) return
     const lastMsg = messages[messages.length - 1]
     if (lastMsg) {
       window.switchboard.invoke('read-marker:set', activeServerId, activeChannel, lastMsg.timestamp)
       useChannelStore.getState().setReadMarker(activeServerId, activeChannel, lastMsg.timestamp)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeServerId, activeChannel, messages.length])
+  }, [activeServerId, activeChannel, messages.length, autoScroll])
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -123,16 +123,33 @@ export function ChatArea() {
     }
   }, [activeServerId, activeChannel, messages, loadingHistory, historyExhausted])
 
+  const lastMarkreadSent = useRef(0)
+
   const handleScroll = useCallback(() => {
     if (!scrollRef.current) return
     const { scrollTop, scrollHeight, clientHeight } = scrollRef.current
-    setAutoScroll(scrollHeight - scrollTop - clientHeight < 100)
+    const isAtBottom = scrollHeight - scrollTop - clientHeight < 100
+
+    // When scrolling to bottom, mark as read and clear the "New messages" divider
+    if (isAtBottom && !autoScroll && activeServerId && activeChannel && messages.length > 0) {
+      const now = Date.now()
+      if (now - lastMarkreadSent.current > 2000) {
+        lastMarkreadSent.current = now
+        const lastMsg = messages[messages.length - 1]
+        window.switchboard.invoke('read-marker:set', activeServerId, activeChannel, lastMsg.timestamp)
+        useChannelStore.getState().setReadMarker(activeServerId, activeChannel, lastMsg.timestamp)
+        useChannelStore.getState().clearUnread(activeServerId, activeChannel)
+      }
+      initialReadMarker.current = null
+    }
+
+    setAutoScroll(isAtBottom)
 
     // Load older messages when scrolled near top
     if (scrollTop < 100 && !loadingHistory) {
       loadOlderMessages()
     }
-  }, [loadingHistory, loadOlderMessages])
+  }, [loadingHistory, loadOlderMessages, autoScroll, activeServerId, activeChannel, messages])
 
   const handleSend = useCallback(
     (text: string) => {

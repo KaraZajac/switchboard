@@ -39,6 +39,8 @@ export interface MainToRendererEvents {
   'irc:channel-rename': { serverId: string; oldName: string; newName: string; reason: string | null }
   'irc:network-icon': { serverId: string; url: string }
   'irc:filehost': { serverId: string; url: string }
+  'irc:monitor-online': { serverId: string; nick: string; user: string | null; host: string | null }
+  'irc:monitor-offline': { serverId: string; nick: string }
   'irc:chathistory': { serverId: string; channel: string; messages: ChatMessage[] }
   'irc:netsplit': { serverId: string; server1: string; server2: string; nicks: string[] }
   'irc:netjoin': { serverId: string; server1: string; server2: string; nicks: string[] }
@@ -91,6 +93,10 @@ export interface RendererToMainInvocations {
   'updater:check': () => Promise<{ available: boolean; version?: string }>
   'link-preview:fetch': (url: string) => Promise<LinkPreviewData | null>
   'file:upload': (serverId: string) => Promise<string | null>
+  'monitor:add': (serverId: string, nicks: string[]) => Promise<void>
+  'monitor:remove': (serverId: string, nicks: string[]) => Promise<void>
+  'monitor:list': (serverId: string) => Promise<string[]>
+  'monitor:status': (serverId: string) => Promise<void>
 }
 
 /** OpenGraph metadata for link previews */
