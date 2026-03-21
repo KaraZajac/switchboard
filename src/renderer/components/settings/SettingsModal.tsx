@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Modal } from '../common/Modal'
 import { useUIStore } from '../../stores/uiStore'
+import type { Theme } from '../../stores/uiStore'
 import { useServerStore } from '../../stores/serverStore'
 
 type Tab = 'servers' | 'appearance' | 'notifications' | 'network' | 'shortcuts'
@@ -21,7 +22,7 @@ export function SettingsModal() {
     <Modal title="Settings" onClose={closeModal} width="max-w-2xl">
       <div className="flex gap-6">
         {/* Sidebar */}
-        <div className="w-40 flex-shrink-0">
+        <div className="w-40 flex-shrink-0 self-start">
           <nav className="space-y-1">
             {TABS.map((tab) => (
               <button
@@ -101,9 +102,33 @@ function ServersTab() {
   )
 }
 
+interface ThemeDef {
+  id: Theme
+  label: string
+  group: 'dark' | 'light'
+  /** Preview colors: [background, surface, accent, text, secondary] */
+  colors: [string, string, string, string, string]
+}
+
+const THEMES: ThemeDef[] = [
+  { id: 'catppuccin-mocha', label: 'Catppuccin Mocha', group: 'dark', colors: ['#11111b', '#1e1e2e', '#89b4fa', '#cdd6f4', '#f38ba8'] },
+  { id: 'catppuccin-frappe', label: 'Catppuccin Frappé', group: 'dark', colors: ['#232634', '#303446', '#8caaee', '#c6d0f5', '#e78284'] },
+  { id: 'catppuccin-macchiato', label: 'Catppuccin Macchiato', group: 'dark', colors: ['#181926', '#24273a', '#8aadf4', '#cad3f5', '#ed8796'] },
+  { id: 'catppuccin-latte', label: 'Catppuccin Latte', group: 'light', colors: ['#dce0e8', '#e6e9ef', '#1e66f5', '#4c4f69', '#d20f39'] },
+  { id: 'dracula', label: 'Dracula', group: 'dark', colors: ['#191a21', '#282a36', '#bd93f9', '#f8f8f2', '#ff5555'] },
+  { id: 'nord', label: 'Nord', group: 'dark', colors: ['#242933', '#3b4252', '#81a1c1', '#d8dee9', '#bf616a'] },
+  { id: 'gruvbox', label: 'Gruvbox', group: 'dark', colors: ['#1d2021', '#32302f', '#b16286', '#ebdbb2', '#cc241d'] },
+  { id: 'one-dark', label: 'One Dark', group: 'dark', colors: ['#1b1e24', '#282c34', '#61afef', '#d7dae0', '#e06c75'] },
+  { id: 'rose-pine', label: 'Rosé Pine', group: 'dark', colors: ['#191724', '#26233a', '#c4a7e7', '#e0def4', '#eb6f92'] },
+  { id: 'solarized-dark', label: 'Solarized Dark', group: 'dark', colors: ['#001e27', '#073642', '#6c71c4', '#b5c4c4', '#dc322f'] },
+  { id: 'tokyo-night', label: 'Tokyo Night', group: 'dark', colors: ['#16161e', '#24283b', '#7aa2f7', '#c0caf5', '#f7768e'] },
+  { id: 'kanagawa', label: 'Kanagawa', group: 'dark', colors: ['#16161d', '#2a2a37', '#957fb8', '#dcd7ba', '#e46876'] },
+  { id: 'discord', label: 'Discord', group: 'dark', colors: ['#1a1b1e', '#313338', '#5865f2', '#f2f3f5', '#ed4245'] },
+]
+
 function AppearanceTab() {
   const theme = useUIStore((s) => s.theme)
-  const toggleTheme = useUIStore((s) => s.toggleTheme)
+  const setTheme = useUIStore((s) => s.setTheme)
   const compactMode = useUIStore((s) => s.compactMode)
   const setCompactMode = useUIStore((s) => s.setCompactMode)
   const fontSize = useUIStore((s) => s.fontSize)
@@ -111,21 +136,31 @@ function AppearanceTab() {
   const timeFormat = useUIStore((s) => s.timeFormat)
   const setTimeFormat = useUIStore((s) => s.setTimeFormat)
 
+  const darkThemes = THEMES.filter((t) => t.group === 'dark')
+  const lightThemes = THEMES.filter((t) => t.group === 'light')
+
   return (
     <div className="space-y-4">
       <h3 className="text-sm font-semibold text-gray-300">Appearance</h3>
 
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="text-sm text-gray-200">Theme</div>
-          <div className="text-xs text-gray-500">Switch between dark and light mode</div>
+      {/* Theme picker */}
+      <div>
+        <div className="text-sm text-gray-200">Select Theme</div>
+        <div className="mt-1 text-xs text-gray-500">Choose a color theme for Switchboard</div>
+
+        <div className="mt-2 text-[11px] font-semibold uppercase tracking-wide text-gray-400">Dark</div>
+        <div className="mt-1 grid grid-cols-3 gap-2">
+          {darkThemes.map((t) => (
+            <ThemeCard key={t.id} theme={t} active={theme === t.id} onClick={() => setTheme(t.id)} />
+          ))}
         </div>
-        <button
-          onClick={toggleTheme}
-          className="rounded bg-gray-700 px-3 py-1.5 text-sm text-gray-200 hover:bg-gray-600"
-        >
-          {theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
-        </button>
+
+        <div className="mt-3 text-[11px] font-semibold uppercase tracking-wide text-gray-400">Light</div>
+        <div className="mt-1 grid grid-cols-3 gap-2">
+          {lightThemes.map((t) => (
+            <ThemeCard key={t.id} theme={t} active={theme === t.id} onClick={() => setTheme(t.id)} />
+          ))}
+        </div>
       </div>
 
       <div className="flex items-center justify-between">
@@ -188,6 +223,32 @@ function AppearanceTab() {
         </div>
       </div>
     </div>
+  )
+}
+
+function ThemeCard({ theme, active, onClick }: { theme: ThemeDef; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`rounded-lg border p-2 text-left transition-colors ${
+        active
+          ? 'border-indigo-500 bg-gray-700/50'
+          : 'border-gray-600 bg-gray-800 hover:border-gray-500 hover:bg-gray-700/30'
+      }`}
+    >
+      <div className="flex gap-1">
+        {theme.colors.map((color, i) => (
+          <div
+            key={i}
+            className="h-4 w-4 rounded-full"
+            style={{ backgroundColor: color }}
+          />
+        ))}
+      </div>
+      <div className={`mt-1.5 truncate text-xs ${active ? 'font-medium text-gray-100' : 'text-gray-300'}`}>
+        {theme.label}
+      </div>
+    </button>
   )
 }
 
