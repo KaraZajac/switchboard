@@ -352,11 +352,11 @@ export class IRCManager {
     })
 
     client.events.on('isupport', (tokens) => {
-      const iconUrl = tokens['draft/ICON']
+      const iconUrl = tokens['ICON'] || tokens['draft/ICON']
       if (typeof iconUrl === 'string') {
         this.send('irc:network-icon', { serverId, url: iconUrl })
       }
-      const filehostUrl = tokens['draft/FILEHOST']
+      const filehostUrl = tokens['FILEHOST'] || tokens['draft/FILEHOST']
       if (typeof filehostUrl === 'string') {
         this.send('irc:filehost', { serverId, url: filehostUrl })
       }
