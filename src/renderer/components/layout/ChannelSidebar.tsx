@@ -4,6 +4,7 @@ import { useChannelStore } from '../../stores/channelStore'
 import { ContextMenu } from '../common/ContextMenu'
 import { ChannelBrowser } from '../channel/ChannelBrowser'
 import { UserProfilePanel } from '../user/UserProfilePanel'
+import { FriendList } from './FriendList'
 import { isChannelName } from '@shared/constants'
 
 const EMPTY_CHANNELS: { name: string; serverId: string; topic: string | null; topicSetBy: string | null; unreadCount: number; mentionCount: number; muted: boolean }[] = []
@@ -176,6 +177,9 @@ export function ChannelSidebar() {
               : 'Not connected'}
           </p>
         )}
+
+        {/* Friend list (MONITOR) */}
+        <FriendList />
       </div>
 
       {/* User profile */}

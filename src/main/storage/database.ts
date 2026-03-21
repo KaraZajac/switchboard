@@ -231,5 +231,17 @@ function runMigrations(): void {
     db.run("INSERT INTO migrations (name) VALUES ('005_avatar_url')")
   }
 
+  // Migration 006: Monitor (friend) list
+  if (!applied.has('006_monitor_list')) {
+    db.run(`
+      CREATE TABLE monitor_list (
+        server_id TEXT NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+        nick TEXT NOT NULL,
+        PRIMARY KEY (server_id, nick)
+      )
+    `)
+    db.run("INSERT INTO migrations (name) VALUES ('006_monitor_list')")
+  }
+
   saveDatabase()
 }

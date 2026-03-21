@@ -82,6 +82,12 @@ export interface ClientEvents {
   warn: (data: { code: string; command: string; message: string }) => void
   note: (data: { code: string; command: string; message: string }) => void
 
+  // Monitor (friend list)
+  monitorOnline: (data: { nick: string; user: string | null; host: string | null }) => void
+  monitorOffline: (data: { nick: string }) => void
+  monitorList: (data: { nicks: string[] }) => void
+  monitorListEnd: (data: Record<string, never>) => void
+
   // WHOIS
   whois: (data: Record<string, string>) => void
 

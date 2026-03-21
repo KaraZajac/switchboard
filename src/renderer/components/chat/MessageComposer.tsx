@@ -214,8 +214,8 @@ export function MessageComposer({
                 try {
                   const url = await window.switchboard.invoke('file:upload', serverId)
                   if (url) onSend(url)
-                } catch {
-                  // ignore — user cancelled or upload failed
+                } catch (err) {
+                  console.error('File upload failed:', err)
                 } finally {
                   setUploading(false)
                 }

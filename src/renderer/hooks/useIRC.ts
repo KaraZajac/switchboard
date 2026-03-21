@@ -326,7 +326,7 @@ export function useIRCEvents(): void {
       })
     )
 
-    // On connect, load read markers from DB
+    // On connect, load read markers from DB and monitor list
     cleanups.push(
       api.on('irc:connected', ({ serverId: sid }) => {
         api.invoke('read-marker:get-all', sid).then((markers) => {
@@ -334,6 +334,28 @@ export function useIRCEvents(): void {
             useChannelStore.getState().setReadMarkers(sid, markers)
           }
         })
+
+        // Load persisted friend list
+        api.invoke('monitor:list', sid).then((nicks) => {
+          if (nicks && nicks.length > 0) {
+            useUserStore.getState().setMonitorList(sid, nicks)
+            // Request current online status
+            api.invoke('monitor:status', sid)
+          }
+        })
+      })
+    )
+
+    // Monitor online/offline events
+    cleanups.push(
+      api.on('irc:monitor-online', ({ serverId, nick }) => {
+        useUserStore.getState().setMonitorOnline(serverId, nick)
+      })
+    )
+
+    cleanups.push(
+      api.on('irc:monitor-offline', ({ serverId, nick }) => {
+        useUserStore.getState().setMonitorOffline(serverId, nick)
       })
     )
 
