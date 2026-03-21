@@ -1,8 +1,7 @@
 node_modules/
 out/
 dist/
-.claude/settings.json
-.claude/settings.local.json
+# Claude Code
 .claude/
 *.db
 *.db-journal
