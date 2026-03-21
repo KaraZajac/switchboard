@@ -346,7 +346,7 @@ export function registerIPCHandlers(): void {
     const client = ircManager.getClient(serverId)
     if (!client) throw new Error('Not connected')
 
-    const filehostUrl = client.state.isupport['draft/FILEHOST']
+    const filehostUrl = client.state.isupport['FILEHOST'] || client.state.isupport['draft/FILEHOST']
     if (typeof filehostUrl !== 'string') throw new Error('Server does not support file uploads')
 
     const result = await dialog.showOpenDialog({
