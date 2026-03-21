@@ -16,6 +16,10 @@ interface ServerState {
   userAvatars: Record<string, string>
   /** Muted servers: serverId -> muteUntil timestamp (0 = permanent) */
   mutedServers: Record<string, number>
+  /** Network icons from ISUPPORT draft/ICON: serverId -> URL */
+  networkIcons: Record<string, string>
+  /** Filehost URLs from ISUPPORT draft/FILEHOST: serverId -> URL */
+  filehostUrls: Record<string, string>
 
   // Actions
   setServers: (servers: ServerConfig[]) => void
@@ -27,6 +31,8 @@ interface ServerState {
   setCapabilities: (id: string, caps: string[]) => void
   setCurrentNick: (id: string, nick: string) => void
   setUserAvatar: (serverId: string, nick: string, url: string) => void
+  setNetworkIcon: (serverId: string, url: string) => void
+  setFilehostUrl: (serverId: string, url: string) => void
   muteServer: (serverId: string, durationMs?: number) => void
   unmuteServer: (serverId: string) => void
   isServerMuted: (serverId: string) => boolean
@@ -40,6 +46,8 @@ export const useServerStore = create<ServerState>((set, get) => ({
   currentNick: {},
   userAvatars: {},
   mutedServers: {},
+  networkIcons: {},
+  filehostUrls: {},
 
   setServers: (servers) => set({ servers }),
 
@@ -82,6 +90,16 @@ export const useServerStore = create<ServerState>((set, get) => ({
   setUserAvatar: (serverId, nick, url) =>
     set((state) => ({
       userAvatars: { ...state.userAvatars, [`${serverId}:${nick.toLowerCase()}`]: url }
+    })),
+
+  setNetworkIcon: (serverId, url) =>
+    set((state) => ({
+      networkIcons: { ...state.networkIcons, [serverId]: url }
+    })),
+
+  setFilehostUrl: (serverId, url) =>
+    set((state) => ({
+      filehostUrls: { ...state.filehostUrls, [serverId]: url }
     })),
 
   muteServer: (serverId, durationMs) =>

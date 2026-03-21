@@ -1,4 +1,6 @@
-import { ipcMain, Notification, app, net } from 'electron'
+import { ipcMain, Notification, app, net, dialog } from 'electron'
+import { readFile } from 'fs/promises'
+import { basename, extname } from 'path'
 import { autoUpdater } from 'electron-updater'
 import { ircManager } from '../irc/manager'
 import {
@@ -302,6 +304,79 @@ export function registerIPCHandlers(): void {
 
   ipcMain.handle('read-marker:get-all', async (_event, serverId: string) => {
     return getAllReadMarkers(serverId)
+  })
+
+  // ── File upload (draft/FILEHOST) ────────────────────────────────────
+
+  ipcMain.handle('file:upload', async (_event, serverId: string) => {
+    const client = ircManager.getClient(serverId)
+    if (!client) throw new Error('Not connected')
+
+    const filehostUrl = client.state.isupport['draft/FILEHOST']
+    if (typeof filehostUrl !== 'string') throw new Error('Server does not support file uploads')
+
+    const result = await dialog.showOpenDialog({
+      properties: ['openFile'],
+      filters: [
+        { name: 'All Files', extensions: ['*'] },
+        { name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp'] },
+        { name: 'Videos', extensions: ['mp4', 'webm', 'mov', 'avi'] },
+        { name: 'Documents', extensions: ['pdf', 'txt', 'md', 'log'] }
+      ]
+    })
+
+    if (result.canceled || result.filePaths.length === 0) return null
+
+    const filePath = result.filePaths[0]
+    const fileName = basename(filePath)
+    const fileData = await readFile(filePath)
+
+    const MIME_MAP: Record<string, string> = {
+      '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+      '.gif': 'image/gif', '.webp': 'image/webp', '.svg': 'image/svg+xml',
+      '.bmp': 'image/bmp', '.mp4': 'video/mp4', '.webm': 'video/webm',
+      '.mov': 'video/quicktime', '.avi': 'video/x-msvideo',
+      '.pdf': 'application/pdf', '.txt': 'text/plain', '.md': 'text/markdown',
+      '.log': 'text/plain', '.zip': 'application/zip',
+    }
+    const contentType = MIME_MAP[extname(filePath).toLowerCase()] || 'application/octet-stream'
+
+    // Build auth header from SASL credentials
+    const headers: Record<string, string> = {
+      'Content-Type': contentType,
+      'Content-Disposition': `attachment; filename="${fileName}"`,
+      'Content-Length': fileData.length.toString()
+    }
+
+    const config = getServer(serverId)
+    if (config?.saslUsername && config?.saslPassword) {
+      if (config.saslMechanism === 'PLAIN' || !config.saslMechanism) {
+        const credentials = Buffer.from(`${config.saslUsername}:${config.saslPassword}`).toString('base64')
+        headers['Authorization'] = `Basic ${credentials}`
+      }
+    }
+
+    const response = await net.fetch(filehostUrl, {
+      method: 'POST',
+      headers,
+      body: fileData
+    })
+
+    if (response.status !== 201) {
+      const body = await response.text()
+      throw new Error(`Upload failed (${response.status}): ${body}`)
+    }
+
+    // Server returns Location header with the uploaded file URL
+    let location = response.headers.get('Location')
+    if (!location) throw new Error('Server did not return a file URL')
+
+    // Resolve relative URLs
+    if (!location.startsWith('http')) {
+      location = new URL(location, filehostUrl).href
+    }
+
+    return location
   })
 
   // ── Link previews ──────────────────────────────────────────────────

@@ -3,6 +3,7 @@ import type { ReplyTarget } from '../../stores/messageStore'
 import type { ChannelUser } from '@shared/types/channel'
 import { TYPING_THROTTLE_MS } from '@shared/constants'
 import { GifPicker } from './GifPicker'
+import { useServerStore } from '../../stores/serverStore'
 
 const IRC_COMMANDS = [
   '/me', '/join', '/part', '/nick', '/msg', '/whois', '/kick',
@@ -29,6 +30,8 @@ export function MessageComposer({
 }: MessageComposerProps) {
   const [text, setText] = useState('')
   const [showGifPicker, setShowGifPicker] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const hasFilehost = !!useServerStore((s) => s.filehostUrls[serverId])
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const lastTypingSent = useRef(0)
 
@@ -202,6 +205,38 @@ export function MessageComposer({
 
       <div className={`relative rounded-lg bg-gray-700 ${replyTarget ? 'rounded-t-none' : ''}`}>
         <div className="flex items-end">
+          {/* Upload button */}
+          {hasFilehost && (
+            <button
+              onClick={async () => {
+                if (uploading || disabled) return
+                setUploading(true)
+                try {
+                  const url = await window.switchboard.invoke('file:upload', serverId)
+                  if (url) onSend(url)
+                } catch {
+                  // ignore — user cancelled or upload failed
+                } finally {
+                  setUploading(false)
+                }
+              }}
+              disabled={disabled || uploading}
+              className="mb-2 ml-2 rounded p-1.5 text-gray-400 hover:bg-gray-600 hover:text-gray-200 disabled:opacity-50"
+              title="Upload a file"
+            >
+              {uploading ? (
+                <svg className="h-5 w-5 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+                </svg>
+              ) : (
+                <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="12" y1="5" x2="12" y2="19" />
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
+              )}
+            </button>
+          )}
+
           <textarea
             ref={inputRef}
             value={text}

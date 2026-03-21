@@ -5,6 +5,7 @@ import { useUIStore } from '../../stores/uiStore'
 import { SwitchboardIcon } from '../common/SwitchboardIcon'
 import { ContextMenu } from '../common/ContextMenu'
 import { isChannelName } from '@shared/constants'
+import { nickColor } from '../../utils/nickColor'
 
 export function ServerRail() {
   const servers = useServerStore((s) => s.servers)
@@ -15,6 +16,7 @@ export function ServerRail() {
   const dmMode = useUIStore((s) => s.dmMode)
   const allChannels = useChannelStore((s) => s.channels)
   const mutedServers = useServerStore((s) => s.mutedServers)
+  const networkIcons = useServerStore((s) => s.networkIcons)
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; serverId: string } | null>(null)
 
   // Count total unread DMs across all servers
@@ -65,6 +67,7 @@ export function ServerRail() {
         const isActive = server.id === activeServerId
         const status = connectionStatus[server.id] || 'disconnected'
         const initial = server.name.charAt(0).toUpperCase()
+        const iconUrl = networkIcons[server.id]
         const serverChannels = allChannels[server.id] || []
         // Exclude DMs from server badge — those show on the Switchboard icon
         const channelOnly = serverChannels.filter((ch) => isChannelName(ch.name) || ch.name === '*')
@@ -89,14 +92,25 @@ export function ServerRail() {
                 e.preventDefault()
                 setContextMenu({ x: e.clientX, y: e.clientY, serverId: server.id })
               }}
-              className={`flex h-12 w-12 items-center justify-center text-base font-bold transition-all ${
+              className={`flex h-12 w-12 items-center justify-center overflow-hidden text-base font-bold text-white transition-all ${!iconUrl ? nickColor(server.name) : 'bg-gray-700'} ${
                 isActive && !dmMode
-                  ? 'rounded-xl bg-indigo-500 text-white'
-                  : 'rounded-2xl bg-gray-700 text-gray-300 hover:rounded-xl hover:bg-indigo-500 hover:text-white'
+                  ? 'rounded-xl'
+                  : 'rounded-2xl hover:rounded-xl'
               }`}
               title={`${server.name} (${status})`}
             >
-              {initial}
+              {iconUrl ? (
+                <img
+                  src={iconUrl}
+                  alt={server.name}
+                  className="h-full w-full object-cover"
+                  referrerPolicy="no-referrer"
+                  onError={(e) => {
+                    ;(e.target as HTMLImageElement).style.display = 'none'
+                    ;(e.target as HTMLImageElement).parentElement!.textContent = initial
+                  }}
+                />
+              ) : initial}
             </button>
 
             {/* Mention badge (takes priority over status dot) */}

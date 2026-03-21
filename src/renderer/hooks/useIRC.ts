@@ -124,29 +124,31 @@ export function useIRCEvents(): void {
     // Message events
     cleanups.push(
       api.on('irc:message', ({ serverId, channel, message }) => {
-        // Auto-create channel entry for incoming DMs (only for real messages, not server notices)
-        if (!isChannelName(channel) && channel !== '*' && (message.type === 'privmsg' || message.type === 'action')) {
+        // Auto-create channel entry for incoming DMs (only for real user messages, not services)
+        const isService = isServiceNick(channel)
+        if (!isChannelName(channel) && channel !== '*' && !isService && (message.type === 'privmsg' || message.type === 'action')) {
           useChannelStore.getState().addChannel(serverId, channel)
         }
 
-        useMessageStore.getState().addMessage(serverId, channel, message)
+        // Route service messages to the server console channel
+        const effectiveChannel = isService ? '*' : channel
+        useMessageStore.getState().addMessage(serverId, effectiveChannel, message)
 
         // Check if this channel is currently active
         const activeServerId = useServerStore.getState().activeServerId
         const activeChannel = useChannelStore.getState().activeChannel[serverId]
-        const isActiveChannel = serverId === activeServerId && channel === activeChannel
+        const isActiveChannel = serverId === activeServerId && effectiveChannel === activeChannel
 
         // Detect mentions
         const myNick = currentNicks[serverId] || ''
         const isMention = myNick
           ? new RegExp(`\\b${myNick.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(message.content)
           : false
-        const isPrivate = !isChannelName(channel) && channel !== '*'
-        const isService = isServiceNick(channel)
+        const isPrivate = !isChannelName(channel) && channel !== '*' && !isService
 
         if (!isActiveChannel) {
           // Service messages get unread but not mention badges
-          useChannelStore.getState().incrementUnread(serverId, channel, !isService && (isMention || isPrivate))
+          useChannelStore.getState().incrementUnread(serverId, effectiveChannel, !isService && (isMention || isPrivate))
         }
 
         // Desktop notification for mentions and PMs (not for services or muted servers)
@@ -293,6 +295,20 @@ export function useIRCEvents(): void {
         if (key === 'avatar') {
           useServerStore.getState().setUserAvatar(serverId, target, value)
         }
+      })
+    )
+
+    // Network icon (ISUPPORT draft/ICON)
+    cleanups.push(
+      api.on('irc:network-icon', ({ serverId, url }) => {
+        useServerStore.getState().setNetworkIcon(serverId, url)
+      })
+    )
+
+    // Filehost (ISUPPORT draft/FILEHOST)
+    cleanups.push(
+      api.on('irc:filehost', ({ serverId, url }) => {
+        useServerStore.getState().setFilehostUrl(serverId, url)
       })
     )
 

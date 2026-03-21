@@ -8,9 +8,11 @@ const AVATAR_COLORS = [
 ]
 
 export function nickColor(nick: string): string {
-  let hash = 0
+  // FNV-1a hash for better distribution across short strings
+  let hash = 2166136261
   for (let i = 0; i < nick.length; i++) {
-    hash = nick.charCodeAt(i) + ((hash << 5) - hash)
+    hash ^= nick.charCodeAt(i)
+    hash = Math.imul(hash, 16777619)
   }
   return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length]
 }

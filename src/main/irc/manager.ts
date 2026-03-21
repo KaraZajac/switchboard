@@ -342,6 +342,17 @@ export class IRCManager {
       }
     })
 
+    client.events.on('isupport', (tokens) => {
+      const iconUrl = tokens['draft/ICON']
+      if (typeof iconUrl === 'string') {
+        this.send('irc:network-icon', { serverId, url: iconUrl })
+      }
+      const filehostUrl = tokens['draft/FILEHOST']
+      if (typeof filehostUrl === 'string') {
+        this.send('irc:filehost', { serverId, url: filehostUrl })
+      }
+    })
+
     client.events.on('whois', (data) => {
       this.send('irc:whois', { serverId, data })
     })
