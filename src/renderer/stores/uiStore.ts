@@ -1,6 +1,20 @@
 import { create } from 'zustand'
 
-type Theme = 'dark' | 'light'
+export type Theme =
+  | 'catppuccin-mocha'
+  | 'catppuccin-latte'
+  | 'catppuccin-frappe'
+  | 'catppuccin-macchiato'
+  | 'dracula'
+  | 'nord'
+  | 'gruvbox'
+  | 'one-dark'
+  | 'rose-pine'
+  | 'solarized-dark'
+  | 'tokyo-night'
+  | 'kanagawa'
+  | 'discord'
+
 type Modal = 'settings' | 'add-server' | 'edit-server' | 'whois' | 'search' | 'quick-switcher' | null
 
 export interface WhoisData {
@@ -40,7 +54,6 @@ interface UIState {
 
   // Actions
   setTheme: (theme: Theme) => void
-  toggleTheme: () => void
   openModal: (modal: Modal) => void
   closeModal: () => void
   toggleUserList: () => void
@@ -56,8 +69,11 @@ interface UIState {
   setPopupWhoisData: (data: WhoisData | null) => void
 }
 
+const savedTheme = (localStorage.getItem('switchboard-theme') as Theme) || 'catppuccin-mocha'
+document.documentElement.setAttribute('data-theme', savedTheme)
+
 export const useUIStore = create<UIState>((set) => ({
-  theme: 'dark',
+  theme: savedTheme,
   settingsOpen: false,
   activeModal: null,
   showUserList: true,
@@ -74,15 +90,9 @@ export const useUIStore = create<UIState>((set) => ({
 
   setTheme: (theme) => {
     document.documentElement.setAttribute('data-theme', theme)
+    localStorage.setItem('switchboard-theme', theme)
     set({ theme })
   },
-
-  toggleTheme: () =>
-    set((state) => {
-      const next = state.theme === 'dark' ? 'light' : 'dark'
-      document.documentElement.setAttribute('data-theme', next)
-      return { theme: next }
-    }),
 
   openModal: (modal) => set({ activeModal: modal }),
   closeModal: () => set({ activeModal: null, whoisData: null, editServerId: null }),

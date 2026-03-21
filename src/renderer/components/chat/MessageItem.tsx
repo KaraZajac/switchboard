@@ -16,6 +16,7 @@ export function MessageItem({ message, prevMessage, onReply }: MessageItemProps)
   const userAvatars = useServerStore((s) => s.userAvatars)
   const avatarUrl = userAvatars[`${message.serverId}:${message.nick.toLowerCase()}`] ?? null
   const currentNick = useServerStore((s) => s.currentNick[message.serverId] ?? '')
+  const compactMode = useUIStore((s) => s.compactMode)
   const [editing, setEditing] = useState(false)
   const [editText, setEditText] = useState('')
 
@@ -111,6 +112,38 @@ export function MessageItem({ message, prevMessage, onReply }: MessageItemProps)
               {isEdited && <span className="ml-1 text-[10px] text-gray-500">(edited)</span>}
             </span>
           )}
+          {Object.keys(message.reactions).length > 0 && (
+            <Reactions reactions={message.reactions} />
+          )}
+          <MessageActions message={message} onReply={onReply} isOwn={isOwn} onEdit={handleEditStart} />
+        </div>
+      </div>
+    )
+  }
+
+  if (compactMode) {
+    return (
+      <div className="group relative flex items-start px-2 py-0.5 hover:bg-gray-800/30">
+        <span className="mr-2 mt-0.5 min-w-[48px] text-right text-xs text-gray-500">
+          {time}
+        </span>
+        <div className="flex-1 overflow-hidden">
+          {message.replyTo && (
+            <ReplyPreview serverId={message.serverId} channel={message.channel} msgid={message.replyTo} />
+          )}
+          <span>
+            <NickWithPopup nick={message.nick} serverId={message.serverId} className="font-medium text-gray-100 hover:underline cursor-pointer" />
+            <span className="mx-1 text-gray-200">
+              {editing ? (
+                <EditInput text={editText} onChange={setEditText} onSave={handleEditSave} onCancel={handleEditCancel} />
+              ) : (
+                <span className={isNotice ? 'text-gray-400' : ''}>
+                  <MessageContent text={message.content} />
+                  {isEdited && <span className="ml-1 text-[10px] text-gray-500">(edited)</span>}
+                </span>
+              )}
+            </span>
+          </span>
           {Object.keys(message.reactions).length > 0 && (
             <Reactions reactions={message.reactions} />
           )}
