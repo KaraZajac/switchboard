@@ -19,7 +19,8 @@ Pre-built binaries for macOS, Linux, and Windows are available on the [Releases]
 - **Text formatting** — Markdown-style bold, italic, strikethrough, spoilers, and headings alongside IRC formatting codes
 - **GIF picker** — Search and send GIFs, stickers, clips, memes, and emoji via Klipy
 - **Link previews** — OpenGraph metadata cards for shared URLs with title, description, and thumbnail
-- **File uploads** — Upload files directly to IRC via `draft/filehost` with the + button
+- **File uploads** — Upload and share files via `draft/filehost`; images and videos render inline, other files show a download card with filename and size
+- **Friend list** — Track when your friends are online/offline via IRCv3 MONITOR
 - **User profiles** — Edit your nickname, realname, and avatar (via `draft/metadata-2`)
 - **Chat history** — Messages are stored locally in SQLite and fetched from the server via `draft/chathistory`
 - **Search** — Full-text search across all your messages; quick channel switcher with `Ctrl+K`
