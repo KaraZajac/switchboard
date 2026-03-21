@@ -92,7 +92,7 @@ export interface RendererToMainInvocations {
   'updater:install': () => Promise<void>
   'updater:check': () => Promise<{ available: boolean; version?: string }>
   'link-preview:fetch': (url: string) => Promise<LinkPreviewData | null>
-  'file:upload': (serverId: string) => Promise<string | null>
+  'file:upload': (serverId: string) => Promise<{ url: string; filename: string } | null>
   'monitor:add': (serverId: string, nicks: string[]) => Promise<void>
   'monitor:remove': (serverId: string, nicks: string[]) => Promise<void>
   'monitor:list': (serverId: string) => Promise<string[]>

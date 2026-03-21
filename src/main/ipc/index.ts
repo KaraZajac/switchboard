@@ -421,7 +421,7 @@ export function registerIPCHandlers(): void {
       req.end()
     })
 
-    return location
+    return { url: location, filename: fileName }
   })
 
   // ── Link previews ──────────────────────────────────────────────────

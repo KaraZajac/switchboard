@@ -215,3 +215,79 @@ export function isKlipyMediaUrl(url: string): boolean {
 export function isVideoUrl(url: string): boolean {
   return /\.(mp4|webm)(\?.*)?$/i.test(url)
 }
+
+/**
+ * Check if a URL points to an audio file.
+ */
+export function isAudioUrl(url: string): boolean {
+  return /\.(mp3|ogg|wav|flac|m4a|aac|opus)(\?.*)?$/i.test(url)
+}
+
+/** File extension to icon/label mapping */
+const FILE_TYPE_INFO: Record<string, { icon: string; label: string }> = {
+  '.pdf': { icon: '📄', label: 'PDF' },
+  '.doc': { icon: '📝', label: 'Document' },
+  '.docx': { icon: '📝', label: 'Document' },
+  '.xls': { icon: '📊', label: 'Spreadsheet' },
+  '.xlsx': { icon: '📊', label: 'Spreadsheet' },
+  '.ppt': { icon: '📊', label: 'Presentation' },
+  '.pptx': { icon: '📊', label: 'Presentation' },
+  '.zip': { icon: '📦', label: 'Archive' },
+  '.tar': { icon: '📦', label: 'Archive' },
+  '.gz': { icon: '📦', label: 'Archive' },
+  '.rar': { icon: '📦', label: 'Archive' },
+  '.7z': { icon: '📦', label: 'Archive' },
+  '.txt': { icon: '📄', label: 'Text' },
+  '.md': { icon: '📄', label: 'Markdown' },
+  '.log': { icon: '📄', label: 'Log' },
+  '.json': { icon: '📄', label: 'JSON' },
+  '.xml': { icon: '📄', label: 'XML' },
+  '.csv': { icon: '📊', label: 'CSV' },
+}
+
+/**
+ * Get file type info from a filename or URL extension.
+ */
+export function getFileTypeInfo(nameOrUrl: string): { icon: string; label: string } | null {
+  // Try as a plain filename first
+  let dotIdx = nameOrUrl.lastIndexOf('.')
+  if (dotIdx !== -1) {
+    const ext = nameOrUrl.slice(dotIdx).toLowerCase().replace(/\?.*$/, '')
+    if (FILE_TYPE_INFO[ext]) return FILE_TYPE_INFO[ext]
+  }
+  // Try parsing as URL
+  try {
+    const pathname = new URL(nameOrUrl).pathname
+    dotIdx = pathname.lastIndexOf('.')
+    if (dotIdx === -1) return null
+    const ext = pathname.slice(dotIdx).toLowerCase()
+    return FILE_TYPE_INFO[ext] || null
+  } catch {
+    return null
+  }
+}
+
+/** Map of filehost URL → original filename (populated at upload time) */
+const uploadFilenames = new Map<string, string>()
+
+/**
+ * Register the original filename for a filehost upload URL.
+ */
+export function registerUploadFilename(url: string, filename: string): void {
+  uploadFilenames.set(url, filename)
+}
+
+/**
+ * Extract a display filename from a URL, preferring the registered original name.
+ */
+export function getFilenameFromUrl(url: string): string {
+  const registered = uploadFilenames.get(url)
+  if (registered) return registered
+  try {
+    const pathname = new URL(url).pathname
+    const name = pathname.split('/').pop() || 'file'
+    return decodeURIComponent(name)
+  } catch {
+    return 'file'
+  }
+}

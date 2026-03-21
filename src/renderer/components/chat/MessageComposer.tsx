@@ -212,8 +212,12 @@ export function MessageComposer({
                 if (uploading || disabled) return
                 setUploading(true)
                 try {
-                  const url = await window.switchboard.invoke('file:upload', serverId)
-                  if (url) onSend(url)
+                  const result = await window.switchboard.invoke('file:upload', serverId)
+                  if (result) {
+                    const { registerUploadFilename } = await import('../../utils/linkify')
+                    registerUploadFilename(result.url, result.filename)
+                    onSend(result.url)
+                  }
                 } catch (err) {
                   console.error('File upload failed:', err)
                 } finally {
