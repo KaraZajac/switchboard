@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Switchboard — A Modern IRC Client</title>
+  <meta name="description" content="A modern IRC client with a Discord-like interface. Multi-server, rich messaging, GIF picker, file uploads, themes, and full IRCv3 support.">
+  <meta property="og:title" content="Switchboard — A Modern IRC Client">
+  <meta property="og:description" content="A modern IRC client with a Discord-like interface. Built with Electron and packed with IRCv3 support.">
+  <meta property="og:image" content="https://raw.githubusercontent.com/KaraZajac/switchboard/main/images/switchboard.png">
+  <meta property="og:type" content="website">
+  <link rel="icon" type="image/png" href="https://raw.githubusercontent.com/KaraZajac/switchboard/main/images/switchboard-icon-1024.png">
+  <style>
+    :root {
+      --crust: #11111b;
+      --mantle: #181825;
+      --base: #1e1e2e;
+      --surface0: #313244;
+      --surface1: #45475a;
+      --overlay0: #6c7086;
+      --overlay1: #7f849c;
+      --subtext0: #a6adc8;
+      --subtext1: #bac2de;
+      --text: #cdd6f4;
+      --blue: #89b4fa;
+      --lavender: #b4befe;
+      --mauve: #cba6f7;
+      --pink: #f5c2e7;
+      --red: #f38ba8;
+      --peach: #fab387;
+      --yellow: #f9e2af;
+      --green: #a6e3a1;
+      --teal: #94e2d5;
+      --sky: #89dceb;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: var(--crust);
+      color: var(--text);
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+
+    a { color: var(--blue); text-decoration: none; transition: color 0.2s; }
+    a:hover { color: var(--lavender); }
+
+    /* Hero */
+    .hero {
+      position: relative;
+      text-align: center;
+      padding: 6rem 2rem 4rem;
+      background: linear-gradient(180deg, var(--base) 0%, var(--crust) 100%);
+      overflow: hidden;
+    }
+
+    .hero::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: radial-gradient(ellipse at 50% 0%, rgba(137, 180, 250, 0.08) 0%, transparent 60%);
+      pointer-events: none;
+    }
+
+    .hero-icon {
+      width: 96px;
+      height: 96px;
+      border-radius: 24px;
+      margin: 0 auto 1.5rem;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    }
+
+    .hero h1 {
+      font-size: 3.5rem;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      margin-bottom: 0.75rem;
+      background: linear-gradient(135deg, var(--text) 0%, var(--lavender) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .hero .tagline {
+      font-size: 1.25rem;
+      color: var(--subtext0);
+      max-width: 600px;
+      margin: 0 auto 2.5rem;
+    }
+
+    .hero-buttons {
+      display: flex;
+      gap: 1rem;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.75rem 1.75rem;
+      border-radius: 12px;
+      font-size: 1rem;
+      font-weight: 600;
+      transition: all 0.2s;
+      border: none;
+      cursor: pointer;
+    }
+
+    .btn-primary {
+      background: var(--blue);
+      color: var(--crust);
+    }
+    .btn-primary:hover {
+      background: var(--lavender);
+      color: var(--crust);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 16px rgba(137, 180, 250, 0.3);
+    }
+
+    .btn-secondary {
+      background: var(--surface0);
+      color: var(--text);
+    }
+    .btn-secondary:hover {
+      background: var(--surface1);
+      color: var(--text);
+      transform: translateY(-1px);
+    }
+
+    .btn svg { width: 20px; height: 20px; }
+
+    .badges {
+      display: flex;
+      gap: 0.5rem;
+      justify-content: center;
+      margin-top: 2rem;
+    }
+    .badges img { height: 22px; }
+
+    /* Screenshot */
+    .screenshot-section {
+      padding: 0 2rem 4rem;
+      text-align: center;
+    }
+
+    .screenshot-wrapper {
+      max-width: 1000px;
+      margin: 0 auto;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 16px 64px rgba(0,0,0,0.5), 0 0 0 1px var(--surface0);
+    }
+
+    .screenshot-wrapper img {
+      width: 100%;
+      display: block;
+    }
+
+    /* Sections */
+    .section {
+      padding: 5rem 2rem;
+    }
+
+    .section-alt {
+      background: var(--mantle);
+    }
+
+    .container {
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+
+    .section-title {
+      font-size: 2rem;
+      font-weight: 700;
+      text-align: center;
+      margin-bottom: 0.5rem;
+    }
+
+    .section-subtitle {
+      text-align: center;
+      color: var(--subtext0);
+      margin-bottom: 3rem;
+      font-size: 1.1rem;
+    }
+
+    /* Feature grid */
+    .features {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 1.5rem;
+    }
+
+    .feature-card {
+      background: var(--base);
+      border: 1px solid var(--surface0);
+      border-radius: 12px;
+      padding: 1.5rem;
+      transition: border-color 0.2s, transform 0.2s;
+    }
+
+    .feature-card:hover {
+      border-color: var(--surface1);
+      transform: translateY(-2px);
+    }
+
+    .feature-icon {
+      font-size: 1.5rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .feature-card h3 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+      color: var(--text);
+    }
+
+    .feature-card p {
+      color: var(--subtext0);
+      font-size: 0.95rem;
+      line-height: 1.5;
+    }
+
+    /* IRC spec table */
+    .spec-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1.5rem;
+    }
+
+    .spec-card {
+      background: var(--base);
+      border: 1px solid var(--surface0);
+      border-radius: 12px;
+      padding: 1.5rem;
+    }
+
+    .spec-card h3 {
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--lavender);
+      margin-bottom: 0.75rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .spec-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+    }
+
+    .spec-tag {
+      display: inline-block;
+      background: var(--surface0);
+      color: var(--subtext1);
+      padding: 0.2rem 0.6rem;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    }
+
+    /* Theme showcase */
+    .theme-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 1rem;
+    }
+
+    .theme-card {
+      border-radius: 10px;
+      padding: 0.75rem;
+      text-align: center;
+      border: 1px solid var(--surface0);
+      transition: transform 0.2s, border-color 0.2s;
+    }
+
+    .theme-card:hover {
+      transform: translateY(-2px);
+      border-color: var(--surface1);
+    }
+
+    .theme-swatches {
+      display: flex;
+      gap: 4px;
+      justify-content: center;
+      margin-bottom: 0.5rem;
+    }
+
+    .theme-swatch {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+
+    .theme-name {
+      font-size: 0.8rem;
+      color: var(--subtext0);
+      font-weight: 500;
+    }
+
+    /* Tech stack */
+    .tech-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 1rem;
+      max-width: 700px;
+      margin: 0 auto;
+    }
+
+    .tech-item {
+      background: var(--base);
+      border: 1px solid var(--surface0);
+      border-radius: 10px;
+      padding: 1.25rem 1rem;
+      text-align: center;
+    }
+
+    .tech-item .tech-label {
+      font-size: 0.75rem;
+      color: var(--overlay1);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 0.35rem;
+    }
+
+    .tech-item .tech-value {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    /* CTA */
+    .cta {
+      text-align: center;
+      padding: 5rem 2rem;
+      background: linear-gradient(180deg, var(--crust) 0%, var(--mantle) 50%, var(--crust) 100%);
+    }
+
+    .cta h2 {
+      font-size: 2rem;
+      font-weight: 700;
+      margin-bottom: 0.75rem;
+    }
+
+    .cta p {
+      color: var(--subtext0);
+      margin-bottom: 2rem;
+      font-size: 1.1rem;
+    }
+
+    /* Footer */
+    footer {
+      text-align: center;
+      padding: 2rem;
+      color: var(--overlay0);
+      font-size: 0.85rem;
+      border-top: 1px solid var(--surface0);
+    }
+
+    footer a { color: var(--overlay1); }
+    footer a:hover { color: var(--text); }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .hero { padding: 4rem 1.5rem 3rem; }
+      .hero h1 { font-size: 2.5rem; }
+      .hero .tagline { font-size: 1.1rem; }
+      .features { grid-template-columns: 1fr; }
+      .spec-grid { grid-template-columns: 1fr; }
+      .theme-grid { grid-template-columns: repeat(3, 1fr); }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Hero -->
+  <section class="hero">
+    <img src="https://raw.githubusercontent.com/KaraZajac/switchboard/main/images/switchboard-icon-1024.png" alt="Switchboard" class="hero-icon">
+    <h1>Switchboard</h1>
+    <p class="tagline">A modern IRC client with a familiar, Discord-like interface. Built with Electron and packed with IRCv3 support.</p>
+    <div class="hero-buttons">
+      <a href="https://github.com/KaraZajac/switchboard/releases/latest" class="btn btn-primary">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
+        Download
+      </a>
+      <a href="https://github.com/KaraZajac/switchboard" class="btn btn-secondary">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+        Source Code
+      </a>
+    </div>
+    <div class="badges">
+      <img src="https://img.shields.io/badge/status-beta-yellow" alt="Status: Beta">
+      <img src="https://img.shields.io/badge/platform-linux%20%7C%20macos%20%7C%20windows-blue" alt="Platforms">
+      <img src="https://img.shields.io/badge/license-BSD--3--Clause-blue" alt="License">
+    </div>
+  </section>
+
+  <!-- Screenshot -->
+  <section class="screenshot-section">
+    <div class="screenshot-wrapper">
+      <img src="https://raw.githubusercontent.com/KaraZajac/switchboard/main/images/switchboard.png" alt="Switchboard screenshot" loading="lazy">
+    </div>
+  </section>
+
+  <!-- Features -->
+  <section class="section section-alt">
+    <div class="container">
+      <h2 class="section-title">Features</h2>
+      <p class="section-subtitle">Everything you need from an IRC client, with a modern twist</p>
+      <div class="features">
+        <div class="feature-card">
+          <div class="feature-icon">&#127760;</div>
+          <h3>Multi-Server</h3>
+          <p>Connect to as many IRC networks as you want, all at once. Each server gets its own icon in the sidebar.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">&#128172;</div>
+          <h3>Rich Messaging</h3>
+          <p>Replies, reactions, typing indicators, read markers, message editing, deletion, and full IRC color/formatting support.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">&#127912;</div>
+          <h3>GIF Picker</h3>
+          <p>Search and send GIFs, stickers, clips, memes, and emoji via Klipy &mdash; right from the message composer.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">&#128206;</div>
+          <h3>File Uploads</h3>
+          <p>Upload files via <code>draft/filehost</code>. Images and video render inline; other files get a download card.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">&#128279;</div>
+          <h3>Link Previews</h3>
+          <p>OpenGraph metadata cards for shared URLs with title, description, and thumbnail &mdash; fetched automatically.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">&#128101;</div>
+          <h3>Friend List</h3>
+          <p>Track when your friends are online or offline using IRCv3 MONITOR. Persists across restarts.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">&#128100;</div>
+          <h3>User Profiles</h3>
+          <p>Edit your nickname, realname, and avatar. View other users' WHOIS info with a click.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">&#128197;</div>
+          <h3>Chat History</h3>
+          <p>Messages stored locally in SQLite and fetched from the server via <code>draft/chathistory</code>. Never miss a conversation.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">&#128270;</div>
+          <h3>Search</h3>
+          <p>Full-text search across all your messages. Quick channel switcher with <kbd>Ctrl+K</kbd>.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">&#128263;</div>
+          <h3>Muting</h3>
+          <p>Timed or permanent mute for channels and servers. No more notification spam from noisy channels.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">&#127912;</div>
+          <h3>13 Themes</h3>
+          <p>Catppuccin, Dracula, Nord, Gruvbox, One Dark, Ros&eacute; Pine, Solarized, Tokyo Night, Kanagawa, Discord, and more.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">&#128187;</div>
+          <h3>Cross-Platform</h3>
+          <p>Available for macOS (.dmg), Linux (.AppImage, .deb, .rpm), and Windows (.exe) with auto-updates.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Themes -->
+  <section class="section">
+    <div class="container">
+      <h2 class="section-title">Themes</h2>
+      <p class="section-subtitle">13 built-in color themes to make Switchboard feel like home</p>
+      <div class="theme-grid">
+        <div class="theme-card" style="background: #1e1e2e;">
+          <div class="theme-swatches">
+            <div class="theme-swatch" style="background:#11111b"></div>
+            <div class="theme-swatch" style="background:#89b4fa"></div>
+            <div class="theme-swatch" style="background:#cba6f7"></div>
+            <div class="theme-swatch" style="background:#f38ba8"></div>
+          </div>
+          <div class="theme-name">Catppuccin Mocha</div>
+        </div>
+        <div class="theme-card" style="background: #eff1f5;">
+          <div class="theme-swatches">
+            <div class="theme-swatch" style="background:#dce0e8"></div>
+            <div class="theme-swatch" style="background:#1e66f5"></div>
+            <div class="theme-swatch" style="background:#8839ef"></div>
+            <div class="theme-swatch" style="background:#d20f39"></div>
+          </div>
+          <div class="theme-name" style="color:#6c6f85">Catppuccin Latte</div>
+        </div>
+        <div class="theme-card" style="background: #303446;">
+          <div class="theme-swatches">
+            <div class="theme-swatch" style="background:#232634"></div>
+            <div class="theme-swatch" style="background:#8caaee"></div>
+            <div class="theme-swatch" style="background:#ca9ee6"></div>
+            <div class="theme-swatch" style="background:#e78284"></div>
+          </div>
+          <div class="theme-name">Catppuccin Frapp&eacute;</div>
+        </div>
+        <div class="theme-card" style="background: #24273a;">
+          <div class="theme-swatches">
+            <div class="theme-swatch" style="background:#1e2030"></div>
+            <div class="theme-swatch" style="background:#8aadf4"></div>
+            <div class="theme-swatch" style="background:#c6a0f6"></div>
+            <div class="theme-swatch" style="background:#ed8796"></div>
+          </div>
+          <div class="theme-name">Catppuccin Macchiato</div>
+        </div>
+        <div class="theme-card" style="background: #282a36;">
+          <div class="theme-swatches">
+            <div class="theme-swatch" style="background:#44475a"></div>
+            <div class="theme-swatch" style="background:#bd93f9"></div>
+            <div class="theme-swatch" style="background:#ff79c6"></div>
+            <div class="theme-swatch" style="background:#ff5555"></div>
+          </div>
+          <div class="theme-name">Dracula</div>
+        </div>
+        <div class="theme-card" style="background: #2e3440;">
+          <div class="theme-swatches">
+            <div class="theme-swatch" style="background:#3b4252"></div>
+            <div class="theme-swatch" style="background:#81a1c1"></div>
+            <div class="theme-swatch" style="background:#88c0d0"></div>
+            <div class="theme-swatch" style="background:#bf616a"></div>
+          </div>
+          <div class="theme-name">Nord</div>
+        </div>
+        <div class="theme-card" style="background: #282828;">
+          <div class="theme-swatches">
+            <div class="theme-swatch" style="background:#3c3836"></div>
+            <div class="theme-swatch" style="background:#458588"></div>
+            <div class="theme-swatch" style="background:#b16286"></div>
+            <div class="theme-swatch" style="background:#cc241d"></div>
+          </div>
+          <div class="theme-name">Gruvbox</div>
+        </div>
+        <div class="theme-card" style="background: #282c34;">
+          <div class="theme-swatches">
+            <div class="theme-swatch" style="background:#21252b"></div>
+            <div class="theme-swatch" style="background:#61afef"></div>
+            <div class="theme-swatch" style="background:#c678dd"></div>
+            <div class="theme-swatch" style="background:#e06c75"></div>
+          </div>
+          <div class="theme-name">One Dark</div>
+        </div>
+        <div class="theme-card" style="background: #191724;">
+          <div class="theme-swatches">
+            <div class="theme-swatch" style="background:#26233a"></div>
+            <div class="theme-swatch" style="background:#c4a7e7"></div>
+            <div class="theme-swatch" style="background:#ebbcba"></div>
+            <div class="theme-swatch" style="background:#eb6f92"></div>
+          </div>
+          <div class="theme-name">Ros&eacute; Pine</div>
+        </div>
+        <div class="theme-card" style="background: #002b36;">
+          <div class="theme-swatches">
+            <div class="theme-swatch" style="background:#073642"></div>
+            <div class="theme-swatch" style="background:#268bd2"></div>
+            <div class="theme-swatch" style="background:#d33682"></div>
+            <div class="theme-swatch" style="background:#dc322f"></div>
+          </div>
+          <div class="theme-name">Solarized Dark</div>
+        </div>
+        <div class="theme-card" style="background: #1a1b26;">
+          <div class="theme-swatches">
+            <div class="theme-swatch" style="background:#24283b"></div>
+            <div class="theme-swatch" style="background:#7aa2f7"></div>
+            <div class="theme-swatch" style="background:#bb9af7"></div>
+            <div class="theme-swatch" style="background:#f7768e"></div>
+          </div>
+          <div class="theme-name">Tokyo Night</div>
+        </div>
+        <div class="theme-card" style="background: #1f1f28;">
+          <div class="theme-swatches">
+            <div class="theme-swatch" style="background:#2a2a37"></div>
+            <div class="theme-swatch" style="background:#7e9cd8"></div>
+            <div class="theme-swatch" style="background:#957fb8"></div>
+            <div class="theme-swatch" style="background:#e46876"></div>
+          </div>
+          <div class="theme-name">Kanagawa</div>
+        </div>
+        <div class="theme-card" style="background: #313338;">
+          <div class="theme-swatches">
+            <div class="theme-swatch" style="background:#2b2d31"></div>
+            <div class="theme-swatch" style="background:#5865f2"></div>
+            <div class="theme-swatch" style="background:#eb459e"></div>
+            <div class="theme-swatch" style="background:#ed4245"></div>
+          </div>
+          <div class="theme-name">Discord</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- IRCv3 -->
+  <section class="section section-alt">
+    <div class="container">
+      <h2 class="section-title">IRCv3 Support</h2>
+      <p class="section-subtitle">One of the most comprehensive IRCv3 implementations in any client</p>
+      <div class="spec-grid">
+        <div class="spec-card">
+          <h3>&#128274; Authentication</h3>
+          <div class="spec-tags">
+            <span class="spec-tag">SASL PLAIN</span>
+            <span class="spec-tag">SASL EXTERNAL</span>
+            <span class="spec-tag">SCRAM-SHA-256</span>
+            <span class="spec-tag">STS</span>
+            <span class="spec-tag">account-registration</span>
+          </div>
+        </div>
+        <div class="spec-card">
+          <h3>&#128172; Messaging</h3>
+          <div class="spec-tags">
+            <span class="spec-tag">message-tags</span>
+            <span class="spec-tag">message-ids</span>
+            <span class="spec-tag">server-time</span>
+            <span class="spec-tag">echo-message</span>
+            <span class="spec-tag">batch</span>
+            <span class="spec-tag">labeled-response</span>
+            <span class="spec-tag">standard-replies</span>
+            <span class="spec-tag">draft/chathistory</span>
+            <span class="spec-tag">draft/multiline</span>
+            <span class="spec-tag">draft/message-redaction</span>
+            <span class="spec-tag">draft/edit</span>
+            <span class="spec-tag">+typing</span>
+            <span class="spec-tag">+draft/react</span>
+          </div>
+        </div>
+        <div class="spec-card">
+          <h3>&#128100; Users</h3>
+          <div class="spec-tags">
+            <span class="spec-tag">account-notify</span>
+            <span class="spec-tag">account-tag</span>
+            <span class="spec-tag">away-notify</span>
+            <span class="spec-tag">chghost</span>
+            <span class="spec-tag">setname</span>
+            <span class="spec-tag">extended-join</span>
+            <span class="spec-tag">multi-prefix</span>
+            <span class="spec-tag">userhost-in-names</span>
+            <span class="spec-tag">monitor</span>
+            <span class="spec-tag">invite-notify</span>
+            <span class="spec-tag">bot</span>
+            <span class="spec-tag">WHOX</span>
+            <span class="spec-tag">draft/metadata-2</span>
+          </div>
+        </div>
+        <div class="spec-card">
+          <h3>&#128218; Channels &amp; Server</h3>
+          <div class="spec-tags">
+            <span class="spec-tag">draft/read-marker</span>
+            <span class="spec-tag">draft/channel-rename</span>
+            <span class="spec-tag">+draft/channel-context</span>
+            <span class="spec-tag">draft/network-icon</span>
+            <span class="spec-tag">draft/filehost</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Tech Stack -->
+  <section class="section">
+    <div class="container">
+      <h2 class="section-title">Tech Stack</h2>
+      <p class="section-subtitle">Built with modern, proven technologies</p>
+      <div class="tech-grid">
+        <div class="tech-item">
+          <div class="tech-label">Framework</div>
+          <div class="tech-value">Electron 33</div>
+        </div>
+        <div class="tech-item">
+          <div class="tech-label">UI</div>
+          <div class="tech-value">React 19</div>
+        </div>
+        <div class="tech-item">
+          <div class="tech-label">State</div>
+          <div class="tech-value">Zustand 5</div>
+        </div>
+        <div class="tech-item">
+          <div class="tech-label">Styling</div>
+          <div class="tech-value">Tailwind CSS 4</div>
+        </div>
+        <div class="tech-item">
+          <div class="tech-label">Database</div>
+          <div class="tech-value">sql.js (SQLite)</div>
+        </div>
+        <div class="tech-item">
+          <div class="tech-label">Build</div>
+          <div class="tech-value">electron-vite</div>
+        </div>
+        <div class="tech-item">
+          <div class="tech-label">Tests</div>
+          <div class="tech-value">Vitest</div>
+        </div>
+        <div class="tech-item">
+          <div class="tech-label">Language</div>
+          <div class="tech-value">TypeScript</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="cta">
+    <h2>Ready to try Switchboard?</h2>
+    <p>Download the latest release or build from source.</p>
+    <div class="hero-buttons">
+      <a href="https://github.com/KaraZajac/switchboard/releases/latest" class="btn btn-primary">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
+        Download Latest Release
+      </a>
+      <a href="https://github.com/KaraZajac/switchboard" class="btn btn-secondary">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+        View on GitHub
+      </a>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer>
+    <p>
+      Switchboard is open source under the <a href="https://github.com/KaraZajac/switchboard/blob/main/LICENSE">BSD-3-Clause</a> license.
+      &copy; 2026 <a href="https://github.com/KaraZajac">.leviathan.</a>
+    </p>
+  </footer>
+
+</body>
+</html>
