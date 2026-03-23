@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Modal } from '../common/Modal'
 import { useUIStore } from '../../stores/uiStore'
 import type { Theme } from '../../stores/uiStore'
@@ -294,7 +294,7 @@ function NetworkTab() {
   const [customCaPath, setCustomCaPath] = useState('')
 
   // Load saved settings
-  useState(() => {
+  useEffect(() => {
     window.switchboard.invoke('settings:get', 'proxy').then((v) => {
       if (v && typeof v === 'object') {
         const p = v as Record<string, string>
@@ -306,7 +306,7 @@ function NetworkTab() {
     window.switchboard.invoke('settings:get', 'customCaPath').then((v) => {
       if (typeof v === 'string') setCustomCaPath(v)
     })
-  })
+  }, [])
 
   const handleSaveProxy = () => {
     window.switchboard.invoke('settings:set', 'proxy', {
