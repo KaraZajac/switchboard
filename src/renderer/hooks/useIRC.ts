@@ -47,20 +47,28 @@ export function useIRCEvents(): void {
       })
     )
 
+    // Stagger chathistory requests to avoid flooding the server
+    let chathistoryQueue = 0
+
     // Channel events
     cleanups.push(
       api.on('irc:join', ({ serverId, channel, user }) => {
         useChannelStore.getState().addChannel(serverId, channel)
         useUserStore.getState().addUser(serverId, channel, user)
 
-        // Load local history first, then request server history
+        // Load local history first; only request server history if local is empty
         api.invoke('history:fetch', serverId, channel, undefined, 50).then((messages) => {
           if (messages && messages.length > 0) {
             useMessageStore.getState().setMessages(serverId, channel, messages)
+          } else {
+            // No local history — request from server, staggered to avoid flood
+            const delay = chathistoryQueue++ * 500
+            setTimeout(() => {
+              chathistoryQueue = Math.max(0, chathistoryQueue - 1)
+              api.invoke('chathistory:request', serverId, channel, undefined, 50)
+            }, delay)
           }
         })
-        // Request server-side chathistory (results arrive via irc:chathistory)
-        api.invoke('chathistory:request', serverId, channel, undefined, 50)
       })
     )
 
