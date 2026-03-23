@@ -15,7 +15,7 @@ if (root) {
     console.log('[Switchboard] React render called')
   } catch (err) {
     console.error('[Switchboard] React render error:', err)
-    root.innerHTML = `<pre style="color:red;padding:40px">${err}</pre>`
+    root.textContent = String(err)
   }
 } else {
   document.body.innerHTML = '<pre style="color:red;padding:40px">#root not found</pre>'
