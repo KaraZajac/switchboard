@@ -23,6 +23,8 @@ export interface ServerConfig {
   websocketUrl: string | null
   /** Locally persisted avatar URL for draft/metadata-2 */
   avatarUrl: string | null
+  /** Away message to set before registration (draft/pre-away, bouncer support) */
+  preAwayMessage: string | null
 }
 
 /** Runtime server state (not persisted) */

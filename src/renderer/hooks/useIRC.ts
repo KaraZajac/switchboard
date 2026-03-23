@@ -346,6 +346,23 @@ export function useIRCEvents(): void {
       })
     )
 
+    // Invite notifications
+    cleanups.push(
+      api.on('irc:invite', ({ serverId, channel, by }) => {
+        useUIStore.getState().addToast({
+          title: `Channel Invite`,
+          body: `${by} invited you to ${channel}`,
+          action: { label: 'Join', serverId, channel }
+        })
+
+        // Desktop notification
+        const isServerMuted = useServerStore.getState().isServerMuted(serverId)
+        if (useUIStore.getState().notificationsEnabled && !isServerMuted) {
+          api.invoke('notification:send', `Invited to ${channel}`, `${by} invited you to ${channel}`)
+        }
+      })
+    )
+
     // Monitor online/offline events
     cleanups.push(
       api.on('irc:monitor-online', ({ serverId, nick }) => {

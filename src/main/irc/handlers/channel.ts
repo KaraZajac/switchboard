@@ -1,5 +1,6 @@
 import { registerHandler } from './registry'
 import type { ChannelUser } from '@shared/types/channel'
+import { sendWHOX } from '../features/whox'
 
 /**
  * JOIN — Someone joined a channel
@@ -16,6 +17,15 @@ registerHandler('JOIN', (client, msg) => {
   if (isMe) {
     // We joined — create channel state
     client.state.getChannel(channel)
+
+    // With draft/no-implicit-names the server won't send NAMES automatically
+    if (client.state.capabilities.has('draft/no-implicit-names')) {
+      if (client.state.isupport['WHOX']) {
+        sendWHOX(client, channel)
+      } else {
+        client.connection.send('NAMES', channel)
+      }
+    }
   }
 
   const ch = client.state.channels.get(channel.toLowerCase())
@@ -188,6 +198,11 @@ registerHandler('366', (client, msg) => {
     ch.namesReceived = true
     const users: ChannelUser[] = Array.from(ch.users.values())
     client.events.emit('names', { channel: ch.name, users })
+
+    // Auto-WHOX for richer user data (bot flags, accounts, away status)
+    if (client.state.isupport['WHOX']) {
+      sendWHOX(client, channel)
+    }
   }
 })
 

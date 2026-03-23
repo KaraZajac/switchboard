@@ -127,6 +127,11 @@ function processBatch(client: { events: { emit: (event: string, ...args: unknown
       break
     }
 
+    case 'search':
+      // Server-side search results — emit as a batch
+      client.events.emit('searchResults', { messages: batch.messages })
+      break
+
     case 'labeled-response':
       // Labeled response — process contained messages normally
       // The label tag on individual messages correlates request/response

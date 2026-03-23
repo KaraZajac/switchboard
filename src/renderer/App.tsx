@@ -1,5 +1,6 @@
 import { useEffect, useCallback, Component, type ReactNode } from 'react'
 import { AppLayout } from './components/layout/AppLayout'
+import { ToastContainer } from './components/common/ToastContainer'
 import { useIRCEvents } from './hooks/useIRC'
 import { useServerStore } from './stores/serverStore'
 import { useUIStore } from './stores/uiStore'
@@ -73,7 +74,12 @@ function AppInner() {
     return () => window.removeEventListener('keydown', handleGlobalKeyDown)
   }, [handleGlobalKeyDown])
 
-  return <AppLayout />
+  return (
+    <>
+      <AppLayout />
+      <ToastContainer />
+    </>
+  )
 }
 
 export function App() {

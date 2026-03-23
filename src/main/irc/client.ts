@@ -88,6 +88,9 @@ export interface ClientEvents {
   monitorList: (data: { nicks: string[] }) => void
   monitorListEnd: (data: Record<string, never>) => void
 
+  // Search results
+  searchResults: (data: { messages: IRCMessage[] }) => void
+
   // WHOIS
   whois: (data: Record<string, string>) => void
 

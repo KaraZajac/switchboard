@@ -39,8 +39,8 @@ export function addServer(config: Omit<ServerConfig, 'id' | 'sortOrder'>): strin
 
   db.run(
     `INSERT INTO servers (id, name, host, port, tls, password, nick, username, realname,
-     sasl_mechanism, sasl_username, sasl_password, auto_connect, auto_join, sort_order, websocket_url, identify_command, avatar_url)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     sasl_mechanism, sasl_username, sasl_password, auto_connect, auto_join, sort_order, websocket_url, identify_command, avatar_url, pre_away_message)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       id,
       config.name,
@@ -59,7 +59,8 @@ export function addServer(config: Omit<ServerConfig, 'id' | 'sortOrder'>): strin
       sortOrder,
       (config as Record<string, unknown>).websocketUrl || null,
       (config as Record<string, unknown>).identifyCommand || null,
-      (config as Record<string, unknown>).avatarUrl || null
+      (config as Record<string, unknown>).avatarUrl || null,
+      (config as Record<string, unknown>).preAwayMessage || null
     ]
   )
 
@@ -89,6 +90,7 @@ export function updateServer(id: string, updates: Partial<ServerConfig>): void {
   if (updates.websocketUrl !== undefined) { fields.push('websocket_url = ?'); values.push(updates.websocketUrl) }
   if (updates.identifyCommand !== undefined) { fields.push('identify_command = ?'); values.push(updates.identifyCommand) }
   if (updates.avatarUrl !== undefined) { fields.push('avatar_url = ?'); values.push(updates.avatarUrl) }
+  if (updates.preAwayMessage !== undefined) { fields.push('pre_away_message = ?'); values.push(updates.preAwayMessage) }
 
   if (fields.length === 0) return
 
@@ -126,7 +128,8 @@ function rowToConfig(row: unknown[]): ServerConfig {
     sortOrder: row[14] as number,
     websocketUrl: (row[17] as string) || null,
     identifyCommand: (row[18] as string) || null,
-    avatarUrl: (row[19] as string) || null
+    avatarUrl: (row[19] as string) || null,
+    preAwayMessage: (row[20] as string) || null
   }
 }
 
@@ -149,6 +152,7 @@ function objectToConfig(row: Record<string, unknown>): ServerConfig {
     sortOrder: row['sort_order'] as number,
     websocketUrl: (row['websocket_url'] as string) || null,
     identifyCommand: (row['identify_command'] as string) || null,
-    avatarUrl: (row['avatar_url'] as string) || null
+    avatarUrl: (row['avatar_url'] as string) || null,
+    preAwayMessage: (row['pre_away_message'] as string) || null
   }
 }

@@ -34,13 +34,13 @@ Switchboard negotiates and supports a wide range of IRCv3 capabilities:
 
 **Authentication** — SASL (PLAIN, EXTERNAL, SCRAM-SHA-256), STS, in-band account registration
 
-**Messaging** — message-tags, message-ids, server-time, echo-message, batch, labeled-response, standard-replies, draft/chathistory, draft/multiline, draft/message-redaction, draft/edit, +typing, +draft/react
+**Messaging** — message-tags, message-ids, server-time, echo-message, batch, labeled-response, standard-replies, draft/chathistory, draft/multiline, draft/message-redaction, draft/edit, draft/search, +typing, +draft/react
 
-**Users** — account-notify, account-tag, away-notify, chghost, setname, extended-join, multi-prefix, userhost-in-names, monitor, invite-notify, bot, WHOX, draft/metadata-2
+**Users** — account-notify, account-tag, away-notify, chghost, setname, extended-join, multi-prefix, userhost-in-names, monitor, invite-notify, bot, WHOX, draft/metadata-2, draft/pre-away
 
-**Channels** — draft/read-marker, draft/channel-rename, +draft/channel-context
+**Channels** — draft/read-marker, draft/channel-rename, +draft/channel-context, draft/no-implicit-names, draft/persistence
 
-**Server** — draft/network-icon, draft/filehost
+**Server** — draft/network-icon, draft/filehost, draft/event-playback, draft/register-before-connect
 
 ## Development
 

@@ -42,6 +42,8 @@ export interface MainToRendererEvents {
   'irc:monitor-online': { serverId: string; nick: string; user: string | null; host: string | null }
   'irc:monitor-offline': { serverId: string; nick: string }
   'irc:chathistory': { serverId: string; channel: string; messages: ChatMessage[] }
+  'irc:invite': { serverId: string; channel: string; by: string }
+  'irc:search-results': { serverId: string; messages: ChatMessage[] }
   'irc:netsplit': { serverId: string; server1: string; server2: string; nicks: string[] }
   'irc:netjoin': { serverId: string; server1: string; server2: string; nicks: string[] }
   'menu:add-server': Record<string, never>
@@ -93,6 +95,7 @@ export interface RendererToMainInvocations {
   'updater:check': () => Promise<{ available: boolean; version?: string }>
   'link-preview:fetch': (url: string) => Promise<LinkPreviewData | null>
   'file:upload': (serverId: string) => Promise<{ url: string; filename: string } | null>
+  'message:search-server': (serverId: string, query: string, channel?: string) => Promise<void>
   'monitor:add': (serverId: string, nicks: string[]) => Promise<void>
   'monitor:remove': (serverId: string, nicks: string[]) => Promise<void>
   'monitor:list': (serverId: string) => Promise<string[]>
