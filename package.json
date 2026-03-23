@@ -1,6 +1,6 @@
 {
   "name": "switchboard",
-  "version": "1.0.7-beta",
+  "version": "1.0.8-beta",
   "description": "A modern IRC client with a Discord-like interface, fully implementing IRCv3",
   "main": "./out/main/index.js",
   "homepage": "https://github.com/KaraZajac/switchboard",
