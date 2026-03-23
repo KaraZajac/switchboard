@@ -9,6 +9,10 @@ import type { ChatMessage } from '@shared/types/message'
 export function SearchModal() {
   const closeModal = useUIStore((s) => s.closeModal)
   const activeServerId = useServerStore((s) => s.activeServerId)
+  const capabilities = useServerStore((s) =>
+    activeServerId ? s.capabilities[activeServerId] ?? [] : []
+  )
+  const hasServerSearch = capabilities.includes('draft/search')
   const activeChannel = useChannelStore((s) =>
     activeServerId ? s.activeChannel[activeServerId] ?? null : null
   )
@@ -17,11 +21,22 @@ export function SearchModal() {
   const [results, setResults] = useState<ChatMessage[]>([])
   const [searching, setSearching] = useState(false)
   const [searchScope, setSearchScope] = useState<'channel' | 'server'>('channel')
+  const [searchSource, setSearchSource] = useState<'local' | 'server'>('local')
   const inputRef = useRef<HTMLInputElement>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     inputRef.current?.focus()
+  }, [])
+
+  // Listen for server-side search results
+  useEffect(() => {
+    if (!window.switchboard) return
+    const cleanup = window.switchboard.on('irc:search-results', ({ messages }) => {
+      setResults(messages || [])
+      setSearching(false)
+    })
+    return cleanup
   }, [])
 
   const doSearch = useCallback(
@@ -33,14 +48,23 @@ export function SearchModal() {
 
       setSearching(true)
       const channel = searchScope === 'channel' ? activeChannel ?? undefined : undefined
-      window.switchboard
-        .invoke('message:search', activeServerId, q.trim(), channel)
-        .then((msgs) => {
-          setResults(msgs || [])
-        })
-        .finally(() => setSearching(false))
+
+      if (searchSource === 'server' && hasServerSearch) {
+        // Server-side search — results arrive via irc:search-results event
+        window.switchboard
+          .invoke('message:search-server', activeServerId, q.trim(), channel)
+          .catch(() => setSearching(false))
+      } else {
+        // Local SQLite search
+        window.switchboard
+          .invoke('message:search', activeServerId, q.trim(), channel)
+          .then((msgs) => {
+            setResults(msgs || [])
+          })
+          .finally(() => setSearching(false))
+      }
     },
-    [activeServerId, activeChannel, searchScope]
+    [activeServerId, activeChannel, searchScope, searchSource, hasServerSearch]
   )
 
   const handleQueryChange = useCallback(
@@ -111,6 +135,34 @@ export function SearchModal() {
               Server
             </button>
           </div>
+
+          {/* Source toggle — only show if server supports draft/search */}
+          {hasServerSearch && (
+            <div className="flex rounded bg-gray-900 ring-1 ring-gray-700">
+              <button
+                onClick={() => setSearchSource('local')}
+                className={`rounded-l px-3 py-2 text-xs ${
+                  searchSource === 'local'
+                    ? 'bg-gray-700 text-gray-100'
+                    : 'text-gray-400 hover:text-gray-200'
+                }`}
+                title="Search local message history"
+              >
+                Local
+              </button>
+              <button
+                onClick={() => setSearchSource('server')}
+                className={`rounded-r px-3 py-2 text-xs ${
+                  searchSource === 'server'
+                    ? 'bg-gray-700 text-gray-100'
+                    : 'text-gray-400 hover:text-gray-200'
+                }`}
+                title="Search server-side message history"
+              >
+                Remote
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Results */}

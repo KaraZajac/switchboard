@@ -104,6 +104,11 @@ registerHandler('CAP', (client, msg) => {
         }
       }
 
+      // draft/pre-away: set away before registration completes (bouncer support)
+      if (client.state.capabilities.has('draft/pre-away') && client.config.preAwayMessage) {
+        client.connection.send('AWAY', client.config.preAwayMessage)
+      }
+
       // If SASL was acknowledged, we need to authenticate before CAP END
       if (client.state.capabilities.has('sasl') && client.config.saslMechanism) {
         // Send AUTHENTICATE <mechanism> to begin SASL auth

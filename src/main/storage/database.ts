@@ -231,6 +231,12 @@ function runMigrations(): void {
     db.run("INSERT INTO migrations (name) VALUES ('005_avatar_url')")
   }
 
+  // Migration 007: Add pre_away_message column to servers
+  if (!applied.has('007_pre_away_message')) {
+    db.run('ALTER TABLE servers ADD COLUMN pre_away_message TEXT DEFAULT NULL')
+    db.run("INSERT INTO migrations (name) VALUES ('007_pre_away_message')")
+  }
+
   // Migration 006: Monitor (friend) list
   if (!applied.has('006_monitor_list')) {
     db.run(`

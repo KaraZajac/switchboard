@@ -35,6 +35,13 @@ export interface WhoisData {
 
 type TimeFormat = '12h' | '24h'
 
+export interface Toast {
+  id: string
+  title: string
+  body: string
+  action?: { label: string; serverId: string; channel: string }
+}
+
 interface UIState {
   theme: Theme
   settingsOpen: boolean
@@ -51,6 +58,7 @@ interface UIState {
   /** Nick being fetched for the hover popup (suppresses modal) */
   popupWhoisNick: string | null
   popupWhoisData: WhoisData | null
+  toasts: Toast[]
 
   // Actions
   setTheme: (theme: Theme) => void
@@ -67,6 +75,8 @@ interface UIState {
   setEditServerId: (id: string | null) => void
   setPopupWhoisNick: (nick: string | null) => void
   setPopupWhoisData: (data: WhoisData | null) => void
+  addToast: (toast: Omit<Toast, 'id'>) => void
+  removeToast: (id: string) => void
 }
 
 const savedTheme = (localStorage.getItem('switchboard-theme') as Theme) || 'catppuccin-mocha'
@@ -87,6 +97,7 @@ export const useUIStore = create<UIState>((set) => ({
   dmMode: false,
   popupWhoisNick: null,
   popupWhoisData: null,
+  toasts: [],
 
   setTheme: (theme) => {
     document.documentElement.setAttribute('data-theme', theme)
@@ -109,5 +120,14 @@ export const useUIStore = create<UIState>((set) => ({
   setEditServerId: (id) => set({ editServerId: id, activeModal: id ? 'edit-server' : null }),
   setDmMode: (dm) => set({ dmMode: dm }),
   setPopupWhoisNick: (nick) => set(nick ? { popupWhoisNick: nick, popupWhoisData: null } : { popupWhoisNick: null }),
-  setPopupWhoisData: (data) => set({ popupWhoisData: data })
+  setPopupWhoisData: (data) => set({ popupWhoisData: data }),
+  addToast: (toast) => {
+    const id = `toast-${Date.now()}-${Math.random().toString(36).slice(2)}`
+    set((state) => ({ toasts: [...state.toasts, { ...toast, id }] }))
+    // Auto-dismiss after 8 seconds
+    setTimeout(() => {
+      useUIStore.getState().removeToast(id)
+    }, 8000)
+  },
+  removeToast: (id) => set((state) => ({ toasts: state.toasts.filter((t) => t.id !== id) }))
 }))

@@ -250,6 +250,20 @@ export function registerIPCHandlers(): void {
     return searchMessages(serverId, query, { channel, limit: 50 })
   })
 
+  ipcMain.handle('message:search-server', async (_event, serverId: string, query: string, channel?: string) => {
+    const client = ircManager.getClient(serverId)
+    if (!client) throw new Error('Not connected')
+    if (!client.state.capabilities.has('draft/search')) {
+      throw new Error('Server does not support search')
+    }
+    // Send SEARCH command — results arrive via irc:search-results event
+    if (channel) {
+      client.connection.sendRaw(`SEARCH :in:${channel} ${query}`)
+    } else {
+      client.connection.sendRaw(`SEARCH :${query}`)
+    }
+  })
+
   // ── Notifications ───────────────────────────────────────────
 
   ipcMain.handle('notification:send', async (_event, title: string, body: string) => {

@@ -42,6 +42,12 @@ export const REQUESTED_CAPS = [
   'draft/channel-rename',
   'draft/account-registration',
   'draft/metadata-2',
+  'draft/event-playback',
+  'draft/no-implicit-names',
+  'draft/pre-away',
+  'draft/persistence',
+  'draft/register-before-connect',
+  'draft/search',
   '+draft/channel-context',
   '+typing',
   'UTF8ONLY'
