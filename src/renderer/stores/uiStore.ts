@@ -80,16 +80,21 @@ interface UIState {
 }
 
 const savedTheme = (localStorage.getItem('switchboard-theme') as Theme) || 'catppuccin-mocha'
+const savedFontSize = parseInt(localStorage.getItem('switchboard-font-size') || '14', 10)
+const savedTimeFormat = (localStorage.getItem('switchboard-time-format') || '12h') as TimeFormat
+const savedCompactMode = localStorage.getItem('switchboard-compact-mode') === 'true'
+
 document.documentElement.setAttribute('data-theme', savedTheme)
+document.documentElement.style.setProperty('--chat-font-size', `${savedFontSize}px`)
 
 export const useUIStore = create<UIState>((set) => ({
   theme: savedTheme,
   settingsOpen: false,
   activeModal: null,
   showUserList: true,
-  compactMode: false,
-  fontSize: 14,
-  timeFormat: '12h' as TimeFormat,
+  compactMode: savedCompactMode,
+  fontSize: savedFontSize,
+  timeFormat: savedTimeFormat,
   notificationsEnabled: true,
   notificationSound: true,
   whoisData: null,
@@ -108,12 +113,19 @@ export const useUIStore = create<UIState>((set) => ({
   openModal: (modal) => set({ activeModal: modal }),
   closeModal: () => set({ activeModal: null, whoisData: null, editServerId: null }),
   toggleUserList: () => set((state) => ({ showUserList: !state.showUserList })),
-  setCompactMode: (compact) => set({ compactMode: compact }),
+  setCompactMode: (compact) => {
+    localStorage.setItem('switchboard-compact-mode', String(compact))
+    set({ compactMode: compact })
+  },
   setFontSize: (size) => {
     document.documentElement.style.setProperty('--chat-font-size', `${size}px`)
+    localStorage.setItem('switchboard-font-size', String(size))
     set({ fontSize: size })
   },
-  setTimeFormat: (format) => set({ timeFormat: format }),
+  setTimeFormat: (format) => {
+    localStorage.setItem('switchboard-time-format', format)
+    set({ timeFormat: format })
+  },
   setNotificationsEnabled: (enabled) => set({ notificationsEnabled: enabled }),
   setNotificationSound: (enabled) => set({ notificationSound: enabled }),
   showWhois: (data) => set({ activeModal: 'whois', whoisData: data }),
