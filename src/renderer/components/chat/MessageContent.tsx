@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { parseIRCFormatting, type FormattedSpan } from '../../utils/formatting'
 import { parseMessageContent, isImageUrl, isKlipyMediaUrl, isVideoUrl, isAudioUrl, getFilenameFromUrl, getFileTypeInfo, type MessageSegment } from '../../utils/linkify'
 import { useServerStore } from '../../stores/serverStore'
@@ -53,17 +54,7 @@ function Segment({ segment, highlightNick }: { segment: MessageSegment; highligh
           </a>
           {/* Image preview */}
           {isImageUrl(segment.url) ? (
-            <div className="mt-1">
-              <img
-                src={segment.url}
-                alt="Preview"
-                className="max-h-64 max-w-md rounded"
-                loading="lazy"
-                onError={(e) => {
-                  ;(e.target as HTMLImageElement).style.display = 'none'
-                }}
-              />
-            </div>
+            <ClickableImage url={segment.url} alt="Preview" />
           ) : (
             <LinkPreview url={segment.url} />
           )}
@@ -205,20 +196,7 @@ function KlipyMedia({ url }: { url: string }) {
       </div>
     )
   }
-  return (
-    <div className="mt-1">
-      <img
-        src={url}
-        alt=""
-        className="max-h-64 max-w-md rounded"
-        loading="lazy"
-        referrerPolicy="no-referrer"
-        onError={(e) => {
-          ;(e.target as HTMLImageElement).style.display = 'none'
-        }}
-      />
-    </div>
-  )
+  return <ClickableImage url={url} alt="" referrerPolicy="no-referrer" />
 }
 
 /** Fetch and display OpenGraph link preview */
@@ -293,21 +271,9 @@ function formatFileSize(bytes: number): string {
 
 /** Render filehost uploads — inline for media, file card for other types */
 function FilehostMedia({ url }: { url: string }) {
-  // Images: render inline
+  // Images: render inline (clickable for full-size view)
   if (isImageUrl(url)) {
-    return (
-      <div className="mt-1">
-        <a href={url} target="_blank" rel="noopener noreferrer">
-          <img
-            src={url}
-            alt={getFilenameFromUrl(url)}
-            className="max-h-64 max-w-md rounded"
-            loading="lazy"
-            onError={(e) => { ;(e.target as HTMLImageElement).style.display = 'none' }}
-          />
-        </a>
-      </div>
-    )
+    return <ClickableImage url={url} alt={getFilenameFromUrl(url)} />
   }
 
   // Videos: render inline player
@@ -335,6 +301,98 @@ function FilehostMedia({ url }: { url: string }) {
 
   // Everything else: file card
   return <FileCard url={url} />
+}
+
+/** Clickable image thumbnail that opens a lightbox */
+function ClickableImage({ url, alt, referrerPolicy }: { url: string; alt?: string; referrerPolicy?: React.HTMLAttributeReferrerPolicy }) {
+  const [showLightbox, setShowLightbox] = useState(false)
+
+  return (
+    <>
+      <div className="mt-1">
+        <img
+          src={url}
+          alt={alt || ''}
+          className="max-h-64 max-w-md cursor-pointer rounded transition-opacity hover:opacity-90"
+          loading="lazy"
+          referrerPolicy={referrerPolicy}
+          onClick={() => setShowLightbox(true)}
+          onError={(e) => { ;(e.target as HTMLImageElement).style.display = 'none' }}
+        />
+      </div>
+      {showLightbox && <ImageLightbox url={url} onClose={() => setShowLightbox(false)} />}
+    </>
+  )
+}
+
+/** Full-screen image lightbox with download button */
+function ImageLightbox({ url, onClose }: { url: string; onClose: () => void }) {
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    if (e.key === 'Escape') onClose()
+  }, [onClose])
+
+  useEffect(() => {
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [handleKeyDown])
+
+  const filename = getFilenameFromUrl(url)
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80"
+      onClick={onClose}
+    >
+      {/* Toolbar */}
+      <div
+        className="absolute top-4 right-4 z-10 flex items-center gap-2"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <a
+          href={url}
+          download={filename}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-1.5 rounded bg-gray-800 px-3 py-1.5 text-sm text-gray-200 hover:bg-gray-700"
+          title="Download"
+        >
+          <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" />
+          </svg>
+          Download
+        </a>
+        <a
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-1.5 rounded bg-gray-800 px-3 py-1.5 text-sm text-gray-200 hover:bg-gray-700"
+          title="Open in browser"
+        >
+          <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M19 19H5V5h7V3H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z" />
+          </svg>
+        </a>
+        <button
+          onClick={onClose}
+          className="flex items-center justify-center rounded bg-gray-800 p-1.5 text-gray-200 hover:bg-gray-700"
+          title="Close"
+        >
+          <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
+          </svg>
+        </button>
+      </div>
+
+      {/* Image */}
+      <img
+        src={url}
+        alt=""
+        className="max-h-[90vh] max-w-[90vw] rounded object-contain"
+        onClick={(e) => e.stopPropagation()}
+      />
+    </div>,
+    document.body
+  )
 }
 
 /** A download card for non-media file types */
