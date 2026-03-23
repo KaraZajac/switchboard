@@ -115,7 +115,7 @@ export function registerIPCHandlers(): void {
     if (!client) throw new Error('Not connected')
     // Send with +reply tag if echo-message is supported
     client.connection.sendRaw(
-      `@+reply=${replyTo} PRIVMSG ${channel} :${text}`
+      `@+reply=${sanitizeTagValue(replyTo)} PRIVMSG ${channel} :${text}`
     )
   })
 
@@ -123,7 +123,7 @@ export function registerIPCHandlers(): void {
     const client = ircManager.getClient(serverId)
     if (!client) throw new Error('Not connected')
     client.connection.sendRaw(
-      `@+draft/react=${emoji};+reply=${msgid} TAGMSG ${channel}`
+      `@+draft/react=${sanitizeTagValue(emoji)};+reply=${sanitizeTagValue(msgid)} TAGMSG ${channel}`
     )
   })
 
@@ -146,13 +146,13 @@ export function registerIPCHandlers(): void {
     const client = ircManager.getClient(serverId)
     if (!client) throw new Error('Not connected')
     // Send edited message with +draft/edit tag pointing to original message ID
-    client.connection.sendRaw(`@+draft/edit=${msgid} PRIVMSG ${channel} :${newText}`)
+    client.connection.sendRaw(`@+draft/edit=${sanitizeTagValue(msgid)} PRIVMSG ${channel} :${newText}`)
   })
 
   ipcMain.handle('message:typing', async (_event, serverId: string, channel: string, status: 'active' | 'done' = 'active') => {
     const client = ircManager.getClient(serverId)
     if (!client) throw new Error('Not connected')
-    client.connection.sendRaw(`@+typing=${status} TAGMSG ${channel}`)
+    client.connection.sendRaw(`@+typing=${sanitizeTagValue(status)} TAGMSG ${channel}`)
   })
 
   // ── User operations ──────────────────────────────────────────────
@@ -203,6 +203,9 @@ export function registerIPCHandlers(): void {
     if (!client.state.capabilities.has('draft/metadata-2')) {
       throw new Error('Server does not support metadata')
     }
+    // Validate key — must be alphanumeric/dashes only (no spaces or protocol chars)
+    if (!/^[a-zA-Z0-9_-]+$/.test(key)) throw new Error('Invalid metadata key')
+
     // Use sendRaw to avoid the serializer adding a trailing ':' prefix
     // which some server implementations incorrectly store as part of the value
     if (value.includes(' ') || value.startsWith(':')) {
@@ -362,6 +365,7 @@ export function registerIPCHandlers(): void {
 
     const filehostUrl = client.state.isupport['FILEHOST'] || client.state.isupport['draft/FILEHOST']
     if (typeof filehostUrl !== 'string') throw new Error('Server does not support file uploads')
+    if (!/^https?:\/\//i.test(filehostUrl)) throw new Error('Invalid filehost URL')
 
     const result = await dialog.showOpenDialog({
       properties: ['openFile'],
@@ -410,8 +414,7 @@ export function registerIPCHandlers(): void {
     const location = await new Promise<string>((resolve, reject) => {
       const req = httpMod.request(url, {
         method: 'POST',
-        headers,
-        rejectUnauthorized: false
+        headers
       }, (res) => {
         let body = ''
         res.on('data', (chunk: Buffer) => { body += chunk.toString() })
@@ -442,13 +445,23 @@ export function registerIPCHandlers(): void {
 
   const linkPreviewCache = new Map<string, { data: import('@shared/types/ipc').LinkPreviewData | null; ts: number }>()
   const PREVIEW_CACHE_TTL = 10 * 60 * 1000 // 10 minutes
+  const PREVIEW_CACHE_MAX = 200
 
   ipcMain.handle('link-preview:fetch', async (_event, url: string) => {
+    // Only fetch http/https URLs
+    if (!/^https?:\/\//i.test(url)) return null
+
     // Don't fetch previews for images/media — they're rendered inline
     if (/\.(jpg|jpeg|png|gif|webp|svg|mp4|webm)(\?.*)?$/i.test(url)) return null
 
     const cached = linkPreviewCache.get(url)
     if (cached && Date.now() - cached.ts < PREVIEW_CACHE_TTL) return cached.data
+
+    // Evict oldest entries if cache is full
+    if (linkPreviewCache.size >= PREVIEW_CACHE_MAX) {
+      const first = linkPreviewCache.keys().next().value
+      if (first) linkPreviewCache.delete(first)
+    }
 
     try {
       const response = await net.fetch(url, {
@@ -519,6 +532,16 @@ export function registerIPCHandlers(): void {
       return null
     }
   })
+}
+
+/** Escape IRC message tag values per IRCv3 spec — prevents tag injection */
+function sanitizeTagValue(value: string): string {
+  return value
+    .replace(/\\/g, '\\\\')
+    .replace(/;/g, '\\:')
+    .replace(/ /g, '\\s')
+    .replace(/\r/g, '\\r')
+    .replace(/\n/g, '\\n')
 }
 
 function decodeHTMLEntities(str: string): string {

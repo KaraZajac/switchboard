@@ -425,11 +425,11 @@ export class IRCManager {
 
     client.events.on('isupport', (tokens) => {
       const iconUrl = tokens['ICON'] || tokens['draft/ICON']
-      if (typeof iconUrl === 'string') {
+      if (typeof iconUrl === 'string' && /^https?:\/\//i.test(iconUrl)) {
         this.send('irc:network-icon', { serverId, url: iconUrl })
       }
       const filehostUrl = tokens['FILEHOST'] || tokens['draft/FILEHOST']
-      if (typeof filehostUrl === 'string') {
+      if (typeof filehostUrl === 'string' && /^https?:\/\//i.test(filehostUrl)) {
         this.send('irc:filehost', { serverId, url: filehostUrl })
       }
     })
