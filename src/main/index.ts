@@ -248,7 +248,7 @@ app.whenReady().then(async () => {
         responseHeaders: {
           ...details.responseHeaders,
           'Content-Security-Policy': [
-            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:;"
+            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; media-src 'self' https:; connect-src 'self' https://api.klipy.com https://static.klipy.com;"
           ]
         }
       })
