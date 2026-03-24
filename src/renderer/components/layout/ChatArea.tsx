@@ -49,6 +49,8 @@ export function ChatArea() {
   const [autoScroll, setAutoScroll] = useState(true)
   const [loadingHistory, setLoadingHistory] = useState(false)
   const [historyExhausted, setHistoryExhausted] = useState(false)
+  // Persist exhaustion across channel switches so we don't re-request
+  const exhaustedChannels = useRef<Set<string>>(new Set())
 
   // Save/restore scroll positions per channel
   const scrollPositions = useRef<Record<string, { top: number; height: number }>>({})
@@ -63,8 +65,8 @@ export function ChatArea() {
       }
     }
 
-    // Reset state for new channel
-    setHistoryExhausted(false)
+    // Restore exhaustion state for new channel (don't reset if already exhausted)
+    setHistoryExhausted(key ? exhaustedChannels.current.has(key) : false)
     setAutoScroll(true)
 
     // Restore scroll position or scroll to bottom
@@ -149,10 +151,12 @@ export function ChatArea() {
         )
         // If no local messages were found, mark exhausted after a delay
         // (server response may arrive via irc:chathistory event)
+        const exhaustKey = `${activeServerId}:${activeChannel.toLowerCase()}`
         setTimeout(() => {
-          const currentMessages = useMessageStore.getState().messages[`${activeServerId}:${activeChannel.toLowerCase()}`] || []
+          const currentMessages = useMessageStore.getState().messages[exhaustKey] || []
           if (currentMessages.length === messages.length) {
             setHistoryExhausted(true)
+            exhaustedChannels.current.add(exhaustKey)
           }
         }, 3000)
       }
