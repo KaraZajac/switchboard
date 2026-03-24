@@ -55,16 +55,24 @@ export function ChatArea() {
   // Save/restore scroll positions per channel
   const scrollPositions = useRef<Record<string, { top: number; atBottom: boolean }>>({})
   const prevKey = useRef<string | null>(null)
-  // Guard to prevent auto-scroll effect from fighting with restore
-  const isRestoringScroll = useRef(false)
   // Ref for the "New messages" divider element
   const newMessagesDividerRef = useRef<HTMLDivElement>(null)
+  // Whether we're in the middle of a channel switch (blocks auto-scroll effect)
+  const isRestoringScroll = useRef(false)
+  // Track what we've already scrolled for to avoid duplicate work
+  const scrolledForKey = useRef<string | null>(null)
 
-  // Track the last message count we scrolled for, so we can scroll again when messages load
-  const scrolledForCount = useRef<number>(-1)
+  // Track the initial read marker — set synchronously during render so the
+  // divider renders correctly on the FIRST paint after a channel switch
+  const initialReadMarker = useRef<string | null>(null)
+  const lastReadMarkerKey = useRef<string | null>(null)
+  if (key !== lastReadMarkerKey.current) {
+    initialReadMarker.current = readMarkerTimestamp
+    lastReadMarkerKey.current = key
+  }
 
+  // Save previous channel's scroll position and prepare for restore
   useEffect(() => {
-    // Save scroll position of previous channel
     if (prevKey.current && scrollRef.current) {
       const { scrollTop, scrollHeight, clientHeight } = scrollRef.current
       scrollPositions.current[prevKey.current] = {
@@ -73,61 +81,49 @@ export function ChatArea() {
       }
     }
 
-    // Restore exhaustion state for new channel (don't reset if already exhausted)
     setHistoryExhausted(key ? exhaustedChannels.current.has(key) : false)
 
-    // Determine if we should auto-scroll based on saved state
-    const saved = key ? scrollPositions.current[key] : null
-    if (saved) {
-      setAutoScroll(saved.atBottom)
-    } else {
-      setAutoScroll(true)
-    }
-
-    // Reset so the layout effect will run for the new channel
-    scrolledForCount.current = -1
+    // Begin restoration mode — blocks auto-scroll effect until we're done
     isRestoringScroll.current = true
+    scrolledForKey.current = null
 
     prevKey.current = key
   }, [key])
 
-  // Synchronous scroll restore — runs after DOM mutation, before paint
+  // Scroll restoration — runs synchronously after DOM update, before paint.
+  // Triggers on channel switch AND when messages load (for async message arrival).
   useLayoutEffect(() => {
     if (!isRestoringScroll.current) return
-    if (!scrollRef.current) return
-    // Skip if messages haven't loaded yet (will re-run when they do)
-    if (messages.length === 0) return
-    // Avoid re-running for the same message count
-    if (scrolledForCount.current === messages.length) return
-    scrolledForCount.current = messages.length
+    if (!scrollRef.current || messages.length === 0) return
+    // Only run once per channel switch (unless message count was 0 and now loaded)
+    if (scrolledForKey.current === key) return
+    scrolledForKey.current = key
 
     const saved = key ? scrollPositions.current[key] : null
 
-    // Priority: 1) "New messages" divider, 2) saved position, 3) bottom
+    // Priority:
+    // 1) If there's a "New messages" divider, scroll to it
+    // 2) If we have a saved position (user was scrolled up), restore it
+    // 3) Otherwise, scroll to bottom (default for all servers, with or without read markers)
     if (newMessagesDividerRef.current) {
       newMessagesDividerRef.current.scrollIntoView({ block: 'start' })
+      // Show a bit of context above the divider
       if (scrollRef.current.scrollTop > 50) {
         scrollRef.current.scrollTop -= 50
       }
       setAutoScroll(false)
-      isRestoringScroll.current = false
     } else if (saved && !saved.atBottom) {
       scrollRef.current.scrollTop = saved.top
-      isRestoringScroll.current = false
+      setAutoScroll(false)
     } else {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
-      isRestoringScroll.current = false
+      setAutoScroll(true)
     }
+
+    isRestoringScroll.current = false
   }, [key, messages.length])
 
-  // Track the initial read marker when entering a channel (so divider doesn't move)
-  const initialReadMarker = useRef<string | null>(null)
-  useEffect(() => {
-    initialReadMarker.current = readMarkerTimestamp
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key]) // Only reset when channel changes, not when readMarkerTimestamp updates
-
-  // Mark channel as read when viewing it (on channel switch or when new messages arrive at bottom)
+  // Mark channel as read when at bottom (on channel switch or new messages)
   useEffect(() => {
     if (!activeServerId || !activeChannel || messages.length === 0 || !autoScroll) return
     const lastMsg = messages[messages.length - 1]
@@ -138,7 +134,7 @@ export function ChatArea() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeServerId, activeChannel, messages.length, autoScroll])
 
-  // Auto-scroll to bottom when new messages arrive (skip during channel switch restore)
+  // Auto-scroll to bottom when new messages arrive (only when already at bottom, not during restore)
   useEffect(() => {
     if (isRestoringScroll.current) return
     if (autoScroll && scrollRef.current) {
