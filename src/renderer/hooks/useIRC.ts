@@ -49,6 +49,8 @@ export function useIRCEvents(): void {
 
     // Track channels that need chathistory but haven't been fetched yet
     const pendingChathistory = new Set<string>()
+    // Track channels where chathistory has already been requested (prevents re-requests)
+    const chathistoryFetched = new Set<string>()
 
     // Channel events
     cleanups.push(
@@ -57,17 +59,20 @@ export function useIRCEvents(): void {
         useUserStore.getState().addUser(serverId, channel, user)
 
         // Load local history first
+        const channelKey = `${serverId}:${channel.toLowerCase()}`
         api.invoke('history:fetch', serverId, channel, undefined, 50).then((messages) => {
           if (messages && messages.length > 0) {
             useMessageStore.getState().setMessages(serverId, channel, messages)
+            chathistoryFetched.add(channelKey)
           } else {
             // No local history — only fetch from server if this is the active channel
             const activeChannel = useChannelStore.getState().activeChannel[serverId]
             if (activeChannel?.toLowerCase() === channel.toLowerCase()) {
+              chathistoryFetched.add(channelKey)
               api.invoke('chathistory:request', serverId, channel, undefined, 50)
             } else {
               // Defer until the user switches to this channel
-              pendingChathistory.add(`${serverId}:${channel.toLowerCase()}`)
+              pendingChathistory.add(channelKey)
             }
           }
         })
@@ -529,9 +534,10 @@ export function useIRCEvents(): void {
       const channel = state.activeChannel[activeServerId]
       const prevChannel = prevState.activeChannel[activeServerId]
       if (!channel || channel === prevChannel) return
-      const channelKey = `${activeServerId}:${channel.toLowerCase()}`
-      if (pendingChathistory.has(channelKey)) {
-        pendingChathistory.delete(channelKey)
+      const chKey = `${activeServerId}:${channel.toLowerCase()}`
+      if (pendingChathistory.has(chKey) && !chathistoryFetched.has(chKey)) {
+        pendingChathistory.delete(chKey)
+        chathistoryFetched.add(chKey)
         api.invoke('chathistory:request', activeServerId, channel, undefined, 50)
       }
     })
