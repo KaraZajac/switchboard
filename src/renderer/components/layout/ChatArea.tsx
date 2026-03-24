@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState, useCallback, useMemo } from 'react'
+import { useRef, useEffect, useLayoutEffect, useState, useCallback, useMemo } from 'react'
 import { useServerStore } from '../../stores/serverStore'
 import { useChannelStore } from '../../stores/channelStore'
 import { useMessageStore } from '../../stores/messageStore'
@@ -60,6 +60,9 @@ export function ChatArea() {
   // Ref for the "New messages" divider element
   const newMessagesDividerRef = useRef<HTMLDivElement>(null)
 
+  // Track the last message count we scrolled for, so we can scroll again when messages load
+  const scrolledForCount = useRef<number>(-1)
+
   useEffect(() => {
     // Save scroll position of previous channel
     if (prevKey.current && scrollRef.current) {
@@ -81,32 +84,41 @@ export function ChatArea() {
       setAutoScroll(true)
     }
 
-    // Restore scroll position after React renders the new messages
+    // Reset so the layout effect will run for the new channel
+    scrolledForCount.current = -1
     isRestoringScroll.current = true
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        if (scrollRef.current) {
-          // Priority: 1) scroll to "New messages" divider, 2) restore saved position, 3) scroll to bottom
-          if (newMessagesDividerRef.current) {
-            // Scroll so the divider is near the top of the viewport
-            newMessagesDividerRef.current.scrollIntoView({ block: 'start' })
-            // Nudge up a bit so context above is visible
-            if (scrollRef.current.scrollTop > 50) {
-              scrollRef.current.scrollTop -= 50
-            }
-            setAutoScroll(false)
-          } else if (saved && !saved.atBottom) {
-            scrollRef.current.scrollTop = saved.top
-          } else {
-            scrollRef.current.scrollTop = scrollRef.current.scrollHeight
-          }
-        }
-        isRestoringScroll.current = false
-      })
-    })
 
     prevKey.current = key
   }, [key])
+
+  // Synchronous scroll restore — runs after DOM mutation, before paint
+  useLayoutEffect(() => {
+    if (!isRestoringScroll.current) return
+    if (!scrollRef.current) return
+    // Skip if messages haven't loaded yet (will re-run when they do)
+    if (messages.length === 0) return
+    // Avoid re-running for the same message count
+    if (scrolledForCount.current === messages.length) return
+    scrolledForCount.current = messages.length
+
+    const saved = key ? scrollPositions.current[key] : null
+
+    // Priority: 1) "New messages" divider, 2) saved position, 3) bottom
+    if (newMessagesDividerRef.current) {
+      newMessagesDividerRef.current.scrollIntoView({ block: 'start' })
+      if (scrollRef.current.scrollTop > 50) {
+        scrollRef.current.scrollTop -= 50
+      }
+      setAutoScroll(false)
+      isRestoringScroll.current = false
+    } else if (saved && !saved.atBottom) {
+      scrollRef.current.scrollTop = saved.top
+      isRestoringScroll.current = false
+    } else {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+      isRestoringScroll.current = false
+    }
+  }, [key, messages.length])
 
   // Track the initial read marker when entering a channel (so divider doesn't move)
   const initialReadMarker = useRef<string | null>(null)
