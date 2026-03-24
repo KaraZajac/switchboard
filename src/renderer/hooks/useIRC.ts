@@ -147,10 +147,11 @@ export function useIRCEvents(): void {
         const activeChannel = useChannelStore.getState().activeChannel[serverId]
         const isActiveChannel = serverId === activeServerId && effectiveChannel === activeChannel
 
-        // Detect mentions
+        // Detect mentions (both "nick" and "@nick")
         const myNick = currentNicks[serverId] || ''
+        const escaped = myNick.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
         const isMention = myNick
-          ? new RegExp(`\\b${myNick.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(message.content)
+          ? new RegExp(`(?:^|[\\s@])${escaped}\\b`, 'i').test(message.content)
           : false
         const isPrivate = !isChannelName(channel) && channel !== '*' && !isService
 

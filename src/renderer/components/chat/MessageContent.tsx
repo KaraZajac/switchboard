@@ -154,7 +154,9 @@ function FormattedText({ text, highlightNick }: { text: string; highlightNick?: 
 
 function highlightMentions(text: string, nick: string): React.ReactNode {
   if (!nick) return text
-  const regex = new RegExp(`(\\b${nick.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b)`, 'gi')
+  const escaped = nick.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  // Match both "nick" and "@nick"
+  const regex = new RegExp(`(@?${escaped}\\b)`, 'gi')
   const parts = text.split(regex)
   if (parts.length === 1) return text
   return parts.map((part, i) =>

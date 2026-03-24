@@ -29,6 +29,11 @@ export function MessageItem({ message, prevMessage, onReply }: MessageItemProps)
   const isOwn = currentNick.toLowerCase() === message.nick.toLowerCase()
   const isEdited = !!message.editedAt
 
+  // Detect if this message mentions our nick
+  const isMention = !isOwn && currentNick && message.type === 'privmsg' &&
+    new RegExp(`(?:^|[\\s@])${currentNick.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(message.content)
+  const mentionBg = isMention ? 'bg-amber-500/8 border-l-2 border-amber-500/50' : ''
+
   const handleEditStart = () => {
     setEditText(message.content)
     setEditing(true)
@@ -101,7 +106,7 @@ export function MessageItem({ message, prevMessage, onReply }: MessageItemProps)
 
   if (isGrouped) {
     return (
-      <div className="group relative flex items-start px-2 py-0.5 hover:bg-gray-800/30">
+      <div className={`group relative flex items-start px-2 py-0.5 hover:bg-gray-800/30 ${mentionBg}`}>
         <span className="mr-2 mt-0.5 min-w-[48px] text-right text-xs text-gray-500 opacity-0 group-hover:opacity-100">
           {time}
         </span>
@@ -110,7 +115,7 @@ export function MessageItem({ message, prevMessage, onReply }: MessageItemProps)
             <EditInput text={editText} onChange={setEditText} onSave={handleEditSave} onCancel={handleEditCancel} />
           ) : (
             <span className={isNotice ? 'text-gray-400' : 'text-gray-200'}>
-              <MessageContent text={message.content} />
+              <MessageContent text={message.content} highlightNick={currentNick} />
               {isEdited && <span className="ml-1 text-[10px] text-gray-500">(edited)</span>}
             </span>
           )}
@@ -125,7 +130,7 @@ export function MessageItem({ message, prevMessage, onReply }: MessageItemProps)
 
   if (compactMode) {
     return (
-      <div className="group relative flex items-start px-2 py-0.5 hover:bg-gray-800/30">
+      <div className={`group relative flex items-start px-2 py-0.5 hover:bg-gray-800/30 ${mentionBg}`}>
         <span className="mr-2 mt-0.5 min-w-[48px] text-right text-xs text-gray-500">
           {time}
         </span>
@@ -140,7 +145,7 @@ export function MessageItem({ message, prevMessage, onReply }: MessageItemProps)
                 <EditInput text={editText} onChange={setEditText} onSave={handleEditSave} onCancel={handleEditCancel} />
               ) : (
                 <span className={isNotice ? 'text-gray-400' : ''}>
-                  <MessageContent text={message.content} />
+                  <MessageContent text={message.content} highlightNick={currentNick} />
                   {isEdited && <span className="ml-1 text-[10px] text-gray-500">(edited)</span>}
                 </span>
               )}
@@ -156,7 +161,7 @@ export function MessageItem({ message, prevMessage, onReply }: MessageItemProps)
   }
 
   return (
-    <div className="group relative mt-3 flex items-start px-2 py-0.5 first:mt-0 hover:bg-gray-800/30">
+    <div className={`group relative mt-3 flex items-start px-2 py-0.5 first:mt-0 hover:bg-gray-800/30 ${mentionBg}`}>
       {/* Avatar */}
       <MessageAvatar nick={message.nick} avatarUrl={avatarUrl} />
 
@@ -182,7 +187,7 @@ export function MessageItem({ message, prevMessage, onReply }: MessageItemProps)
           <EditInput text={editText} onChange={setEditText} onSave={handleEditSave} onCancel={handleEditCancel} />
         ) : (
           <div className={isNotice ? 'text-gray-400' : 'text-gray-200'}>
-            <MessageContent text={message.content} />
+            <MessageContent text={message.content} highlightNick={currentNick} />
             {isEdited && <span className="ml-1 text-[10px] text-gray-500">(edited)</span>}
           </div>
         )}
