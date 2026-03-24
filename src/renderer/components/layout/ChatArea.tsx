@@ -50,9 +50,47 @@ export function ChatArea() {
   const [loadingHistory, setLoadingHistory] = useState(false)
   const [historyExhausted, setHistoryExhausted] = useState(false)
 
-  // Reset history state when channel changes
+  // Save/restore scroll positions per channel
+  const scrollPositions = useRef<Record<string, { top: number; height: number }>>({})
+  const prevKey = useRef<string | null>(null)
+
   useEffect(() => {
+    // Save scroll position of previous channel
+    if (prevKey.current && scrollRef.current) {
+      scrollPositions.current[prevKey.current] = {
+        top: scrollRef.current.scrollTop,
+        height: scrollRef.current.scrollHeight
+      }
+    }
+
+    // Reset state for new channel
     setHistoryExhausted(false)
+    setAutoScroll(true)
+
+    // Restore scroll position or scroll to bottom
+    if (key && scrollRef.current) {
+      const saved = scrollPositions.current[key]
+      if (saved) {
+        // Restore after render
+        requestAnimationFrame(() => {
+          if (scrollRef.current) {
+            scrollRef.current.scrollTop = saved.top
+            // Check if we were at the bottom
+            const { scrollTop, scrollHeight, clientHeight } = scrollRef.current
+            setAutoScroll(scrollHeight - scrollTop - clientHeight < 100)
+          }
+        })
+      } else {
+        // New channel — scroll to bottom
+        requestAnimationFrame(() => {
+          if (scrollRef.current) {
+            scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+          }
+        })
+      }
+    }
+
+    prevKey.current = key
   }, [key])
 
   // Track the initial read marker when entering a channel (so divider doesn't move)
