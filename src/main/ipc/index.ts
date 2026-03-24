@@ -190,6 +190,16 @@ export function registerIPCHandlers(): void {
     client.connection.send('SETNAME', realname)
   })
 
+  ipcMain.handle('user:away', async (_event, serverId: string, message?: string) => {
+    const client = ircManager.getClient(serverId)
+    if (!client) throw new Error('Not connected')
+    if (message) {
+      client.connection.send('AWAY', message)
+    } else {
+      client.connection.send('AWAY')
+    }
+  })
+
   // ── Metadata ────────────────────────────────────────────────────
 
   ipcMain.handle('metadata:get', async (_event, serverId: string, target: string, key: string) => {

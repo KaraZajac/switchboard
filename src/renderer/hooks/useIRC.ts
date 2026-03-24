@@ -224,6 +224,11 @@ export function useIRCEvents(): void {
             })
           }
         }
+        // If it's our own nick, update the server-level away state
+        const ourNick = useServerStore.getState().currentNick[serverId]
+        if (ourNick && nick.toLowerCase() === ourNick.toLowerCase()) {
+          useServerStore.getState().setAwayMessage(serverId, message)
+        }
       })
     )
 
