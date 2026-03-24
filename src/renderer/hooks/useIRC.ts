@@ -149,13 +149,6 @@ export function useIRCEvents(): void {
         const effectiveChannel = isService ? '*' : channel
         useMessageStore.getState().addMessage(serverId, effectiveChannel, message)
 
-        // Duck hunt — auto-respond to \_o< quack!
-        if (isChannelName(channel) && /\\_o<\s*quack/i.test(message.content)) {
-          const responses = ['+bang', '+bef', '+feed', '+quack', '+hug', '+save', '+kiss', '+maul']
-          const pick = responses[Math.floor(Math.random() * responses.length)]
-          api.invoke('message:send', serverId, channel, pick)
-        }
-
         // Check if this channel is currently active
         const activeServerId = useServerStore.getState().activeServerId
         const activeChannel = useChannelStore.getState().activeChannel[serverId]
