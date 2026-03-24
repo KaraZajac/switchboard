@@ -4,6 +4,8 @@ import { MessageContent } from './MessageContent'
 import { useMessageStore } from '../../stores/messageStore'
 import { useUIStore } from '../../stores/uiStore'
 import { useServerStore } from '../../stores/serverStore'
+import { useChannelStore } from '../../stores/channelStore'
+import { useUserStore, type MonitoredNick } from '../../stores/userStore'
 import { nickColor } from '../../utils/nickColor'
 
 interface MessageItemProps {
@@ -524,6 +526,9 @@ function NickWithPopup({ nick, serverId, className }: { nick: string; serverId: 
                   </div>
                 )}
               </div>
+
+              {/* Action buttons */}
+              <PopupActions nick={popupWhoisData.nick} serverId={serverId} onClose={() => setShowPopup(false)} />
             </div>
           ) : (
             <div className="flex items-center gap-2 text-sm text-gray-400">
@@ -539,6 +544,67 @@ function NickWithPopup({ nick, serverId, className }: { nick: string; serverId: 
   )
 }
 
+
+/** Action buttons in the nick popup: Message and Add/Remove Friend */
+function PopupActions({ nick, serverId, onClose }: { nick: string; serverId: string; onClose: () => void }) {
+  const currentNick = useServerStore((s) => s.currentNick[serverId] ?? '')
+  const isOwnNick = currentNick.toLowerCase() === nick.toLowerCase()
+
+  const EMPTY_MONITOR: MonitoredNick[] = []
+  const monitoredNicks = useUserStore((s) => s.monitoredNicks[serverId] ?? EMPTY_MONITOR)
+  const isFriend = monitoredNicks.some((m) => m.nick.toLowerCase() === nick.toLowerCase())
+
+  if (isOwnNick) return null
+
+  const handleMessage = () => {
+    useChannelStore.getState().addChannel(serverId, nick)
+    useChannelStore.getState().setActiveChannel(serverId, nick)
+    useServerStore.getState().setActiveServer(serverId)
+    useUIStore.getState().setDmMode(false)
+    onClose()
+  }
+
+  const handleToggleFriend = () => {
+    if (isFriend) {
+      useUserStore.getState().removeMonitorNick(serverId, nick)
+      window.switchboard.invoke('monitor:remove', serverId, [nick])
+    } else {
+      useUserStore.getState().addMonitorNick(serverId, nick)
+      window.switchboard.invoke('monitor:add', serverId, [nick])
+    }
+  }
+
+  return (
+    <div className="flex gap-2 border-t border-gray-700 pt-2">
+      <button
+        onClick={handleMessage}
+        className="flex flex-1 items-center justify-center gap-1.5 rounded bg-indigo-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-400"
+      >
+        <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z" />
+        </svg>
+        Message
+      </button>
+      <button
+        onClick={handleToggleFriend}
+        className={`flex flex-1 items-center justify-center gap-1.5 rounded px-3 py-1.5 text-xs font-medium ${
+          isFriend
+            ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30'
+            : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+        }`}
+      >
+        <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor">
+          {isFriend ? (
+            <path d="M15 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-9-2V7H4v3H1v2h3v3h2v-3h3v-2H6zm9 4c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
+          ) : (
+            <path d="M15 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-9-2V7H4v3H1v2h3v3h2v-3h3v-2H6zm9 4c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
+          )}
+        </svg>
+        {isFriend ? 'Unfriend' : 'Add Friend'}
+      </button>
+    </div>
+  )
+}
 
 function WhoisAvatar({ nick, avatarUrl }: { nick: string; avatarUrl: string | null }) {
   const [failed, setFailed] = useState(false)
