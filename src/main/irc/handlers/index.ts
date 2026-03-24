@@ -28,6 +28,7 @@ import '../features/rename'
 import '../features/redact'
 import '../features/metadata'
 import '../features/account-registration'
+import '../features/autojoin'
 
 /** No-op — handlers are registered via side-effect imports above */
 export function registerAllHandlers(): void {
