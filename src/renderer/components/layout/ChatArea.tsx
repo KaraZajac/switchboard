@@ -57,6 +57,8 @@ export function ChatArea() {
   const prevKey = useRef<string | null>(null)
   // Guard to prevent auto-scroll effect from fighting with restore
   const isRestoringScroll = useRef(false)
+  // Ref for the "New messages" divider element
+  const newMessagesDividerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     // Save scroll position of previous channel
@@ -74,20 +76,26 @@ export function ChatArea() {
     // Determine if we should auto-scroll based on saved state
     const saved = key ? scrollPositions.current[key] : null
     if (saved) {
-      // Restore the previous auto-scroll state
       setAutoScroll(saved.atBottom)
     } else {
-      // New channel we haven't visited — scroll to bottom
       setAutoScroll(true)
     }
 
     // Restore scroll position after React renders the new messages
     isRestoringScroll.current = true
-    // Use double-rAF to ensure DOM has updated with new channel's messages
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         if (scrollRef.current) {
-          if (saved && !saved.atBottom) {
+          // Priority: 1) scroll to "New messages" divider, 2) restore saved position, 3) scroll to bottom
+          if (newMessagesDividerRef.current) {
+            // Scroll so the divider is near the top of the viewport
+            newMessagesDividerRef.current.scrollIntoView({ block: 'start' })
+            // Nudge up a bit so context above is visible
+            if (scrollRef.current.scrollTop > 50) {
+              scrollRef.current.scrollTop -= 50
+            }
+            setAutoScroll(false)
+          } else if (saved && !saved.atBottom) {
             scrollRef.current.scrollTop = saved.top
           } else {
             scrollRef.current.scrollTop = scrollRef.current.scrollHeight
@@ -318,7 +326,7 @@ export function ChatArea() {
           return (
             <div key={msg.id}>
               {showDivider && (
-                <div className="my-2 flex items-center gap-2">
+                <div ref={newMessagesDividerRef} className="my-2 flex items-center gap-2">
                   <div className="flex-1 border-t border-red-500/50" />
                   <span className="text-xs font-medium text-red-400">New messages</span>
                   <div className="flex-1 border-t border-red-500/50" />
