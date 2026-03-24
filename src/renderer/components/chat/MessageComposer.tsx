@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, type KeyboardEvent } from 'react'
+import { useState, useRef, useCallback, useEffect, type KeyboardEvent } from 'react'
 import type { ReplyTarget } from '../../stores/messageStore'
 import type { ChannelUser } from '@shared/types/channel'
 import { TYPING_THROTTLE_MS } from '@shared/constants'
@@ -44,8 +44,67 @@ export function MessageComposer({
     prefix: string
   }>({ active: false, candidates: [], index: 0, start: 0, prefix: '' })
 
+  // @mention autocomplete state
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null)
+  const [mentionStart, setMentionStart] = useState(0)
+  const [mentionIndex, setMentionIndex] = useState(0)
+  const mentionRef = useRef<HTMLDivElement>(null)
+
+  const mentionCandidates = mentionQuery !== null
+    ? users
+        .map((u) => u.nick)
+        .filter((nick) => nick.toLowerCase().startsWith(mentionQuery.toLowerCase()))
+        .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
+        .slice(0, 10)
+    : []
+
+  // Reset mention index when candidates change
+  useEffect(() => {
+    setMentionIndex(0)
+  }, [mentionQuery])
+
+  const acceptMention = useCallback((nick: string) => {
+    const before = text.slice(0, mentionStart)
+    const after = text.slice(inputRef.current?.selectionStart || text.length)
+    setText(before + nick + ' ' + after.trimStart())
+    setMentionQuery(null)
+    // Focus back and move cursor after inserted nick
+    setTimeout(() => {
+      if (inputRef.current) {
+        const pos = mentionStart + nick.length + 1
+        inputRef.current.selectionStart = pos
+        inputRef.current.selectionEnd = pos
+        inputRef.current.focus()
+      }
+    }, 0)
+  }, [text, mentionStart])
+
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
+      // Handle mention popup navigation
+      if (mentionCandidates.length > 0 && mentionQuery !== null) {
+        if (e.key === 'ArrowDown') {
+          e.preventDefault()
+          setMentionIndex((i) => (i + 1) % mentionCandidates.length)
+          return
+        }
+        if (e.key === 'ArrowUp') {
+          e.preventDefault()
+          setMentionIndex((i) => (i - 1 + mentionCandidates.length) % mentionCandidates.length)
+          return
+        }
+        if (e.key === 'Tab' || e.key === 'Enter') {
+          e.preventDefault()
+          acceptMention(mentionCandidates[mentionIndex])
+          return
+        }
+        if (e.key === 'Escape') {
+          e.preventDefault()
+          setMentionQuery(null)
+          return
+        }
+      }
+
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault()
         if (text.trim() && !disabled) {
@@ -58,6 +117,7 @@ export function MessageComposer({
           sendTypingDone()
           onCancelReply?.()
           completionState.current.active = false
+          setMentionQuery(null)
         }
         return
       }
@@ -79,7 +139,7 @@ export function MessageComposer({
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [text, onSend, onSendReply, replyTarget, onCancelReply, disabled, users, channels]
+    [text, onSend, onSendReply, replyTarget, onCancelReply, disabled, users, channels, mentionCandidates, mentionQuery, mentionIndex, acceptMention]
   )
 
   const handleTabCompletion = useCallback(
@@ -204,6 +264,29 @@ export function MessageComposer({
       )}
 
       <div className={`relative rounded-lg bg-gray-700 ${replyTarget ? 'rounded-t-none' : ''}`}>
+        {/* @mention autocomplete popup */}
+        {mentionCandidates.length > 0 && mentionQuery !== null && (
+          <div
+            ref={mentionRef}
+            className="absolute bottom-full left-0 z-20 mb-1 w-64 overflow-hidden rounded-lg border border-gray-600 bg-gray-800 py-1 shadow-xl"
+          >
+            {mentionCandidates.map((nick, i) => (
+              <button
+                key={nick}
+                onMouseDown={(e) => {
+                  e.preventDefault()
+                  acceptMention(nick)
+                }}
+                className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm ${
+                  i === mentionIndex ? 'bg-indigo-500/30 text-white' : 'text-gray-300 hover:bg-gray-700'
+                }`}
+              >
+                <span className="font-medium">{nick}</span>
+              </button>
+            ))}
+          </div>
+        )}
+
         <div className="flex items-end">
           {/* Upload button */}
           {hasFilehost && (
@@ -245,10 +328,23 @@ export function MessageComposer({
             ref={inputRef}
             value={text}
             onChange={(e) => {
-              setText(e.target.value)
+              const val = e.target.value
+              setText(val)
               handleInput()
               completionState.current.active = false
-              if (e.target.value.trim()) {
+
+              // Detect @mention query
+              const cursor = e.target.selectionStart || val.length
+              const beforeCursor = val.slice(0, cursor)
+              const atMatch = beforeCursor.match(/@(\w*)$/)
+              if (atMatch) {
+                setMentionQuery(atMatch[1])
+                setMentionStart(cursor - atMatch[1].length)
+              } else {
+                setMentionQuery(null)
+              }
+
+              if (val.trim()) {
                 sendTyping()
               } else {
                 sendTypingDone()
