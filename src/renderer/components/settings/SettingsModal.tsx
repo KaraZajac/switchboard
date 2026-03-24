@@ -257,6 +257,8 @@ function NotificationsTab() {
   const setNotificationsEnabled = useUIStore((s) => s.setNotificationsEnabled)
   const notificationSound = useUIStore((s) => s.notificationSound)
   const setNotificationSound = useUIStore((s) => s.setNotificationSound)
+  const duckHuntAutoRespond = useUIStore((s) => s.duckHuntAutoRespond)
+  const setDuckHuntAutoRespond = useUIStore((s) => s.setDuckHuntAutoRespond)
 
   return (
     <div className="space-y-4">
@@ -282,6 +284,16 @@ function NotificationsTab() {
         <div className="text-xs text-gray-400">
           Per-channel mute: right-click a channel in the sidebar to mute/unmute notifications for that channel.
         </div>
+      </div>
+
+      <h3 className="text-sm font-semibold text-gray-300">Automations</h3>
+
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="text-sm text-gray-200">Duck Hunt Auto-respond</div>
+          <div className="text-xs text-gray-500">Automatically respond to duck hunt bots</div>
+        </div>
+        <ToggleSwitch checked={duckHuntAutoRespond} onChange={setDuckHuntAutoRespond} />
       </div>
     </div>
   )
