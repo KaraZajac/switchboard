@@ -113,9 +113,11 @@ export function registerIPCHandlers(): void {
   ipcMain.handle('message:reply', async (_event, serverId: string, channel: string, text: string, replyTo: string) => {
     const client = ircManager.getClient(serverId)
     if (!client) throw new Error('Not connected')
+    // Strip newlines to prevent IRC command injection
+    const safeText = text.replace(/[\r\n]+/g, ' ')
     // Send with +reply tag if echo-message is supported
     client.connection.sendRaw(
-      `@+reply=${sanitizeTagValue(replyTo)} PRIVMSG ${channel} :${text}`
+      `@+reply=${sanitizeTagValue(replyTo)} PRIVMSG ${channel} :${safeText}`
     )
   })
 
@@ -145,8 +147,10 @@ export function registerIPCHandlers(): void {
   ipcMain.handle('message:edit', async (_event, serverId: string, channel: string, msgid: string, newText: string) => {
     const client = ircManager.getClient(serverId)
     if (!client) throw new Error('Not connected')
+    // Strip newlines to prevent IRC command injection
+    const safeText = newText.replace(/[\r\n]+/g, ' ')
     // Send edited message with +draft/edit tag pointing to original message ID
-    client.connection.sendRaw(`@+draft/edit=${sanitizeTagValue(msgid)} PRIVMSG ${channel} :${newText}`)
+    client.connection.sendRaw(`@+draft/edit=${sanitizeTagValue(msgid)} PRIVMSG ${channel} :${safeText}`)
   })
 
   ipcMain.handle('message:typing', async (_event, serverId: string, channel: string, status: 'active' | 'done' = 'active') => {

@@ -156,11 +156,13 @@ function highlightMentions(text: string, nick: string): React.ReactNode {
   if (!nick) return text
   const escaped = nick.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   // Match both "nick" and "@nick"
-  const regex = new RegExp(`(@?${escaped}\\b)`, 'gi')
-  const parts = text.split(regex)
+  const splitRegex = new RegExp(`(@?${escaped}\\b)`, 'gi')
+  const parts = text.split(splitRegex)
   if (parts.length === 1) return text
+  // Use a fresh regex for each test to avoid lastIndex issues
+  const testRegex = new RegExp(`^@?${escaped}\\b$`, 'i')
   return parts.map((part, i) =>
-    regex.test(part) ? (
+    testRegex.test(part) ? (
       <span key={i} className="rounded bg-amber-500/20 px-0.5 font-semibold text-amber-300">
         {part}
       </span>
