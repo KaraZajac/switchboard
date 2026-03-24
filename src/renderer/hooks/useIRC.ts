@@ -171,13 +171,15 @@ export function useIRCEvents(): void {
             api.invoke('notification:send', title, message.content.slice(0, 200))
           }
 
-          // Update tray badge
-          const allChannels = useChannelStore.getState().channels
-          let totalMentions = 0
-          for (const chs of Object.values(allChannels)) {
-            totalMentions += chs.reduce((sum, ch) => sum + ch.mentionCount, 0)
-          }
-          api.invoke('tray:set-badge', totalMentions + 1)
+          // Update tray badge — recalculate after the increment above
+          setTimeout(() => {
+            const allChannels = useChannelStore.getState().channels
+            let totalMentions = 0
+            for (const chs of Object.values(allChannels)) {
+              totalMentions += chs.reduce((sum, ch) => sum + ch.mentionCount, 0)
+            }
+            api.invoke('tray:set-badge', totalMentions)
+          }, 0)
         }
       })
     )

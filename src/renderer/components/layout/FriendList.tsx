@@ -1,6 +1,8 @@
 import { useState, useCallback } from 'react'
 import { useUserStore, type MonitoredNick } from '../../stores/userStore'
 import { useServerStore } from '../../stores/serverStore'
+import { useChannelStore } from '../../stores/channelStore'
+import { useUIStore } from '../../stores/uiStore'
 import { nickColor } from '../../utils/nickColor'
 
 const EMPTY_MONITOR: MonitoredNick[] = []
@@ -33,6 +35,16 @@ export function FriendList() {
     if (!activeServerId) return
     window.switchboard.invoke('monitor:remove', activeServerId, [nick])
     useUserStore.getState().removeMonitorNick(activeServerId, nick)
+  }, [activeServerId])
+
+  const handleClick = useCallback((nick: string) => {
+    if (!activeServerId) return
+    // Ensure a DM channel exists, then switch to it
+    useChannelStore.getState().addChannel(activeServerId, nick)
+    useChannelStore.getState().setActiveChannel(activeServerId, nick)
+    useChannelStore.getState().clearUnread(activeServerId, nick)
+    // Exit DM mode so the server sidebar shows
+    useUIStore.getState().setDmMode(false)
   }, [activeServerId])
 
   if (connectionStatus !== 'connected') return null
@@ -108,6 +120,7 @@ export function FriendList() {
               nick={m.nick}
               online
               onRemove={handleRemove}
+              onClick={handleClick}
             />
           ))}
         </div>
@@ -124,6 +137,7 @@ export function FriendList() {
               nick={m.nick}
               online={false}
               onRemove={handleRemove}
+              onClick={handleClick}
             />
           ))}
         </div>
@@ -132,15 +146,16 @@ export function FriendList() {
   )
 }
 
-function FriendEntry({ nick, online, onRemove }: { nick: string; online: boolean; onRemove: (nick: string) => void }) {
+function FriendEntry({ nick, online, onRemove, onClick }: { nick: string; online: boolean; onRemove: (nick: string) => void; onClick: (nick: string) => void }) {
   const [hover, setHover] = useState(false)
   const avatarColor = nickColor(nick)
 
   return (
     <div
-      className="group flex items-center gap-2 rounded px-2 py-1 hover:bg-gray-700/50"
+      className="group flex cursor-pointer items-center gap-2 rounded px-2 py-1 hover:bg-gray-700/50"
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
+      onClick={() => onClick(nick)}
     >
       <div className="relative">
         <div className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold text-white ${avatarColor} ${!online ? 'opacity-40' : ''}`}>
@@ -157,7 +172,7 @@ function FriendEntry({ nick, online, onRemove }: { nick: string; online: boolean
       </span>
       {hover && (
         <button
-          onClick={() => onRemove(nick)}
+          onClick={(e) => { e.stopPropagation(); onRemove(nick) }}
           className="rounded p-0.5 text-gray-500 hover:text-red-400"
           title="Remove friend"
         >
