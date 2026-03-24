@@ -21,6 +21,9 @@ export class ConnectionState {
   /** Realname sent during registration */
   realname = ''
 
+  /** Whether we are currently marked as away */
+  away = false
+
   /** Server name (from 001 or prefix) */
   serverName = ''
 

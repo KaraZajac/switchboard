@@ -97,6 +97,11 @@ export function registerIPCHandlers(): void {
     const client = ircManager.getClient(serverId)
     if (!client) throw new Error('Not connected')
 
+    // Auto-clear away when sending a message
+    if (client.state.away) {
+      client.connection.send('AWAY')
+    }
+
     // Handle /me action
     if (text.startsWith('/me ')) {
       client.action(channel, text.slice(4))

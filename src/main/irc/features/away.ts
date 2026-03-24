@@ -26,6 +26,7 @@ registerHandler('AWAY', (client, msg) => {
  * RPL_UNAWAY (305) — We are no longer away
  */
 registerHandler('305', (client, _msg) => {
+  client.state.away = false
   client.events.emit('away', { nick: client.state.nick, message: null })
 })
 
@@ -33,6 +34,7 @@ registerHandler('305', (client, _msg) => {
  * RPL_NOWAWAY (306) — We are now away
  */
 registerHandler('306', (client, msg) => {
+  client.state.away = true
   client.events.emit('away', {
     nick: client.state.nick,
     message: msg.params[1] || 'Away'
