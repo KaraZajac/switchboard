@@ -267,6 +267,9 @@ app.whenReady().then(async () => {
   // Set up auto-updater
   setupAutoUpdater()
 
+  // Periodically flush message database to disk (every 30s)
+  setInterval(() => saveDatabase(), 30_000)
+
   // Auto-connect servers
   const servers = getAllServers()
   for (const server of servers) {

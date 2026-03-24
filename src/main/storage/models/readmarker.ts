@@ -1,4 +1,4 @@
-import { getDb } from '../database'
+import { getDb, saveDatabase } from '../database'
 
 export function getReadMarker(serverId: string, channel: string): string | null {
   const db = getDb()
@@ -16,6 +16,7 @@ export function setReadMarker(serverId: string, channel: string, timestamp: stri
     `INSERT OR REPLACE INTO read_markers (server_id, channel, timestamp) VALUES (?, ?, ?)`,
     [serverId, channel, timestamp]
   )
+  saveDatabase()
 }
 
 export function getAllReadMarkers(serverId: string): Record<string, string> {
