@@ -47,8 +47,8 @@ export function useIRCEvents(): void {
       })
     )
 
-    // Stagger chathistory requests to avoid flooding the server
-    let chathistoryQueue = 0
+    // Track channels that need chathistory but haven't been fetched yet
+    const pendingChathistory = new Set<string>()
 
     // Channel events
     cleanups.push(
@@ -56,17 +56,19 @@ export function useIRCEvents(): void {
         useChannelStore.getState().addChannel(serverId, channel)
         useUserStore.getState().addUser(serverId, channel, user)
 
-        // Load local history first; only request server history if local is empty
+        // Load local history first
         api.invoke('history:fetch', serverId, channel, undefined, 50).then((messages) => {
           if (messages && messages.length > 0) {
             useMessageStore.getState().setMessages(serverId, channel, messages)
           } else {
-            // No local history — request from server, staggered to avoid flood
-            const delay = chathistoryQueue++ * 500
-            setTimeout(() => {
-              chathistoryQueue = Math.max(0, chathistoryQueue - 1)
+            // No local history — only fetch from server if this is the active channel
+            const activeChannel = useChannelStore.getState().activeChannel[serverId]
+            if (activeChannel?.toLowerCase() === channel.toLowerCase()) {
               api.invoke('chathistory:request', serverId, channel, undefined, 50)
-            }, delay)
+            } else {
+              // Defer until the user switches to this channel
+              pendingChathistory.add(`${serverId}:${channel.toLowerCase()}`)
+            }
           }
         })
       })
@@ -520,7 +522,22 @@ export function useIRCEvents(): void {
       })
     )
 
+    // When user switches to a channel that has deferred chathistory, fetch it
+    const unsubscribe = useChannelStore.subscribe((state, prevState) => {
+      const activeServerId = useServerStore.getState().activeServerId
+      if (!activeServerId) return
+      const channel = state.activeChannel[activeServerId]
+      const prevChannel = prevState.activeChannel[activeServerId]
+      if (!channel || channel === prevChannel) return
+      const channelKey = `${activeServerId}:${channel.toLowerCase()}`
+      if (pendingChathistory.has(channelKey)) {
+        pendingChathistory.delete(channelKey)
+        api.invoke('chathistory:request', activeServerId, channel, undefined, 50)
+      }
+    })
+
     return () => {
+      unsubscribe()
       for (const cleanup of cleanups) {
         cleanup()
       }
