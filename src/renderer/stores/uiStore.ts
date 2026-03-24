@@ -52,7 +52,6 @@ interface UIState {
   timeFormat: TimeFormat
   notificationsEnabled: boolean
   notificationSound: boolean
-  duckHuntAutoRespond: boolean
   whoisData: WhoisData | null
   editServerId: string | null
   dmMode: boolean
@@ -72,7 +71,6 @@ interface UIState {
   setTimeFormat: (format: TimeFormat) => void
   setNotificationsEnabled: (enabled: boolean) => void
   setNotificationSound: (enabled: boolean) => void
-  setDuckHuntAutoRespond: (enabled: boolean) => void
   showWhois: (data: WhoisData) => void
   setEditServerId: (id: string | null) => void
   setPopupWhoisNick: (nick: string | null) => void
@@ -85,7 +83,6 @@ const savedTheme = (localStorage.getItem('switchboard-theme') as Theme) || 'catp
 const savedFontSize = parseInt(localStorage.getItem('switchboard-font-size') || '14', 10)
 const savedTimeFormat = (localStorage.getItem('switchboard-time-format') || '12h') as TimeFormat
 const savedCompactMode = localStorage.getItem('switchboard-compact-mode') === 'true'
-const savedDuckHunt = localStorage.getItem('switchboard-duck-hunt') === 'true'
 
 document.documentElement.setAttribute('data-theme', savedTheme)
 document.documentElement.style.setProperty('--chat-font-size', `${savedFontSize}px`)
@@ -100,7 +97,6 @@ export const useUIStore = create<UIState>((set) => ({
   timeFormat: savedTimeFormat,
   notificationsEnabled: true,
   notificationSound: true,
-  duckHuntAutoRespond: savedDuckHunt,
   whoisData: null,
   editServerId: null,
   dmMode: false,
@@ -132,10 +128,6 @@ export const useUIStore = create<UIState>((set) => ({
   },
   setNotificationsEnabled: (enabled) => set({ notificationsEnabled: enabled }),
   setNotificationSound: (enabled) => set({ notificationSound: enabled }),
-  setDuckHuntAutoRespond: (enabled) => {
-    localStorage.setItem('switchboard-duck-hunt', String(enabled))
-    set({ duckHuntAutoRespond: enabled })
-  },
   showWhois: (data) => set({ activeModal: 'whois', whoisData: data }),
   setEditServerId: (id) => set({ editServerId: id, activeModal: id ? 'edit-server' : null }),
   setDmMode: (dm) => set({ dmMode: dm }),
