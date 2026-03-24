@@ -53,44 +53,49 @@ export function ChatArea() {
   const exhaustedChannels = useRef<Set<string>>(new Set())
 
   // Save/restore scroll positions per channel
-  const scrollPositions = useRef<Record<string, { top: number; height: number }>>({})
+  const scrollPositions = useRef<Record<string, { top: number; atBottom: boolean }>>({})
   const prevKey = useRef<string | null>(null)
+  // Guard to prevent auto-scroll effect from fighting with restore
+  const isRestoringScroll = useRef(false)
 
   useEffect(() => {
     // Save scroll position of previous channel
     if (prevKey.current && scrollRef.current) {
+      const { scrollTop, scrollHeight, clientHeight } = scrollRef.current
       scrollPositions.current[prevKey.current] = {
-        top: scrollRef.current.scrollTop,
-        height: scrollRef.current.scrollHeight
+        top: scrollTop,
+        atBottom: scrollHeight - scrollTop - clientHeight < 100
       }
     }
 
     // Restore exhaustion state for new channel (don't reset if already exhausted)
     setHistoryExhausted(key ? exhaustedChannels.current.has(key) : false)
-    setAutoScroll(true)
 
-    // Restore scroll position or scroll to bottom
-    if (key && scrollRef.current) {
-      const saved = scrollPositions.current[key]
-      if (saved) {
-        // Restore after render
-        requestAnimationFrame(() => {
-          if (scrollRef.current) {
+    // Determine if we should auto-scroll based on saved state
+    const saved = key ? scrollPositions.current[key] : null
+    if (saved) {
+      // Restore the previous auto-scroll state
+      setAutoScroll(saved.atBottom)
+    } else {
+      // New channel we haven't visited — scroll to bottom
+      setAutoScroll(true)
+    }
+
+    // Restore scroll position after React renders the new messages
+    isRestoringScroll.current = true
+    // Use double-rAF to ensure DOM has updated with new channel's messages
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (scrollRef.current) {
+          if (saved && !saved.atBottom) {
             scrollRef.current.scrollTop = saved.top
-            // Check if we were at the bottom
-            const { scrollTop, scrollHeight, clientHeight } = scrollRef.current
-            setAutoScroll(scrollHeight - scrollTop - clientHeight < 100)
-          }
-        })
-      } else {
-        // New channel — scroll to bottom
-        requestAnimationFrame(() => {
-          if (scrollRef.current) {
+          } else {
             scrollRef.current.scrollTop = scrollRef.current.scrollHeight
           }
-        })
-      }
-    }
+        }
+        isRestoringScroll.current = false
+      })
+    })
 
     prevKey.current = key
   }, [key])
@@ -113,8 +118,9 @@ export function ChatArea() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeServerId, activeChannel, messages.length, autoScroll])
 
-  // Auto-scroll to bottom when new messages arrive
+  // Auto-scroll to bottom when new messages arrive (skip during channel switch restore)
   useEffect(() => {
+    if (isRestoringScroll.current) return
     if (autoScroll && scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
     }
