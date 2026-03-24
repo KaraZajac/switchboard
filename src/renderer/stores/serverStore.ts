@@ -20,6 +20,8 @@ interface ServerState {
   networkIcons: Record<string, string>
   /** Filehost URLs from ISUPPORT draft/FILEHOST: serverId -> URL */
   filehostUrls: Record<string, string>
+  /** Away status per server: serverId -> away message (null = not away) */
+  awayMessage: Record<string, string | null>
 
   // Actions
   setServers: (servers: ServerConfig[]) => void
@@ -33,6 +35,7 @@ interface ServerState {
   setUserAvatar: (serverId: string, nick: string, url: string) => void
   setNetworkIcon: (serverId: string, url: string) => void
   setFilehostUrl: (serverId: string, url: string) => void
+  setAwayMessage: (serverId: string, message: string | null) => void
   muteServer: (serverId: string, durationMs?: number) => void
   unmuteServer: (serverId: string) => void
   isServerMuted: (serverId: string) => boolean
@@ -48,6 +51,7 @@ export const useServerStore = create<ServerState>((set, get) => ({
   mutedServers: {},
   networkIcons: {},
   filehostUrls: {},
+  awayMessage: {},
 
   setServers: (servers) => set({ servers }),
 
@@ -100,6 +104,11 @@ export const useServerStore = create<ServerState>((set, get) => ({
   setFilehostUrl: (serverId, url) =>
     set((state) => ({
       filehostUrls: { ...state.filehostUrls, [serverId]: url }
+    })),
+
+  setAwayMessage: (serverId, message) =>
+    set((state) => ({
+      awayMessage: { ...state.awayMessage, [serverId]: message }
     })),
 
   muteServer: (serverId, durationMs) =>

@@ -79,6 +79,7 @@ export interface RendererToMainInvocations {
   'user:kick': (serverId: string, channel: string, nick: string, reason?: string) => Promise<void>
   'user:nick': (serverId: string, nick: string) => Promise<void>
   'user:setname': (serverId: string, realname: string) => Promise<void>
+  'user:away': (serverId: string, message?: string) => Promise<void>
   'metadata:get': (serverId: string, target: string, key: string) => Promise<void>
   'metadata:set': (serverId: string, key: string, value: string) => Promise<void>
   'account:register': (serverId: string, email: string | null, password: string) => Promise<boolean>

@@ -41,6 +41,7 @@ export function UserProfilePanel() {
   const connectionStatuses = useServerStore((s) => s.connectionStatus)
   const userAvatars = useServerStore((s) => s.userAvatars)
   const allCapabilities = useServerStore((s) => s.capabilities)
+  const awayMessages = useServerStore((s) => s.awayMessage)
 
   // Derive values in the component body
   const currentNick = activeServerId ? currentNicks[activeServerId] ?? null : null
@@ -50,6 +51,8 @@ export function UserProfilePanel() {
     ? userAvatars[`${activeServerId}:${currentNick.toLowerCase()}`] ?? null
     : null
   const capabilities = activeServerId ? allCapabilities[activeServerId] ?? [] : []
+  const awayMessage = activeServerId ? awayMessages[activeServerId] ?? null : null
+  const isAway = awayMessage !== null
 
   const [showPopup, setShowPopup] = useState(false)
   const popupRef = useRef<HTMLDivElement>(null)
@@ -92,7 +95,9 @@ export function UserProfilePanel() {
         {/* Nick & status */}
         <div className="min-w-0 flex-1 text-left">
           <div className="truncate text-sm font-medium text-gray-100">{displayNick}</div>
-          <div className="truncate text-xs text-gray-400">Online</div>
+          <div className={`truncate text-xs ${isAway ? 'text-yellow-400' : 'text-gray-400'}`}>
+            {isAway ? awayMessage : 'Online'}
+          </div>
         </div>
 
         {/* Settings gear */}
@@ -113,6 +118,7 @@ export function UserProfilePanel() {
           username={server?.username ?? ''}
           realname={server?.realname ?? ''}
           avatarUrl={avatarUrl}
+          awayMessage={awayMessage}
           supportsSetname={supportsSetname}
           supportsMetadata={supportsMetadata}
           onClose={() => setShowPopup(false)}
@@ -129,6 +135,7 @@ interface ProfileEditPopupProps {
   username: string
   realname: string
   avatarUrl: string | null
+  awayMessage: string | null
   supportsSetname: boolean
   supportsMetadata: boolean
   onClose: () => void
@@ -141,6 +148,7 @@ function ProfileEditPopup({
   username,
   realname,
   avatarUrl,
+  awayMessage,
   supportsSetname,
   supportsMetadata,
   onClose,
@@ -149,6 +157,8 @@ function ProfileEditPopup({
   const [editNick, setEditNick] = useState(nick)
   const [editRealname, setEditRealname] = useState(realname)
   const [editAvatarUrl, setEditAvatarUrl] = useState(avatarUrl ?? '')
+  const [editAwayMessage, setEditAwayMessage] = useState(awayMessage ?? '')
+  const [isAway, setIsAway] = useState(awayMessage !== null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -182,13 +192,23 @@ function ProfileEditPopup({
         await window.switchboard.invoke('metadata:set', serverId, 'avatar', newUrl)
       }
 
+      // Set/clear away status
+      const wasAway = awayMessage !== null
+      if (isAway && !wasAway) {
+        await window.switchboard.invoke('user:away', serverId, editAwayMessage.trim() || 'Away')
+      } else if (isAway && wasAway && editAwayMessage.trim() !== awayMessage) {
+        await window.switchboard.invoke('user:away', serverId, editAwayMessage.trim() || 'Away')
+      } else if (!isAway && wasAway) {
+        await window.switchboard.invoke('user:away', serverId)
+      }
+
       onClose()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save')
     } finally {
       setSaving(false)
     }
-  }, [serverId, nick, editNick, realname, editRealname, avatarUrl, editAvatarUrl, supportsSetname, supportsMetadata, onClose])
+  }, [serverId, nick, editNick, realname, editRealname, avatarUrl, editAvatarUrl, awayMessage, isAway, editAwayMessage, supportsSetname, supportsMetadata, onClose])
 
   return (
     <div
@@ -256,6 +276,32 @@ function ProfileEditPopup({
             disabled={!supportsMetadata}
             className="w-full rounded bg-gray-800 px-2.5 py-1.5 text-sm text-gray-100 outline-none ring-1 ring-gray-700 focus:ring-indigo-500 disabled:opacity-50"
           />
+        </div>
+
+        {/* Away status */}
+        <div>
+          <div className="mb-1 flex items-center justify-between">
+            <label className="text-xs font-medium text-gray-400">Status</label>
+            <button
+              onClick={() => setIsAway(!isAway)}
+              className={`rounded px-2 py-0.5 text-xs font-medium ${
+                isAway
+                  ? 'bg-yellow-600/20 text-yellow-400 hover:bg-yellow-600/30'
+                  : 'bg-green-600/20 text-green-400 hover:bg-green-600/30'
+              }`}
+            >
+              {isAway ? 'Away' : 'Online'}
+            </button>
+          </div>
+          {isAway && (
+            <input
+              type="text"
+              value={editAwayMessage}
+              onChange={(e) => setEditAwayMessage(e.target.value)}
+              placeholder="Away message (e.g. Be right back)"
+              className="w-full rounded bg-gray-800 px-2.5 py-1.5 text-sm text-gray-100 outline-none ring-1 ring-gray-700 focus:ring-indigo-500"
+            />
+          )}
         </div>
 
         {error && (
