@@ -128,8 +128,8 @@ export const useChannelStore = create<ChannelState>((set) => ({
     })),
 
   clearUnread: (serverId, name) =>
-    set((state) => ({
-      channels: {
+    set((state) => {
+      const updated = {
         ...state.channels,
         [serverId]: (state.channels[serverId] || []).map((ch) =>
           ch.name.toLowerCase() === name.toLowerCase()
@@ -137,7 +137,14 @@ export const useChannelStore = create<ChannelState>((set) => ({
             : ch
         )
       }
-    })),
+      // Recalculate and update dock badge
+      let totalMentions = 0
+      for (const chs of Object.values(updated)) {
+        totalMentions += chs.reduce((sum, ch) => sum + ch.mentionCount, 0)
+      }
+      window.switchboard?.invoke('tray:set-badge', totalMentions)
+      return { channels: updated }
+    }),
 
   renameChannel: (serverId, oldName, newName) =>
     set((state) => {
