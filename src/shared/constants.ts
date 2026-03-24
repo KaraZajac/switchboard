@@ -48,6 +48,7 @@ export const REQUESTED_CAPS = [
   'draft/persistence',
   'draft/register-before-connect',
   'draft/search',
+  'draft/auto-join',
   '+draft/channel-context',
   '+typing',
   'UTF8ONLY'
