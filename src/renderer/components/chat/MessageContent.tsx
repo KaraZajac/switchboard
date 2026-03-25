@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { parseIRCFormatting, type FormattedSpan } from '../../utils/formatting'
-import { parseMessageContent, isImageUrl, isKlipyMediaUrl, isVideoUrl, isAudioUrl, getFilenameFromUrl, getFileTypeInfo, type MessageSegment } from '../../utils/linkify'
+import { parseMessageContent, isImageUrl, isKlipyMediaUrl, isVideoUrl, isAudioUrl, getYouTubeVideoId, getFilenameFromUrl, getFileTypeInfo, type MessageSegment } from '../../utils/linkify'
 import { useServerStore } from '../../stores/serverStore'
 import type { LinkPreviewData } from '@shared/types/ipc'
 
@@ -39,6 +39,25 @@ function Segment({ segment, highlightNick }: { segment: MessageSegment; highligh
       // Filehost uploads: render inline media or file card (no URL text)
       if (isFilehostUrl(segment.url)) {
         return <FilehostMedia url={segment.url} />
+      }
+
+      // YouTube: show link + embedded player
+      const ytId = getYouTubeVideoId(segment.url)
+      if (ytId) {
+        return (
+          <>
+            <a
+              href={segment.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-400 underline hover:text-blue-300"
+              title={segment.url}
+            >
+              {segment.display}
+            </a>
+            <YouTubeEmbed videoId={ytId} url={segment.url} />
+          </>
+        )
       }
 
       return (
@@ -201,6 +220,79 @@ function KlipyMedia({ url }: { url: string }) {
     )
   }
   return <ClickableImage url={url} alt="" referrerPolicy="no-referrer" />
+}
+
+/** YouTube video preview with thumbnail — click play for inline, click thumbnail for browser */
+function YouTubeEmbed({ videoId, url }: { videoId: string; url: string }) {
+  const [imgFailed, setImgFailed] = useState(false)
+  const [inline, setInline] = useState(false)
+
+  if (imgFailed) return null
+
+  if (inline) {
+    return (
+      <div className="mt-1 max-w-lg overflow-hidden rounded">
+        <div className="relative" style={{ paddingBottom: '56.25%' }}>
+          <iframe
+            src={`https://www.youtube.com/embed/${videoId}?autoplay=1`}
+            className="absolute inset-0 h-full w-full rounded"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen
+            referrerPolicy="no-referrer"
+          />
+          {/* Close / fallback button */}
+          <button
+            onClick={() => setInline(false)}
+            className="absolute top-2 right-2 flex h-7 w-7 items-center justify-center rounded-full bg-black/70 text-white hover:bg-black/90 transition-colors z-10"
+            title="Close inline player"
+          >
+            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+              <path d="M18 6L6 18M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="group relative mt-1 max-w-lg overflow-hidden rounded">
+      <a href={url} target="_blank" rel="noopener noreferrer" className="block">
+        <img
+          src={`https://img.youtube.com/vi/${videoId}/mqdefault.jpg`}
+          alt="YouTube video"
+          className="w-full rounded"
+          referrerPolicy="no-referrer"
+          onError={() => setImgFailed(true)}
+        />
+      </a>
+      {/* Play inline button — centered */}
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+        <button
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); setInline(true) }}
+          className="pointer-events-auto flex h-14 w-20 items-center justify-center rounded-xl bg-red-600 shadow-lg hover:bg-red-500 transition-colors"
+          title="Play inline"
+        >
+          <svg className="h-8 w-8 text-white ml-1" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M8 5v14l11-7z" />
+          </svg>
+        </button>
+      </div>
+      {/* Open in browser — bottom right */}
+      <a
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="absolute bottom-2 right-2 flex items-center gap-1.5 rounded bg-black/70 px-2 py-1 text-xs text-white opacity-0 group-hover:opacity-100 hover:bg-black/90 transition-all"
+        title="Open on YouTube"
+      >
+        <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+          <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3" />
+        </svg>
+        YouTube
+      </a>
+    </div>
+  )
 }
 
 /** Fetch and display OpenGraph link preview */
