@@ -4,7 +4,10 @@ import {
   setSTSPolicy,
   parseSTSValue,
   loadSTSPolicies,
-  getAllSTSPolicies
+  getAllSTSPolicies,
+  stsUpgradeFor,
+  persistSTSPoliciesWith,
+  type STSPolicy
 } from '../../src/main/irc/features/sts'
 
 describe('STS (Strict Transport Security)', () => {
@@ -67,3 +70,100 @@ describe('STS (Strict Transport Security)', () => {
     })
   })
 })
+
+/**
+ * Obeying the policy, which is the part that was missing.
+ *
+ * The cache existed and nothing ever read it: a server could say "TLS only" and
+ * the next connection would still be dialled in the clear. These are about the
+ * connection *after* the one that learned the policy, which is the only one the
+ * feature protects.
+ */
+describe('acting on an STS policy', () => {
+  beforeEach(() => {
+    for (const policy of getAllSTSPolicies()) setSTSPolicy(policy.host, policy.port, 0)
+    persistSTSPoliciesWith(null)
+  })
+
+  it('sends a later plaintext connection to the secure port', () => {
+    setSTSPolicy('irc.example.org', 6697, 2592000)
+
+    expect(stsUpgradeFor('irc.example.org', 6667, false)).toEqual({ port: 6697, tls: true })
+  })
+
+  it('leaves a connection that already satisfies the policy alone', () => {
+    setSTSPolicy('irc.example.org', 6697, 2592000)
+
+    expect(stsUpgradeFor('irc.example.org', 6697, true)).toBeNull()
+  })
+
+  it('moves a TLS connection on the wrong port to the right one', () => {
+    setSTSPolicy('irc.example.org', 6697, 2592000)
+
+    expect(stsUpgradeFor('irc.example.org', 7000, true)).toEqual({ port: 6697, tls: true })
+  })
+
+  it('has nothing to say about a host it was never told about', () => {
+    expect(stsUpgradeFor('irc.other.org', 6667, false)).toBeNull()
+  })
+
+  it('matches the host whatever its case', () => {
+    setSTSPolicy('IRC.Example.ORG', 6697, 2592000)
+
+    expect(stsUpgradeFor('irc.example.org', 6667, false)).toEqual({ port: 6697, tls: true })
+  })
+})
+
+/**
+ * Keeping it between runs.
+ *
+ * A policy held only in memory is a plaintext window on every launch, which is
+ * exactly what STS exists to close.
+ */
+describe('remembering an STS policy', () => {
+  it('writes a policy through to storage, and drops it when withdrawn', () => {
+    const written: STSPolicy[] = []
+    const forgotten: string[] = []
+    persistSTSPoliciesWith({
+      save: (policy) => written.push(policy),
+      forget: (host) => forgotten.push(host)
+    })
+
+    setSTSPolicy('irc.example.org', 6697, 2592000)
+    expect(written).toHaveLength(1)
+    expect(written[0]).toMatchObject({ host: 'irc.example.org', port: 6697 })
+
+    setSTSPolicy('irc.example.org', 6697, 0)
+    expect(forgotten).toContain('irc.example.org')
+
+    persistSTSPoliciesWith(null)
+  })
+
+  it('applies a policy loaded from a previous run', () => {
+    loadSTSPolicies([
+      {
+        host: 'irc.example.org',
+        port: 6697,
+        duration: 2592000,
+        cachedAt: new Date().toISOString()
+      }
+    ])
+
+    expect(stsUpgradeFor('irc.example.org', 6667, false)).toEqual({ port: 6697, tls: true })
+  })
+
+  it('forgets one that has expired rather than acting on it', () => {
+    loadSTSPolicies([
+      {
+        host: 'stale.example.org',
+        port: 6697,
+        duration: 60,
+        cachedAt: new Date(Date.now() - 120_000).toISOString()
+      }
+    ])
+
+    expect(getSTSPolicy('stale.example.org')).toBeNull()
+    expect(stsUpgradeFor('stale.example.org', 6667, false)).toBeNull()
+  })
+})
+

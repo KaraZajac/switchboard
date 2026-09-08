@@ -1,0 +1,392 @@
+{
+  "$comment": "Shared by tests/main/fixtures.test.ts and android/app/src/test IrcParserTest. Both implementations must turn `raw` into `parsed`, and `command`+`params` into `line`.",
+  "cases": [
+    {
+      "name": "plain PRIVMSG with a trailing parameter",
+      "raw": ":nick!user@host PRIVMSG #channel :hello there",
+      "parsed": {
+        "tags": {},
+        "prefix": "nick!user@host",
+        "nick": "nick",
+        "command": "PRIVMSG",
+        "params": [
+          "#channel",
+          "hello there"
+        ]
+      }
+    },
+    {
+      "name": "trailing parameter keeps its inner colons",
+      "raw": ":a!b@c PRIVMSG #chan :http://example.com/x:y",
+      "parsed": {
+        "tags": {},
+        "prefix": "a!b@c",
+        "nick": "a",
+        "command": "PRIVMSG",
+        "params": [
+          "#chan",
+          "http://example.com/x:y"
+        ]
+      }
+    },
+    {
+      "name": "an empty trailing parameter is still a parameter",
+      "raw": ":a!b@c PRIVMSG #chan :",
+      "parsed": {
+        "tags": {},
+        "prefix": "a!b@c",
+        "nick": "a",
+        "command": "PRIVMSG",
+        "params": [
+          "#chan",
+          ""
+        ]
+      }
+    },
+    {
+      "name": "no prefix at all",
+      "raw": "PING :irc.example.org",
+      "parsed": {
+        "tags": {},
+        "prefix": null,
+        "nick": null,
+        "command": "PING",
+        "params": [
+          "irc.example.org"
+        ]
+      }
+    },
+    {
+      "name": "server prefix without a user or host",
+      "raw": ":irc.example.org 001 kara :Welcome to the network",
+      "parsed": {
+        "tags": {},
+        "prefix": "irc.example.org",
+        "nick": "irc.example.org",
+        "command": "001",
+        "params": [
+          "kara",
+          "Welcome to the network"
+        ]
+      }
+    },
+    {
+      "name": "message tags",
+      "raw": "@time=2026-09-08T12:00:00.000Z;msgid=abc :n!u@h PRIVMSG #c :tagged",
+      "parsed": {
+        "tags": {
+          "time": "2026-09-08T12:00:00.000Z",
+          "msgid": "abc"
+        },
+        "prefix": "n!u@h",
+        "nick": "n",
+        "command": "PRIVMSG",
+        "params": [
+          "#c",
+          "tagged"
+        ]
+      }
+    },
+    {
+      "name": "a tag with no value is present, not empty",
+      "raw": "@bot;account=kara :n!u@h PRIVMSG #c :hi",
+      "parsed": {
+        "tags": {
+          "bot": true,
+          "account": "kara"
+        },
+        "prefix": "n!u@h",
+        "nick": "n",
+        "command": "PRIVMSG",
+        "params": [
+          "#c",
+          "hi"
+        ]
+      }
+    },
+    {
+      "name": "tag escapes: semicolon, space, backslash, CR, LF",
+      "raw": "@k=a\\:b\\sc\\\\d\\re\\nf :n!u@h PRIVMSG #c :x",
+      "parsed": {
+        "tags": {
+          "k": "a;b c\\d\re\nf"
+        },
+        "prefix": "n!u@h",
+        "nick": "n",
+        "command": "PRIVMSG",
+        "params": [
+          "#c",
+          "x"
+        ]
+      }
+    },
+    {
+      "name": "a lone trailing backslash in a tag is dropped",
+      "raw": "@k=value\\ :n!u@h PRIVMSG #c :x",
+      "parsed": {
+        "tags": {
+          "k": "value"
+        },
+        "prefix": "n!u@h",
+        "nick": "n",
+        "command": "PRIVMSG",
+        "params": [
+          "#c",
+          "x"
+        ]
+      }
+    },
+    {
+      "name": "the command is upper-cased",
+      "raw": ":n!u@h privmsg #c :lower",
+      "parsed": {
+        "tags": {},
+        "prefix": "n!u@h",
+        "nick": "n",
+        "command": "PRIVMSG",
+        "params": [
+          "#c",
+          "lower"
+        ]
+      }
+    },
+    {
+      "name": "several middle parameters",
+      "raw": ":irc.example.org 353 kara = #chan :@op +voice plain",
+      "parsed": {
+        "tags": {},
+        "prefix": "irc.example.org",
+        "nick": "irc.example.org",
+        "command": "353",
+        "params": [
+          "kara",
+          "=",
+          "#chan",
+          "@op +voice plain"
+        ]
+      }
+    },
+    {
+      "name": "CAP negotiation",
+      "raw": ":irc.example.org CAP * LS :sasl=PLAIN,EXTERNAL server-time message-tags",
+      "parsed": {
+        "tags": {},
+        "prefix": "irc.example.org",
+        "nick": "irc.example.org",
+        "command": "CAP",
+        "params": [
+          "*",
+          "LS",
+          "sasl=PLAIN,EXTERNAL server-time message-tags"
+        ]
+      }
+    },
+    {
+      "name": "metadata (draft/metadata-2) key value",
+      "raw": ":irc.example.org 761 kara nick pronouns * :she/her",
+      "parsed": {
+        "tags": {},
+        "prefix": "irc.example.org",
+        "nick": "irc.example.org",
+        "command": "761",
+        "params": [
+          "kara",
+          "nick",
+          "pronouns",
+          "*",
+          "she/her"
+        ]
+      }
+    },
+    {
+      "name": "CTCP ACTION is an ordinary PRIVMSG on the wire",
+      "raw": ":n!u@h PRIVMSG #c :\u0001ACTION waves\u0001",
+      "parsed": {
+        "tags": {},
+        "prefix": "n!u@h",
+        "nick": "n",
+        "command": "PRIVMSG",
+        "params": [
+          "#c",
+          "\u0001ACTION waves\u0001"
+        ]
+      }
+    },
+    {
+      "name": "a nick containing the special characters RFC 2812 allows",
+      "raw": ":[kara]`^!u@h PRIVMSG #c :brackets",
+      "parsed": {
+        "tags": {},
+        "prefix": "[kara]`^!u@h",
+        "nick": "[kara]`^",
+        "command": "PRIVMSG",
+        "params": [
+          "#c",
+          "brackets"
+        ]
+      }
+    },
+    {
+      "name": "extra spaces between parameters collapse",
+      "raw": ":n!u@h  PRIVMSG   #c :spaced",
+      "parsed": {
+        "tags": {},
+        "prefix": "n!u@h",
+        "nick": "n",
+        "command": "PRIVMSG",
+        "params": [
+          "#c",
+          "spaced"
+        ]
+      }
+    },
+    {
+      "name": "UTF-8 survives the round trip",
+      "raw": ":n!u@h PRIVMSG #c :ünïcode ✨ 日本語",
+      "parsed": {
+        "tags": {},
+        "prefix": "n!u@h",
+        "nick": "n",
+        "command": "PRIVMSG",
+        "params": [
+          "#c",
+          "ünïcode ✨ 日本語"
+        ]
+      }
+    },
+    {
+      "name": "CRLF is stripped, not treated as content",
+      "raw": ":n!u@h PRIVMSG #c :ends here\r\n",
+      "parsed": {
+        "tags": {},
+        "prefix": "n!u@h",
+        "nick": "n",
+        "command": "PRIVMSG",
+        "params": [
+          "#c",
+          "ends here"
+        ]
+      }
+    }
+  ],
+  "serialise": [
+    {
+      "name": "no parameters",
+      "command": "QUIT",
+      "params": [],
+      "line": "QUIT"
+    },
+    {
+      "name": "the last parameter is only prefixed when it has to be",
+      "command": "JOIN",
+      "params": [
+        "#channel"
+      ],
+      "line": "JOIN #channel"
+    },
+    {
+      "name": "a parameter with a space becomes trailing",
+      "command": "PRIVMSG",
+      "params": [
+        "#channel",
+        "hello there"
+      ],
+      "line": "PRIVMSG #channel :hello there"
+    },
+    {
+      "name": "a parameter starting with a colon becomes trailing",
+      "command": "PRIVMSG",
+      "params": [
+        "#channel",
+        ":not-a-prefix"
+      ],
+      "line": "PRIVMSG #channel ::not-a-prefix"
+    },
+    {
+      "name": "an empty last parameter becomes trailing",
+      "command": "PRIVMSG",
+      "params": [
+        "#channel",
+        ""
+      ],
+      "line": "PRIVMSG #channel :"
+    },
+    {
+      "name": "a sentence topic",
+      "command": "TOPIC",
+      "params": [
+        "#channel",
+        "the topic, with commas"
+      ],
+      "line": "TOPIC #channel :the topic, with commas"
+    },
+    {
+      "name": "a structured last parameter stays bare",
+      "command": "MODE",
+      "params": [
+        "#channel",
+        "+o",
+        "kara"
+      ],
+      "line": "MODE #channel +o kara"
+    },
+    {
+      "name": "CAP subcommands are tokens, not text",
+      "command": "CAP",
+      "params": [
+        "LS",
+        "302"
+      ],
+      "line": "CAP LS 302"
+    },
+    {
+      "name": "a metadata subscription keeps every key a separate token",
+      "command": "METADATA",
+      "params": [
+        "*",
+        "SUB",
+        "avatar",
+        "display-name",
+        "color"
+      ],
+      "line": "METADATA * SUB avatar display-name color"
+    },
+    {
+      "name": "a WHOX field list is a token",
+      "command": "WHO",
+      "params": [
+        "#channel",
+        "%tcuhsnfar,742"
+      ],
+      "line": "WHO #channel %tcuhsnfar,742"
+    },
+    {
+      "name": "message text is trailing even when it is one word",
+      "command": "PRIVMSG",
+      "params": [
+        "#channel",
+        "hi"
+      ],
+      "line": "PRIVMSG #channel :hi"
+    },
+    {
+      "name": "a topic is text, so it is trailing even as one word",
+      "command": "TOPIC",
+      "params": [
+        "#channel",
+        "quiet"
+      ],
+      "line": "TOPIC #channel :quiet"
+    },
+    {
+      "name": "a part reason is text",
+      "command": "PART",
+      "params": [
+        "#channel",
+        "bye"
+      ],
+      "line": "PART #channel :bye"
+    }
+  ],
+  "$serialiseRule": "A command whose last parameter is human text (PRIVMSG, NOTICE, TOPIC, PART, QUIT, KICK, AWAY, SETNAME, WALLOPS, USER) always sends it as trailing. Any other last parameter is trailing only when it is empty, contains a space, or starts with ':'. Earlier parameters are always sent bare."
+}

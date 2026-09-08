@@ -15,6 +15,8 @@ declare module 'sql.js' {
   interface Statement {
     bind(params?: unknown[]): boolean
     step(): boolean
+    /** Bind, execute and reset in one call — for statements with no result rows */
+    run(params?: unknown[]): void
     getAsObject(params?: Record<string, unknown>): Record<string, unknown>
     get(params?: unknown[]): unknown[]
     free(): boolean

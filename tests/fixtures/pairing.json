@@ -1,0 +1,46 @@
+{
+  "$comment": "Pairing payloads the desktop encodes into its QR and the phone parses. Read by tests/main/pairing.test.ts and the Android PairingTest, so the two agree about every shape — including the ones that must be refused rather than half-accepted.",
+  "encoded": [
+    {
+      "ticket": "endpointabc123",
+      "code": "482915",
+      "uri": "switchboard://pair?ticket=endpointabc123&code=482915"
+    },
+    {
+      "ticket": "endpointabc123",
+      "code": null,
+      "uri": "switchboard://pair?ticket=endpointabc123"
+    },
+    {
+      "ticket": "endpoint+abc/123=xyz&more",
+      "code": "000001",
+      "uri": "switchboard://pair?ticket=endpoint%2Babc%2F123%3Dxyz%26more&code=000001"
+    },
+    {
+      "ticket": "ENDPOINTmIxEdCaSe",
+      "code": "999999",
+      "uri": "switchboard://pair?ticket=ENDPOINTmIxEdCaSe&code=999999"
+    }
+  ],
+  "alsoAccepted": [
+    {
+      "input": "endpointabc123",
+      "ticket": "endpointabc123",
+      "code": null
+    },
+    {
+      "input": "  endpointabc123\n",
+      "ticket": "endpointabc123",
+      "code": null
+    }
+  ],
+  "rejected": [
+    "",
+    "   ",
+    "scan the code on your desktop",
+    "switchboard://pair?code=482915",
+    "switchboard://pair",
+    "https://example.com/pair?ticket=abc",
+    "mailto:someone@example.com"
+  ]
+}

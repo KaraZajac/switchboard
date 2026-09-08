@@ -17,12 +17,13 @@ import '../../src/main/irc/features/away'
 import '../../src/main/irc/features/chghost'
 import '../../src/main/irc/features/setname'
 import '../../src/main/irc/features/monitor'
-import '../../src/main/irc/features/whox'
+import { WHOX_TOKEN } from '../../src/main/irc/features/whox'
 import '../../src/main/irc/features/batch'
 import '../../src/main/irc/features/labeled'
 import '../../src/main/irc/features/readmarker'
 import '../../src/main/irc/features/rename'
 import '../../src/main/irc/features/redact'
+import '../../src/main/irc/features/account-registration'
 
 /**
  * Create a mock IRCClient for handler testing.
@@ -55,11 +56,23 @@ function createMockClient(overrides: Partial<{
     password: null
   }
 
+  // Nick recovery is a real part of the client the handlers talk to; record
+  // the calls rather than stubbing them away, so the tests can assert on them.
+  const nickRecovery: string[] = []
+
   return {
-    client: { state, events, connection, config } as any,
+    client: {
+      state,
+      events,
+      connection,
+      config,
+      startNickRecovery: () => nickRecovery.push('start'),
+      stopNickRecovery: () => nickRecovery.push('stop')
+    } as any,
     events,
     state,
-    sentLines
+    sentLines,
+    nickRecovery
   }
 }
 
@@ -454,7 +467,8 @@ describe('Message Handlers', () => {
       channel: '#general',
       nick: 'Alice',
       emoji: '👍',
-      msgid: 'msg123'
+      msgid: 'msg123',
+      removed: false
     })
   })
 })
@@ -693,7 +707,7 @@ describe('WHOX Handler', () => {
 
     // params: <nick> <token> <channel> <user> <host> <server> <nick> <flags> <account> <realname>
     dispatchMessage(client, parseMessage(
-      ':server 354 TestUser switchboard #general alice host.com irc.net Alice G@B alice_acct :Alice Real'
+      `:server 354 TestUser ${WHOX_TOKEN} #general alice host.com irc.net Alice G@B alice_acct :Alice Real`
     ))
 
     const user = ch.users.get('alice')!
@@ -718,10 +732,15 @@ describe('WHOX Handler', () => {
     expect(ch.users.size).toBe(0)
   })
 
+  it('uses a token the WHOX spec allows (numeric, at most 3 digits)', () => {
+    expect(WHOX_TOKEN).toMatch(/^\d{1,3}$/)
+  })
+
   it('handles RPL_ENDOFWHO (315) emitting names', () => {
     const { client, events, state } = createMockClient()
     const ch = state.getChannel('#general')
     ch.setUser('Alice', { nick: 'Alice', prefixes: ['@'] })
+    ch.setUser('Bob', { nick: 'Bob', prefixes: [] })
 
     const handler = vi.fn()
     events.on('names', handler)
@@ -733,6 +752,28 @@ describe('WHOX Handler', () => {
       users: expect.arrayContaining([
         expect.objectContaining({ nick: 'Alice' })
       ])
+    })
+  })
+
+  it('falls back to NAMES when WHOX produced no users', () => {
+    const { client, events, state, sentLines } = createMockClient()
+    const ch = state.getChannel('#general')
+    ch.setUser('TestUser', { nick: 'TestUser', prefixes: [] })
+
+    const handler = vi.fn()
+    events.on('names', handler)
+
+    dispatchMessage(client, parseMessage(':server 315 TestUser #general :End of /WHO list'))
+
+    expect(sentLines).toContain('NAMES #general')
+    expect(handler).not.toHaveBeenCalled()
+
+    // NAMES arrives, and the follow-up 315 then emits as usual
+    dispatchMessage(client, parseMessage(':server 353 TestUser = #general :TestUser @Alice'))
+    dispatchMessage(client, parseMessage(':server 366 TestUser #general :End of /NAMES list'))
+    expect(handler).toHaveBeenCalledWith({
+      channel: '#general',
+      users: expect.arrayContaining([expect.objectContaining({ nick: 'Alice' })])
     })
   })
 })
@@ -883,3 +924,155 @@ describe('REDACT Handler', () => {
     })
   })
 })
+
+/**
+ * Client tags, in both spellings.
+ *
+ * These specs are drafts and implementations disagree about the prefix. A
+ * reaction that silently does not arrive is indistinguishable from one nobody
+ * sent, so both forms are accepted rather than picking a side.
+ */
+describe('reaction tag spellings', () => {
+  const cases = [
+    ['@+draft/react=🎉;+draft/reply=abc :Bo!b@h TAGMSG #c', '🎉', 'abc', false],
+    ['@+react=🎉;+reply=abc :Bo!b@h TAGMSG #c', '🎉', 'abc', false],
+    ['@+draft/react=🎉;+reply=abc :Bo!b@h TAGMSG #c', '🎉', 'abc', false],
+    ['@+draft/unreact=🎉;+draft/reply=abc :Bo!b@h TAGMSG #c', '🎉', 'abc', true],
+    ['@+unreact=🎉;+reply=abc :Bo!b@h TAGMSG #c', '🎉', 'abc', true]
+  ] as const
+
+  for (const [line, emoji, msgid, removed] of cases) {
+    it(line.split(' ')[0], () => {
+      const { client, events } = createMockClient()
+      const handler = vi.fn()
+      events.on('react', handler)
+
+      dispatchMessage(client, parseMessage(line))
+
+      expect(handler).toHaveBeenCalledWith({
+        channel: '#c',
+        nick: 'Bo',
+        emoji,
+        msgid,
+        removed
+      })
+    })
+  }
+
+  it('takes typing in either spelling', () => {
+    for (const line of [
+      '@+typing=active :Bo!b@h TAGMSG #c',
+      '@+draft/typing=active :Bo!b@h TAGMSG #c'
+    ]) {
+      const { client, events } = createMockClient()
+      const handler = vi.fn()
+      events.on('typing', handler)
+
+      dispatchMessage(client, parseMessage(line))
+      expect(handler).toHaveBeenCalledWith({ channel: '#c', nick: 'Bo', status: 'active' })
+    }
+  })
+
+  it('a TAGMSG with neither is still delivered, not swallowed', () => {
+    const { client, events } = createMockClient()
+    const handler = vi.fn()
+    events.on('tagmsg', handler)
+
+    dispatchMessage(client, parseMessage('@+some/future-tag=x :Bo!b@h TAGMSG #c'))
+    expect(handler).toHaveBeenCalled()
+  })
+})
+
+/**
+ * A profile belongs to the person, not to the name they had at the time.
+ *
+ * Our own nick changes routinely — a fallback nick given back after a handover
+ * is the common case — and losing the display name, colour and avatar every
+ * time is how a rename turns someone into a stranger.
+ */
+describe('metadata across a rename', () => {
+  it('carries a profile to the new nick', () => {
+    const { client, state } = createMockClient({ nick: 'kara' })
+    state.metadata.set('robin', { 'display-name': 'Robin', pronouns: 'she/her' })
+
+    dispatchMessage(client, parseMessage(':robin!robin@host NICK robin_'))
+
+    expect(state.metadata.get('robin')).toBeUndefined()
+    expect(state.metadata.get('robin_')).toEqual({
+      'display-name': 'Robin',
+      pronouns: 'she/her'
+    })
+  })
+
+  it('carries our own profile when we get our nick back', () => {
+    const { client, state } = createMockClient({ nick: 'kara_' })
+    state.desiredNick = 'kara'
+    state.metadata.set('kara_', { 'display-name': 'Kara' })
+
+    dispatchMessage(client, parseMessage(':kara_!kara@host NICK kara'))
+
+    expect(state.nick).toBe('kara')
+    expect(state.metadata.get('kara')).toEqual({ 'display-name': 'Kara' })
+  })
+
+  it('leaves someone with no profile alone', () => {
+    const { client, state } = createMockClient({ nick: 'kara' })
+
+    dispatchMessage(client, parseMessage(':robin!robin@host NICK robin_'))
+
+    expect(state.metadata.size).toBe(0)
+  })
+})
+
+/**
+ * draft/account-registration, both halves.
+ *
+ * A server that wants an email confirmed answers REGISTER with
+ * VERIFICATION_REQUIRED and then waits. Handling the first half and not the
+ * second leaves an account created and unusable.
+ */
+describe('registering an account', () => {
+  it('reports a registration that succeeded outright', () => {
+    const { client, events } = createMockClient({ nick: 'kara' })
+    const seen = vi.fn()
+    events.on('accountRegistered', seen)
+
+    dispatchMessage(client, parseMessage(':irc.test REGISTER SUCCESS kara :You are now registered'))
+
+    expect(seen).toHaveBeenCalledWith({ account: 'kara', message: 'You are now registered' })
+  })
+
+  it('reports one that needs an email confirming', () => {
+    const { client, events } = createMockClient({ nick: 'kara' })
+    const seen = vi.fn()
+    events.on('accountRegistered', seen)
+
+    dispatchMessage(
+      client,
+      parseMessage(':irc.test REGISTER VERIFICATION_REQUIRED kara :Check your email')
+    )
+
+    expect(seen).toHaveBeenCalledWith({ account: 'kara', message: 'Check your email' })
+  })
+
+  it('reports the verification landing', () => {
+    const { client, events } = createMockClient({ nick: 'kara' })
+    const seen = vi.fn()
+    events.on('accountVerified', seen)
+
+    dispatchMessage(client, parseMessage(':irc.test VERIFY SUCCESS kara :Account verified'))
+
+    expect(seen).toHaveBeenCalledWith({ account: 'kara', message: 'Account verified' })
+  })
+
+  it('says nothing about a verification that did not succeed', () => {
+    const { client, events } = createMockClient({ nick: 'kara' })
+    const seen = vi.fn()
+    events.on('accountVerified', seen)
+
+    dispatchMessage(client, parseMessage(':irc.test VERIFY BAD_CODE kara :Wrong code'))
+
+    expect(seen).not.toHaveBeenCalled()
+  })
+})
+

@@ -94,3 +94,25 @@ describe('isImageUrl', () => {
     expect(isImageUrl('https://example.com/photo.JPG')).toBe(true)
   })
 })
+
+/**
+ * Favicons that are not favicons.
+ *
+ * `<link rel="icon" href="data:,">` is how a site says it has none — example.com
+ * does exactly this. Passing it through leaves a blank image slot in the
+ * preview, which reads as a failed load rather than a deliberate absence.
+ */
+describe('empty favicon data URIs', () => {
+  const isEmptyDataUri = (value: string) => /^data:[^,]*,\s*$/i.test(value)
+
+  it('recognises the ways a site says it has no icon', () => {
+    expect(isEmptyDataUri('data:,')).toBe(true)
+    expect(isEmptyDataUri('data:image/png;base64,')).toBe(true)
+    expect(isEmptyDataUri('data:, ')).toBe(true)
+  })
+
+  it('leaves a real icon alone', () => {
+    expect(isEmptyDataUri('https://example.com/favicon.ico')).toBe(false)
+    expect(isEmptyDataUri('data:image/png;base64,iVBORw0KGgo=')).toBe(false)
+  })
+})

@@ -8,3 +8,8 @@ dist/
 .env
 .DS_Store
 Thumbs.db
+
+# Android client build output
+android/app/build/
+android/.gradle/
+android/local.properties

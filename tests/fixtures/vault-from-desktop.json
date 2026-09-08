@@ -1,0 +1,38 @@
+{
+  "$comment": "Sealed by src/main/vault/crypto.ts. The Android unit tests open this; if they cannot, the two vault implementations have drifted.",
+  "passphrase": "correct horse battery staple ☕",
+  "payload": {
+    "servers": [
+      {
+        "id": "srv-1",
+        "name": "Libera",
+        "host": "irc.libera.chat",
+        "port": 6697,
+        "tls": true,
+        "nick": "kara",
+        "saslAccount": "kara",
+        "saslPassword": "hunter2"
+      }
+    ],
+    "profile": {
+      "display-name": "Kara",
+      "pronouns": "she/her",
+      "color": "#cba6f7"
+    }
+  },
+  "fingerprint": "be731abe987e",
+  "envelope": {
+    "format": 1,
+    "kdf": {
+      "name": "pbkdf2-sha256",
+      "iterations": 600000,
+      "salt": "8Kvl+Bdi4ceXcCVv8c65Cg=="
+    },
+    "iv": "lA1fqQ38gqc78o/W",
+    "ciphertext": "n+nY2cpmyknX/G3g3wl67R2nEtyDQcQdekpaCxyKK2xlksCxzs6CcVqbjea9QjkgG529CoplcgRj6WRMhkFwNbh49tLRZ0w82uS/ffSA7XuQ4Nk/ZRpfWsIqTryOf3tb2KQyUUxhMukzLiIXXJnwAmMS1QzS/f5WpiPK8pNdpAr246ErVLukUlHyYv6T0AhAV9JoGupmjnKBnBu+GGWrnWA99swLGaO2eMJKSJlK+apU/y1+/0ibuihePPijFuc5JH4VAsrYnO0Ca6wEqXhqxu8OukuhJkdoz4i27l01fBEb",
+    "tag": "QRk6ELmtX/3lUxcBcgeVmg==",
+    "version": 7,
+    "updatedAt": "2026-09-08T10:15:00.000Z",
+    "updatedBy": "desktop-fixture"
+  }
+}
