@@ -1,0 +1,8 @@
+{
+  "note": "A Web Push body (RFC 8291) written by src/main/push/webpush.ts. The Android suite decrypts it with the keys below; both sides also check that each can read what the other wrote.",
+  "plaintext": "someone said your name in #lounge",
+  "publicKey": "BK3QczgmFer5TFYPQtP1oZ6dfFln0+5UIIKgQxpBT68ReWRi4eNBOjdGaM8oL2ganuwEyKS0RrX9qmOrZLYNLFw=",
+  "privateKey": "ZZzzVjICUVedGMXe8bRYZLaJc0unJpEOxDyMHTvYNzA=",
+  "authSecret": "OIrxYLBaAsvrKMreXAbuAQ==",
+  "body": "X66H5fBXZSJz2tA6wG5Q1AAAEABBBO+ueKzlLbpFxH+OzB8bjlxXcZHc6xPN/OgRJMjZnjMNq2XoxLQjL3vbU7qbbU1mW/uwI7G+Y6v5Q36wLnjGHadCMoXmDsOIUS3tQcbNwUwx5UVHVEn3617ATgCuqEPOOzWY0ciY300fyEote3CNRFPSMA=="
+}

@@ -105,6 +105,7 @@ export interface MainToRendererEvents {
   'irc:cap': { serverId: string; capabilities: string[] }
   'irc:raw': { serverId: string; direction: 'in' | 'out'; line: string }
   'irc:verify': { serverId: string; account: string; message: string }
+  'irc:webpush': { serverId: string; subcommand: string; endpoint: string }
   'irc:setname': { serverId: string; nick: string; realname: string }
   'irc:metadata': { serverId: string; target: string; key: string; value: string }
   'irc:account-registered': { serverId: string; account: string; message: string }

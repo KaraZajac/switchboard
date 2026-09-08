@@ -464,6 +464,10 @@ export class IRCManager {
       this.send('irc:redact', { serverId, channel: data.channel, msgid: data.msgid })
     })
 
+    client.events.on('webpush', (data) => {
+      this.send('irc:webpush', { serverId, ...data })
+    })
+
     client.events.on('accountVerified', (data) => {
       this.send('irc:verify', { serverId, ...data })
     })

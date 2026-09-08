@@ -1,0 +1,8 @@
+{
+  "note": "A Web Push body written by the Kotlin implementation, for tests/main/webpush.test.ts to read.",
+  "plaintext": "from the phone",
+  "publicKey": "BK3QczgmFer5TFYPQtP1oZ6dfFln0+5UIIKgQxpBT68ReWRi4eNBOjdGaM8oL2ganuwEyKS0RrX9qmOrZLYNLFw=",
+  "privateKey": "ZZzzVjICUVedGMXe8bRYZLaJc0unJpEOxDyMHTvYNzA=",
+  "authSecret": "OIrxYLBaAsvrKMreXAbuAQ==",
+  "body": "CsQqOB/0EFN/dmgjtNrDTwAAEABBBOyf3dem+NoBblzMZ6Qub0wCGbj2CjikxXPy4DUWoLVtEENWKfRDAJa5TBAXL4vLeDFUsRkpZPyC0K/k9ftvkccYPiPxBEGLFfEo6yKYH/VFe74yrWPmXwmpp7zfcmd8"
+}

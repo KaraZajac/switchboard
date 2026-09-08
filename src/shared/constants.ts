@@ -58,6 +58,7 @@ export const REQUESTED_CAPS = [
   'draft/message-edit',
   'draft/chathistory',
   'draft/read-marker',
+  'draft/webpush',
   'draft/multiline',
   'draft/channel-rename',
   'draft/account-registration',

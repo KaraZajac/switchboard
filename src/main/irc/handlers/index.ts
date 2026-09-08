@@ -27,6 +27,7 @@ import '../features/readmarker'
 import '../features/rename'
 import '../features/redact'
 import '../features/metadata'
+import '../features/webpush'
 import '../features/account-registration'
 import '../features/autojoin'
 
