@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.Switchboard" parent="android:Theme.Material.NoActionBar">
+        <item name="android:statusBarColor">#181825</item>
+        <item name="android:navigationBarColor">#181825</item>
+    </style>
+</resources>

@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- The link to the desktop is a UDP/QUIC connection over whatever network
+         the phone is on; nothing here listens on a port. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- Only to read the pairing QR off the desktop's screen. Nothing is
+         recorded and no frame leaves the device. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+
+    <!-- A standby connection has to survive the app being backgrounded, and a
+         foreground service is the only way to say so. Android demotes a plain
+         background process to `cached` within a minute or two and tears down
+         its sockets with it. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+    <!-- Doze suspends the heartbeat. An exact alarm is the only thing that
+         still fires through it, and the exemption below is what makes the
+         difference between noticing a dead desktop in minutes and in hours. -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-feature android:name="android.hardware.camera.any" android:required="false" />
+
+    <application
+        android:name=".SwitchboardApp"
+        android:label="Switchboard"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.Switchboard">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:label="Switchboard"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!-- A pairing link, so a QR scanned by the system camera or shared
+                 from another device opens straight into pairing. -->
+            <intent-filter android:autoVerify="false">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="switchboard" android:host="pair" />
+            </intent-filter>
+        </activity>
+
+        <service
+            android:name=".SwitchboardService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+    </application>
+</manifest>

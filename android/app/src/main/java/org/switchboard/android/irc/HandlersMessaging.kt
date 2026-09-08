@@ -1,0 +1,227 @@
+package org.switchboard.android.irc
+
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import java.time.Instant
+import java.util.concurrent.atomic.AtomicLong
+
+/**
+ * What people say, and the tags they hang on it.
+ *
+ * PRIVMSG and NOTICE are the easy part. The rest — typing, reactions, replies,
+ * edits, redaction — all ride on message tags, so they arrive as ordinary
+ * messages that happen to carry more than text.
+ */
+
+private val counter = AtomicLong(0)
+
+internal fun messageId(message: IrcMessage, serverId: String): String =
+    message.tag("msgid") ?: "$serverId-${Instant.now().toEpochMilli()}-${counter.incrementAndGet()}"
+
+internal fun timestampOf(message: IrcMessage): String =
+    message.tag("time") ?: Instant.now().toString()
+
+internal fun registerMessagingHandlers() {
+
+    for (command in listOf("PRIVMSG", "NOTICE")) {
+        Handlers.on(command) { session, message ->
+            val state = session.state
+            val target = message.param(0) ?: return@on
+            val text = message.param(1) ?: return@on
+            val from = message.nick ?: message.prefix ?: return@on
+
+            // A private message belongs in a conversation named for the other
+            // person, not for our own nick.
+            val conversation = if (state.isMe(target)) from else target
+
+            // draft/message-edit: this replaces something already said rather
+            // than adding to it. Same event the desktop sends, so the store
+            // needs one handler rather than one per mode.
+            val edits = message.tag("+draft/edit") ?: message.tag("edit")
+            if (edits != null) {
+                session.emit("irc:edit", buildJsonObject {
+                    put("serverId", state.serverId)
+                    put("channel", conversation)
+                    put("originalId", edits)
+                    put("newContent", text)
+                    put("editedAt", timestampOf(message))
+                })
+                return@on
+            }
+
+            session.emit("irc:message", buildJsonObject {
+                put("serverId", state.serverId)
+                put("channel", conversation)
+                put("message", buildJsonObject {
+                    put("id", messageId(message, state.serverId))
+                    put("nick", from)
+                    put("content", text)
+                    put("timestamp", timestampOf(message))
+                    put("type", if (command == "NOTICE") "notice" else "privmsg")
+                    put("account", message.tag("account"))
+                    // draft/message-edit and the reply client tag
+                    put("replyTo", message.tag("+draft/reply") ?: message.tag("+reply"))
+                })
+            })
+        }
+    }
+
+    /**
+     * TAGMSG — a message that is only tags.
+     *
+     * Typing indicators and reactions travel this way, so a client that ignores
+     * TAGMSG loses both while seeing nothing wrong.
+     */
+    Handlers.on("TAGMSG") { session, message ->
+        val state = session.state
+        val target = message.param(0) ?: return@on
+        val from = message.nick ?: return@on
+        val conversation = if (state.isMe(target)) from else target
+
+        message.tag("+typing")?.let { typing ->
+            session.emit("irc:typing", buildJsonObject {
+                put("serverId", state.serverId)
+                put("channel", conversation)
+                put("nick", from)
+                put("state", typing)
+            })
+        }
+
+        val react = message.tag("+draft/react") ?: message.tag("+react")
+        val unreact = message.tag("+draft/unreact") ?: message.tag("+unreact")
+        val reactTo = message.tag("+draft/reply") ?: message.tag("+reply")
+        val emoji = react ?: unreact
+        if (emoji != null && reactTo != null) {
+            session.emit("irc:react", buildJsonObject {
+                put("serverId", state.serverId)
+                put("channel", conversation)
+                put("nick", from)
+                put("msgid", reactTo)
+                put("emoji", emoji)
+                put("removed", react == null)
+            })
+        }
+    }
+
+    /** draft/message-redaction — a message being taken back */
+    Handlers.on("REDACT") { session, message ->
+        session.emit("irc:redact", buildJsonObject {
+            put("serverId", session.state.serverId)
+            put("channel", message.param(0))
+            put("msgid", message.param(1))
+            put("reason", message.param(2))
+            put("by", message.nick)
+        })
+    }
+
+    /** draft/read-marker — where we had read up to, on another device */
+    Handlers.on("MARKREAD") { session, message ->
+        val timestamp = message.param(1)?.removePrefix("timestamp=")?.takeIf { it != "*" }
+        session.emit("irc:read-marker", buildJsonObject {
+            put("serverId", session.state.serverId)
+            put("channel", message.param(0))
+            put("timestamp", timestamp)
+        })
+    }
+}
+
+/**
+ * Asking for what was said before we arrived.
+ *
+ * Only meaningful once the phone is the connection; while it is following the
+ * desktop, the desktop is the one with the database.
+ */
+internal object ChatHistory {
+
+    fun requestLatest(session: IrcSession, target: String, limit: Int = 50) {
+        if (!session.state.capabilities.contains("draft/chathistory")) return
+        session.send("CHATHISTORY", "LATEST", target, "*", limit.toString())
+    }
+
+    fun requestBefore(session: IrcSession, target: String, timestamp: String, limit: Int = 50) {
+        if (!session.state.capabilities.contains("draft/chathistory")) return
+        session.send("CHATHISTORY", "BEFORE", target, "timestamp=$timestamp", limit.toString())
+    }
+}
+
+/**
+ * WHOX — a WHO that says which fields it wants.
+ *
+ * The token comes back in the reply so a client can tell its own query from
+ * one a script issued. It has to be numeric and short: some servers parse it as
+ * an integer and answer with 0, which fails every check below.
+ */
+internal object Whox {
+
+    const val TOKEN = "742"
+    private const val FIELDS = "%tcuhsnfar"
+
+    fun request(session: IrcSession, target: String) {
+        if (session.state.isupport.containsKey("WHOX")) {
+            session.send("WHO", target, "$FIELDS,$TOKEN")
+        } else {
+            session.send("WHO", target)
+        }
+    }
+
+    fun registerHandlers() {
+        // RPL_WHOSPCRPL — fields in the order requested above
+        Handlers.on("354") { session, message ->
+            val params = message.params
+            if (params.size < 10 || params[1] != TOKEN) return@on
+
+            val channel = session.state.findChannel(params[2]) ?: return@on
+            val flags = params[7]
+            val account = params[8].takeIf { it != "0" }
+
+            channel.setUser(params[6]) {
+                it.copy(
+                    nick = params[6],
+                    user = params[3],
+                    host = params[4],
+                    account = account,
+                    realname = params.getOrNull(9),
+                    away = flags.startsWith("G"),
+                    isBot = flags.contains("B"),
+                    prefixes = flags.drop(1)
+                        .filter { symbol -> session.state.prefixSymbols.contains(symbol) }
+                        .map { symbol -> symbol.toString() }
+                        .ifEmpty { it.prefixes }
+                )
+            }
+        }
+
+        // RPL_WHOREPLY — the plain form, for servers without WHOX
+        Handlers.on("352") { session, message ->
+            val channel = session.state.findChannel(message.param(1)) ?: return@on
+            val nick = message.param(5) ?: return@on
+            val flags = message.param(6).orEmpty()
+
+            channel.setUser(nick) {
+                it.copy(
+                    nick = nick,
+                    user = message.param(2),
+                    host = message.param(3),
+                    away = flags.startsWith("G"),
+                    isBot = flags.contains("B")
+                )
+            }
+        }
+
+        // RPL_ENDOFWHO
+        Handlers.on("315") { session, message ->
+            val channel = session.state.findChannel(message.param(1)) ?: return@on
+
+            // A safety net for servers whose WHOX reply we could not use: fall
+            // back to NAMES so the roster is never empty. 366 sets
+            // namesReceived, so this cannot loop.
+            if (!channel.namesReceived && channel.users.size <= 1) {
+                session.send("NAMES", channel.name)
+                return@on
+            }
+            emitNames(session, channel)
+        }
+    }
+}

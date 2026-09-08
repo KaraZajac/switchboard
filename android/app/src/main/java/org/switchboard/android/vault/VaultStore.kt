@@ -1,0 +1,202 @@
+package org.switchboard.android.vault
+
+import android.content.Context
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
+import org.switchboard.android.irc.ServerConfig
+import java.io.File
+import java.time.Instant
+
+/**
+ * The shared config, on the phone.
+ *
+ * The envelope is written to disk exactly as it arrived — still sealed. The
+ * passphrase is the only thing that opens it, and by default the key it derives
+ * lives in memory and nowhere else.
+ *
+ * That default is safe and, for a standby device, not enough on its own: the
+ * system restarts this app whenever it likes, and a phone that has to be asked
+ * for a passphrase before it can take over will sit beside a dead desktop doing
+ * nothing. So the key can also be kept — wrapped by the Android Keystore, never
+ * written down in the clear. See [KeyKeeper] for exactly what that protects.
+ *
+ * This mirrors `src/main/vault/vault.ts` on the desktop, including the part that
+ * matters most: a re-seal keeps the same salt, so a device that is already
+ * unlocked can open the next version without asking again.
+ */
+class VaultStore(context: Context) {
+
+    private val file = File(context.filesDir, "vault.json")
+    private val keeper = KeyKeeper(context)
+
+    private var key: ByteArray? = null
+    private var envelope: VaultEnvelope? = null
+    private var payload: VaultPayload? = null
+
+    private val json = Json {
+        ignoreUnknownKeys = true
+        encodeDefaults = true
+        explicitNulls = false
+    }
+
+    val exists: Boolean get() = envelope != null
+    val isUnlocked: Boolean get() = payload != null
+    val version: Int get() = envelope?.version ?: 0
+    val updatedBy: String? get() = envelope?.updatedBy
+    val fingerprint: String? get() = key?.let { VaultCrypto.keyFingerprint(it) }
+
+    /** Servers the phone can connect to on its own, once unlocked */
+    fun servers(): List<ServerConfig> = payload?.servers.orEmpty()
+
+    /** True when the key is being kept, so a restart does not lock us out */
+    val isKeptOpen: Boolean get() = keeper.isKept
+
+    init {
+        if (file.exists()) {
+            runCatching { envelope = VaultCrypto.decode(file.readText()) }
+        }
+
+        // If the user asked us to stay open, this is what makes a standby phone
+        // able to take over after the system restarts it in the night.
+        val sealed = envelope
+        val kept = keeper.recover()
+        if (sealed != null && kept != null) {
+            runCatching {
+                payload = json.decodeFromString(
+                    VaultPayload.serializer(),
+                    VaultCrypto.open(sealed, kept)
+                )
+                key = kept
+            }.onFailure {
+                // The vault was resealed under a different passphrase, or the
+                // keystore entry no longer matches. Ask again rather than
+                // pretending.
+                keeper.forget()
+            }
+        }
+    }
+
+    /**
+     * Try a passphrase against the vault we hold.
+     *
+     * Returns false rather than throwing: a mistyped passphrase is an ordinary
+     * thing for a person to do, not an exceptional one.
+     */
+    fun unlock(passphrase: String, keepOpen: Boolean = false): Boolean {
+        val sealed = envelope ?: return false
+        return try {
+            val derived = VaultCrypto.deriveKeyFor(sealed, passphrase)
+            payload = json.decodeFromString(
+                VaultPayload.serializer(),
+                VaultCrypto.open(sealed, derived)
+            )
+            key = derived
+            if (keepOpen) keeper.keep(derived) else keeper.forget()
+            true
+        } catch (e: Exception) {
+            payload = null
+            key = null
+            false
+        }
+    }
+
+    /**
+     * Lock it, and stop keeping it open.
+     *
+     * Locking has to mean locked: leaving a wrapped key behind would have the
+     * vault spring open again at the next restart, which is not what anyone
+     * pressing Lock is asking for.
+     */
+    fun lock() {
+        key?.fill(0)
+        key = null
+        payload = null
+        keeper.forget()
+    }
+
+    /** What the desktop's import did, and why it did it, for the UI to show */
+    data class Import(val accepted: Boolean, val reason: String)
+
+    /**
+     * Take a vault offered by the desktop.
+     *
+     * Only a strictly newer version is taken: an older one is either a stale
+     * peer or an attempt to roll config back to a version whose password
+     * somebody already has. An equal version is already what we hold.
+     */
+    fun accept(incoming: VaultEnvelope): Import {
+        if (exists && incoming.version <= version) {
+            return Import(false, "Ignored vault v${incoming.version}; this phone has v$version")
+        }
+
+        val currentKey = key
+        if (currentKey != null) {
+            // Verify it opens before replacing what is on disk. Half-applying a
+            // vault is how a user ends up locked out of their own config.
+            val opened = try {
+                json.decodeFromString(
+                    VaultPayload.serializer(),
+                    VaultCrypto.open(incoming, currentKey)
+                )
+            } catch (e: VaultLockedException) {
+                return Import(false, "That device is using a different passphrase")
+            }
+
+            envelope = incoming
+            payload = opened
+            file.writeText(VaultCrypto.encode(incoming))
+            return Import(true, "Adopted vault v${incoming.version}")
+        }
+
+        // Locked: we cannot check it opens, but storing it is still right — the
+        // user may unlock later, and refusing would leave the devices apart.
+        envelope = incoming
+        file.writeText(VaultCrypto.encode(incoming))
+        return Import(true, "Stored vault v${incoming.version}; unlock to apply it")
+    }
+
+    /**
+     * Seal the current contents under the next version.
+     *
+     * Keeps the envelope's existing salt, so every device that has already
+     * unlocked can open the result without being asked again.
+     */
+    fun reseal(servers: List<ServerConfig>, deviceName: String = "phone"): VaultEnvelope? {
+        val currentKey = key ?: return null
+        val sealed = envelope ?: return null
+
+        val next = VaultPayload(version = sealed.version + 1, servers = servers)
+        val resealed = VaultCrypto.seal(
+            payloadJson = json.encodeToString(VaultPayload.serializer(), next),
+            key = currentKey,
+            salt = java.util.Base64.getDecoder().decode(sealed.kdf.salt),
+            version = next.version,
+            updatedAt = Instant.now().toString(),
+            updatedBy = deviceName,
+            iterations = sealed.kdf.iterations
+        )
+
+        envelope = resealed
+        payload = next
+        file.writeText(VaultCrypto.encode(resealed))
+        // The salt is unchanged, so the kept key still opens this — but write
+        // it again rather than relying on that staying true.
+        if (keeper.isKept) keeper.keep(currentKey)
+        return resealed
+    }
+
+    /** The sealed envelope, for handing to another device */
+    fun sealedEnvelope(): VaultEnvelope? = envelope
+}
+
+/**
+ * What is inside the vault.
+ *
+ * The same document the desktop seals — `{ version, servers }` — so the phone
+ * deserialises exactly what `src/main/vault/vault.ts` wrote.
+ */
+@Serializable
+data class VaultPayload(
+    val version: Int = 0,
+    val servers: List<ServerConfig> = emptyList()
+)

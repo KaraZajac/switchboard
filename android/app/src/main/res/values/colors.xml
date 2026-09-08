@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The icon's background layer. The darkest colour in the app's own
+         palette rather than pure black, so the icon still reads as a shape on a
+         black wallpaper. -->
+    <color name="ic_launcher_background">#11111B</color>
+</resources>
