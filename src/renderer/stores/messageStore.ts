@@ -19,7 +19,14 @@ interface MessageState {
   addMessage: (serverId: string, channel: string, message: ChatMessage) => void
   setMessages: (serverId: string, channel: string, messages: ChatMessage[]) => void
   prependMessages: (serverId: string, channel: string, messages: ChatMessage[]) => void
-  addReaction: (serverId: string, channel: string, msgid: string, nick: string, emoji: string) => void
+  setReaction: (
+    serverId: string,
+    channel: string,
+    msgid: string,
+    nick: string,
+    emoji: string,
+    present: boolean
+  ) => void
   removeMessage: (serverId: string, channel: string, msgid: string) => void
   editMessage: (serverId: string, channel: string, msgid: string, newContent: string, editedAt: string) => void
   setTyping: (serverId: string, channel: string, nick: string, active: boolean) => void
@@ -73,17 +80,26 @@ export const useMessageStore = create<MessageState>((set, get) => ({
       }
     }),
 
-  addReaction: (serverId, channel, msgid, nick, emoji) =>
+  /**
+   * Add or take back one person's reaction.
+   *
+   * Both directions in one place: an unreact is the same event with a flag, and
+   * splitting them into two actions is how one of the two ends up unhandled.
+   */
+  setReaction: (serverId, channel, msgid, nick, emoji, present) =>
     set((state) => {
       const key = channelKey(serverId, channel)
       const messages = (state.messages[key] || []).map((m) => {
         if (m.id !== msgid) return m
+
+        const people = new Set(m.reactions[emoji] ?? [])
+        if (present) people.add(nick)
+        else people.delete(nick)
+
         const reactions = { ...m.reactions }
-        if (!reactions[emoji]) {
-          reactions[emoji] = [nick]
-        } else if (!reactions[emoji].includes(nick)) {
-          reactions[emoji] = [...reactions[emoji], nick]
-        }
+        if (people.size === 0) delete reactions[emoji]
+        else reactions[emoji] = [...people]
+
         return { ...m, reactions }
       })
       return { messages: { ...state.messages, [key]: messages } }

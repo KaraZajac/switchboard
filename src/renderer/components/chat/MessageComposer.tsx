@@ -1,14 +1,14 @@
 import { useState, useRef, useCallback, useEffect, type KeyboardEvent } from 'react'
 import type { ReplyTarget } from '../../stores/messageStore'
 import type { ChannelUser } from '@shared/types/channel'
-import { TYPING_THROTTLE_MS } from '@shared/constants'
+import { IRC_COMMANDS, TYPING_THROTTLE_MS } from '@shared/constants'
 import { GifPicker } from './GifPicker'
 import { useServerStore } from '../../stores/serverStore'
 
-const IRC_COMMANDS = [
-  '/me', '/join', '/part', '/nick', '/msg', '/whois', '/kick',
-  '/topic', '/mode', '/notice', '/quit', '/away', '/back'
-]
+/** Composer grows with its content up to this height, then scrolls */
+const MAX_COMPOSER_HEIGHT = 320
+
+const COMPLETION_COMMANDS = IRC_COMMANDS.map((name) => `/${name}`)
 
 interface MessageComposerProps {
   serverId: string
@@ -62,6 +62,27 @@ export function MessageComposer({
   useEffect(() => {
     setMentionIndex(0)
   }, [mentionQuery])
+
+  // Switching channel should leave the cursor ready to type, unless something
+  // else (a modal, the search box) is deliberately focused.
+  useEffect(() => {
+    const active = document.activeElement
+    const typingElsewhere =
+      active instanceof HTMLElement &&
+      active !== inputRef.current &&
+      (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.isContentEditable)
+    if (typingElsewhere || disabled) return
+    inputRef.current?.focus()
+  }, [serverId, channel, disabled])
+
+  // Grow the box to fit what has been typed — one line until the text wraps,
+  // then taller line by line, and scrolling once it hits the cap.
+  useEffect(() => {
+    const el = inputRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${Math.min(el.scrollHeight, MAX_COMPOSER_HEIGHT)}px`
+  }, [text])
 
   const acceptMention = useCallback((nick: string) => {
     const before = text.slice(0, mentionStart)
@@ -180,7 +201,7 @@ export function MessageComposer({
 
       if (prefix.startsWith('/')) {
         // Command completion
-        candidates = IRC_COMMANDS.filter((cmd) =>
+        candidates = COMPLETION_COMMANDS.filter((cmd) =>
           cmd.toLowerCase().startsWith(prefix)
         )
       } else if (prefix.startsWith('#') || prefix.startsWith('&')) {
@@ -232,13 +253,6 @@ export function MessageComposer({
       window.switchboard.invoke('message:typing', serverId, channel, 'done')
     }
   }, [serverId, channel, disabled])
-
-  const handleInput = useCallback(() => {
-    if (inputRef.current) {
-      inputRef.current.style.height = 'auto'
-      inputRef.current.style.height = Math.min(inputRef.current.scrollHeight, 200) + 'px'
-    }
-  }, [])
 
   return (
     <div className="px-4 pb-6 pt-0">
@@ -330,7 +344,6 @@ export function MessageComposer({
             onChange={(e) => {
               const val = e.target.value
               setText(val)
-              handleInput()
               completionState.current.active = false
 
               // Detect @mention query
@@ -354,8 +367,8 @@ export function MessageComposer({
             placeholder={disabled ? 'Not connected' : `Message ${channel}`}
             disabled={disabled}
             rows={1}
-            className="flex-1 resize-none bg-transparent px-4 py-3 text-gray-100 placeholder-gray-400 outline-none disabled:cursor-not-allowed disabled:opacity-50"
-            style={{ maxHeight: '200px' }}
+            className="composer-field flex-1 resize-none overflow-y-auto rounded-lg bg-transparent px-4 py-[11px] leading-[22px] text-gray-100 placeholder-gray-500 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+            style={{ maxHeight: `${MAX_COMPOSER_HEIGHT}px` }}
           />
 
           {/* GIF button */}

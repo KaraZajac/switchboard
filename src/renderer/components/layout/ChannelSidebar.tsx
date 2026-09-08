@@ -2,6 +2,7 @@ import { useState, useCallback, useMemo } from 'react'
 import { useServerStore } from '../../stores/serverStore'
 import { useChannelStore } from '../../stores/channelStore'
 import { ContextMenu } from '../common/ContextMenu'
+import { ServerMenu } from '../server/ServerMenu'
 import { ChannelBrowser } from '../channel/ChannelBrowser'
 import { UserProfilePanel } from '../user/UserProfilePanel'
 import { FriendList } from './FriendList'
@@ -36,6 +37,8 @@ export function ChannelSidebar() {
   const server = servers.find((s) => s.id === activeServerId)
   const [contextMenu, setContextMenu] = useState<ChannelContextState | null>(null)
   const [showBrowser, setShowBrowser] = useState(false)
+  const [serverMenu, setServerMenu] = useState<{ x: number; y: number } | null>(null)
+  const [channelsCollapsed, setChannelsCollapsed] = useState(false)
 
   const handleContextMenu = useCallback((e: React.MouseEvent, channelName: string, muted: boolean) => {
     e.preventDefault()
@@ -61,40 +64,39 @@ export function ChannelSidebar() {
     useChannelStore.getState().clearUnread(activeServerId, name)
   }
 
-  const handleConnect = () => {
-    if (!activeServerId) return
-    useServerStore.getState().setConnectionStatus(activeServerId, 'connecting')
-    window.switchboard.invoke('server:connect', activeServerId)
-  }
-
-  const handleDisconnect = () => {
-    if (!activeServerId) return
-    window.switchboard.invoke('server:disconnect', activeServerId)
-  }
-
   return (
-    <div className="flex w-60 shrink-0 flex-col bg-gray-800 no-select">
-      {/* Server name header */}
-      <div className="flex h-12 items-center justify-between border-b border-gray-700 px-4 shadow-sm">
-        <span className="truncate font-semibold">{server?.name || 'No Server'}</span>
-        {connectionStatus === 'connected' ? (
-          <button
-            onClick={handleDisconnect}
-            className="text-xs text-gray-400 hover:text-red-400"
-            title="Disconnect"
+    <div className="flex w-60 shrink-0 flex-col bg-gray-900 no-select">
+      {/* Server header — opens the server menu, like a Discord server dropdown */}
+      <button
+        onClick={(e) => {
+          const rect = e.currentTarget.getBoundingClientRect()
+          setServerMenu(serverMenu ? null : { x: rect.left + 8, y: rect.bottom + 2 })
+        }}
+        className="flex h-12 shrink-0 items-center justify-between gap-2 border-b border-gray-950/70 px-4 text-left shadow-sm transition-colors hover:bg-gray-700/30"
+        title="Server options"
+      >
+        <span className="truncate font-semibold text-gray-100">{server?.name || 'No Server'}</span>
+        <span className="flex shrink-0 items-center gap-1.5">
+          {connectionStatus !== 'connected' && (
+            <span
+              className={`h-2 w-2 rounded-full ${
+                connectionStatus === 'connecting' ? 'bg-yellow-500' : 'bg-gray-600'
+              }`}
+              title={connectionStatus === 'connecting' ? 'Connecting' : 'Not connected'}
+            />
+          )}
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="currentColor"
+            className={`text-gray-400 transition-transform ${serverMenu ? 'rotate-180' : ''}`}
+            aria-hidden="true"
           >
-            Disconnect
-          </button>
-        ) : (
-          <button
-            onClick={handleConnect}
-            className="text-xs text-gray-400 hover:text-green-400"
-            title="Connect"
-          >
-            {connectionStatus === 'connecting' ? 'Connecting...' : 'Connect'}
-          </button>
-        )}
-      </div>
+            <path d="M7 10l5 5 5-5z" />
+          </svg>
+        </span>
+      </button>
 
       {/* Channel list */}
       <div className="flex-1 overflow-y-auto px-2 py-2">
@@ -108,14 +110,28 @@ export function ChannelSidebar() {
         )}
 
         {(channels.length > 0 || connectionStatus === 'connected') && (
-          <div className="mb-1 flex items-center justify-between px-1">
-            <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+          <div className="mb-0.5 mt-3 flex items-center justify-between pl-0.5 pr-1">
+            <button
+              onClick={() => setChannelsCollapsed((c) => !c)}
+              className="flex items-center gap-0.5 text-xs font-semibold uppercase tracking-wide text-gray-400 transition-colors hover:text-gray-200"
+              title={channelsCollapsed ? 'Show channels' : 'Hide channels'}
+            >
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                className={`transition-transform ${channelsCollapsed ? '-rotate-90' : ''}`}
+                aria-hidden="true"
+              >
+                <path d="M7 10l5 5 5-5z" />
+              </svg>
               Channels
-            </span>
+            </button>
             {connectionStatus === 'connected' && (
               <button
                 onClick={() => setShowBrowser(true)}
-                className="rounded p-0.5 text-gray-400 hover:bg-gray-700 hover:text-gray-200"
+                className="rounded p-0.5 text-gray-400 transition-colors hover:bg-gray-700 hover:text-gray-100"
                 title="Browse channels"
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
@@ -126,47 +142,58 @@ export function ChannelSidebar() {
           </div>
         )}
 
-        {channels.map((ch) => {
-          const isActive =
-            activeChannel?.toLowerCase() === ch.name.toLowerCase()
-          const hasUnread = ch.unreadCount > 0
-          const hasMention = ch.mentionCount > 0
+        {!channelsCollapsed &&
+          channels.map((ch) => {
+            const isActive = activeChannel?.toLowerCase() === ch.name.toLowerCase()
+            const hasUnread = ch.unreadCount > 0 && !ch.muted
+            const hasMention = ch.mentionCount > 0
 
-          return (
-            <button
-              key={ch.name}
-              onClick={() => handleChannelClick(ch.name)}
-              onContextMenu={(e) => handleContextMenu(e, ch.name, ch.muted)}
-              className={`mb-0.5 flex w-full items-center justify-between rounded px-2 py-1.5 text-left transition-colors ${
-                isActive
-                  ? 'bg-gray-700 text-white'
-                  : hasUnread && !ch.muted
-                    ? 'text-gray-100 hover:bg-gray-700/50'
-                    : 'text-gray-400 hover:bg-gray-700/50 hover:text-gray-200'
-              }`}
-            >
-              <span className={`flex items-center truncate ${hasUnread && !isActive && !ch.muted ? 'font-semibold' : ''}`}>
-                <span className="mr-1 text-gray-500">#</span>
-                {ch.name.replace(/^#/, '')}
-                {ch.muted && (
-                  <svg className="ml-1 h-3 w-3 text-gray-500" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51A8.796 8.796 0 0 0 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06a8.99 8.99 0 0 0 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z" />
-                  </svg>
+            return (
+              <div key={ch.name} className="relative">
+                {/* Unread pill at the very edge of the sidebar */}
+                {hasUnread && !isActive && (
+                  <span className="absolute -left-2 top-1/2 h-2 w-1 -translate-y-1/2 rounded-r-full bg-gray-100" />
                 )}
-              </span>
+                <button
+                  onClick={() => handleChannelClick(ch.name)}
+                  onContextMenu={(e) => handleContextMenu(e, ch.name, ch.muted)}
+                  className={`mb-0.5 flex h-8 w-full items-center gap-1.5 rounded-md px-2 text-left transition-colors ${
+                    isActive
+                      ? 'bg-gray-700 text-white'
+                      : hasUnread
+                        ? 'text-gray-100 hover:bg-gray-700/40'
+                        : ch.muted
+                          ? 'text-gray-500 hover:bg-gray-700/40 hover:text-gray-300'
+                          : 'text-gray-400 hover:bg-gray-700/40 hover:text-gray-200'
+                  }`}
+                >
+                  <span className="text-lg leading-none text-gray-500">#</span>
+                  <span className={`flex-1 truncate ${hasUnread && !isActive ? 'font-semibold' : ''}`}>
+                    {ch.name.replace(/^#/, '')}
+                  </span>
+                  {ch.muted && (
+                    <svg
+                      className="h-3.5 w-3.5 shrink-0 text-gray-500"
+                      viewBox="0 0 24 24"
+                      fill="currentColor"
+                    >
+                      <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51A8.796 8.796 0 0 0 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06a8.99 8.99 0 0 0 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z" />
+                    </svg>
+                  )}
+                  {hasMention && (
+                    <span className="flex h-4 min-w-[16px] shrink-0 items-center justify-center rounded-full bg-red-500 px-1 text-xs font-bold text-white">
+                      {ch.mentionCount}
+                    </span>
+                  )}
+                </button>
+              </div>
+            )
+          })}
 
-              {hasMention && (
-                <span className="ml-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-red-500 px-1 text-xs font-bold text-white">
-                  {ch.mentionCount}
-                </span>
-              )}
-            </button>
-          )
-        })}
-
-        {channels.length === 0 && connectionStatus === 'connected' && (
-          <p className="px-2 py-4 text-center text-sm text-gray-500">
-            No channels yet. Join one with /join #channel
+        {channels.length === 0 && connectionStatus === 'connected' && !channelsCollapsed && (
+          <p className="px-2 py-3 text-sm leading-relaxed text-gray-500">
+            No channels yet — browse with the <span className="text-gray-400">+</span> above, or
+            type <span className="font-mono text-gray-400">/join #channel</span>.
           </p>
         )}
 
@@ -187,6 +214,20 @@ export function ChannelSidebar() {
 
       {/* Channel browser */}
       {showBrowser && <ChannelBrowser onClose={() => setShowBrowser(false)} />}
+
+      {/* Server dropdown */}
+      {serverMenu && activeServerId && (
+        <ServerMenu
+          serverId={activeServerId}
+          x={serverMenu.x}
+          y={serverMenu.y}
+          onClose={() => setServerMenu(null)}
+          extraItems={[
+            { label: 'Browse Channels', onClick: () => setShowBrowser(true) },
+            { label: '', onClick: () => {}, separator: true }
+          ]}
+        />
+      )}
 
       {/* Channel context menu */}
       {contextMenu && (
@@ -271,7 +312,7 @@ interface ServiceItemsProps {
 
 function ServiceItems({ activeChannel, allChannels, onChannelClick }: ServiceItemsProps) {
   return (
-    <div className="mb-2">
+    <div className="mb-1">
       {SERVICE_ENTRIES.map((entry) => {
         const isActive = activeChannel === entry.name ||
           (entry.name !== '*' && activeChannel?.toLowerCase() === entry.name.toLowerCase())
@@ -283,12 +324,12 @@ function ServiceItems({ activeChannel, allChannels, onChannelClick }: ServiceIte
           <button
             key={entry.name}
             onClick={() => onChannelClick(entry.name)}
-            className={`mb-0.5 flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm transition-colors ${
+            className={`mb-0.5 flex h-8 w-full items-center gap-2 rounded-md px-2 text-left transition-colors ${
               isActive
                 ? 'bg-gray-700 text-white'
                 : hasUnread
-                  ? 'text-gray-100 hover:bg-gray-700/50'
-                  : 'text-gray-400 hover:bg-gray-700/50 hover:text-gray-200'
+                  ? 'text-gray-100 hover:bg-gray-700/40'
+                  : 'text-gray-400 hover:bg-gray-700/40 hover:text-gray-200'
             }`}
           >
             <ServiceIcon type={entry.icon} />

@@ -3,6 +3,7 @@ import { useServerStore } from '../../stores/serverStore'
 import { useChannelStore } from '../../stores/channelStore'
 import { useMessageStore } from '../../stores/messageStore'
 import { useUserStore } from '../../stores/userStore'
+import { useUIStore } from '../../stores/uiStore'
 import type { ChannelUser } from '@shared/types/channel'
 import { SwitchboardIcon } from '../common/SwitchboardIcon'
 import { isChannelName } from '@shared/constants'
@@ -19,6 +20,7 @@ const EMPTY_NICKS: string[] = []
 
 export function ChatArea() {
   const activeServerId = useServerStore((s) => s.activeServerId)
+  const dmMode = useUIStore((s) => s.dmMode)
   const activeChannel = useChannelStore((s) =>
     activeServerId ? s.activeChannel[activeServerId] ?? null : null
   )
@@ -274,6 +276,22 @@ export function ChatArea() {
     )
   }
 
+  // In the DM view with no conversation open, the channel behind it is not what
+  // the sidebar is showing — prompt for a conversation instead.
+  if (dmMode && (!activeChannel || isChannelName(activeChannel) || activeChannel === '*')) {
+    return (
+      <div className="flex flex-1 items-center justify-center">
+        <div className="max-w-sm text-center">
+          <SwitchboardIcon size={64} bg="transparent" fg="#4b5563" className="mx-auto mb-4" />
+          <h2 className="mb-2 text-xl font-semibold text-gray-300">Direct Messages</h2>
+          <p className="text-sm text-gray-500">
+            Pick a conversation on the left, or start a new one with the + button.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
   // No channel selected or server console — show server messages (MOTD, etc.)
   if (!activeChannel || activeChannel === '*') {
     return <ServerMessages serverId={activeServerId} />
@@ -285,8 +303,10 @@ export function ChatArea() {
       <div
         ref={scrollRef}
         onScroll={handleScroll}
-        className="chat-messages flex-1 overflow-y-auto px-4 py-2"
+        className="chat-messages flex flex-1 flex-col overflow-y-auto px-4 py-2"
       >
+        {/* mt-auto keeps a short conversation pinned to the bottom */}
+        <div className="mt-auto">
         {/* Loading history indicator */}
         {loadingHistory && (
           <div className="flex justify-center py-2">
@@ -295,7 +315,7 @@ export function ChatArea() {
         )}
 
         {messages.length === 0 && (
-          <div className="flex h-full items-end pb-4">
+          <div className="flex items-end pb-4 pt-8">
             <div>
               {isChannelName(activeChannel) ? (
                 <>
@@ -324,15 +344,22 @@ export function ChatArea() {
         )}
 
         {messages.map((msg, i) => {
+          const prev = i > 0 ? messages[i - 1] : null
+
           // Show "New messages" divider
           const showDivider =
             initialReadMarker.current &&
-            i > 0 &&
-            messages[i - 1].timestamp <= initialReadMarker.current &&
+            prev &&
+            prev.timestamp <= initialReadMarker.current &&
             msg.timestamp > initialReadMarker.current
+
+          // A day boundary gets its own divider, and always starts a fresh
+          // message header rather than grouping onto yesterday's last line.
+          const startsNewDay = !prev || !isSameDay(prev.timestamp, msg.timestamp)
 
           return (
             <div key={msg.id}>
+              {startsNewDay && <DateDivider timestamp={msg.timestamp} />}
               {showDivider && (
                 <div ref={newMessagesDividerRef} className="my-2 flex items-center gap-2">
                   <div className="flex-1 border-t border-red-500/50" />
@@ -342,13 +369,32 @@ export function ChatArea() {
               )}
               <MessageItem
                 message={msg}
-                prevMessage={i > 0 ? messages[i - 1] : null}
+                prevMessage={startsNewDay ? null : prev}
                 onReply={handleReply}
               />
             </div>
           )
         })}
+        </div>
       </div>
+
+      {/* Back to the newest messages after scrolling up */}
+      {!autoScroll && (
+        <button
+          onClick={() => {
+            const el = scrollRef.current
+            if (!el) return
+            el.scrollTop = el.scrollHeight
+            setAutoScroll(true)
+          }}
+          className="mx-4 mb-1 flex items-center justify-center gap-1.5 rounded-md bg-gray-700/90 py-1 text-xs font-medium text-gray-200 shadow-lg transition-colors hover:bg-gray-600"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M12 16.5l-6-6 1.41-1.41L12 13.67l4.59-4.58L18 10.5z" />
+          </svg>
+          Jump to present
+        </button>
+      )}
 
       {/* Typing indicator */}
       <TypingIndicator nicks={typingNicks} />
@@ -417,6 +463,49 @@ function ServerMessages({ serverId }: { serverId: string }) {
           className="w-full rounded-lg bg-gray-700 px-4 py-2.5 text-sm text-gray-100 placeholder-gray-400 outline-none focus:ring-1 focus:ring-indigo-500"
         />
       </div>
+    </div>
+  )
+}
+
+/** Same calendar day in the viewer's timezone */
+function isSameDay(a: string, b: string): boolean {
+  const dateA = new Date(a)
+  const dateB = new Date(b)
+  return (
+    dateA.getFullYear() === dateB.getFullYear() &&
+    dateA.getMonth() === dateB.getMonth() &&
+    dateA.getDate() === dateB.getDate()
+  )
+}
+
+function dayLabel(iso: string): string {
+  const date = new Date(iso)
+  const today = new Date()
+  const yesterday = new Date(today)
+  yesterday.setDate(today.getDate() - 1)
+
+  if (isSameDay(iso, today.toISOString())) return 'Today'
+  if (isSameDay(iso, yesterday.toISOString())) return 'Yesterday'
+
+  const sameYear = date.getFullYear() === today.getFullYear()
+  return date.toLocaleDateString([], {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+    ...(sameYear ? {} : { year: 'numeric' })
+  })
+}
+
+/** Date separator between days of conversation */
+function DateDivider({ timestamp }: { timestamp: string }) {
+  const label = dayLabel(timestamp)
+  if (!label) return null
+
+  return (
+    <div className="my-4 flex items-center gap-3 no-select" aria-label={label}>
+      <div className="h-px flex-1 bg-gray-700" />
+      <span className="shrink-0 text-xs font-semibold text-gray-400">{label}</span>
+      <div className="h-px flex-1 bg-gray-700" />
     </div>
   )
 }

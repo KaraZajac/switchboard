@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import type { UserMetadata } from '@shared/types/metadata'
 import type { ServerConfig } from '@shared/types/server'
 
 interface ServerState {
@@ -13,7 +14,8 @@ interface ServerState {
   /** Our current nick per server */
   currentNick: Record<string, string>
   /** User avatars from metadata: `${serverId}:${nick}` -> URL */
-  userAvatars: Record<string, string>
+  /** Everyone's draft/metadata-2 profile: `serverId:nick` -> keys */
+  userMetadata: Record<string, UserMetadata>
   /** Muted servers: serverId -> muteUntil timestamp (0 = permanent) */
   mutedServers: Record<string, number>
   /** Network icons from ISUPPORT draft/ICON: serverId -> URL */
@@ -32,12 +34,14 @@ interface ServerState {
   setConnectionStatus: (id: string, status: 'disconnected' | 'connecting' | 'connected') => void
   setCapabilities: (id: string, caps: string[]) => void
   setCurrentNick: (id: string, nick: string) => void
-  setUserAvatar: (serverId: string, nick: string, url: string) => void
+  setUserMetadata: (serverId: string, nick: string, key: string, value: string) => void
   setNetworkIcon: (serverId: string, url: string) => void
   setFilehostUrl: (serverId: string, url: string) => void
   setAwayMessage: (serverId: string, message: string | null) => void
   muteServer: (serverId: string, durationMs?: number) => void
   unmuteServer: (serverId: string) => void
+  /** Apply saved server mutes at startup */
+  setMutedServers: (muted: Record<string, number>) => void
   isServerMuted: (serverId: string) => boolean
 }
 
@@ -47,7 +51,7 @@ export const useServerStore = create<ServerState>((set, get) => ({
   connectionStatus: {},
   capabilities: {},
   currentNick: {},
-  userAvatars: {},
+  userMetadata: {},
   mutedServers: {},
   networkIcons: {},
   filehostUrls: {},
@@ -91,10 +95,21 @@ export const useServerStore = create<ServerState>((set, get) => ({
       currentNick: { ...state.currentNick, [id]: nick }
     })),
 
-  setUserAvatar: (serverId, nick, url) =>
-    set((state) => ({
-      userAvatars: { ...state.userAvatars, [`${serverId}:${nick.toLowerCase()}`]: url }
-    })),
+  setUserMetadata: (serverId, nick, key, value) =>
+    set((state) => {
+      const mapKey = `${serverId}:${nick.toLowerCase()}`
+      const current = state.userMetadata[mapKey] ?? {}
+      const next = { ...current }
+
+      // An empty value is how the server says a key was cleared
+      if (value === '') {
+        delete next[key as keyof UserMetadata]
+      } else {
+        next[key as keyof UserMetadata] = value
+      }
+
+      return { userMetadata: { ...state.userMetadata, [mapKey]: next } }
+    }),
 
   setNetworkIcon: (serverId, url) =>
     set((state) => ({
@@ -118,6 +133,8 @@ export const useServerStore = create<ServerState>((set, get) => ({
         [serverId]: durationMs ? Date.now() + durationMs : 0
       }
     })),
+
+  setMutedServers: (muted) => set({ mutedServers: muted }),
 
   unmuteServer: (serverId) =>
     set((state) => {

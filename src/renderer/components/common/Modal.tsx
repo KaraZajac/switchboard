@@ -26,9 +26,11 @@ export function Modal({ title, onClose, children, width = 'max-w-lg' }: ModalPro
     <div
       ref={backdropRef}
       onClick={handleBackdropClick}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+      className="fixed inset-0 z-50 flex animate-[fade-in_120ms_ease-out] items-center justify-center bg-black/70"
     >
-      <div className={`${width} w-full rounded-lg bg-gray-800 shadow-2xl`}>
+      <div
+        className={`${width} w-full animate-[modal-in_140ms_ease-out] rounded-lg bg-gray-800 shadow-2xl ring-1 ring-gray-950/60`}
+      >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-gray-700 px-6 py-4">
           <h2 className="text-lg font-semibold text-gray-100">{title}</h2>

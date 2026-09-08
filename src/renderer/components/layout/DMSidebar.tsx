@@ -68,7 +68,7 @@ export function DMSidebar() {
   }
 
   return (
-    <div className="flex w-60 shrink-0 flex-col bg-gray-800 no-select">
+    <div className="flex w-60 shrink-0 flex-col bg-gray-900 no-select">
       {/* Header */}
       <div className="flex h-12 items-center justify-between border-b border-gray-700 px-4 shadow-sm">
         <span className="font-semibold">Direct Messages</span>
@@ -96,7 +96,7 @@ export function DMSidebar() {
               if (e.key === 'Escape') { setShowInput(false); setNewNick('') }
             }}
             placeholder="Enter a nickname..."
-            className="w-full rounded bg-gray-900 px-2 py-1.5 text-sm text-gray-100 placeholder-gray-500 outline-none focus:ring-1 focus:ring-indigo-500"
+            className="w-full rounded bg-gray-950 px-2 py-1.5 text-sm text-gray-100 placeholder-gray-500 outline-none focus:ring-1 focus:ring-indigo-500"
           />
         </div>
       )}

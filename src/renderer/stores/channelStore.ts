@@ -12,9 +12,18 @@ interface ChannelInfo {
   muteUntil: number
 }
 
+/** Key for the mute map: server + lowercased channel name */
+const muteKey = (serverId: string, name: string): string => `${serverId}:${name.toLowerCase()}`
+
+/** A stored mute counts only until it expires (0 means "until manually unmuted") */
+const isMuteActive = (muteUntil: number | undefined): boolean =>
+  muteUntil !== undefined && (muteUntil === 0 || muteUntil > Date.now())
+
 interface ChannelState {
   /** Channels per server: serverId -> channel[] */
   channels: Record<string, ChannelInfo[]>
+  /** Muted channels: `serverId:channel` -> expiry timestamp (0 = permanent) */
+  mutedChannels: Record<string, number>
   /** Currently active channel per server: serverId -> channelName */
   activeChannel: Record<string, string>
   /** Read marker timestamps: `serverId:channel` -> ISO timestamp */
@@ -28,6 +37,8 @@ interface ChannelState {
   incrementUnread: (serverId: string, name: string, mention?: boolean) => void
   clearUnread: (serverId: string, name: string) => void
   toggleMute: (serverId: string, name: string, durationMs?: number) => void
+  /** Apply saved mutes at startup, before any channel has been joined */
+  hydrateMutes: (muted: Record<string, number>) => void
   renameChannel: (serverId: string, oldName: string, newName: string) => void
   setReadMarker: (serverId: string, channel: string, timestamp: string) => void
   setReadMarkers: (serverId: string, markers: Record<string, string>) => void
@@ -36,6 +47,7 @@ interface ChannelState {
 
 export const useChannelStore = create<ChannelState>((set) => ({
   channels: {},
+  mutedChannels: {},
   activeChannel: {},
   readMarkers: {},
 
@@ -45,6 +57,9 @@ export const useChannelStore = create<ChannelState>((set) => ({
       if (existing.some((ch) => ch.name.toLowerCase() === name.toLowerCase())) {
         return state
       }
+      // A channel muted in an earlier session comes back muted
+      const savedMute = state.mutedChannels[muteKey(serverId, name)]
+      const stillMuted = isMuteActive(savedMute)
       return {
         channels: {
           ...state.channels,
@@ -57,8 +72,8 @@ export const useChannelStore = create<ChannelState>((set) => ({
               topicSetBy: null,
               unreadCount: 0,
               mentionCount: 0,
-              muted: false,
-              muteUntil: 0
+              muted: stillMuted,
+              muteUntil: stillMuted ? (savedMute as number) : 0
             }
           ]
         },
@@ -178,24 +193,55 @@ export const useChannelStore = create<ChannelState>((set) => ({
     }),
 
   toggleMute: (serverId, name, durationMs) =>
-    set((state) => ({
-      channels: {
-        ...state.channels,
-        [serverId]: (state.channels[serverId] || []).map((ch) => {
-          if (ch.name.toLowerCase() !== name.toLowerCase()) return ch
-          if (ch.muted) {
-            // Unmute
-            return { ...ch, muted: false, muteUntil: 0 }
-          }
-          // Mute with optional duration
-          return {
-            ...ch,
-            muted: true,
-            muteUntil: durationMs ? Date.now() + durationMs : 0
-          }
-        })
+    set((state) => {
+      const key = muteKey(serverId, name)
+      const wasMuted = isMuteActive(state.mutedChannels[key])
+      const muteUntil = durationMs ? Date.now() + durationMs : 0
+
+      const mutedChannels = { ...state.mutedChannels }
+      if (wasMuted) {
+        delete mutedChannels[key]
+      } else {
+        mutedChannels[key] = muteUntil
       }
-    })),
+
+      return {
+        mutedChannels,
+        channels: {
+          ...state.channels,
+          [serverId]: (state.channels[serverId] || []).map((ch) =>
+            ch.name.toLowerCase() === name.toLowerCase()
+              ? { ...ch, muted: !wasMuted, muteUntil: wasMuted ? 0 : muteUntil }
+              : ch
+          )
+        }
+      }
+    }),
+
+  hydrateMutes: (muted) =>
+    set((state) => {
+      // Drop mutes that ran out while the app was closed
+      const active = Object.fromEntries(
+        Object.entries(muted).filter(([, muteUntil]) => isMuteActive(muteUntil))
+      )
+
+      return {
+        mutedChannels: active,
+        channels: Object.fromEntries(
+          Object.entries(state.channels).map(([serverId, channels]) => [
+            serverId,
+            channels.map((ch) => {
+              const savedMute = active[muteKey(serverId, ch.name)]
+              return {
+                ...ch,
+                muted: savedMute !== undefined,
+                muteUntil: savedMute ?? 0
+              }
+            })
+          ])
+        )
+      }
+    }),
 
   clearServerChannels: (serverId) =>
     set((state) => ({

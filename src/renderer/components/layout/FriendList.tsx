@@ -50,8 +50,8 @@ export function FriendList() {
   if (connectionStatus !== 'connected') return null
   if (monitoredNicks.length === 0 && !addingNick) {
     return (
-      <div className="px-1">
-        <div className="mb-1 flex items-center justify-between px-1">
+      <div>
+        <div className="mb-0.5 mt-3 flex items-center justify-between pl-[15px] pr-1">
           <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">
             Friends
           </span>
@@ -70,8 +70,8 @@ export function FriendList() {
   }
 
   return (
-    <div className="px-1">
-      <div className="mb-1 flex items-center justify-between px-1">
+    <div>
+      <div className="mb-0.5 mt-3 flex items-center justify-between pl-[15px] pr-1">
         <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">
           Friends
         </span>

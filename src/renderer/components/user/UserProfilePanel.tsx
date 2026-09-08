@@ -1,5 +1,12 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { useServerStore } from '../../stores/serverStore'
+import {
+  METADATA_FIELDS,
+  METADATA_KEYS,
+  displayNameFor,
+  metadataColor,
+  type UserMetadata
+} from '@shared/types/metadata'
 
 /** Avatar image with fallback to letter initial on error */
 function AvatarImg({ src, nick, size = 'h-8 w-8', textSize = 'text-sm' }: { src: string; nick: string; size?: string; textSize?: string }) {
@@ -39,7 +46,7 @@ export function UserProfilePanel() {
   const servers = useServerStore((s) => s.servers)
   const currentNicks = useServerStore((s) => s.currentNick)
   const connectionStatuses = useServerStore((s) => s.connectionStatus)
-  const userAvatars = useServerStore((s) => s.userAvatars)
+  const userMetadata = useServerStore((s) => s.userMetadata)
   const allCapabilities = useServerStore((s) => s.capabilities)
   const awayMessages = useServerStore((s) => s.awayMessage)
 
@@ -47,9 +54,11 @@ export function UserProfilePanel() {
   const currentNick = activeServerId ? currentNicks[activeServerId] ?? null : null
   const server = servers.find((sv) => sv.id === activeServerId)
   const connectionStatus = activeServerId ? connectionStatuses[activeServerId] ?? 'disconnected' : 'disconnected'
-  const avatarUrl = activeServerId && currentNick
-    ? userAvatars[`${activeServerId}:${currentNick.toLowerCase()}`] ?? null
-    : null
+  const myMetadata: UserMetadata =
+    activeServerId && currentNick
+      ? userMetadata[`${activeServerId}:${currentNick.toLowerCase()}`] ?? {}
+      : {}
+  const avatarUrl = myMetadata.avatar ?? null
   const capabilities = activeServerId ? allCapabilities[activeServerId] ?? [] : []
   const awayMessage = activeServerId ? awayMessages[activeServerId] ?? null : null
   const isAway = awayMessage !== null
@@ -73,12 +82,12 @@ export function UserProfilePanel() {
     return null
   }
 
-  const displayNick = currentNick
+  const displayNick = displayNameFor(currentNick, myMetadata)
   const supportsSetname = capabilities.includes('setname')
   const supportsMetadata = capabilities.includes('draft/metadata-2')
 
   return (
-    <div className="relative border-t border-gray-700">
+    <div className="relative bg-gray-950">
       <button
         onClick={() => setShowPopup(!showPopup)}
         className="flex w-full items-center gap-2 px-3 py-2 hover:bg-gray-700/50"
@@ -96,7 +105,7 @@ export function UserProfilePanel() {
         <div className="min-w-0 flex-1 text-left">
           <div className="truncate text-sm font-medium text-gray-100">{displayNick}</div>
           <div className={`truncate text-xs ${isAway ? 'text-yellow-400' : 'text-gray-400'}`}>
-            {isAway ? awayMessage : 'Online'}
+            {isAway ? awayMessage : myMetadata.status || 'Online'}
           </div>
         </div>
 
@@ -117,7 +126,7 @@ export function UserProfilePanel() {
           nick={displayNick}
           username={server?.username ?? ''}
           realname={server?.realname ?? ''}
-          avatarUrl={avatarUrl}
+          metadata={myMetadata}
           awayMessage={awayMessage}
           supportsSetname={supportsSetname}
           supportsMetadata={supportsMetadata}
@@ -134,7 +143,7 @@ interface ProfileEditPopupProps {
   nick: string
   username: string
   realname: string
-  avatarUrl: string | null
+  metadata: UserMetadata
   awayMessage: string | null
   supportsSetname: boolean
   supportsMetadata: boolean
@@ -147,7 +156,7 @@ function ProfileEditPopup({
   nick,
   username,
   realname,
-  avatarUrl,
+  metadata,
   awayMessage,
   supportsSetname,
   supportsMetadata,
@@ -156,7 +165,7 @@ function ProfileEditPopup({
 }: ProfileEditPopupProps) {
   const [editNick, setEditNick] = useState(nick)
   const [editRealname, setEditRealname] = useState(realname)
-  const [editAvatarUrl, setEditAvatarUrl] = useState(avatarUrl ?? '')
+  const [editMetadata, setEditMetadata] = useState<UserMetadata>(metadata)
   const [editAwayMessage, setEditAwayMessage] = useState(awayMessage ?? '')
   const [isAway, setIsAway] = useState(awayMessage !== null)
   const [saving, setSaving] = useState(false)
@@ -184,12 +193,28 @@ function ProfileEditPopup({
         }
       }
 
-      // Set avatar via metadata if supported
-      if (supportsMetadata && editAvatarUrl.trim() !== (avatarUrl ?? '')) {
-        const newUrl = editAvatarUrl.trim()
-        // Update locally immediately for instant feedback
-        useServerStore.getState().setUserAvatar(serverId, nick, newUrl)
-        await window.switchboard.invoke('metadata:set', serverId, 'avatar', newUrl)
+      // Publish whichever metadata keys changed, and remember them locally so
+      // they can be republished on the next connect.
+      if (supportsMetadata) {
+        const changed = METADATA_KEYS.filter(
+          (key) => (editMetadata[key] ?? '').trim() !== (metadata[key] ?? '')
+        )
+
+        for (const key of changed) {
+          const value = (editMetadata[key] ?? '').trim()
+          useServerStore.getState().setUserMetadata(serverId, nick, key, value)
+          await window.switchboard.invoke('metadata:set', serverId, key, value)
+        }
+
+        if (changed.length > 0) {
+          const profile: UserMetadata = {}
+          for (const key of METADATA_KEYS) {
+            const value = (editMetadata[key] ?? '').trim()
+            if (value) profile[key] = value
+          }
+          await window.switchboard.invoke('server:update', serverId, { profile })
+          useServerStore.getState().updateServer(serverId, { profile })
+        }
       }
 
       // Set/clear away status
@@ -208,7 +233,7 @@ function ProfileEditPopup({
     } finally {
       setSaving(false)
     }
-  }, [serverId, nick, editNick, realname, editRealname, avatarUrl, editAvatarUrl, awayMessage, isAway, editAwayMessage, supportsSetname, supportsMetadata, onClose])
+  }, [serverId, nick, editNick, realname, editRealname, metadata, editMetadata, awayMessage, isAway, editAwayMessage, supportsSetname, supportsMetadata, onClose])
 
   return (
     <div
@@ -220,8 +245,8 @@ function ProfileEditPopup({
       <div className="space-y-3">
         {/* Avatar preview */}
         <div className="flex items-center gap-3">
-          {editAvatarUrl ? (
-            <AvatarImg src={editAvatarUrl} nick={editNick || nick} size="h-12 w-12" textSize="text-lg" />
+          {editMetadata.avatar ? (
+            <AvatarImg src={editMetadata.avatar} nick={editNick || nick} size="h-12 w-12" textSize="text-lg" />
           ) : (
             <div className="flex h-12 w-12 items-center justify-center rounded-full bg-indigo-500 text-lg font-medium text-white">
               {(editNick || nick).charAt(0).toUpperCase()}
@@ -260,28 +285,49 @@ function ProfileEditPopup({
           />
         </div>
 
-        {/* Avatar URL */}
-        <div>
-          <label className="mb-1 block text-xs font-medium text-gray-400">
-            Avatar URL
+        {/* draft/metadata-2 profile */}
+        <div className="space-y-2 border-t border-gray-800 pt-3">
+          <div className="flex items-baseline justify-between">
+            <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+              Profile
+            </span>
             {!supportsMetadata && (
-              <span className="ml-1 text-gray-500">(not supported by server)</span>
+              <span className="text-xs text-gray-500">not supported by this server</span>
             )}
-          </label>
-          <input
-            type="text"
-            value={editAvatarUrl}
-            onChange={(e) => setEditAvatarUrl(e.target.value)}
-            placeholder="https://example.com/avatar.png"
-            disabled={!supportsMetadata}
-            className="w-full rounded bg-gray-800 px-2.5 py-1.5 text-sm text-gray-100 outline-none ring-1 ring-gray-700 focus:ring-indigo-500 disabled:opacity-50"
-          />
+          </div>
+
+          {METADATA_FIELDS.map((field) => (
+            <div key={field.key}>
+              <label className="mb-1 flex items-baseline gap-2 text-xs font-medium text-gray-400">
+                {field.label}
+                {field.hint && <span className="text-gray-500">{field.hint}</span>}
+              </label>
+              <div className="flex items-center gap-2">
+                {field.key === 'color' && metadataColor(editMetadata.color) && (
+                  <span
+                    className="h-4 w-4 shrink-0 rounded-full ring-1 ring-gray-700"
+                    style={{ backgroundColor: metadataColor(editMetadata.color) as string }}
+                  />
+                )}
+                <input
+                  type="text"
+                  value={editMetadata[field.key] ?? ''}
+                  onChange={(e) =>
+                    setEditMetadata((current) => ({ ...current, [field.key]: e.target.value }))
+                  }
+                  placeholder={field.placeholder}
+                  disabled={!supportsMetadata}
+                  className="w-full rounded bg-gray-800 px-2.5 py-1.5 text-sm text-gray-100 outline-none ring-1 ring-gray-700 focus:ring-indigo-500 disabled:opacity-50"
+                />
+              </div>
+            </div>
+          ))}
         </div>
 
         {/* Away status */}
         <div>
           <div className="mb-1 flex items-center justify-between">
-            <label className="text-xs font-medium text-gray-400">Status</label>
+            <label className="text-xs font-medium text-gray-400">Availability</label>
             <button
               onClick={() => setIsAway(!isAway)}
               className={`rounded px-2 py-0.5 text-xs font-medium ${

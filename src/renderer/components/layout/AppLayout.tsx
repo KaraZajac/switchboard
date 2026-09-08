@@ -5,6 +5,7 @@ import { DMSidebar } from './DMSidebar'
 import { ChatArea } from './ChatArea'
 import { UserList } from './UserList'
 import { TitleBar } from './TitleBar'
+import { WindowControls } from './WindowControls'
 import { useUIStore } from '../../stores/uiStore'
 import { useServerStore } from '../../stores/serverStore'
 import { SettingsModal } from '../settings/SettingsModal'
@@ -24,12 +25,18 @@ export function AppLayout() {
   const isFirstRun = servers.length === 0
 
   return (
-    <div className="flex h-screen w-screen flex-col overflow-hidden bg-gray-900 text-gray-100">
-      {/* Draggable title bar region for macOS window controls */}
+    <div className="flex h-screen w-screen flex-col overflow-hidden bg-gray-800 text-gray-100">
+      {/* App-drawn window frame: drag region, plus controls off macOS */}
       <div
-        className="h-9 w-full flex-shrink-0 bg-gray-950"
+        className="flex h-8 w-full flex-shrink-0 items-center justify-between bg-gray-950 pl-3"
         style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
-      />
+        onDoubleClick={() => window.switchboard?.invoke('window:maximize').catch(() => {})}
+      >
+        <span className="text-xs font-medium tracking-wide text-gray-500 no-select">
+          Switchboard
+        </span>
+        <WindowControls />
+      </div>
 
       {isFirstRun ? (
         <WelcomeScreen />

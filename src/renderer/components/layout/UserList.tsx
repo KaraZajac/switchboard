@@ -4,6 +4,7 @@ import { useChannelStore } from '../../stores/channelStore'
 import { useUserStore } from '../../stores/userStore'
 import { useUIStore } from '../../stores/uiStore'
 import { nickColor } from '../../utils/nickColor'
+import { displayNameFor, metadataColor, type UserMetadata } from '@shared/types/metadata'
 import { ContextMenu, type ContextMenuItem } from '../common/ContextMenu'
 import type { ChannelUser } from '@shared/types/channel'
 import { PREFIX_RANKS } from '@shared/types/channel'
@@ -61,14 +62,19 @@ export function UserList() {
   ] : []
 
   return (
-    <div className="w-60 shrink-0 overflow-y-auto bg-gray-800 px-2 py-4 no-select">
+    <div className="w-60 shrink-0 overflow-y-auto bg-gray-900 px-2 py-3 no-select">
       {groups.map((group) => (
         <div key={group.label}>
           <div className="mb-1 mt-4 px-2 text-xs font-semibold uppercase tracking-wide text-gray-400 first:mt-0">
             {group.label} — {group.users.length}
           </div>
           {group.users.map((user) => (
-            <UserItem key={user.nick} user={user} onContextMenu={handleContextMenu} />
+            <UserItem
+              key={user.nick}
+              user={user}
+              onContextMenu={handleContextMenu}
+              onClick={handleWhois}
+            />
           ))}
         </div>
       ))}
@@ -90,20 +96,36 @@ export function UserList() {
   )
 }
 
-function UserItem({ user, onContextMenu }: { user: ChannelUser; onContextMenu: (e: React.MouseEvent, user: ChannelUser) => void }) {
+function UserItem({
+  user,
+  onContextMenu,
+  onClick
+}: {
+  user: ChannelUser
+  onContextMenu: (e: React.MouseEvent, user: ChannelUser) => void
+  onClick: (nick: string) => void
+}) {
   const activeServerId = useServerStore((s) => s.activeServerId)
-  const userAvatars = useServerStore((s) => s.userAvatars)
-  const avatarUrl = activeServerId
-    ? userAvatars[`${activeServerId}:${user.nick.toLowerCase()}`] ?? null
-    : null
+  const userMetadata = useServerStore((s) => s.userMetadata)
+  const metadata: UserMetadata = activeServerId
+    ? userMetadata[`${activeServerId}:${user.nick.toLowerCase()}`] ?? {}
+    : {}
+  const avatarUrl = metadata.avatar ?? null
+  const shownName = displayNameFor(user.nick, metadata)
+  const nameColor = metadataColor(metadata.color)
 
-  const tooltipParts = [user.nick]
+  const tooltipParts = [shownName === user.nick ? user.nick : `${shownName} (${user.nick})`]
+  if (metadata.pronouns) tooltipParts.push(metadata.pronouns)
+  if (metadata.status) tooltipParts.push(metadata.status)
+  if (metadata.homepage) tooltipParts.push(metadata.homepage)
   if (user.account) tooltipParts.push(`Account: ${user.account}`)
   if (user.away && user.awayMessage) tooltipParts.push(`Away: ${user.awayMessage}`)
 
   return (
-    <div
-      className="group flex items-center gap-2 rounded px-2 py-1 hover:bg-gray-700/50"
+    <button
+      type="button"
+      className="group flex w-full items-center gap-2 rounded px-2 py-1 text-left transition-colors hover:bg-gray-700/50"
+      onClick={() => onClick(user.nick)}
       onContextMenu={(e) => onContextMenu(e, user)}
       title={tooltipParts.join('\n')}
     >
@@ -120,11 +142,10 @@ function UserItem({ user, onContextMenu }: { user: ChannelUser; onContextMenu: (
 
         {/* Nick */}
         <span
-          className={`truncate text-sm ${
-            user.away ? 'text-gray-500' : 'text-gray-300'
-          }`}
+          className={`truncate text-sm ${user.away ? 'text-gray-500' : 'text-gray-300'}`}
+          style={nameColor && !user.away ? { color: nameColor } : undefined}
         >
-          {user.nick}
+          {shownName}
         </span>
 
         {/* Bot badge */}
@@ -134,7 +155,7 @@ function UserItem({ user, onContextMenu }: { user: ChannelUser; onContextMenu: (
           </span>
         )}
       </div>
-    </div>
+    </button>
   )
 }
 

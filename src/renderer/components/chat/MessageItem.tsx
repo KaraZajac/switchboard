@@ -7,6 +7,7 @@ import { useServerStore } from '../../stores/serverStore'
 import { useChannelStore } from '../../stores/channelStore'
 import { useUserStore, type MonitoredNick } from '../../stores/userStore'
 import { nickColor } from '../../utils/nickColor'
+import { displayNameFor, metadataColor } from '@shared/types/metadata'
 
 interface MessageItemProps {
   message: ChatMessage
@@ -15,8 +16,9 @@ interface MessageItemProps {
 }
 
 export function MessageItem({ message, prevMessage, onReply }: MessageItemProps) {
-  const userAvatars = useServerStore((s) => s.userAvatars)
-  const avatarUrl = userAvatars[`${message.serverId}:${message.nick.toLowerCase()}`] ?? null
+  const userMetadata = useServerStore((s) => s.userMetadata)
+  const senderMetadata = userMetadata[`${message.serverId}:${message.nick.toLowerCase()}`]
+  const avatarUrl = senderMetadata?.avatar ?? null
   const currentNick = useServerStore((s) => s.currentNick[message.serverId] ?? '')
   const compactMode = useUIStore((s) => s.compactMode)
   const [editing, setEditing] = useState(false)
@@ -28,6 +30,7 @@ export function MessageItem({ message, prevMessage, onReply }: MessageItemProps)
   const isDeleted = message.deleted === true
   const isOwn = currentNick.toLowerCase() === message.nick.toLowerCase()
   const isEdited = !!message.editedAt
+
 
   // Detect if this message mentions our nick
   const isMention = !isOwn && currentNick && message.type === 'privmsg' &&
@@ -78,7 +81,7 @@ export function MessageItem({ message, prevMessage, onReply }: MessageItemProps)
 
   if (isAction) {
     return (
-      <div className="group relative flex items-start px-2 py-0.5 hover:bg-gray-800/30">
+      <div className="group relative flex items-start px-2 py-0.5 hover:bg-gray-700/25">
         <span className="mr-2 mt-0.5 min-w-[48px] text-right text-xs text-gray-500 opacity-0 group-hover:opacity-100">
           {time}
         </span>
@@ -95,7 +98,7 @@ export function MessageItem({ message, prevMessage, onReply }: MessageItemProps)
 
   if (isSystem) {
     return (
-      <div className="group relative flex items-start px-2 py-0.5 hover:bg-gray-800/30">
+      <div className="group relative flex items-start px-2 py-0.5 hover:bg-gray-700/25">
         <span className="mr-2 mt-0.5 min-w-[48px] text-right text-xs text-gray-500 opacity-0 group-hover:opacity-100">
           {time}
         </span>
@@ -106,7 +109,7 @@ export function MessageItem({ message, prevMessage, onReply }: MessageItemProps)
 
   if (isGrouped) {
     return (
-      <div className={`group relative flex items-start px-2 py-0.5 hover:bg-gray-800/30 ${mentionBg}`}>
+      <div className={`group relative flex items-start px-2 py-0.5 hover:bg-gray-700/25 ${mentionBg}`}>
         <span className="mr-2 mt-0.5 min-w-[48px] text-right text-xs text-gray-500 opacity-0 group-hover:opacity-100">
           {time}
         </span>
@@ -120,7 +123,7 @@ export function MessageItem({ message, prevMessage, onReply }: MessageItemProps)
             </span>
           )}
           {Object.keys(message.reactions).length > 0 && (
-            <Reactions reactions={message.reactions} />
+            <Reactions message={message} />
           )}
           <MessageActions message={message} onReply={onReply} isOwn={isOwn} onEdit={handleEditStart} />
         </div>
@@ -130,7 +133,7 @@ export function MessageItem({ message, prevMessage, onReply }: MessageItemProps)
 
   if (compactMode) {
     return (
-      <div className={`group relative flex items-start px-2 py-0.5 hover:bg-gray-800/30 ${mentionBg}`}>
+      <div className={`group relative flex items-start px-2 py-0.5 hover:bg-gray-700/25 ${mentionBg}`}>
         <span className="mr-2 mt-0.5 min-w-[48px] text-right text-xs text-gray-500">
           {time}
         </span>
@@ -152,7 +155,7 @@ export function MessageItem({ message, prevMessage, onReply }: MessageItemProps)
             </span>
           </span>
           {Object.keys(message.reactions).length > 0 && (
-            <Reactions reactions={message.reactions} />
+            <Reactions message={message} />
           )}
           <MessageActions message={message} onReply={onReply} isOwn={isOwn} onEdit={handleEditStart} />
         </div>
@@ -161,7 +164,7 @@ export function MessageItem({ message, prevMessage, onReply }: MessageItemProps)
   }
 
   return (
-    <div className={`group relative mt-3 flex items-start px-2 py-0.5 first:mt-0 hover:bg-gray-800/30 ${mentionBg}`}>
+    <div className={`group relative mt-3 flex items-start px-2 py-0.5 first:mt-0 hover:bg-gray-700/25 ${mentionBg}`}>
       {/* Avatar */}
       <MessageAvatar nick={message.nick} avatarUrl={avatarUrl} />
 
@@ -192,7 +195,7 @@ export function MessageItem({ message, prevMessage, onReply }: MessageItemProps)
           </div>
         )}
         {Object.keys(message.reactions).length > 0 && (
-          <Reactions reactions={message.reactions} />
+          <Reactions message={message} />
         )}
         <MessageActions message={message} onReply={onReply} isOwn={isOwn} onEdit={handleEditStart} />
       </div>
@@ -255,6 +258,22 @@ function MessageActions({ message, onReply, isOwn, onEdit }: { message: ChatMess
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const pickerRef = useRef<HTMLDivElement>(null)
 
+  // Who may take a message back: its author, or a channel operator.
+  //
+  // `draft/message-redaction` says so and the server enforces it, so offering
+  // an ordinary user a Delete button on everyone else's messages is offering an
+  // action that can only fail.
+  const currentNick = useServerStore((s) => s.currentNick[message.serverId] ?? '')
+  const channelUsers = useUserStore(
+    (s) => s.users[`${message.serverId}:${message.channel.toLowerCase()}`]
+  )
+  const holdsOps = (channelUsers ?? []).some(
+    (user) =>
+      user.nick.toLowerCase() === currentNick.toLowerCase() &&
+      user.prefixes.some((prefix) => prefix === '@' || prefix === '~' || prefix === '&')
+  )
+  const canRedact = Boolean(isOwn) || holdsOps
+
   useEffect(() => {
     if (!showEmojiPicker) return
     const handleClick = (e: MouseEvent) => {
@@ -274,17 +293,19 @@ function MessageActions({ message, onReply, isOwn, onEdit }: { message: ChatMess
   }
 
   const handleRedact = () => {
-    // Optimistic removal from UI immediately
-    useMessageStore.getState().removeMessage(message.serverId, message.channel, message.id)
-    // Send REDACT to server and delete from local DB
+    // Ask, and let the server's REDACT come back and remove it.
+    //
+    // Removing it here first meant a refusal — not the author, not an op, or a
+    // server that does not carry redaction at all — still emptied the message
+    // out of the window, and only a reload brought it back.
     window.switchboard.invoke('message:redact', message.serverId, message.channel, message.id)
   }
 
   return (
-    <div className="absolute -top-3 right-2 z-10 flex gap-0.5 rounded border border-gray-700 bg-gray-800 opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
+    <div className="absolute -top-3 right-2 z-10 flex gap-0.5 rounded-md border border-gray-600/60 bg-gray-700 opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
       {/* Delete confirmation popup */}
       {showDeleteConfirm && (
-        <div className="absolute -top-1 right-0 z-30 -translate-y-full rounded-lg border border-gray-700 bg-gray-800 p-3 shadow-xl">
+        <div className="absolute -top-1 right-0 z-30 -translate-y-full rounded-lg border border-gray-600/60 bg-gray-800 p-3 shadow-xl">
           <p className="mb-2 whitespace-nowrap text-sm text-gray-300">Delete this message?</p>
           <div className="flex justify-end gap-2">
             <button
@@ -363,7 +384,8 @@ function MessageActions({ message, onReply, isOwn, onEdit }: { message: ChatMess
         </button>
       )}
 
-      {/* Delete (redact) */}
+      {/* Delete (redact) — the author, or an operator */}
+      {canRedact && (
       <button
         onClick={() => setShowDeleteConfirm(true)}
         className="rounded px-2 py-1 text-gray-400 hover:bg-red-900/50 hover:text-red-400"
@@ -375,6 +397,7 @@ function MessageActions({ message, onReply, isOwn, onEdit }: { message: ChatMess
           <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
         </svg>
       </button>
+      )}
     </div>
   )
 }
@@ -384,8 +407,11 @@ function NickWithPopup({ nick, serverId, className }: { nick: string; serverId: 
   const popupWhoisData = useUIStore((s) =>
     s.popupWhoisData?.nick.toLowerCase() === nick.toLowerCase() ? s.popupWhoisData : null
   )
-  const userAvatars = useServerStore((s) => s.userAvatars)
-  const nickAvatarUrl = userAvatars[`${serverId}:${nick.toLowerCase()}`] ?? null
+  const userMetadata = useServerStore((s) => s.userMetadata)
+  const metadata = userMetadata[`${serverId}:${nick.toLowerCase()}`] ?? {}
+  const nickAvatarUrl = metadata.avatar ?? null
+  const shownName = displayNameFor(nick, metadata)
+  const nameColor = metadataColor(metadata.color)
   const [showPopup, setShowPopup] = useState(false)
   const [popupStyle, setPopupStyle] = useState<React.CSSProperties>({})
   const [fetched, setFetched] = useState(false)
@@ -467,10 +493,14 @@ function NickWithPopup({ nick, serverId, className }: { nick: string; serverId: 
     <>
       <span
         className={className}
+        style={nameColor ? { color: nameColor } : undefined}
+        // The nick is still the identity — keep it reachable when a display
+        // name is standing in for it.
+        title={shownName === nick ? nick : `${shownName} (${nick})`}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
       >
-        {nick}
+        {shownName}
       </span>
 
       {showPopup && (
@@ -487,7 +517,15 @@ function NickWithPopup({ nick, serverId, className }: { nick: string; serverId: 
                 <WhoisAvatar nick={popupWhoisData.nick} avatarUrl={nickAvatarUrl} />
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5">
-                    <span className="font-semibold text-gray-100">{popupWhoisData.nick}</span>
+                    <span
+                      className="font-semibold text-gray-100"
+                      style={nameColor ? { color: nameColor } : undefined}
+                    >
+                      {shownName}
+                    </span>
+                    {metadata.pronouns && (
+                      <span className="text-xs text-gray-400">{metadata.pronouns}</span>
+                    )}
                     {popupWhoisData.isOperator && (
                       <span className="rounded bg-red-500/20 px-1 py-0.5 text-[10px] font-semibold text-red-400">OPER</span>
                     )}
@@ -501,8 +539,27 @@ function NickWithPopup({ nick, serverId, className }: { nick: string; serverId: 
                 </div>
               </div>
 
+              {shownName !== popupWhoisData.nick && (
+                <div className="text-xs text-gray-500">also known as {popupWhoisData.nick}</div>
+              )}
+
+              {metadata.status && (
+                <div className="text-sm italic text-gray-300">{metadata.status}</div>
+              )}
+
               {popupWhoisData.realname && (
                 <div className="text-sm text-gray-300">{popupWhoisData.realname}</div>
+              )}
+
+              {metadata.homepage && (
+                <a
+                  href={metadata.homepage}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="block truncate text-xs text-indigo-400 hover:underline"
+                >
+                  {metadata.homepage}
+                </a>
               )}
 
               <div className="space-y-1 border-t border-gray-700 pt-2 text-xs">
@@ -659,19 +716,49 @@ function MessageAvatar({ nick, avatarUrl }: { nick: string; avatarUrl: string | 
   )
 }
 
-function Reactions({ reactions }: { reactions: Record<string, string[]> }) {
+/**
+ * The reactions on a message.
+ *
+ * Each one is a button that toggles your own: these were rendered as buttons
+ * with nothing behind them, so the whole row looked interactive and was not —
+ * and a reaction you cannot take back is one people hesitate to leave.
+ */
+function Reactions({ message }: { message: ChatMessage }) {
+  const currentNick = useServerStore((s) => s.currentNick[message.serverId] ?? '')
+
+  const toggle = (emoji: string, mine: boolean) => {
+    window.switchboard.invoke(
+      'message:react',
+      message.serverId,
+      message.channel,
+      message.id,
+      emoji,
+      mine
+    )
+  }
+
   return (
     <div className="mt-1 flex flex-wrap gap-1">
-      {Object.entries(reactions).map(([emoji, nicks]) => (
-        <button
-          key={emoji}
-          className="flex items-center gap-1 rounded-full border border-gray-700 bg-gray-800 px-2 py-0.5 text-sm hover:bg-gray-700"
-          title={nicks.join(', ')}
-        >
-          <span>{emoji}</span>
-          <span className="text-xs text-gray-400">{nicks.length}</span>
-        </button>
-      ))}
+      {Object.entries(message.reactions).map(([emoji, nicks]) => {
+        const mine = nicks.some((nick) => nick.toLowerCase() === currentNick.toLowerCase())
+        return (
+          <button
+            key={emoji}
+            onClick={() => toggle(emoji, mine)}
+            className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-sm ${
+              mine
+                ? 'border-indigo-500 bg-indigo-500/20 hover:bg-indigo-500/30'
+                : 'border-gray-700 bg-gray-800 hover:bg-gray-700'
+            }`}
+            title={nicks.join(', ')}
+          >
+            <span>{emoji}</span>
+            <span className={`text-xs ${mine ? 'text-indigo-300' : 'text-gray-400'}`}>
+              {nicks.length}
+            </span>
+          </button>
+        )
+      })}
     </div>
   )
 }

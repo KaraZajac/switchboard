@@ -3,6 +3,7 @@ import { AppLayout } from './components/layout/AppLayout'
 import { ToastContainer } from './components/common/ToastContainer'
 import { useIRCEvents } from './hooks/useIRC'
 import { useServerStore } from './stores/serverStore'
+import { initMutePersistence } from './stores/mutePersistence'
 import { useUIStore } from './stores/uiStore'
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
@@ -41,12 +42,18 @@ function AppInner() {
       }
       // Seed avatar store from saved server configs
       for (const server of servers) {
-        if (server.avatarUrl && server.nick) {
-          useServerStore.getState().setUserAvatar(server.id, server.nick, server.avatarUrl)
+        if (!server.nick) continue
+        const saved = { ...(server.avatarUrl ? { avatar: server.avatarUrl } : {}), ...server.profile }
+        for (const [key, value] of Object.entries(saved)) {
+          if (value) useServerStore.getState().setUserMetadata(server.id, server.nick, key, value)
         }
       }
     }).catch((err) => {
       console.error('Failed to load servers:', err)
+    })
+
+    initMutePersistence().catch((err) => {
+      console.error('Failed to restore mutes:', err)
     })
   }, [])
 

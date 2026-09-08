@@ -1,15 +1,17 @@
 import { useState, useEffect } from 'react'
+import { DevicesTab } from './DevicesTab'
 import { Modal } from '../common/Modal'
 import { useUIStore } from '../../stores/uiStore'
 import type { Theme } from '../../stores/uiStore'
 import { useServerStore } from '../../stores/serverStore'
 
-type Tab = 'servers' | 'appearance' | 'notifications' | 'network' | 'shortcuts'
+type Tab = 'servers' | 'appearance' | 'notifications' | 'devices' | 'network' | 'shortcuts'
 
 const TABS: { key: Tab; label: string }[] = [
   { key: 'servers', label: 'Servers' },
   { key: 'appearance', label: 'Appearance' },
   { key: 'notifications', label: 'Notifications' },
+  { key: 'devices', label: 'Devices' },
   { key: 'network', label: 'Network' },
   { key: 'shortcuts', label: 'Shortcuts' }
 ]
@@ -45,6 +47,7 @@ export function SettingsModal() {
           {activeTab === 'servers' && <ServersTab />}
           {activeTab === 'appearance' && <AppearanceTab />}
           {activeTab === 'notifications' && <NotificationsTab />}
+          {activeTab === 'devices' && <DevicesTab />}
           {activeTab === 'network' && <NetworkTab />}
           {activeTab === 'shortcuts' && <ShortcutsTab />}
         </div>
@@ -289,6 +292,7 @@ function NotificationsTab() {
 }
 
 function NetworkTab() {
+  const [secrets, setSecrets] = useState<{ protected: boolean; description: string } | null>(null)
   const [proxyType, setProxyType] = useState('none')
   const [proxyHost, setProxyHost] = useState('')
   const [proxyPort, setProxyPort] = useState('')
@@ -307,6 +311,10 @@ function NetworkTab() {
     window.switchboard.invoke('settings:get', 'customCaPath').then((v) => {
       if (typeof v === 'string') setCustomCaPath(v)
     })
+    window.switchboard
+      .invoke('app:secrets-status')
+      .then(setSecrets)
+      .catch(() => {})
   }, [])
 
   const handleSaveProxy = () => {
@@ -324,6 +332,23 @@ function NetworkTab() {
   return (
     <div className="space-y-4">
       <h3 className="text-sm font-semibold text-gray-300">Network</h3>
+
+      {/* Where passwords live on disk */}
+      {secrets && (
+        <div className="rounded border border-gray-700 bg-gray-900/50 px-3 py-2.5">
+          <div className="flex items-center gap-2 text-sm text-gray-200">
+            <span
+              className={`h-2 w-2 rounded-full ${secrets.protected ? 'bg-green-500' : 'bg-yellow-500'}`}
+            />
+            Credential storage
+          </div>
+          <div className="mt-1 text-xs leading-relaxed text-gray-500">
+            {secrets.protected
+              ? `Server and SASL passwords are encrypted with your system keystore (${secrets.description}).`
+              : `Passwords are not protected on this system — ${secrets.description}.`}
+          </div>
+        </div>
+      )}
 
       {/* Proxy */}
       <div>

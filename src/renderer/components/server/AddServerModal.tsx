@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Modal } from '../common/Modal'
 import { useUIStore } from '../../stores/uiStore'
 import { useServerStore } from '../../stores/serverStore'
@@ -40,6 +40,18 @@ export function AddServerModal({ editServer }: AddServerModalProps = {}) {
   const [identifyCommand, setIdentifyCommand] = useState(editServer?.identifyCommand ?? '')
   const [websocketUrl, setWebsocketUrl] = useState(editServer?.websocketUrl ?? '')
   const [showAdvanced, setShowAdvanced] = useState(isEdit)
+
+  // Seed a new server with the OS account name — "Switchboard" as everyone's
+  // nickname is a poor first impression, and it collides on busy networks.
+  useEffect(() => {
+    if (isEdit || nick !== DEFAULT_NICK) return
+    window.switchboard
+      .invoke('app:default-nick')
+      .then((suggested) => {
+        setNick((current) => (current === DEFAULT_NICK ? suggested : current))
+      })
+      .catch(() => {})
+  }, [isEdit, nick])
   const [error, setError] = useState<string | null>(null)
 
   const handleTlsToggle = (checked: boolean) => {
@@ -85,6 +97,12 @@ export function AddServerModal({ editServer }: AddServerModalProps = {}) {
       } else {
         const id = await window.switchboard.invoke('server:add', config as never)
         addServer({ ...config, id, sortOrder: 0 } as never)
+        // Connect right away — a server you just finished configuring should not
+        // sit there disconnected waiting to be told to connect.
+        useServerStore.getState().setConnectionStatus(id, 'connecting')
+        window.switchboard.invoke('server:connect', id).catch(() => {
+          useServerStore.getState().setConnectionStatus(id, 'disconnected')
+        })
         closeModal()
       }
     } catch (err) {

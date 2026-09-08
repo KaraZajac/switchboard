@@ -84,7 +84,12 @@ const savedFontSize = parseInt(localStorage.getItem('switchboard-font-size') || 
 const savedTimeFormat = (localStorage.getItem('switchboard-time-format') || '12h') as TimeFormat
 const savedCompactMode = localStorage.getItem('switchboard-compact-mode') === 'true'
 
-document.documentElement.setAttribute('data-theme', savedTheme)
+function applyThemeToDocument(theme: Theme): void {
+  document.documentElement.setAttribute('data-theme', theme)
+}
+
+/** Paint immediately from what this machine last used, so there is no flash */
+applyThemeToDocument(savedTheme)
 document.documentElement.style.setProperty('--chat-font-size', `${savedFontSize}px`)
 
 export const useUIStore = create<UIState>((set) => ({
@@ -105,8 +110,12 @@ export const useUIStore = create<UIState>((set) => ({
   toasts: [],
 
   setTheme: (theme) => {
-    document.documentElement.setAttribute('data-theme', theme)
+    applyThemeToDocument(theme)
+    // Locally for the next paint, and in the shared settings so the phone
+    // picks up the same choice — the two clients are one product, and a
+    // different palette on each is the most visible way to look like two.
     localStorage.setItem('switchboard-theme', theme)
+    void window.switchboard.invoke('settings:set', 'theme', theme)
     set({ theme })
   },
 
@@ -143,3 +152,22 @@ export const useUIStore = create<UIState>((set) => ({
   },
   removeToast: (id) => set((state) => ({ toasts: state.toasts.filter((t) => t.id !== id) }))
 }))
+
+/**
+ * Adopt a theme chosen on another device.
+ *
+ * The shared setting is the agreed answer; localStorage is only this machine's
+ * cache of it, so it is read first for speed and corrected here.
+ */
+export async function syncThemeFromSettings(): Promise<void> {
+  const shared = await window.switchboard.invoke('settings:get', 'theme')
+  if (typeof shared !== 'string') {
+    // Nothing shared yet — publish what this machine is using
+    void window.switchboard.invoke('settings:set', 'theme', useUIStore.getState().theme)
+    return
+  }
+  if (shared === useUIStore.getState().theme) return
+  applyThemeToDocument(shared as Theme)
+  localStorage.setItem('switchboard-theme', shared)
+  useUIStore.setState({ theme: shared as Theme })
+}

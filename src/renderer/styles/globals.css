@@ -392,9 +392,40 @@
   font-size: var(--chat-font-size);
 }
 
+/* Modal entrance */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes modal-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
 /* Prevent text selection on UI elements */
 .no-select {
   user-select: none;
+}
+
+/* Scrollable without a visible scrollbar (server rail) */
+.scrollbar-none {
+  scrollbar-width: none;
+}
+
+.scrollbar-none::-webkit-scrollbar {
+  width: 0;
+  height: 0;
 }
 
 /* Reset transition for text inputs */
@@ -408,4 +439,18 @@ select {
 *:focus-visible {
   outline: 2px solid var(--color-indigo-500);
   outline-offset: -2px;
+}
+
+/*
+ * The message box is where you already are.
+ *
+ * A text field always matches :focus-visible while focused, so the ring above
+ * would sit permanently around the one input people spend the whole session
+ * inside — reading as an error state rather than as focus. It is still marked,
+ * just quietly, by lifting the field instead of outlining it.
+ */
+.composer-field:focus-visible,
+.composer-field:focus {
+  outline: none;
+  background-color: var(--color-gray-600);
 }

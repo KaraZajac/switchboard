@@ -75,7 +75,10 @@ export function QuickSwitcher() {
   )
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center pt-24" onClick={closeModal}>
+    <div
+      className="fixed inset-0 z-50 flex animate-[fade-in_100ms_ease-out] items-start justify-center bg-black/50 pt-24"
+      onClick={closeModal}
+    >
       <div
         className="w-full max-w-lg rounded-lg bg-gray-800 shadow-2xl ring-1 ring-gray-700"
         onClick={(e) => e.stopPropagation()}

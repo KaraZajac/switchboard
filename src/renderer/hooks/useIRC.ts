@@ -4,6 +4,7 @@ import { useChannelStore } from '../stores/channelStore'
 import { useMessageStore } from '../stores/messageStore'
 import { useUserStore } from '../stores/userStore'
 import { useUIStore } from '../stores/uiStore'
+import { syncThemeFromSettings } from '../stores/uiStore'
 import { isChannelName, isServiceNick } from '@shared/constants'
 
 /**
@@ -27,6 +28,14 @@ export function useIRCEvents(): void {
         if (nick) {
           useServerStore.getState().setCurrentNick(serverId, nick)
         }
+
+        // Read back our own avatar now we are actually on the network. Asking
+        // at capability negotiation is too early when SASL is in play: the
+        // server answers 451 and we never find out.
+        const caps = useServerStore.getState().capabilities[serverId] ?? []
+        if (caps.includes('draft/metadata-2')) {
+          api.invoke('metadata:get', serverId, '*', 'avatar').catch(() => {})
+        }
       })
     )
 
@@ -39,11 +48,6 @@ export function useIRCEvents(): void {
     cleanups.push(
       api.on('irc:cap', ({ serverId, capabilities }) => {
         useServerStore.getState().setCapabilities(serverId, capabilities)
-
-        // Request our own avatar if metadata is supported
-        if (capabilities.includes('draft/metadata-2')) {
-          api.invoke('metadata:get', serverId, '*', 'avatar').catch(() => {})
-        }
       })
     )
 
@@ -99,8 +103,12 @@ export function useIRCEvents(): void {
     )
 
     cleanups.push(
-      api.on('irc:part', ({ serverId, channel, nick }) => {
+      api.on('irc:part', ({ serverId, channel, nick, isMe }) => {
         useUserStore.getState().removeUser(serverId, channel, nick)
+        // We left — drop the channel rather than leaving a dead row behind
+        if (isMe) {
+          useChannelStore.getState().removeChannel(serverId, channel)
+        }
       })
     )
 
@@ -119,6 +127,17 @@ export function useIRCEvents(): void {
     cleanups.push(
       api.on('irc:names', ({ serverId, channel, users }) => {
         useUserStore.getState().setUsers(serverId, channel, users)
+      })
+    )
+
+    // Server errors and bad commands were being dropped silently
+    cleanups.push(
+      api.on('irc:error', ({ serverId, code, message }) => {
+        const server = useServerStore.getState().servers.find((s) => s.id === serverId)
+        useUIStore.getState().addToast({
+          title: code === 'COMMAND' ? 'Command' : server?.name || 'Server error',
+          body: message
+        })
       })
     )
 
@@ -281,8 +300,8 @@ export function useIRCEvents(): void {
     })
 
     cleanups.push(
-      api.on('irc:react', ({ serverId, channel, nick, msgid, emoji }) => {
-        useMessageStore.getState().addReaction(serverId, channel, msgid, nick, emoji)
+      api.on('irc:react', ({ serverId, channel, nick, msgid, emoji, removed }) => {
+        useMessageStore.getState().setReaction(serverId, channel, msgid, nick, emoji, !removed)
       })
     )
 
@@ -315,9 +334,7 @@ export function useIRCEvents(): void {
     // Metadata updates (avatar, etc.)
     cleanups.push(
       api.on('irc:metadata', ({ serverId, target, key, value }) => {
-        if (key === 'avatar') {
-          useServerStore.getState().setUserAvatar(serverId, target, value)
-        }
+        useServerStore.getState().setUserMetadata(serverId, target, key, value)
       })
     )
 
@@ -546,6 +563,53 @@ export function useIRCEvents(): void {
         api.invoke('chathistory:request', activeServerId, channel, undefined, 50)
       }
     })
+
+    // Listeners are attached — tell main, which holds auto-connect until now.
+    // Anything already live (a reload, or a connection that raced this effect)
+    // comes back as a snapshot, because those events are not replayed.
+    // A theme picked on the phone, or on this machine before a reinstall
+    void syncThemeFromSettings()
+
+    api
+      .invoke('app:renderer-ready')
+      .then((snapshot) => {
+        for (const server of snapshot) {
+          const { serverId } = server
+          useServerStore.getState().setConnectionStatus(serverId, 'connected')
+          useServerStore.getState().setCurrentNick(serverId, server.nick)
+          useServerStore.getState().setCapabilities(serverId, server.capabilities)
+          currentNicks[serverId] = server.nick
+
+          // Display names, colours and avatars the core already knows about
+          for (const [nick, profile] of Object.entries(server.metadata ?? {})) {
+            for (const [key, value] of Object.entries(profile)) {
+              if (value) useServerStore.getState().setUserMetadata(serverId, nick, key, value)
+            }
+          }
+
+          for (const channel of server.channels) {
+            useChannelStore.getState().addChannel(serverId, channel.name)
+            useUserStore.getState().setUsers(serverId, channel.name, channel.users)
+            if (channel.topic) {
+              useChannelStore
+                .getState()
+                .setTopic(serverId, channel.name, channel.topic, channel.topicSetBy)
+            }
+
+            api
+              .invoke('history:fetch', serverId, channel.name, undefined, 50)
+              .then((messages) => {
+                if (messages && messages.length > 0) {
+                  useMessageStore.getState().setMessages(serverId, channel.name, messages)
+                }
+              })
+              .catch(() => {})
+          }
+        }
+      })
+      .catch((err) => {
+        console.error('Failed to sync connection state from main:', err)
+      })
 
     return () => {
       unsubscribe()
