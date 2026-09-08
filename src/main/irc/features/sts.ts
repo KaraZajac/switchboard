@@ -20,8 +20,18 @@ export interface STSPolicy {
   cachedAt: string // ISO 8601
 }
 
-/** In-memory STS policy cache (persisted to DB by the storage layer) */
+/** In-memory cache, backed by the database so a policy survives a restart */
 const stsPolicies = new Map<string, STSPolicy>()
+
+/** Where policies are kept between runs; injected so this stays testable */
+let store: {
+  save: (policy: STSPolicy) => void
+  forget: (host: string) => void
+} | null = null
+
+export function persistSTSPoliciesWith(backing: typeof store): void {
+  store = backing
+}
 
 /**
  * Check if a host has an active STS policy.
@@ -36,6 +46,7 @@ export function getSTSPolicy(host: string): STSPolicy | null {
   const expiresAt = cachedAt + policy.duration * 1000
   if (Date.now() > expiresAt) {
     stsPolicies.delete(host.toLowerCase())
+    store?.forget(host)
     return null
   }
 
@@ -47,16 +58,37 @@ export function getSTSPolicy(host: string): STSPolicy | null {
  */
 export function setSTSPolicy(host: string, port: number, duration: number): void {
   if (duration === 0) {
+    // duration=0 is the server withdrawing the policy
     stsPolicies.delete(host.toLowerCase())
+    store?.forget(host)
     return
   }
 
-  stsPolicies.set(host.toLowerCase(), {
+  const policy: STSPolicy = {
     host: host.toLowerCase(),
     port,
     duration,
     cachedAt: new Date().toISOString()
-  })
+  }
+  stsPolicies.set(policy.host, policy)
+  store?.save(policy)
+}
+
+/**
+ * Where this server must actually be reached.
+ *
+ * Returns the port and TLS setting to dial with, which is the whole purpose of
+ * the policy — a cached STS that nothing consults protects nobody.
+ */
+export function stsUpgradeFor(
+  host: string,
+  port: number,
+  tls: boolean
+): { port: number; tls: true } | null {
+  const policy = getSTSPolicy(host)
+  if (!policy) return null
+  if (tls && port === policy.port) return null
+  return { port: policy.port, tls: true }
 }
 
 /**

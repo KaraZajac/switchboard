@@ -123,12 +123,23 @@ registerHandler('422', (client, _msg) => {
  */
 registerHandler('433', (client, msg) => {
   // params: <current-nick-or-*> <attempted-nick> :Nickname is already in use
+  //
+  // Whatever we asked for, we did not get it — forget it, so a later NICK for
+  // somebody else who takes that name is not mistaken for ours.
+  if (client.state.pendingNick?.toLowerCase() === (msg.params[1] || '').toLowerCase()) {
+    client.state.pendingNick = null
+  }
+
   if (client.state.registrationState !== 'connected') {
     // During registration, try an alternative nick
     const attempted = msg.params[1]
     const altNick = attempted + '_'
     client.state.nick = altNick
     client.connection.send('NICK', altNick)
+
+    // …and keep trying for the real one. Usually the name is only held by a
+    // session that is on its way out — our own, on the other device.
+    client.startNickRecovery()
   }
   client.events.emit('nickInUse', {
     nick: msg.params[1],
@@ -154,14 +165,38 @@ registerHandler('NICK', (client, msg) => {
   const oldNick = msg.source?.nick || ''
   const newNick = msg.params[0]
 
-  // Update our own nick if it's us
-  if (oldNick.toLowerCase() === client.state.nick.toLowerCase()) {
+  // Is this our own change? Normally the prefix says so. When it does not —
+  // a server that puts the new nick there instead of the old — the nick we
+  // asked for and have not yet heard about does.
+  const byPrefix = oldNick.toLowerCase() === client.state.nick.toLowerCase()
+  const byRequest =
+    client.state.pendingNick !== null &&
+    newNick.toLowerCase() === client.state.pendingNick.toLowerCase()
+
+  if (byPrefix || byRequest) {
     client.state.nick = newNick
+    client.state.pendingNick = null
+    if (newNick.toLowerCase() === client.state.desiredNick.toLowerCase()) {
+      client.stopNickRecovery()
+    }
   }
 
   // Update nick in all channels
   for (const [, channel] of client.state.channels) {
     channel.renameUser(oldNick, newNick)
+  }
+
+  // A person's profile belongs to the person, not to the name they had at the
+  // time. Leaving it behind means a rename — including our own, every time the
+  // fallback nick is given back — quietly drops their display name and avatar.
+  const from = oldNick.toLowerCase()
+  const to = newNick.toLowerCase()
+  if (from !== to) {
+    const profile = client.state.metadata.get(from)
+    if (profile) {
+      client.state.metadata.delete(from)
+      client.state.metadata.set(to, { ...(client.state.metadata.get(to) ?? {}), ...profile })
+    }
   }
 
   client.events.emit('nick', { oldNick, newNick })

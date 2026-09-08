@@ -62,7 +62,12 @@ registerHandler('CAP', (client, msg) => {
               port: sts.port,
               duration: sts.duration
             })
-            // The client manager should handle reconnecting with TLS
+
+            // Move this server onto TLS before dropping the socket, so the
+            // reconnect that follows comes back secured. Without it the retry
+            // dialled plaintext again and the two sides argued for ever.
+            client.config.port = sts.port
+            client.config.tls = true
             client.connection.disconnect('STS upgrade required')
             pendingCapLs = new Map()
             return
@@ -82,7 +87,7 @@ registerHandler('CAP', (client, msg) => {
       pendingCapLs = new Map()
 
       if (toRequest.length > 0) {
-        client.connection.send('CAP', 'REQ', toRequest.join(' '))
+        requestCapabilities(client, toRequest)
       } else {
         // Nothing to negotiate — end cap negotiation
         client.connection.send('CAP', 'END')
@@ -103,6 +108,11 @@ registerHandler('CAP', (client, msg) => {
           client.state.capabilities.add(cap)
         }
       }
+
+      // A long wish list goes out as several CAP REQ lines; registration must
+      // not proceed until the last one has been answered.
+      if (client.state.pendingCapRequests > 0) client.state.pendingCapRequests--
+      if (client.state.pendingCapRequests > 0) break
 
       // draft/pre-away: set away before registration completes (bouncer support)
       if (client.state.capabilities.has('draft/pre-away') && client.config.preAwayMessage) {
@@ -126,9 +136,12 @@ registerHandler('CAP', (client, msg) => {
     }
 
     case 'NAK': {
-      // Server rejected our cap request
-      // Try to continue without the rejected caps
-      // We could retry with a subset, but for simplicity just end negotiation
+      // Server rejected our cap request. Everything in that line is refused
+      // together, so there is nothing to salvage from it — but any other lines
+      // we sent are still outstanding.
+      if (client.state.pendingCapRequests > 0) client.state.pendingCapRequests--
+      if (client.state.pendingCapRequests > 0) break
+
       client.connection.send('CAP', 'END')
       client.state.capNegotiating = false
       client.events.emit('capNegotiated', Array.from(client.state.capabilities))
@@ -154,7 +167,7 @@ registerHandler('CAP', (client, msg) => {
       }
 
       if (newCaps.length > 0) {
-        client.connection.send('CAP', 'REQ', newCaps.join(' '))
+        requestCapabilities(client, newCaps)
       }
       break
     }
@@ -176,3 +189,49 @@ registerHandler('CAP', (client, msg) => {
     }
   }
 })
+
+/**
+ * The IRC line limit, in bytes, including the trailing CRLF.
+ *
+ * RFC 1459 and every server since. A few advertise more via the LINELEN
+ * ISUPPORT token, but that arrives long after capability negotiation, so this
+ * is the only budget available when it matters most.
+ */
+const MAX_LINE_BYTES = 512
+
+/**
+ * Ask for capabilities, in as many CAP REQ lines as it takes.
+ *
+ * A wish list that has grown past the line limit is not a small problem: the
+ * server answers `417 ERR_INPUTTOOLONG`, registration never completes, and the
+ * client simply never connects. The capability-negotiation spec requires the
+ * split, and each CAP REQ is atomic — the server ACKs or NAKs a whole line — so
+ * splitting changes nothing except that it fits.
+ */
+export function requestCapabilities(
+  client: {
+    connection: { send: (...args: string[]) => void }
+    state: { pendingCapRequests: number }
+  },
+  caps: string[]
+): void {
+  const budget = MAX_LINE_BYTES - Buffer.byteLength('CAP REQ :') - 2 // CRLF
+
+  const lines: string[] = []
+  let current = ''
+  for (const cap of caps) {
+    const candidate = current === '' ? cap : `${current} ${cap}`
+    if (Buffer.byteLength(candidate) > budget && current !== '') {
+      lines.push(current)
+      current = cap
+    } else {
+      current = candidate
+    }
+  }
+  if (current !== '') lines.push(current)
+
+  client.state.pendingCapRequests = lines.length
+  for (const line of lines) {
+    client.connection.send('CAP', 'REQ', line)
+  }
+}

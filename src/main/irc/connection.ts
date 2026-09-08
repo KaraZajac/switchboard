@@ -1,4 +1,5 @@
 import { EventEmitter } from 'events'
+import { stsUpgradeFor } from './features/sts'
 import * as net from 'net'
 import * as tls from 'tls'
 import WebSocket from 'ws'
@@ -32,9 +33,62 @@ export declare interface IRCConnection {
  * - Automatic PING/PONG keepalive
  * - Reconnection with exponential backoff
  */
+
+/**
+ * The WebSocket subprotocols defined by the IRCv3 websocket specification.
+ *
+ * Both are offered and the server picks: text frames are UTF-8, binary frames
+ * the same bytes unencoded. Either way a frame is one IRC line without CRLF.
+ */
+export const WEBSOCKET_SUBPROTOCOLS = ['text.ircv3.net', 'binary.ircv3.net']
+
+/**
+ * How many commands a client may send back to back.
+ *
+ * Servers implement a token bucket of roughly this shape — rIRCd allows 10,
+ * solanum and its relatives about the same — and staying a little under leaves
+ * room for the ones that are stricter.
+ */
+export const SEND_BURST = 5
+
+/** Sustained rate once the burst is spent. irssi ships with much the same. */
+export const SEND_RATE_PER_SECOND = 1
+
+/**
+ * Keepalive, which is answered out of band.
+ *
+ * A PONG held behind a queue gets us pinged out, and it belongs to no sequence,
+ * so overtaking costs nothing.
+ */
+const ALWAYS_IMMEDIATE = new Set(['PING', 'PONG'])
+
+/**
+ * Commands servers exempt from flood control.
+ *
+ * They still go through the queue when anything is waiting in it. Overtaking
+ * would reorder the stream — and a NICK landing between two lines of a
+ * multiline batch is exactly the kind of thing that produces a bug report
+ * nobody can reproduce.
+ */
+const FLOOD_EXEMPT = new Set(['CAP', 'NICK', 'USER', 'PASS', 'AUTHENTICATE', 'QUIT'])
+
+function commandOf(line: string): string {
+  // The command is the first token, unless the line carries tags or a prefix
+  let rest = line
+  if (rest.startsWith('@')) rest = rest.slice(rest.indexOf(' ') + 1).trimStart()
+  if (rest.startsWith(':')) rest = rest.slice(rest.indexOf(' ') + 1).trimStart()
+  return rest.split(' ', 1)[0].toUpperCase()
+}
+
 // eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging
 export class IRCConnection extends EventEmitter {
   readonly config: ServerConfig
+  /** Lines waiting on the token bucket, oldest first */
+  private readonly sendQueue: string[] = []
+  private tokens = SEND_BURST
+  private lastRefill = Date.now()
+  private drainTimer: ReturnType<typeof setTimeout> | null = null
+
   private socket: net.Socket | tls.TLSSocket | null = null
   private ws: WebSocket | null = null
   private useWebSocket = false
@@ -80,6 +134,17 @@ export class IRCConnection extends EventEmitter {
     }
 
     this.useWebSocket = false
+
+    // A server that has told us it is TLS-only gets reached over TLS, whatever
+    // this server's saved settings say. Checked on every dial rather than only
+    // when the policy arrives: the point of caching it is the connection
+    // *after* the one that learned about it.
+    const upgrade = stsUpgradeFor(this.config.host, this.config.port, this.config.tls)
+    if (upgrade) {
+      this.config.port = upgrade.port
+      this.config.tls = true
+    }
+
     const options = {
       host: this.config.host,
       port: this.config.port
@@ -98,33 +163,38 @@ export class IRCConnection extends EventEmitter {
     this.socket.setEncoding('utf8')
     this.socket.setTimeout(0) // No idle timeout — we use PING/PONG
 
-    this.socket.on('connect', () => this.onConnect())
-    this.socket.on('secureConnect', () => {
-      // For TLS, 'connect' fires first, then 'secureConnect' after handshake.
-    })
+    // A TLS socket emits 'connect' when the TCP connection is up and
+    // 'secureConnect' once the handshake finishes. Registration must wait for the
+    // handshake, so bind exactly one of them — binding both sends the whole
+    // CAP LS / NICK / USER burst twice, which stalls or trips up strict servers.
+    if (this.config.tls) {
+      this.socket.once('secureConnect', () => this.onConnect())
+    } else {
+      this.socket.once('connect', () => this.onConnect())
+    }
+
     this.socket.on('data', (data: string) => this.onData(data))
     this.socket.on('error', (err: Error) => this.onError(err))
     this.socket.on('close', () => this.onClose())
     this.socket.on('end', () => this.onEnd())
-
-    // For TLS, wait for secureConnect before sending registration
-    if (this.config.tls) {
-      ;(this.socket as tls.TLSSocket).once('secureConnect', () => {
-        this.onConnect()
-      })
-    }
   }
 
   private connectWebSocket(url: string): void {
-    this.ws = new WebSocket(url, ['irc'], {
+    // The subprotocols the IRCv3 WebSocket spec defines. A server that follows
+    // it will not accept a connection asking for anything else, so getting
+    // these wrong does not degrade the transport — it removes it.
+    this.ws = new WebSocket(url, WEBSOCKET_SUBPROTOCOLS, {
       rejectUnauthorized: true
     })
 
     this.ws.on('open', () => this.onConnect())
 
     this.ws.on('message', (data: WebSocket.Data) => {
+      // One frame is one IRC line, with no CRLF of its own — under either
+      // subprotocol, since a text frame is UTF-8 and a binary one carries the
+      // same bytes. The parser wants terminated lines, so put it back.
       const str = typeof data === 'string' ? data : data.toString('utf8')
-      this.onData(str + '\r\n')
+      this.onData(str.replace(/\r?\n$/, '') + '\r\n')
     })
 
     this.ws.on('error', (err: Error) => this.onError(err))
@@ -137,6 +207,9 @@ export class IRCConnection extends EventEmitter {
   disconnect(reason = 'Leaving'): void {
     this.intentionalDisconnect = true
     if (this._connected) {
+      // Whatever is still queued is for a conversation we are leaving, and
+      // holding QUIT behind it would only delay a clean goodbye.
+      this.clearQueue()
       this.sendRaw(cmd('QUIT', reason))
     }
     // Give the server a moment to process QUIT before closing
@@ -145,20 +218,85 @@ export class IRCConnection extends EventEmitter {
 
   /**
    * Send a raw IRC line to the server.
-   * Appends \r\n automatically.
+   *
+   * Queued and paced, because every ircd since 1993 has a send-queue limit and
+   * punishes clients that ignore it — by silently dropping commands, or by
+   * killing the connection with "Excess Flood". Connecting is exactly when a
+   * client wants to say the most at once (subscribe, publish a profile, join,
+   * ask for history and names), so it is exactly when the limit bites.
+   *
+   * Registration and keepalive bypass the queue: servers exempt those, and
+   * delaying a PONG would get us pinged out.
    */
   sendRaw(line: string): void {
     // Prevent injection: strip any embedded newlines
     const sanitized = line.replace(/[\r\n]/g, '')
 
+    const command = commandOf(sanitized)
+
+    // Keepalive always goes now. Registration goes now too, but only while
+    // nothing is waiting — which is every time it actually happens.
+    if (ALWAYS_IMMEDIATE.has(command) || (FLOOD_EXEMPT.has(command) && this.sendQueue.length === 0)) {
+      this.writeLine(sanitized)
+      return
+    }
+
+    this.sendQueue.push(sanitized)
+    this.drainQueue()
+  }
+
+  /**
+   * Send what the bucket allows, and schedule the rest.
+   *
+   * A token bucket rather than a fixed delay: a client that has been quiet can
+   * say several things at once, which is what makes joining a few channels feel
+   * instant, while a sustained stream settles to a rate servers accept.
+   */
+  private drainQueue(): void {
+    const now = Date.now()
+    this.tokens = Math.min(
+      SEND_BURST,
+      this.tokens + ((now - this.lastRefill) / 1000) * SEND_RATE_PER_SECOND
+    )
+    this.lastRefill = now
+
+    while (this.sendQueue.length > 0 && this.tokens >= 1) {
+      this.tokens -= 1
+      this.writeLine(this.sendQueue.shift() as string)
+    }
+
+    if (this.sendQueue.length === 0) {
+      if (this.drainTimer) clearTimeout(this.drainTimer)
+      this.drainTimer = null
+      return
+    }
+
+    if (this.drainTimer) return
+    const waitMs = Math.ceil(((1 - this.tokens) / SEND_RATE_PER_SECOND) * 1000)
+    this.drainTimer = setTimeout(() => {
+      this.drainTimer = null
+      this.drainQueue()
+    }, Math.max(waitMs, 10))
+  }
+
+  /** Anything still queued is not worth sending to a server we have left */
+  private clearQueue(): void {
+    this.sendQueue.length = 0
+    if (this.drainTimer) clearTimeout(this.drainTimer)
+    this.drainTimer = null
+    this.tokens = SEND_BURST
+    this.lastRefill = Date.now()
+  }
+
+  private writeLine(line: string): void {
     if (this.useWebSocket) {
       if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return
-      this.ws.send(sanitized)
+      this.ws.send(line)
     } else {
       if (!this.socket || this.socket.destroyed) return
-      this.socket.write(sanitized + '\r\n')
+      this.socket.write(line + '\r\n')
     }
-    this.emit('raw', 'out', sanitized)
+    this.emit('raw', 'out', line)
   }
 
   /**
@@ -292,6 +430,7 @@ export class IRCConnection extends EventEmitter {
   // ── Cleanup ──────────────────────────────────────────────────────
 
   private cleanup(): void {
+    this.clearQueue()
     this.stopPingTimer()
     this._connected = false
 

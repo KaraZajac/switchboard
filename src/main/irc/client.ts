@@ -5,6 +5,7 @@ import type { ChannelUser } from '@shared/types/channel'
 import { IRCConnection } from './connection'
 import { ConnectionState } from './state'
 import { dispatchMessage, registerAllHandlers } from './handlers/index'
+import { checkBatchMembership } from './features/batch'
 
 // Register all handlers once at module load
 registerAllHandlers()
@@ -115,11 +116,22 @@ export type TypedEventEmitter = EventEmitter & {
  *   client.events.on('privmsg', (data) => { ... })
  *   client.connect()
  */
+/**
+ * How often to ask for our real nick back while we are on a fallback.
+ *
+ * Slow enough that a server will not read it as flooding, quick enough that a
+ * handover between two devices resolves while the user is still watching.
+ */
+export const NICK_RECOVERY_INTERVAL_MS = 20_000
+
 export class IRCClient {
   readonly config: ServerConfig
   readonly connection: IRCConnection
   readonly state: ConnectionState
   readonly events: TypedEventEmitter
+
+  /** Set while we are on a fallback nick and still want our real one back */
+  private nickRecovery: ReturnType<typeof setInterval> | null = null
 
   constructor(config: ServerConfig) {
     this.config = config
@@ -200,6 +212,7 @@ export class IRCClient {
    */
   setNick(nick: string): void {
     this.state.desiredNick = nick
+    this.state.pendingNick = nick
     this.connection.send('NICK', nick)
   }
 
@@ -239,8 +252,40 @@ export class IRCClient {
    * Destroy the client — disconnect and clean up everything.
    */
   destroy(): void {
+    this.stopNickRecovery()
     this.connection.destroy()
     this.events.removeAllListeners()
+  }
+
+  /**
+   * Keep asking for the nick we actually wanted.
+   *
+   * Landing on `kara_` is normal and temporary: the old session is in a ping
+   * timeout, a netsplit is healing, or the other device has not finished
+   * handing over. What is not acceptable is staying there — the fallback nick
+   * follows the user around all evening and is not the name anyone knows them
+   * by. So we ask again, quietly, until we get it.
+   */
+  startNickRecovery(): void {
+    if (this.nickRecovery) return
+    if (this.state.nick.toLowerCase() === this.state.desiredNick.toLowerCase()) return
+
+    this.nickRecovery = setInterval(() => {
+      if (this.state.registrationState !== 'connected') return
+      if (this.state.nick.toLowerCase() === this.state.desiredNick.toLowerCase()) {
+        this.stopNickRecovery()
+        return
+      }
+      // A plain NICK: if it is still taken the server answers 433 and we are
+      // no worse off than before.
+      this.state.pendingNick = this.state.desiredNick
+      this.connection.send('NICK', this.state.desiredNick)
+    }, NICK_RECOVERY_INTERVAL_MS)
+  }
+
+  stopNickRecovery(): void {
+    if (this.nickRecovery) clearInterval(this.nickRecovery)
+    this.nickRecovery = null
   }
 
   // ── Internal setup ───────────────────────────────────────────────
@@ -259,6 +304,9 @@ export class IRCClient {
 
     // Route parsed messages through the handler system
     this.connection.on('message', (msg: IRCMessage) => {
+      // A message inside a batch we handle ourselves is collected, not acted
+      // on: replayed history must not drive live state.
+      if (checkBatchMembership(this, msg)) return
       dispatchMessage(this, msg)
     })
 

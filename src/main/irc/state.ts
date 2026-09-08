@@ -1,5 +1,6 @@
 import type { RegistrationState, IRCBatch } from '@shared/types/irc'
 import type { ChannelUser } from '@shared/types/channel'
+import type { UserMetadata } from '@shared/types/metadata'
 
 /**
  * Per-connection state tracking.
@@ -14,6 +15,20 @@ export class ConnectionState {
 
   /** Desired nickname (what we requested) */
   desiredNick = ''
+
+  /**
+   * A nick we have asked for and not yet had an answer to.
+   *
+   * The answer is normally a NICK echoed back with our *old* nick in the
+   * prefix, which is how a client recognises its own change. Not every server
+   * does that — at least one sends the new nick in the prefix, which matches
+   * nobody and leaves the client convinced it is still called something else
+   * for the rest of the session. Knowing what we asked for settles it.
+   */
+  pendingNick: string | null = null
+
+  /** CAP REQ lines still waiting for an ACK or NAK */
+  pendingCapRequests = 0
 
   /** Username sent during registration */
   username = ''
@@ -38,6 +53,15 @@ export class ConnectionState {
 
   /** ISUPPORT tokens (from 005 RPL_ISUPPORT) */
   isupport: Record<string, string | true> = {}
+
+  /**
+   * draft/metadata-2 values, keyed by lowercase target (nick or channel).
+   *
+   * Held here rather than only in the UI so a reloading window — or a phone
+   * pairing for the first time — sees the same display names and colours the
+   * desktop is already showing.
+   */
+  metadata = new Map<string, UserMetadata>()
 
   /** Channels we are currently in */
   channels = new Map<string, ChannelStateData>()
@@ -67,11 +91,14 @@ export class ConnectionState {
   reset(): void {
     this.registrationState = 'disconnected'
     this.nick = ''
+    this.pendingNick = null
     this.serverName = ''
     this.capabilities.clear()
     this.availableCapabilities.clear()
     this.capNegotiating = false
+    this.pendingCapRequests = 0
     this.isupport = {}
+    this.metadata.clear()
     this.channels.clear()
     this.batches.clear()
     this.motdLines = []

@@ -134,7 +134,7 @@ registerHandler('TAGMSG', (client, msg) => {
   const channel = isPrivate ? nick : target
 
   // Handle typing notifications (skip our own echoed typing)
-  const typing = msg.tags['+typing']
+  const typing = msg.tags['+typing'] ?? msg.tags['+draft/typing']
   if (typeof typing === 'string') {
     if (nick.toLowerCase() !== client.state.nick.toLowerCase()) {
       client.events.emit('typing', {
@@ -146,15 +146,20 @@ registerHandler('TAGMSG', (client, msg) => {
     return
   }
 
-  // Handle reactions
-  const react = msg.tags['+draft/react']
-  const replyTo = msg.tags['+reply']
-  if (typeof react === 'string' && typeof replyTo === 'string') {
+  // Reactions. Both spellings of each tag are accepted: the specs are drafts,
+  // implementations differ on the prefix, and a reaction that silently does
+  // not arrive is indistinguishable from one nobody sent.
+  const react = tagValue(msg.tags, '+draft/react', '+react')
+  const unreact = tagValue(msg.tags, '+draft/unreact', '+unreact')
+  const replyTo = tagValue(msg.tags, '+draft/reply', '+reply')
+
+  if ((react || unreact) && replyTo) {
     client.events.emit('react', {
       channel,
       nick,
-      emoji: react,
-      msgid: replyTo
+      emoji: (react ?? unreact) as string,
+      msgid: replyTo,
+      removed: unreact !== null
     })
     return
   }
@@ -166,3 +171,17 @@ registerHandler('TAGMSG', (client, msg) => {
     tags: msg.tags
   })
 })
+
+/** The first of several tag spellings that is actually present */
+function tagValue(
+  tags: Record<string, string | true>,
+  ...names: string[]
+): string | null {
+  for (const name of names) {
+    const value = tags[name]
+    if (typeof value === 'string') return value
+    // A tag with no value still means it is present
+    if (value === true) return ''
+  }
+  return null
+}

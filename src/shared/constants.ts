@@ -13,7 +13,19 @@ export const DEFAULT_USERNAME = 'switchboard'
 /** Default realname */
 export const DEFAULT_REALNAME = 'Switchboard IRC Client'
 
-/** IRCv3 capabilities we request (in priority order) */
+/**
+ * IRCv3 capabilities we ask for, in priority order.
+ *
+ * Only the ones the server advertises are actually requested, so a name that no
+ * server uses is not an error — it is worse than that, it is silent: the
+ * feature simply never turns on and nothing says why. Every entry here is the
+ * name as registered at ircv3.net/registry.html, checked against the spec.
+ *
+ * Client *tags* (`+typing`, `+react`, `+draft/channel-context`) are deliberately
+ * absent: a tag is never negotiated with CAP, it rides on `message-tags`. Some
+ * servers advertise a matching capability anyway and gate the feature on it, so
+ * those unprefixed names appear below.
+ */
 export const REQUESTED_CAPS = [
   'cap-notify',
   'message-tags',
@@ -21,7 +33,6 @@ export const REQUESTED_CAPS = [
   'labeled-response',
   'echo-message',
   'server-time',
-  'message-ids',
   'sasl',
   'multi-prefix',
   'userhost-in-names',
@@ -34,24 +45,39 @@ export const REQUESTED_CAPS = [
   'invite-notify',
   'bot',
   'standard-replies',
+  'no-implicit-names',
+  'account-extban',
+  'monitor',
+  'extended-monitor',
+  // Not registered — WHOX is de facto throughout, signalled by the WHOX
+  // ISUPPORT token. Kept because a server that gates the 354 reply on a
+  // capability of this name would otherwise answer a WHOX query with a plain
+  // WHO, and asking for a name nobody advertises costs nothing.
+  'whox',
+  'draft/message-redaction',
+  'draft/message-edit',
   'draft/chathistory',
   'draft/read-marker',
   'draft/multiline',
-  'draft/message-redaction',
-  'draft/edit',
   'draft/channel-rename',
   'draft/account-registration',
   'draft/metadata-2',
   'draft/event-playback',
-  'draft/no-implicit-names',
   'draft/pre-away',
-  'draft/persistence',
-  'draft/register-before-connect',
+  // Deliberately absent: draft/persistence. It is a real capability, and
+  // nothing here implements the PERSISTENCE command — asking for it would
+  // change what a server does when we disappear, on the strength of support we
+  // do not have.
   'draft/search',
   'draft/auto-join',
-  '+draft/channel-context',
-  '+typing',
-  'UTF8ONLY'
+  'draft/client-batch',
+  'draft/extended-isupport',
+  // Server-side names for features that are client tags in the spec
+  'draft/channel-context',
+  'draft/react',
+  'draft/unreact',
+  'typing',
+  'reply'
 ] as const
 
 /** Tag escaping map per IRCv3 message-tags spec */
@@ -105,3 +131,29 @@ export const IRC_SERVICES = new Set(['nickserv', 'chanserv', 'memoserv', 'operse
 export function isServiceNick(name: string): boolean {
   return IRC_SERVICES.has(name.toLowerCase())
 }
+
+/**
+ * Slash commands the client understands.
+ *
+ * The parser in main/irc/commands.ts and the composer's completion both read
+ * this, so the two cannot drift apart — offering a command that then gets sent
+ * to the channel as plain text is worse than not offering it at all.
+ */
+export const IRC_COMMANDS = [
+  'me',
+  'join',
+  'part',
+  'nick',
+  'msg',
+  'query',
+  'notice',
+  'whois',
+  'topic',
+  'mode',
+  'kick',
+  'invite',
+  'away',
+  'back',
+  'quit',
+  'raw'
+] as const

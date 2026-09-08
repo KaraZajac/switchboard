@@ -58,8 +58,34 @@ registerHandler('BATCH', (client, msg) => {
 })
 
 /**
- * Check if a message belongs to a batch and buffer it.
- * Returns true if the message was consumed by a batch.
+ * Batch types whose contents must not be treated as live traffic.
+ *
+ * These are the ones where the batch changes what the messages *mean*: history
+ * is not news, a netsplit is one event rather than fifty quits, and the parts
+ * of a multiline message are not separate messages. Every other type — `names`,
+ * `metadata`, `labeled-response` — is a grouping hint, and the batch spec says
+ * a client that has nothing special to do with a type should process its
+ * messages as if they had arrived unbatched.
+ */
+const DEFERRED_BATCH_TYPES = new Set([
+  'chathistory',
+  'draft/chathistory',
+  'netsplit',
+  'netjoin',
+  'draft/multiline',
+  'multiline',
+  'search',
+  'draft/search'
+])
+
+/**
+ * Buffer a message that belongs to a batch we handle ourselves.
+ *
+ * Returns true when the message has been consumed and must not be dispatched.
+ *
+ * Getting this wrong is not subtle. A replayed JOIN handled as a live one sends
+ * NAMES, a metadata sync, a WHO and another CHATHISTORY — whose reply replays
+ * the same JOIN again. The client floods itself in a loop it cannot see.
  */
 export function checkBatchMembership(
   client: { state: { batches: Map<string, IRCBatch> } },
@@ -69,9 +95,27 @@ export function checkBatchMembership(
   if (typeof batchTag !== 'string') return false
 
   const batch = client.state.batches.get(batchTag)
-  if (batch) {
-    batch.messages.push(msg)
-    return true
+  if (!batch) return false
+
+  // Only collect what we are going to do something with. A nested batch
+  // inherits its ancestor's meaning: replayed history is still history.
+  if (!isDeferred(client, batch)) return false
+
+  batch.messages.push(msg)
+  return true
+}
+
+function isDeferred(
+  client: { state: { batches: Map<string, IRCBatch> } },
+  batch: IRCBatch
+): boolean {
+  const seen = new Set<string>()
+  let current: IRCBatch | undefined = batch
+
+  while (current && !seen.has(current.id)) {
+    if (DEFERRED_BATCH_TYPES.has(current.type)) return true
+    seen.add(current.id)
+    current = current.parent ? client.state.batches.get(current.parent) : undefined
   }
   return false
 }
@@ -132,20 +176,12 @@ function processBatch(client: { events: { emit: (event: string, ...args: unknown
       client.events.emit('searchResults', { messages: batch.messages })
       break
 
-    case 'labeled-response':
-      // Labeled response — process contained messages normally
-      // The label tag on individual messages correlates request/response
-      for (const msg of batch.messages) {
-        // Re-dispatch each message through the handler system
-        dispatchMessage(client, msg)
-      }
-      break
-
     default:
-      // Unknown batch type — process messages normally
-      for (const msg of batch.messages) {
-        dispatchMessage(client, msg)
-      }
+      // Everything else — `names`, `metadata`, `labeled-response`, a type we
+      // have never heard of — was handled as it arrived, which is what the
+      // batch spec asks of a client with nothing special to do with the type.
+      // Nothing was collected, so there is nothing to replay: dispatching here
+      // would deliver every message a second time.
       break
   }
 }

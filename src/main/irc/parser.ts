@@ -92,6 +92,10 @@ function parseTags(tagStr: string): Record<string, string | true> {
 function unescapeTagValue(value: string): string {
   let result = ''
   for (let i = 0; i < value.length; i++) {
+    if (value[i] === '\\' && i === value.length - 1) {
+      // A lone trailing backslash is dropped, per the message-tags spec
+      break
+    }
     if (value[i] === '\\' && i + 1 < value.length) {
       const seq = value.slice(i, i + 2)
       if (seq in TAG_ESCAPE_MAP) {

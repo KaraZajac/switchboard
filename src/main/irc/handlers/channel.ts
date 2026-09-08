@@ -1,6 +1,7 @@
 import { registerHandler } from './registry'
 import type { ChannelUser } from '@shared/types/channel'
 import { sendWHOX } from '../features/whox'
+import { syncMetadata } from '../features/metadata'
 
 /**
  * JOIN — Someone joined a channel
@@ -18,14 +19,26 @@ registerHandler('JOIN', (client, msg) => {
     // We joined — create channel state
     client.state.getChannel(channel)
 
-    // With draft/no-implicit-names the server won't send NAMES automatically
-    if (client.state.capabilities.has('draft/no-implicit-names')) {
-      if (client.state.isupport['WHOX']) {
-        sendWHOX(client, channel)
-      } else {
-        client.connection.send('NAMES', channel)
-      }
+    // Everyone's avatars, display names and colours for this channel in one go
+    if (client.state.capabilities.has('draft/metadata-2')) {
+      syncMetadata(client, channel)
     }
+
+    // With no-implicit-names the server will not send NAMES on its own, so ask.
+    //
+    // NAMES rather than WHOX, even where WHOX is available: the 366 that ends
+    // it is what marks the roster complete, and the WHOX enrichment already
+    // hangs off that. Asking WHOX first only means asking twice — once here,
+    // and again when the NAMES we still needed comes back.
+    if (client.state.capabilities.has('no-implicit-names')) {
+      client.connection.send('NAMES', channel)
+    }
+  }
+
+  // Someone else arriving: the server pushed everyone's metadata when *we*
+  // joined, but not for people who show up afterwards, so ask for theirs.
+  if (!isMe && nick && client.state.capabilities.has('draft/metadata-2')) {
+    syncMetadata(client, nick)
   }
 
   const ch = client.state.channels.get(channel.toLowerCase())

@@ -7,12 +7,19 @@ import type { ChannelUser } from '@shared/types/channel'
  * Client sends: WHO <mask> %tcuhsnfadlor[,token]
  * Server responds: RPL_WHOSPCRPL (354) with requested fields.
  *
- * We use a standard field set: %tcuhsnfar,switchboard
+ * We use a standard field set: %tcuhsnfar,<token>
  * t=token, c=channel, u=user, h=host, s=server, n=nick, f=flags, a=account, r=realname
  */
 
-/** Token we use to identify our WHOX requests */
-export const WHOX_TOKEN = 'switchboard'
+/**
+ * Token used to identify our WHOX requests.
+ *
+ * Must be numeric and at most 3 digits — that is all WHOX implementations
+ * (UnrealIRCd, solanum, ircu) accept. A non-numeric token is silently replaced
+ * with 0 in the reply, so every 354 fails the token check below and the user
+ * list never gets populated.
+ */
+export const WHOX_TOKEN = '742'
 
 /** Send a WHOX query for a channel */
 export function sendWHOX(
@@ -81,8 +88,16 @@ registerHandler('354', (client, msg) => {
 registerHandler('315', (client, msg) => {
   const channel = msg.params[1]
   const ch = client.state.channels.get(channel?.toLowerCase())
-  if (ch) {
-    const users: ChannelUser[] = Array.from(ch.users.values())
-    client.events.emit('names', { channel: ch.name, users })
+  if (!ch) return
+
+  // Safety net for servers whose WHOX replies we could not use (unexpected field
+  // order, dropped token): fall back to NAMES so the user list is never empty.
+  // 366 sets namesReceived, so this cannot loop.
+  if (!ch.namesReceived && ch.users.size <= 1) {
+    client.connection.send('NAMES', ch.name)
+    return
   }
+
+  const users: ChannelUser[] = Array.from(ch.users.values())
+  client.events.emit('names', { channel: ch.name, users })
 })
