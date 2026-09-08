@@ -4,7 +4,11 @@ import { autoUpdater } from 'electron-updater'
 import { registerIPCHandlers } from './ipc/index'
 import { ircManager } from './irc/manager'
 import { initDatabase, closeDatabase, saveDatabase } from './storage/database'
-import { getAllServers } from './storage/models/server'
+import { loadSTSPolicies, persistSTSPoliciesWith } from './irc/features/sts'
+import { allSTSPolicies, saveSTSPolicy, forgetSTSPolicy } from './storage/models/sts'
+import { stopRemoteLink } from './remote/link'
+import { encryptStoredCredentials } from './storage/models/server'
+import { secretsBackendDescription } from './storage/secrets'
 
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
@@ -32,7 +36,9 @@ function createWindow(): void {
 
   mainWindow.on('ready-to-show', () => {
     mainWindow?.show()
-    if (!app.isPackaged) {
+    // SWITCHBOARD_NO_DEVTOOLS keeps the window clean when running an unpackaged
+    // build to look at the UI itself.
+    if (!app.isPackaged && !process.env['SWITCHBOARD_NO_DEVTOOLS']) {
       mainWindow?.webContents.openDevTools()
     }
   })
@@ -50,6 +56,10 @@ function createWindow(): void {
     shell.openExternal(details.url)
     return { action: 'deny' }
   })
+
+  // Keep the window controls in sync when the window is resized by the WM
+  mainWindow.on('maximize', () => sendToRenderer('window:maximized', { maximized: true }))
+  mainWindow.on('unmaximize', () => sendToRenderer('window:maximized', { maximized: false }))
 
   // Set up IRC manager with main window for IPC
   ircManager.setMainWindow(mainWindow)
@@ -148,9 +158,16 @@ function createAppMenu(): void {
 }
 
 function createTray(): void {
-  const trayIconPath = join(__dirname, '../../resources/tray-icon.png')
+  // macOS wants a template image (a black glyph plus alpha, which the menu bar
+  // recolours). Everywhere else the full icon reads better, since a tray theme
+  // can be light or dark.
+  const isMac = process.platform === 'darwin'
+  const trayIconPath = join(
+    __dirname,
+    isMac ? '../../resources/tray-icon-mac.png' : '../../resources/tray-icon.png'
+  )
   const trayIcon = nativeImage.createFromPath(trayIconPath)
-  if (process.platform === 'darwin') {
+  if (isMac) {
     trayIcon.setTemplateImage(true)
   }
 
@@ -218,7 +235,10 @@ function setupAutoUpdater(): void {
     console.error('Auto-updater error:', err.message)
   })
 
-  autoUpdater.checkForUpdatesAndNotify()
+  // Rejects when a release has no updater metadata (or the network is down).
+  // The 'error' handler above already reports it — this just keeps it from
+  // surfacing as an unhandled rejection.
+  autoUpdater.checkForUpdatesAndNotify().catch(() => {})
 }
 
 function sendToRenderer(channel: string, data: unknown): void {
@@ -234,6 +254,22 @@ app.whenReady().then(async () => {
   // Initialize database
   try {
     await initDatabase()
+
+    // Strict Transport Security has to outlive the session to mean anything:
+    // a client that forgets on restart offers a plaintext window on every
+    // launch, which is exactly what the policy exists to close.
+    persistSTSPoliciesWith({ save: saveSTSPolicy, forget: forgetSTSPolicy })
+    loadSTSPolicies(allSTSPolicies())
+
+    // Credentials used to be written to disk in the clear; encrypt anything
+    // left over from an older build before anything else reads them.
+    const { migrated, protected: credentialsProtected } = encryptStoredCredentials()
+    if (migrated > 0) {
+      console.info(`Encrypted stored credentials for ${migrated} server(s)`)
+    }
+    if (!credentialsProtected) {
+      console.warn(`Credential storage: ${secretsBackendDescription()}`)
+    }
   } catch (err) {
     console.error('Failed to initialize database:', err)
   }
@@ -270,13 +306,10 @@ app.whenReady().then(async () => {
   // Periodically flush message database to disk (every 30s)
   setInterval(() => saveDatabase(), 30_000)
 
-  // Auto-connect servers
-  const servers = getAllServers()
-  for (const server of servers) {
-    if (server.autoConnect) {
-      ircManager.connect(server)
-    }
-  }
+  // Auto-connect servers once the renderer is listening (it calls
+  // 'app:renderer-ready'). This timer is the fallback for a renderer that never
+  // reports in, so a broken window still leaves the connections up.
+  setTimeout(() => ircManager.autoConnectAll(), 5_000)
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -293,10 +326,33 @@ app.on('window-all-closed', () => {
   }
 })
 
-app.on('before-quit', () => {
+let shuttingDown = false
+
+app.on('before-quit', (event) => {
+  if (shuttingDown) return
+  event.preventDefault()
+  shuttingDown = true
   isQuitting = true
-  // Save pending messages and disconnect
+
+  // Closing on purpose should hand over immediately. Without telling the phone,
+  // it waits out the heartbeat timeout first — sixteen seconds during which the
+  // user is connected to nothing and does not know it.
+  void shutdown().finally(() => app.exit(0))
+})
+
+/**
+ * Leave tidily, but never hang on it.
+ *
+ * A network call that does not come back must not stop the app from closing,
+ * so everything here races a short timer.
+ */
+async function shutdown(): Promise<void> {
+  const withTimeout = (work: Promise<unknown>, ms: number) =>
+    Promise.race([work, new Promise((resolve) => setTimeout(resolve, ms))])
+
+  await withTimeout(stopRemoteLink().catch(() => {}), 1500)
+
   saveDatabase()
   ircManager.destroyAll()
   closeDatabase()
-})
+}

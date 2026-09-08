@@ -1,10 +1,13 @@
-import { ipcMain, Notification, app, net, dialog } from 'electron'
+import { BrowserWindow, Notification, app, net, dialog, type IpcMainInvokeEvent } from 'electron'
+import { handle } from './registry'
 import { readFile } from 'fs/promises'
+import { userInfo } from 'os'
 import { basename, extname } from 'path'
 import https from 'node:https'
 import http from 'node:http'
 import { autoUpdater } from 'electron-updater'
 import { ircManager } from '../irc/manager'
+import { runCommand } from '../irc/commands'
 import {
   getAllServers,
   getServer,
@@ -14,108 +17,217 @@ import {
 } from '../storage/models/server'
 import { getMessages, searchMessages, deleteMessage } from '../storage/models/message'
 import { getSetting, setSetting } from '../storage/models/settings'
+import { secretsProtected, secretsBackendDescription } from '../storage/secrets'
+import { createVault, lockVault, resealVault, unlockVault, vaultStatus } from '../vault/vault'
+import {
+  sessionState,
+  remoteStatus,
+  startRemoteLink,
+  stopRemoteLink,
+  startPairing,
+  cancelPairing,
+  revokeRemoteDevice
+} from '../remote/link'
+import { DEFAULT_NICK } from '@shared/constants'
 import { getReadMarker, setReadMarker, getAllReadMarkers } from '../storage/models/readmarker'
+import { expectCleared } from '../irc/features/metadata'
 
 /**
  * Register all IPC handlers.
  * These handle renderer → main invocations.
  */
+type ChannelListEntry = { name: string; userCount: number; topic: string }
+
+/** LIST is slow and answers once; concurrent askers share the same request. */
+const channelListRequests = new Map<string, Promise<ChannelListEntry[]>>()
+
 export function registerIPCHandlers(): void {
   // ── Server management ────────────────────────────────────────────
 
-  ipcMain.handle('server:list', async () => {
+  handle('server:list', async () => {
     return getAllServers()
   })
 
-  ipcMain.handle('server:add', async (_event, config) => {
+  handle('app:renderer-ready', async () => {
+    // The renderer is listening now, so it is safe to bring up auto-connect
+    // servers. Returns whatever is already live, for a reload or a slow first
+    // paint that missed the events.
+    ircManager.autoConnectAll()
+    return ircManager.getSnapshot()
+  })
+
+  // ── Window controls (the frame is drawn by the app itself) ───────
+
+  // ── Remote link ─────────────────────────────────────────────────
+
+  handle('remote:status', async () => remoteStatus())
+  handle('session:state', async () => sessionState())
+
+  handle('vault:status', async () => vaultStatus())
+  handle('vault:create', async (_event, passphrase: string) => createVault(passphrase))
+  handle('vault:unlock', async (_event, passphrase: string) => unlockVault(passphrase))
+  handle('vault:lock', async () => lockVault())
+  handle('remote:start', async () => startRemoteLink())
+  handle('remote:stop', async () => stopRemoteLink())
+  handle('remote:start-pairing', async () => startPairing())
+  handle('remote:cancel-pairing', async () => cancelPairing())
+  handle('remote:revoke', async (_event, endpointId: string) => revokeRemoteDevice(endpointId))
+
+  handle('app:secrets-status', async () => ({
+    protected: secretsProtected(),
+    description: secretsBackendDescription()
+  }))
+
+  handle('app:default-nick', async () => {
+    // RFC 2812 nick charset; anything else in the account name is dropped
+    const raw = (userInfo().username || '').replace(/[^A-Za-z0-9[\]\\`_^{|}-]/g, '')
+    const nick = /^[A-Za-z[\]\\`_^{|}]/.test(raw) ? raw.slice(0, 16) : ''
+    return nick || DEFAULT_NICK
+  })
+
+  // Window controls act on the window that asked. A paired device has no
+  // window here, which is also why these are absent from REMOTE_ALLOWED.
+  const senderWindow = (event: IpcMainInvokeEvent | null): BrowserWindow | null =>
+    event ? BrowserWindow.fromWebContents(event.sender) : null
+
+  handle('window:minimize', async (event) => {
+    senderWindow(event)?.minimize()
+  })
+
+  handle('window:maximize', async (event) => {
+    const window = senderWindow(event)
+    if (!window) return false
+    if (window.isMaximized()) {
+      window.unmaximize()
+      return false
+    }
+    window.maximize()
+    return true
+  })
+
+  handle('window:close', async (event) => {
+    senderWindow(event)?.close()
+  })
+
+  handle('window:is-maximized', async (event) => {
+    return senderWindow(event)?.isMaximized() ?? false
+  })
+
+  handle('server:add', async (_event, config) => {
     const id = addServer(config)
+    // The vault is what the other device would connect with — keep it current
+    resealVault()
     return id
   })
 
-  ipcMain.handle('server:update', async (_event, serverId: string, updates) => {
+  handle('server:update', async (_event, serverId: string, updates) => {
     updateServer(serverId, updates)
+    resealVault()
   })
 
-  ipcMain.handle('server:remove', async (_event, serverId: string) => {
+  handle('server:remove', async (_event, serverId: string) => {
     ircManager.disconnect(serverId)
     removeServer(serverId)
+    resealVault()
   })
 
-  ipcMain.handle('server:connect', async (_event, serverId: string) => {
+  handle('server:connect', async (_event, serverId: string) => {
     const config = getServer(serverId)
     if (!config) throw new Error(`Server ${serverId} not found`)
     ircManager.connect(config)
   })
 
-  ipcMain.handle('server:disconnect', async (_event, serverId: string) => {
+  handle('server:disconnect', async (_event, serverId: string) => {
     ircManager.disconnect(serverId)
   })
 
   // ── Channel operations ───────────────────────────────────────────
 
-  ipcMain.handle('channel:join', async (_event, serverId: string, channel: string, key?: string) => {
+  handle('channel:join', async (_event, serverId: string, channel: string, key?: string) => {
     const client = ircManager.getClient(serverId)
     if (!client) throw new Error('Not connected')
     client.join(channel, key)
   })
 
-  ipcMain.handle('channel:part', async (_event, serverId: string, channel: string) => {
+  handle('channel:part', async (_event, serverId: string, channel: string) => {
     const client = ircManager.getClient(serverId)
     if (!client) throw new Error('Not connected')
     client.part(channel)
   })
 
-  ipcMain.handle('channel:topic', async (_event, serverId: string, channel: string, topic: string) => {
+  handle('channel:topic', async (_event, serverId: string, channel: string, topic: string) => {
     const client = ircManager.getClient(serverId)
     if (!client) throw new Error('Not connected')
     client.setTopic(channel, topic)
   })
 
-  ipcMain.handle('channel:list', async (_event, serverId: string) => {
+  handle('channel:list', async (_event, serverId: string) => {
     const client = ircManager.getClient(serverId)
     if (!client) throw new Error('Not connected')
 
-    return new Promise<{ name: string; userCount: number; topic: string }[]>((resolve) => {
-      const timeout = setTimeout(() => {
-        client.events.off('channelList', onList)
-        resolve([])
-      }, 15000)
+    // One LIST at a time per server. Two callers — the window and a phone, say
+    // — used to send two LISTs and race for one `channelList` event, so the
+    // loser got whatever the winner had already drained: an empty list.
+    const inFlight = channelListRequests.get(serverId)
+    if (inFlight) return inFlight
 
-      const onList = (channels: { name: string; userCount: number; topic: string }[]) => {
+    const request = new Promise<ChannelListEntry[]>((resolve) => {
+      const finish = (channels: ChannelListEntry[]): void => {
         clearTimeout(timeout)
+        client.events.off('channelList', onList)
+        channelListRequests.delete(serverId)
         resolve(channels)
       }
 
-      client.events.once('channelList', onList)
+      // A big network answers for a long time; give up rather than hang
+      const timeout = setTimeout(() => finish([]), 15000)
+      const onList = (channels: ChannelListEntry[]): void => finish(channels)
+
+      client.events.on('channelList', onList)
       client.connection.send('LIST')
     })
+
+    channelListRequests.set(serverId, request)
+    return request
   })
 
   // ── Message operations ───────────────────────────────────────────
 
-  ipcMain.handle('message:send', async (_event, serverId: string, channel: string, text: string) => {
+  handle('message:send', async (_event, serverId: string, channel: string, text: string) => {
     const client = ircManager.getClient(serverId)
     if (!client) throw new Error('Not connected')
+
+    // Slash commands run instead of being sent — an unrecognised one must never
+    // reach the channel as a message.
+    const command = runCommand(client, channel, text)
+    if (command.handled) {
+      if (command.error) {
+        client.events.emit('error', {
+          code: 'COMMAND',
+          command: text.split(' ')[0],
+          message: command.error
+        })
+      }
+      return
+    }
 
     // Auto-clear away when sending a message
     if (client.state.away) {
       client.connection.send('AWAY')
     }
 
-    // Handle /me action
-    if (text.startsWith('/me ')) {
-      client.action(channel, text.slice(4))
-    } else if (text.includes('\n') && client.state.capabilities.has('draft/multiline')) {
+    const body = command.message ?? text
+
+    if (body.includes('\n') && client.state.capabilities.has('draft/multiline')) {
       // Multiline message — send as batch
       const { sendMultilineMessage } = await import('../irc/features/multiline')
-      const lines = text.split('\n')
-      sendMultilineMessage(client, channel, lines)
+      sendMultilineMessage(client, channel, body.split('\n'))
     } else {
-      client.say(channel, text)
+      client.say(channel, body)
     }
   })
 
-  ipcMain.handle('message:reply', async (_event, serverId: string, channel: string, text: string, replyTo: string) => {
+  handle('message:reply', async (_event, serverId: string, channel: string, text: string, replyTo: string) => {
     const client = ircManager.getClient(serverId)
     if (!client) throw new Error('Not connected')
     // Strip newlines to prevent IRC command injection
@@ -126,15 +238,32 @@ export function registerIPCHandlers(): void {
     )
   })
 
-  ipcMain.handle('message:react', async (_event, serverId: string, channel: string, msgid: string, emoji: string) => {
-    const client = ircManager.getClient(serverId)
-    if (!client) throw new Error('Not connected')
-    client.connection.sendRaw(
-      `@+draft/react=${sanitizeTagValue(emoji)};+reply=${sanitizeTagValue(msgid)} TAGMSG ${channel}`
-    )
-  })
+  /**
+   * React to a message, or take the reaction back.
+   *
+   * Both directions, because a reaction you cannot remove is a reaction nobody
+   * dares add. `draft/unreact` is the other half of the same client tag.
+   */
+  handle(
+    'message:react',
+    async (
+      _event,
+      serverId: string,
+      channel: string,
+      msgid: string,
+      emoji: string,
+      remove = false
+    ) => {
+      const client = ircManager.getClient(serverId)
+      if (!client) throw new Error('Not connected')
+      const tag = remove ? '+draft/unreact' : '+draft/react'
+      client.connection.sendRaw(
+        `@${tag}=${sanitizeTagValue(emoji)};+reply=${sanitizeTagValue(msgid)} TAGMSG ${channel}`
+      )
+    }
+  )
 
-  ipcMain.handle('message:redact', async (_event, serverId: string, channel: string, msgid: string, reason?: string) => {
+  handle('message:redact', async (_event, serverId: string, channel: string, msgid: string, reason?: string) => {
     const client = ircManager.getClient(serverId)
     if (!client) throw new Error('Not connected')
 
@@ -149,7 +278,7 @@ export function registerIPCHandlers(): void {
     }
   })
 
-  ipcMain.handle('message:edit', async (_event, serverId: string, channel: string, msgid: string, newText: string) => {
+  handle('message:edit', async (_event, serverId: string, channel: string, msgid: string, newText: string) => {
     const client = ircManager.getClient(serverId)
     if (!client) throw new Error('Not connected')
     // Strip newlines to prevent IRC command injection
@@ -158,7 +287,7 @@ export function registerIPCHandlers(): void {
     client.connection.sendRaw(`@+draft/edit=${sanitizeTagValue(msgid)} PRIVMSG ${channel} :${safeText}`)
   })
 
-  ipcMain.handle('message:typing', async (_event, serverId: string, channel: string, status: 'active' | 'done' = 'active') => {
+  handle('message:typing', async (_event, serverId: string, channel: string, status: 'active' | 'done' = 'active') => {
     const client = ircManager.getClient(serverId)
     if (!client) throw new Error('Not connected')
     client.connection.sendRaw(`@+typing=${sanitizeTagValue(status)} TAGMSG ${channel}`)
@@ -166,7 +295,7 @@ export function registerIPCHandlers(): void {
 
   // ── User operations ──────────────────────────────────────────────
 
-  ipcMain.handle('user:whois', async (_event, serverId: string, nick: string) => {
+  handle('user:whois', async (_event, serverId: string, nick: string) => {
     const client = ircManager.getClient(serverId)
     if (!client) throw new Error('Not connected')
     client.whois(nick)
@@ -174,19 +303,19 @@ export function registerIPCHandlers(): void {
     return {}
   })
 
-  ipcMain.handle('user:kick', async (_event, serverId: string, channel: string, nick: string, reason?: string) => {
+  handle('user:kick', async (_event, serverId: string, channel: string, nick: string, reason?: string) => {
     const client = ircManager.getClient(serverId)
     if (!client) throw new Error('Not connected')
     client.kick(channel, nick, reason)
   })
 
-  ipcMain.handle('user:nick', async (_event, serverId: string, nick: string) => {
+  handle('user:nick', async (_event, serverId: string, nick: string) => {
     const client = ircManager.getClient(serverId)
     if (!client) throw new Error('Not connected')
     client.setNick(nick)
   })
 
-  ipcMain.handle('user:setname', async (_event, serverId: string, realname: string) => {
+  handle('user:setname', async (_event, serverId: string, realname: string) => {
     const client = ircManager.getClient(serverId)
     if (!client) throw new Error('Not connected')
     if (!client.state.capabilities.has('setname')) {
@@ -195,7 +324,7 @@ export function registerIPCHandlers(): void {
     client.connection.send('SETNAME', realname)
   })
 
-  ipcMain.handle('user:away', async (_event, serverId: string, message?: string) => {
+  handle('user:away', async (_event, serverId: string, message?: string) => {
     const client = ircManager.getClient(serverId)
     if (!client) throw new Error('Not connected')
     if (message) {
@@ -207,45 +336,99 @@ export function registerIPCHandlers(): void {
 
   // ── Metadata ────────────────────────────────────────────────────
 
-  ipcMain.handle('metadata:get', async (_event, serverId: string, target: string, key: string) => {
+  handle('metadata:get', async (_event, serverId: string, target: string, key: string) => {
     const client = ircManager.getClient(serverId)
     if (!client) throw new Error('Not connected')
     if (!client.state.capabilities.has('draft/metadata-2')) {
       throw new Error('Server does not support metadata')
+    }
+    // METADATA before 001 comes back as 451 and is lost. Say so rather than
+    // sending a command that cannot work.
+    if (client.state.registrationState !== 'connected') {
+      throw new Error('Not registered with the server yet')
     }
     client.connection.send('METADATA', target, 'GET', key)
   })
 
-  ipcMain.handle('metadata:set', async (_event, serverId: string, key: string, value: string) => {
-    const client = ircManager.getClient(serverId)
-    if (!client) throw new Error('Not connected')
-    if (!client.state.capabilities.has('draft/metadata-2')) {
-      throw new Error('Server does not support metadata')
-    }
-    // Validate key — must be alphanumeric/dashes only (no spaces or protocol chars)
+  /**
+   * Set one of your own profile keys.
+   *
+   * Your profile is yours, not the network's, so it is saved whatever the
+   * server can carry — and published on the ones that can, now and on every
+   * later connect. This used to throw on a server without `draft/metadata-2`,
+   * which meant filling the form in on such a network threw the answers away.
+   *
+   * Answers rather than throws, because "saved but not published" is the
+   * common case and is not a failure the caller should have to infer from an
+   * exception.
+   */
+  handle('metadata:set', async (_event, serverId: string, key: string, value: string) => {
+    // Alphanumeric and dashes only — no spaces, no protocol characters
     if (!/^[a-zA-Z0-9_-]+$/.test(key)) throw new Error('Invalid metadata key')
 
-    // Use sendRaw to avoid the serializer adding a trailing ':' prefix
-    // which some server implementations incorrectly store as part of the value
-    if (value.includes(' ') || value.startsWith(':')) {
+    const config = getServer(serverId)
+    if (!config) throw new Error(`Server ${serverId} not found`)
+
+    const profile: Record<string, string> = { ...(config.profile ?? {}) }
+    if (value) profile[key] = value
+    else delete profile[key]
+    updateServer(serverId, { profile })
+
+    // The avatar has a column of its own, from before profiles were a thing
+    if (key === 'avatar') updateServer(serverId, { avatarUrl: value || null })
+
+    // Keep the other device's copy in step
+    resealVault()
+
+    const client = ircManager.getClient(serverId)
+    if (client && key === 'avatar') client.config.avatarUrl = value || null
+    if (client) {
+      client.config.profile = profile as typeof client.config.profile
+
+      // Reflect it back to both windows now, rather than waiting for a server
+      // echo that may be wrong or may never come.
+      const own = client.state.nick.toLowerCase()
+      const mine: Record<string, string> = { ...(client.state.metadata.get(own) ?? {}) }
+      if (value) mine[key] = value
+      else delete mine[key]
+      if (Object.keys(mine).length > 0) client.state.metadata.set(own, mine)
+      else client.state.metadata.delete(own)
+
+      ircManager.announceMetadata(serverId, client.state.nick, key, value)
+    }
+
+    if (!client) return { saved: true, published: false, reason: 'Not connected' }
+    if (!client.state.capabilities.has('draft/metadata-2')) {
+      return {
+        saved: true,
+        published: false,
+        reason: 'This network does not support profiles, so nobody here will see it'
+      }
+    }
+
+    if (!value) {
+      // Clearing a key means leaving the value off entirely. Sending an empty
+      // one — `METADATA * SET pronouns ` — is a malformed line, and servers
+      // are entitled to make of it what they like.
+      expectCleared(client, key)
+      client.connection.send('METADATA', '*', 'SET', key)
+    } else if (value.includes(' ') || value.startsWith(':')) {
+      // sendRaw rather than the serializer: some servers store the trailing ':'
+      // as part of the value
       client.connection.sendRaw(`METADATA * SET ${key} :${value}`)
     } else {
       client.connection.sendRaw(`METADATA * SET ${key} ${value}`)
     }
-    // Persist avatar URL locally so it survives restarts
-    if (key === 'avatar') {
-      updateServer(serverId, { avatarUrl: value || null })
-      client.config.avatarUrl = value || null
-    }
+    return { saved: true, published: true }
   })
 
   // ── History ──────────────────────────────────────────────────────
 
-  ipcMain.handle('history:fetch', async (_event, serverId: string, channel: string, before?: string, limit?: number) => {
+  handle('history:fetch', async (_event, serverId: string, channel: string, before?: string, limit?: number) => {
     return getMessages(serverId, channel, { before, limit })
   })
 
-  ipcMain.handle('chathistory:request', async (_event, serverId: string, channel: string, before?: string, limit?: number) => {
+  handle('chathistory:request', async (_event, serverId: string, channel: string, before?: string, limit?: number) => {
     const client = ircManager.getClient(serverId)
     if (!client) return
     const { requestChathistory } = await import('../irc/features/chathistory')
@@ -259,20 +442,27 @@ export function registerIPCHandlers(): void {
 
   // ── Account registration ────────────────────────────────────
 
-  ipcMain.handle('account:register', async (_event, serverId: string, email: string | null, password: string) => {
+  handle('account:register', async (_event, serverId: string, email: string | null, password: string) => {
     const client = ircManager.getClient(serverId)
     if (!client) throw new Error('Not connected')
     const { registerAccount } = await import('../irc/features/account-registration')
     return registerAccount(client, email, password)
   })
 
+  handle('account:verify', async (_event, serverId: string, account: string, code: string) => {
+    const client = ircManager.getClient(serverId)
+    if (!client) throw new Error('Not connected')
+    const { verifyAccount } = await import('../irc/features/account-registration')
+    return verifyAccount(client, account, code)
+  })
+
   // ── Search ──────────────────────────────────────────────────
 
-  ipcMain.handle('message:search', async (_event, serverId: string, query: string, channel?: string) => {
+  handle('message:search', async (_event, serverId: string, query: string, channel?: string) => {
     return searchMessages(serverId, query, { channel, limit: 50 })
   })
 
-  ipcMain.handle('message:search-server', async (_event, serverId: string, query: string, channel?: string) => {
+  handle('message:search-server', async (_event, serverId: string, query: string, channel?: string) => {
     const client = ircManager.getClient(serverId)
     if (!client) throw new Error('Not connected')
     if (!client.state.capabilities.has('draft/search')) {
@@ -288,14 +478,14 @@ export function registerIPCHandlers(): void {
 
   // ── Notifications ───────────────────────────────────────────
 
-  ipcMain.handle('notification:send', async (_event, title: string, body: string) => {
+  handle('notification:send', async (_event, title: string, body: string) => {
     if (Notification.isSupported()) {
       const notification = new Notification({ title, body, silent: false })
       notification.show()
     }
   })
 
-  ipcMain.handle('tray:set-badge', async (_event, count: number) => {
+  handle('tray:set-badge', async (_event, count: number) => {
     if (process.platform === 'darwin') {
       app.dock?.setBadge(count > 0 ? count.toString() : '')
     }
@@ -303,11 +493,11 @@ export function registerIPCHandlers(): void {
 
   // ── Auto-update ────────────────────────────────────────────────
 
-  ipcMain.handle('updater:install', async () => {
+  handle('updater:install', async () => {
     autoUpdater.quitAndInstall(false, true)
   })
 
-  ipcMain.handle('updater:check', async () => {
+  handle('updater:check', async () => {
     if (!app.isPackaged) return { available: false }
     const result = await autoUpdater.checkForUpdates()
     return { available: !!result?.updateInfo, version: result?.updateInfo?.version }
@@ -315,17 +505,17 @@ export function registerIPCHandlers(): void {
 
   // ── Settings ─────────────────────────────────────────────────────
 
-  ipcMain.handle('settings:get', async (_event, key: string) => {
+  handle('settings:get', async (_event, key: string) => {
     return getSetting(key)
   })
 
-  ipcMain.handle('settings:set', async (_event, key: string, value: unknown) => {
+  handle('settings:set', async (_event, key: string, value: unknown) => {
     setSetting(key, value)
   })
 
   // ── Read markers ─────────────────────────────────────────────────
 
-  ipcMain.handle('read-marker:set', async (_event, serverId: string, channel: string, timestamp: string) => {
+  handle('read-marker:set', async (_event, serverId: string, channel: string, timestamp: string) => {
     // Persist locally
     setReadMarker(serverId, channel, timestamp)
 
@@ -336,17 +526,17 @@ export function registerIPCHandlers(): void {
     }
   })
 
-  ipcMain.handle('read-marker:get', async (_event, serverId: string, channel: string) => {
+  handle('read-marker:get', async (_event, serverId: string, channel: string) => {
     return getReadMarker(serverId, channel)
   })
 
-  ipcMain.handle('read-marker:get-all', async (_event, serverId: string) => {
+  handle('read-marker:get-all', async (_event, serverId: string) => {
     return getAllReadMarkers(serverId)
   })
 
   // ── Monitor (friend list) ──────────────────────────────────────────
 
-  ipcMain.handle('monitor:add', async (_event, serverId: string, nicks: string[]) => {
+  handle('monitor:add', async (_event, serverId: string, nicks: string[]) => {
     const { addToMonitorList } = await import('../storage/models/monitor')
     addToMonitorList(serverId, nicks)
     const client = ircManager.getClient(serverId)
@@ -355,7 +545,7 @@ export function registerIPCHandlers(): void {
     }
   })
 
-  ipcMain.handle('monitor:remove', async (_event, serverId: string, nicks: string[]) => {
+  handle('monitor:remove', async (_event, serverId: string, nicks: string[]) => {
     const { removeFromMonitorList } = await import('../storage/models/monitor')
     removeFromMonitorList(serverId, nicks)
     const client = ircManager.getClient(serverId)
@@ -364,12 +554,12 @@ export function registerIPCHandlers(): void {
     }
   })
 
-  ipcMain.handle('monitor:list', async (_event, serverId: string) => {
+  handle('monitor:list', async (_event, serverId: string) => {
     const { getMonitorList } = await import('../storage/models/monitor')
     return getMonitorList(serverId)
   })
 
-  ipcMain.handle('monitor:status', async (_event, serverId: string) => {
+  handle('monitor:status', async (_event, serverId: string) => {
     const client = ircManager.getClient(serverId)
     if (client) {
       client.connection.send('MONITOR', 'S')
@@ -378,7 +568,7 @@ export function registerIPCHandlers(): void {
 
   // ── File upload (draft/FILEHOST) ────────────────────────────────────
 
-  ipcMain.handle('file:upload', async (_event, serverId: string) => {
+  handle('file:upload', async (_event, serverId: string) => {
     const client = ircManager.getClient(serverId)
     if (!client) throw new Error('Not connected')
 
@@ -466,7 +656,7 @@ export function registerIPCHandlers(): void {
   const PREVIEW_CACHE_TTL = 10 * 60 * 1000 // 10 minutes
   const PREVIEW_CACHE_MAX = 200
 
-  ipcMain.handle('link-preview:fetch', async (_event, url: string) => {
+  handle('link-preview:fetch', async (_event, url: string) => {
     // Only fetch http/https URLs
     if (!/^https?:\/\//i.test(url)) return null
 
@@ -511,7 +701,8 @@ export function registerIPCHandlers(): void {
         return undefined
       }
 
-      const title = get('title') || html.match(/<title[^>]*>([^<]+)<\/title>/i)?.[1]?.trim()
+      const titleTag = html.match(/<title[^>]*>([^<]+)<\/title>/i)?.[1]?.trim()
+      const title = get('title') || (titleTag ? decodeHTMLEntities(titleTag) : undefined)
       const description = get('description')
       const siteName = get('site_name')
       let image = get('image')
@@ -535,6 +726,11 @@ export function registerIPCHandlers(): void {
       } else {
         try { favicon = new URL('/favicon.ico', url).href } catch { /* ignore */ }
       }
+
+      // Some sites suppress the favicon request with `<link rel=icon href="data:,">`.
+      // Passing that on leaves a blank image slot in the preview, which reads as
+      // a failed load rather than a site that chose not to have one.
+      if (favicon && /^data:[^,]*,\s*$/i.test(favicon)) favicon = undefined
 
       if (!title && !description && !image) {
         linkPreviewCache.set(url, { data: null, ts: Date.now() })
@@ -563,13 +759,46 @@ function sanitizeTagValue(value: string): string {
     .replace(/\n/g, '\\n')
 }
 
+/** The named entities that actually turn up in page titles and descriptions */
+const NAMED_ENTITIES: Record<string, string> = {
+  amp: '&',
+  lt: '<',
+  gt: '>',
+  quot: '"',
+  apos: "'",
+  nbsp: ' ',
+  mdash: '\u2014',
+  ndash: '\u2013',
+  hellip: '\u2026',
+  lsquo: '\u2018',
+  rsquo: '\u2019',
+  ldquo: '\u201c',
+  rdquo: '\u201d',
+  laquo: '\u00ab',
+  raquo: '\u00bb',
+  bull: '\u2022',
+  middot: '\u00b7',
+  times: '\u00d7',
+  copy: '\u00a9',
+  reg: '\u00ae',
+  trade: '\u2122',
+  deg: '\u00b0',
+  euro: '\u20ac',
+  pound: '\u00a3',
+  hyphen: '-'
+}
+
 function decodeHTMLEntities(str: string): string {
-  return str
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&#x([0-9a-f]+);/gi, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
-    .replace(/&#(\d+);/g, (_, dec) => String.fromCodePoint(parseInt(dec)))
+  // One pass, so an escaped entity (&amp;lt;) does not decode twice
+  return str.replace(/&(#x[0-9a-f]+|#\d+|[a-z][a-z0-9]*);/gi, (match, entity: string) => {
+    if (entity.startsWith('#x') || entity.startsWith('#X')) {
+      const code = parseInt(entity.slice(2), 16)
+      return Number.isFinite(code) ? String.fromCodePoint(code) : match
+    }
+    if (entity.startsWith('#')) {
+      const code = parseInt(entity.slice(1), 10)
+      return Number.isFinite(code) ? String.fromCodePoint(code) : match
+    }
+    return NAMED_ENTITIES[entity.toLowerCase()] ?? match
+  })
 }

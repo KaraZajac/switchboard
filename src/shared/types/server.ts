@@ -1,4 +1,5 @@
 import type { SASLMechanism } from './irc'
+import type { UserMetadata } from './metadata'
 
 /** Server connection configuration */
 export interface ServerConfig {
@@ -21,8 +22,10 @@ export interface ServerConfig {
   sortOrder: number
   /** WebSocket URL (ws:// or wss://) — if set, connect via WebSocket instead of TCP */
   websocketUrl: string | null
-  /** Locally persisted avatar URL for draft/metadata-2 */
+  /** Locally persisted avatar URL for draft/metadata-2 (legacy; see profile) */
   avatarUrl: string | null
+  /** Our own draft/metadata-2 profile, republished on every connect */
+  profile: UserMetadata
   /** Away message to set before registration (draft/pre-away, bouncer support) */
   preAwayMessage: string | null
 }

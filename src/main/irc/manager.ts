@@ -2,9 +2,15 @@ import { BrowserWindow } from 'electron'
 import type { ServerConfig } from '@shared/types/server'
 import type { IRCMessage } from '@shared/types/irc'
 import type { ChatMessage } from '@shared/types/message'
+import type { ConnectionSnapshot } from '@shared/types/ipc'
 import { IRCClient } from './client'
-import { storeMessage, deleteMessage } from '../storage/models/message'
+import { storeMessage, deleteMessage, editStoredMessage } from '../storage/models/message'
+import { setReaction } from '../storage/models/reaction'
 import { getMonitorList } from '../storage/models/monitor'
+import { getAllServers } from '../storage/models/server'
+import { getJoinedChannels, markChannelJoined, markChannelParted } from '../storage/models/channel'
+import { subscribeToMetadata } from './features/metadata'
+import type { UserMetadata } from '@shared/types/metadata'
 import { v4 as uuid } from 'uuid'
 
 /**
@@ -13,6 +19,10 @@ import { v4 as uuid } from 'uuid'
 export class IRCManager {
   private clients = new Map<string, IRCClient>()
   private mainWindow: BrowserWindow | null = null
+  private autoConnected = false
+  private eventSubscribers = new Set<(channel: string, data: unknown) => void>()
+  /** Servers we disconnected because another device took over */
+  private released: string[] = []
 
   setMainWindow(window: BrowserWindow): void {
     this.mainWindow = window
@@ -27,7 +37,14 @@ export class IRCManager {
       this.disconnect(config.id)
     }
 
-    const client = new IRCClient(config)
+    // Rejoin whatever we were in last time, on top of the configured auto-join.
+    // Registration already knows how to join this list (including the delay for
+    // an identify command), so merge rather than joining separately.
+    const remembered = getJoinedChannels(config.id)
+    const known = new Set(config.autoJoin.map((name) => name.toLowerCase()))
+    const autoJoin = [...config.autoJoin, ...remembered.filter((n) => !known.has(n.toLowerCase()))]
+
+    const client = new IRCClient({ ...config, autoJoin })
     this.clients.set(config.id, client)
     this.bindClientEvents(config.id, client)
     client.connect()
@@ -62,6 +79,110 @@ export class IRCManager {
   }
 
   /**
+   * Connect every server marked auto-connect. Runs at most once per app launch.
+   *
+   * Called when the renderer signals it is listening, so the burst of events a
+   * fresh connection produces (connected, join, names) is not emitted into a
+   * window that has no listeners yet — which left the UI showing "Not connected"
+   * over a perfectly live socket.
+   */
+  autoConnectAll(): void {
+    if (this.autoConnected) return
+    this.autoConnected = true
+
+    for (const server of getAllServers()) {
+      if (server.autoConnect) {
+        this.connect(server)
+      }
+    }
+  }
+
+  /**
+   * Give up the IRC connections because another device is taking over.
+   *
+   * The server list is remembered rather than forgotten, so handing back is a
+   * matter of reconnecting the same set — the user should not have to do
+   * anything when their desktop wakes up.
+   */
+  releaseConnections(): void {
+    this.released = [...this.clients.keys()]
+    for (const serverId of this.released) {
+      this.disconnect(serverId)
+    }
+    console.info(`Released ${this.released.length} connection(s) to another device`)
+  }
+
+  /**
+   * Take the connections back (or open them for the first time).
+   *
+   * Skips anything already connected. This runs whenever this device becomes
+   * primary — including the very first time the remote link is switched on,
+   * when every server is typically connected already — and reconnecting those
+   * would drop the user off the network and bring them back under a `nick_`
+   * the server hands out because their real one is still in the ping timeout.
+   */
+  resumeConnections(): void {
+    const released = this.released
+    this.released = []
+
+    const wanted =
+      released.length > 0
+        ? released
+        : getAllServers()
+            .filter((server) => server.autoConnect)
+            .map((server) => server.id)
+
+    let resumed = 0
+    for (const serverId of wanted) {
+      if (this.clients.has(serverId)) continue
+      const config = getAllServers().find((server) => server.id === serverId)
+      if (!config) continue
+      this.connect(config)
+      resumed++
+    }
+
+    this.autoConnected = true
+    if (resumed > 0) console.info(`Resumed ${resumed} connection(s)`)
+  }
+
+  /**
+   * Live state of every registered connection, for a renderer that attached late
+   * or reloaded and so missed the events that would have built this state.
+   */
+  /**
+   * Tell both windows about a metadata change we made ourselves.
+   *
+   * The same event a server echo produces, so nothing downstream needs to know
+   * which of the two it was.
+   */
+  announceMetadata(serverId: string, target: string, key: string, value: string): void {
+    this.send('irc:metadata', { serverId, target, key, value })
+  }
+
+  getSnapshot(): ConnectionSnapshot[] {
+    const snapshot: ConnectionSnapshot[] = []
+
+    for (const [serverId, client] of this.clients) {
+      if (client.state.registrationState !== 'connected') continue
+
+      snapshot.push({
+        serverId,
+        nick: client.state.nick,
+        capabilities: Array.from(client.state.capabilities),
+        metadata: Object.fromEntries(client.state.metadata),
+        channels: Array.from(client.state.channels.values()).map((channel) => ({
+          name: channel.name,
+          topic: channel.topic,
+          topicSetBy: channel.topicSetBy,
+          users: Array.from(channel.users.values())
+        }))
+      })
+    }
+
+    return snapshot
+  }
+
+  /**
    * Disconnect all servers and clean up.
    */
   destroyAll(): void {
@@ -73,9 +194,69 @@ export class IRCManager {
 
   // ── Event bridging to renderer ───────────────────────────────────
 
+  /**
+   * Watch every event the UI receives.
+   *
+   * Paired devices are second renderers: they need the same stream of joins,
+   * messages and status changes the desktop window gets, from the same place,
+   * so the two cannot drift.
+   */
+  subscribe(listener: (channel: string, data: unknown) => void): () => void {
+    this.eventSubscribers.add(listener)
+    return () => {
+      this.eventSubscribers.delete(listener)
+    }
+  }
+
   private send(channel: string, data: unknown): void {
     if (this.mainWindow && !this.mainWindow.isDestroyed()) {
       this.mainWindow.webContents.send(channel, data)
+    }
+    for (const listener of this.eventSubscribers) {
+      try {
+        listener(channel, data)
+      } catch (err) {
+        console.error('A remote event listener threw:', err)
+      }
+    }
+  }
+
+  /**
+   * Subscribe to the metadata keys we render, and publish our own profile.
+   *
+   * Metadata does not survive a disconnect on most servers, so what is saved
+   * locally is the source of truth and goes up on every connect. Subscribing
+   * first means the server then pushes other people's values for the channels
+   * we are in, rather than us asking nick by nick.
+   */
+  private publishProfile(client: IRCClient): void {
+    const profile: UserMetadata = {
+      ...(client.config.avatarUrl ? { avatar: client.config.avatarUrl } : {}),
+      ...(client.config.profile ?? {})
+    }
+
+    // Show it to ourselves whatever the network can carry.
+    //
+    // Otherwise you set a display name, and every window — this one and the
+    // phone's — keeps calling you by your nick, because the only source of a
+    // rendered name was the server echoing it back. A server without
+    // `draft/metadata-2` never will, and one that has it may not until it
+    // feels like it.
+    const own = client.state.nick.toLowerCase()
+    const known = client.state.metadata.get(own) ?? {}
+    const seeded: Record<string, string> = { ...known }
+    for (const [key, value] of Object.entries(profile)) {
+      if (value && !seeded[key]) seeded[key] = value
+    }
+    if (Object.keys(seeded).length > 0) client.state.metadata.set(own, seeded)
+
+    if (!client.state.capabilities.has('draft/metadata-2')) return
+
+    subscribeToMetadata(client)
+
+    for (const [key, value] of Object.entries(profile)) {
+      if (!value) continue
+      client.connection.send('METADATA', '*', 'SET', key, value)
     }
   }
 
@@ -83,6 +264,12 @@ export class IRCManager {
     // Connection events
     client.events.on('registered', (data) => {
       this.send('irc:connected', { serverId, nick: data.nick })
+
+      // After 001, not at the end of capability negotiation. With SASL in play
+      // the two are seconds apart, and anything sent in between comes back as
+      // 451 ERR_NOTREGISTERED — so the profile silently never gets published
+      // for exactly the users who have an account.
+      this.publishProfile(client)
 
       // Re-send monitor list on connect
       const monitorNicks = getMonitorList(serverId)
@@ -107,6 +294,9 @@ export class IRCManager {
 
     // Channel events
     client.events.on('join', (data) => {
+      if (data.isMe) {
+        markChannelJoined(serverId, data.channel)
+      }
       this.send('irc:join', {
         serverId,
         channel: data.channel,
@@ -115,21 +305,29 @@ export class IRCManager {
     })
 
     client.events.on('part', (data) => {
+      if (data.isMe) {
+        markChannelParted(serverId, data.channel)
+      }
       this.send('irc:part', {
         serverId,
         channel: data.channel,
         nick: data.nick,
-        reason: data.reason
+        reason: data.reason,
+        isMe: data.isMe
       })
     })
 
     client.events.on('kick', (data) => {
+      if (data.isMe) {
+        markChannelParted(serverId, data.channel)
+      }
       this.send('irc:kick', {
         serverId,
         channel: data.channel,
         nick: data.nick,
         by: data.by,
-        reason: data.reason
+        reason: data.reason,
+        isMe: data.isMe
       })
     })
 
@@ -170,6 +368,8 @@ export class IRCManager {
     client.events.on('privmsg', (data) => {
       // Handle message edits (draft/edit spec)
       if (data.editOf) {
+        // Keep it, or the next restart quietly undoes it
+        editStoredMessage(data.editOf, data.content, data.time)
         this.send('irc:edit', {
           serverId,
           channel: data.channel,
@@ -239,14 +439,33 @@ export class IRCManager {
       this.send('irc:typing', { serverId, ...data })
     })
 
-    client.events.on('react', (data) => {
-      this.send('irc:react', { serverId, ...data })
-    })
+    client.events.on(
+      'react',
+      (data: {
+        channel: string
+        nick: string
+        emoji: string
+        msgid: string
+        removed: boolean
+      }) => {
+        // Parsed and then dropped before this: the reaction reached the client
+        // and stopped there, so nothing ever showed one — on either client.
+        //
+        // Kept, too. A reaction that vanishes on the next restart is not really
+        // on the message; it was on the screen.
+        setReaction(serverId, data.channel, data.msgid, data.emoji, data.nick, data.removed)
+        this.send('irc:react', { serverId, ...data })
+      }
+    )
 
     client.events.on('redact', (data: { channel: string; msgid: string; nick: string; reason: string | null }) => {
       // Delete from local database
       deleteMessage(data.msgid)
       this.send('irc:redact', { serverId, channel: data.channel, msgid: data.msgid })
+    })
+
+    client.events.on('accountVerified', (data) => {
+      this.send('irc:verify', { serverId, ...data })
     })
 
     client.events.on('away', (data) => {
@@ -412,14 +631,10 @@ export class IRCManager {
     client.events.on('capNegotiated', (caps) => {
       this.send('irc:cap', { serverId, capabilities: caps })
 
-      // Re-set avatar from saved config if metadata is supported
-      if (caps.includes('draft/metadata-2') && client.config.avatarUrl) {
-        const url = client.config.avatarUrl
-        if (url.includes(' ') || url.startsWith(':')) {
-          client.connection.sendRaw(`METADATA * SET avatar :${url}`)
-        } else {
-          client.connection.sendRaw(`METADATA * SET avatar ${url}`)
-        }
+      // A capability that turned up mid-session (CAP NEW) after we were already
+      // registered still needs setting up.
+      if (client.state.registrationState === 'connected') {
+        this.publishProfile(client)
       }
     })
 
