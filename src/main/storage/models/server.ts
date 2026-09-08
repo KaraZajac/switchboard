@@ -1,7 +1,14 @@
 import { getDb, saveDatabase } from '../database'
 import type { ServerConfig } from '@shared/types/server'
 import type { SASLMechanism } from '@shared/types/irc'
+import type { UserMetadata } from '@shared/types/metadata'
 import { v4 as uuid } from 'uuid'
+import {
+  encryptSecret,
+  decryptSecret,
+  isPlaintextSecret,
+  secretsProtected
+} from '../secrets'
 
 /**
  * Server CRUD operations.
@@ -39,28 +46,29 @@ export function addServer(config: Omit<ServerConfig, 'id' | 'sortOrder'>): strin
 
   db.run(
     `INSERT INTO servers (id, name, host, port, tls, password, nick, username, realname,
-     sasl_mechanism, sasl_username, sasl_password, auto_connect, auto_join, sort_order, websocket_url, identify_command, avatar_url, pre_away_message)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     sasl_mechanism, sasl_username, sasl_password, auto_connect, auto_join, sort_order, websocket_url, identify_command, avatar_url, pre_away_message, profile_metadata)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       id,
       config.name,
       config.host,
       config.port,
       config.tls ? 1 : 0,
-      config.password,
+      encryptSecret(config.password),
       config.nick,
       config.username,
       config.realname,
       config.saslMechanism,
       config.saslUsername,
-      config.saslPassword,
+      encryptSecret(config.saslPassword),
       config.autoConnect ? 1 : 0,
       JSON.stringify(config.autoJoin),
       sortOrder,
       (config as Record<string, unknown>).websocketUrl || null,
-      (config as Record<string, unknown>).identifyCommand || null,
+      encryptSecret((config as Record<string, unknown>).identifyCommand as string | null),
       (config as Record<string, unknown>).avatarUrl || null,
-      (config as Record<string, unknown>).preAwayMessage || null
+      (config as Record<string, unknown>).preAwayMessage || null,
+      JSON.stringify((config as Record<string, unknown>).profile ?? {})
     ]
   )
 
@@ -77,20 +85,21 @@ export function updateServer(id: string, updates: Partial<ServerConfig>): void {
   if (updates.host !== undefined) { fields.push('host = ?'); values.push(updates.host) }
   if (updates.port !== undefined) { fields.push('port = ?'); values.push(updates.port) }
   if (updates.tls !== undefined) { fields.push('tls = ?'); values.push(updates.tls ? 1 : 0) }
-  if (updates.password !== undefined) { fields.push('password = ?'); values.push(updates.password) }
+  if (updates.password !== undefined) { fields.push('password = ?'); values.push(encryptSecret(updates.password)) }
   if (updates.nick !== undefined) { fields.push('nick = ?'); values.push(updates.nick) }
   if (updates.username !== undefined) { fields.push('username = ?'); values.push(updates.username) }
   if (updates.realname !== undefined) { fields.push('realname = ?'); values.push(updates.realname) }
   if (updates.saslMechanism !== undefined) { fields.push('sasl_mechanism = ?'); values.push(updates.saslMechanism) }
   if (updates.saslUsername !== undefined) { fields.push('sasl_username = ?'); values.push(updates.saslUsername) }
-  if (updates.saslPassword !== undefined) { fields.push('sasl_password = ?'); values.push(updates.saslPassword) }
+  if (updates.saslPassword !== undefined) { fields.push('sasl_password = ?'); values.push(encryptSecret(updates.saslPassword)) }
   if (updates.autoConnect !== undefined) { fields.push('auto_connect = ?'); values.push(updates.autoConnect ? 1 : 0) }
   if (updates.autoJoin !== undefined) { fields.push('auto_join = ?'); values.push(JSON.stringify(updates.autoJoin)) }
   if (updates.sortOrder !== undefined) { fields.push('sort_order = ?'); values.push(updates.sortOrder) }
   if (updates.websocketUrl !== undefined) { fields.push('websocket_url = ?'); values.push(updates.websocketUrl) }
-  if (updates.identifyCommand !== undefined) { fields.push('identify_command = ?'); values.push(updates.identifyCommand) }
+  if (updates.identifyCommand !== undefined) { fields.push('identify_command = ?'); values.push(encryptSecret(updates.identifyCommand)) }
   if (updates.avatarUrl !== undefined) { fields.push('avatar_url = ?'); values.push(updates.avatarUrl) }
   if (updates.preAwayMessage !== undefined) { fields.push('pre_away_message = ?'); values.push(updates.preAwayMessage) }
+  if (updates.profile !== undefined) { fields.push('profile_metadata = ?'); values.push(JSON.stringify(updates.profile)) }
 
   if (fields.length === 0) return
 
@@ -98,6 +107,52 @@ export function updateServer(id: string, updates: Partial<ServerConfig>): void {
   values.push(id)
 
   db.run(`UPDATE servers SET ${fields.join(', ')} WHERE id = ?`, values)
+  saveDatabase()
+}
+
+/**
+ * Insert or update a server, keeping the id it already has.
+ *
+ * The vault syncs whole server records between devices, and matching on id is
+ * what keeps an edit an edit rather than a duplicate.
+ */
+export function upsertServer(config: ServerConfig): void {
+  const db = getDb()
+  const existing = db.exec('SELECT 1 FROM servers WHERE id = ?', [config.id])
+
+  if (existing.length > 0 && existing[0].values.length > 0) {
+    updateServer(config.id, config)
+    return
+  }
+
+  db.run(
+    `INSERT INTO servers (id, name, host, port, tls, password, nick, username, realname,
+     sasl_mechanism, sasl_username, sasl_password, auto_connect, auto_join, sort_order,
+     websocket_url, identify_command, avatar_url, pre_away_message, profile_metadata)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      config.id,
+      config.name,
+      config.host,
+      config.port,
+      config.tls ? 1 : 0,
+      encryptSecret(config.password),
+      config.nick,
+      config.username,
+      config.realname,
+      config.saslMechanism,
+      config.saslUsername,
+      encryptSecret(config.saslPassword),
+      config.autoConnect ? 1 : 0,
+      JSON.stringify(config.autoJoin),
+      config.sortOrder,
+      config.websocketUrl,
+      encryptSecret(config.identifyCommand),
+      config.avatarUrl,
+      config.preAwayMessage,
+      JSON.stringify(config.profile ?? {})
+    ]
+  )
   saveDatabase()
 }
 
@@ -109,6 +164,17 @@ export function removeServer(id: string): void {
 
 // ── Row mapping helpers ────────────────────────────────────────────
 
+/** Profile metadata is stored as one JSON blob; a broken one must not stop a connect */
+function parseProfile(raw: string | null): UserMetadata {
+  if (!raw) return {}
+  try {
+    const parsed = JSON.parse(raw)
+    return parsed && typeof parsed === 'object' ? (parsed as UserMetadata) : {}
+  } catch {
+    return {}
+  }
+}
+
 function rowToConfig(row: unknown[]): ServerConfig {
   return {
     id: row[0] as string,
@@ -116,20 +182,21 @@ function rowToConfig(row: unknown[]): ServerConfig {
     host: row[2] as string,
     port: row[3] as number,
     tls: (row[4] as number) === 1,
-    password: row[5] as string | null,
+    password: decryptSecret(row[5] as string | null),
     nick: row[6] as string,
     username: row[7] as string,
     realname: row[8] as string,
     saslMechanism: row[9] as SASLMechanism | null,
     saslUsername: row[10] as string | null,
-    saslPassword: row[11] as string | null,
+    saslPassword: decryptSecret(row[11] as string | null),
     autoConnect: (row[12] as number) === 1,
     autoJoin: JSON.parse((row[13] as string) || '[]'),
     sortOrder: row[14] as number,
     websocketUrl: (row[17] as string) || null,
-    identifyCommand: (row[18] as string) || null,
+    identifyCommand: decryptSecret(row[18] as string | null),
     avatarUrl: (row[19] as string) || null,
-    preAwayMessage: (row[20] as string) || null
+    preAwayMessage: (row[20] as string) || null,
+    profile: parseProfile(row[21] as string | null)
   }
 }
 
@@ -140,19 +207,57 @@ function objectToConfig(row: Record<string, unknown>): ServerConfig {
     host: row['host'] as string,
     port: row['port'] as number,
     tls: (row['tls'] as number) === 1,
-    password: row['password'] as string | null,
+    password: decryptSecret(row['password'] as string | null),
     nick: row['nick'] as string,
     username: row['username'] as string,
     realname: row['realname'] as string,
     saslMechanism: row['sasl_mechanism'] as SASLMechanism | null,
     saslUsername: row['sasl_username'] as string | null,
-    saslPassword: row['sasl_password'] as string | null,
+    saslPassword: decryptSecret(row['sasl_password'] as string | null),
     autoConnect: (row['auto_connect'] as number) === 1,
     autoJoin: JSON.parse((row['auto_join'] as string) || '[]'),
     sortOrder: row['sort_order'] as number,
     websocketUrl: (row['websocket_url'] as string) || null,
-    identifyCommand: (row['identify_command'] as string) || null,
+    identifyCommand: decryptSecret(row['identify_command'] as string | null),
     avatarUrl: (row['avatar_url'] as string) || null,
-    preAwayMessage: (row['pre_away_message'] as string) || null
+    preAwayMessage: (row['pre_away_message'] as string) || null,
+    profile: parseProfile(row['profile_metadata'] as string | null)
   }
+}
+
+/**
+ * Encrypt any credentials still stored as plaintext.
+ *
+ * Runs once at startup after the database is open. Rows written by an older
+ * build (or by a build that ran without a keyring) are rewritten in place;
+ * anything already encrypted is left alone.
+ */
+export function encryptStoredCredentials(): { migrated: number; protected: boolean } {
+  const db = getDb()
+  const rows = db.exec('SELECT id, password, sasl_password, identify_command FROM servers')
+  if (rows.length === 0) return { migrated: 0, protected: secretsProtected() }
+
+  let migrated = 0
+
+  for (const row of rows[0].values) {
+    const [id, password, saslPassword, identifyCommand] = row as (string | null)[]
+    if (
+      !isPlaintextSecret(password) &&
+      !isPlaintextSecret(saslPassword) &&
+      !isPlaintextSecret(identifyCommand)
+    ) {
+      continue
+    }
+
+    db.run('UPDATE servers SET password = ?, sasl_password = ?, identify_command = ? WHERE id = ?', [
+      encryptSecret(password),
+      encryptSecret(saslPassword),
+      encryptSecret(identifyCommand),
+      id
+    ])
+    migrated++
+  }
+
+  if (migrated > 0) saveDatabase()
+  return { migrated, protected: secretsProtected() }
 }

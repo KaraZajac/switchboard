@@ -15,13 +15,7 @@ export async function initDatabase(): Promise<void> {
 
   dbPath = path.join(app.getPath('userData'), 'switchboard.db')
 
-  // Load existing database or create new
-  if (fs.existsSync(dbPath)) {
-    const buffer = fs.readFileSync(dbPath)
-    db = new SQL.Database(buffer)
-  } else {
-    db = new SQL.Database()
-  }
+  db = openExisting(SQL) ?? new SQL.Database()
 
   // Run migrations
   runMigrations()
@@ -29,6 +23,35 @@ export async function initDatabase(): Promise<void> {
   // Enable WAL mode for better concurrent access
   db.run('PRAGMA journal_mode = WAL')
   db.run('PRAGMA foreign_keys = ON')
+}
+
+/**
+ * Open what is on disk, falling back to the previous copy.
+ *
+ * A database that will not open is the worst thing that can happen here — it is
+ * the user's servers, their credentials and their history. The backup is the
+ * copy from before the last save, so at worst they lose one write rather than
+ * everything.
+ */
+function openExisting(SQL: Awaited<ReturnType<typeof initSqlJs>>): SqlJsDatabase | null {
+  for (const candidate of [dbPath, `${dbPath}.bak`]) {
+    if (!fs.existsSync(candidate)) continue
+    try {
+      const database = new SQL.Database(fs.readFileSync(candidate))
+      // Constructing does not read the file; reading the schema does, and that
+      // is what tells a real database apart from a truncated or zeroed one.
+      database.exec('SELECT count(*) FROM sqlite_master')
+
+      if (candidate !== dbPath) {
+        console.warn('Main database was unreadable; recovered from the backup')
+        fs.copyFileSync(candidate, dbPath)
+      }
+      return database
+    } catch (err) {
+      console.error(`Could not open ${path.basename(candidate)}:`, err)
+    }
+  }
+  return null
 }
 
 /**
@@ -45,9 +68,32 @@ export function getDb(): SqlJsDatabase {
  */
 export function saveDatabase(): void {
   if (!db) return
-  const data = db.export()
-  const buffer = Buffer.from(data)
-  fs.writeFileSync(dbPath, buffer)
+  const buffer = Buffer.from(db.export())
+
+  // Write beside the real file, flush, then rename over it. A plain write
+  // truncates first, so a crash or a power cut part-way through leaves a
+  // half-written database — and this runs on every message, which is a lot of
+  // chances to be interrupted.
+  const temporary = `${dbPath}.tmp`
+  const handle = fs.openSync(temporary, 'w')
+  try {
+    fs.writeFileSync(handle, buffer)
+    fs.fsyncSync(handle)
+  } finally {
+    fs.closeSync(handle)
+  }
+
+  // Keep the previous copy: rename is atomic, but the bytes it replaces are
+  // the only other version that exists.
+  if (fs.existsSync(dbPath)) {
+    try {
+      fs.copyFileSync(dbPath, `${dbPath}.bak`)
+    } catch (err) {
+      console.error('Could not refresh the database backup:', err)
+    }
+  }
+
+  fs.renameSync(temporary, dbPath)
 }
 
 /**
@@ -208,8 +254,10 @@ function runMigrations(): void {
               SELECT rowid, id, server_id, channel, nick, content, timestamp FROM messages`)
 
       db.run("INSERT INTO migrations (name) VALUES ('002_fts_search')")
-    } catch (err) {
-      console.warn('Migration 002 (FTS5) failed — full-text search will be unavailable:', err)
+    } catch {
+      // sql.js is built without FTS5. Search falls back to LIKE matching in
+      // searchMessages(), so this is not fatal — just note it once per launch.
+      console.info('SQLite has no FTS5 module — message search uses substring matching')
     }
   }
 
@@ -247,6 +295,59 @@ function runMigrations(): void {
       )
     `)
     db.run("INSERT INTO migrations (name) VALUES ('006_monitor_list')")
+  }
+
+  // Migration 009: Profile metadata (IRCv3 draft/metadata-2) per server
+  if (!applied.has('009_profile_metadata')) {
+    db.run('ALTER TABLE servers ADD COLUMN profile_metadata TEXT DEFAULT NULL')
+    // The avatar used to live in its own column; keep it by moving it in
+    db.run(
+      `UPDATE servers SET profile_metadata = json_object('avatar', avatar_url)
+       WHERE avatar_url IS NOT NULL AND avatar_url != ''`
+    )
+    db.run("INSERT INTO migrations (name) VALUES ('009_profile_metadata')")
+  }
+
+  // Migration 011: Keep reactions
+  //
+  // They lived in the renderer and nowhere else, so every reaction anyone left
+  // was gone at the next restart — including your own, on your own messages.
+  if (!applied.has('011_reactions')) {
+    db.run(`
+      CREATE TABLE reactions (
+        server_id TEXT NOT NULL,
+        channel   TEXT NOT NULL,
+        msgid     TEXT NOT NULL,
+        emoji     TEXT NOT NULL,
+        nick      TEXT NOT NULL,
+        PRIMARY KEY (server_id, channel, msgid, emoji, nick)
+      )
+    `)
+    db.run('CREATE INDEX idx_reactions_message ON reactions(server_id, channel, msgid)')
+    db.run("INSERT INTO migrations (name) VALUES ('011_reactions')")
+  }
+
+  // Migration 010: Remember that a message was edited
+  //
+  // draft/message-edit changed the text in the running client and nowhere else,
+  // so every edit was undone by the next restart — on the desktop and, through
+  // it, on the phone.
+  if (!applied.has('010_message_edits')) {
+    db.run('ALTER TABLE messages ADD COLUMN edited_at TEXT DEFAULT NULL')
+    db.run("INSERT INTO migrations (name) VALUES ('010_message_edits')")
+  }
+
+  // Migration 008: Paired devices for the remote link
+  if (!applied.has('008_remote_devices')) {
+    db.run(`
+      CREATE TABLE remote_devices (
+        endpoint_id   TEXT PRIMARY KEY,
+        name          TEXT NOT NULL,
+        paired_at     TEXT NOT NULL DEFAULT (datetime('now')),
+        last_seen_at  TEXT
+      )
+    `)
+    db.run("INSERT INTO migrations (name) VALUES ('008_remote_devices')")
   }
 
   saveDatabase()

@@ -1,6 +1,7 @@
 import { getDb, saveDatabase } from '../database'
 import type { ChatMessage } from '@shared/types/message'
 import { v4 as uuid } from 'uuid'
+import { reactionsFor, clearReactions } from './reaction'
 
 /**
  * Message storage operations.
@@ -54,7 +55,16 @@ export function getMessages(
   const rows = db.exec(query, params as number[])
   if (rows.length === 0) return []
 
-  return rows[0].values.map(rowToMessage).reverse()
+  return withReactions(serverId, channel, rows[0].values.map(rowToMessage).reverse())
+}
+
+/** Hang the stored reactions back on the messages they belong to */
+function withReactions(serverId: string, channel: string, messages: ChatMessage[]): ChatMessage[] {
+  const found = reactionsFor(serverId, channel, messages.map((m) => m.id))
+  if (Object.keys(found).length === 0) return messages
+  return messages.map((message) =>
+    found[message.id] ? { ...message, reactions: found[message.id] } : message
+  )
 }
 
 export function searchMessages(
@@ -65,25 +75,41 @@ export function searchMessages(
   const db = getDb()
   const limit = options.limit || 50
 
-  // Escape FTS5 special characters and add prefix matching
-  const ftsQuery = query.replace(/['"]/g, '').trim()
-  if (!ftsQuery) return []
+  const term = query.replace(/['"]/g, '').trim()
+  if (!term) return []
 
   let sql: string
   let params: unknown[]
 
-  if (options.channel) {
-    sql = `SELECT m.* FROM messages m
-           JOIN messages_fts fts ON m.rowid = fts.rowid
-           WHERE fts.content MATCH ? AND m.server_id = ? AND m.channel = ?
-           ORDER BY m.timestamp DESC LIMIT ?`
-    params = [ftsQuery, serverId, options.channel, limit]
+  if (hasFtsIndex(db)) {
+    if (options.channel) {
+      sql = `SELECT m.* FROM messages m
+             JOIN messages_fts fts ON m.rowid = fts.rowid
+             WHERE fts.content MATCH ? AND m.server_id = ? AND m.channel = ?
+             ORDER BY m.timestamp DESC LIMIT ?`
+      params = [term, serverId, options.channel, limit]
+    } else {
+      sql = `SELECT m.* FROM messages m
+             JOIN messages_fts fts ON m.rowid = fts.rowid
+             WHERE fts.content MATCH ? AND m.server_id = ?
+             ORDER BY m.timestamp DESC LIMIT ?`
+      params = [term, serverId, limit]
+    }
   } else {
-    sql = `SELECT m.* FROM messages m
-           JOIN messages_fts fts ON m.rowid = fts.rowid
-           WHERE fts.content MATCH ? AND m.server_id = ?
-           ORDER BY m.timestamp DESC LIMIT ?`
-    params = [ftsQuery, serverId, limit]
+    // sql.js ships without the FTS5 module, so messages_fts does not exist and
+    // every search would come back empty. Substring matching instead.
+    const like = `%${term.replace(/[\\%_]/g, '\\$&')}%`
+    if (options.channel) {
+      sql = `SELECT * FROM messages
+             WHERE content LIKE ? ESCAPE '\\' AND server_id = ? AND channel = ?
+             ORDER BY timestamp DESC LIMIT ?`
+      params = [like, serverId, options.channel, limit]
+    } else {
+      sql = `SELECT * FROM messages
+             WHERE content LIKE ? ESCAPE '\\' AND server_id = ?
+             ORDER BY timestamp DESC LIMIT ?`
+      params = [like, serverId, limit]
+    }
   }
 
   try {
@@ -95,9 +121,33 @@ export function searchMessages(
   }
 }
 
+/** Whether the FTS5 index exists — it does not when SQLite was built without FTS5. */
+function hasFtsIndex(db: ReturnType<typeof getDb>): boolean {
+  const rows = db.exec(
+    "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'messages_fts'"
+  )
+  return rows.length > 0 && rows[0].values.length > 0
+}
+
+/**
+ * Apply an edit to a message already stored.
+ *
+ * Returns false when we never had the original, which is ordinary: the edit may
+ * be for something said before this client was running.
+ */
+export function editStoredMessage(msgid: string, content: string, editedAt: string): boolean {
+  const db = getDb()
+  db.run('UPDATE messages SET content = ?, edited_at = ? WHERE id = ?', [content, editedAt, msgid])
+  const changed = db.getRowsModified() > 0
+  if (changed) saveDatabase()
+  return changed
+}
+
 export function deleteMessage(msgid: string): void {
   const db = getDb()
   db.run('DELETE FROM messages WHERE id = ?', [msgid])
+  // Its reactions go with it; nothing else will ever look them up
+  clearReactions(msgid)
   saveDatabase()
 }
 
@@ -113,6 +163,7 @@ function rowToMessage(row: unknown[]): ChatMessage {
     tags: JSON.parse((row[7] as string) || '{}'),
     replyTo: row[8] as string | null,
     timestamp: row[9] as string,
+    editedAt: (row[11] as string | null) || undefined,
     account: null,
     pending: false,
     reactions: {},
