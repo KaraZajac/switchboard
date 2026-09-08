@@ -30,9 +30,37 @@ the connection when the desktop goes away, and gives it back when it returns.
 | **A8 · full IRCv3 on the phone** | done — the Kotlin engine handles what the desktop handles, checked against a live server |
 | **A9 · unattended failover** | done — foreground service, vault kept open across restarts |
 | **A10 · Doze** | done — goodbye on clean shutdown, exact-alarm backstop, wake on idle exit, battery-exemption prompt |
-| **A4 · push wake-ups** | not started (UnifiedPush) |
+| **A11 · push wake-ups** | crypto done, wire blocked — see below |
 | **B2 · whole-database encryption** | not started |
 | **Profile metadata** | done — all six registry keys, published, subscribed and rendered on both clients |
+
+### A11 · push wake-ups — where it stands
+
+`draft/webpush` turned out to be a better answer than UnifiedPush alone. The
+device hands the IRC server an endpoint and two keys; the server encrypts each
+notification to those keys (RFC 8291) and gives it to a push service, which
+forwards something it cannot read. UnifiedPush is still how an Android device
+*gets* an endpoint without Google — the two are complements, not alternatives.
+
+**Done.** The encryption, twice: `src/main/push/webpush.ts` and
+`android/.../push/WebPush.kt`, sharing no code, each suite reading what the
+other wrote. The `WEBPUSH REGISTER` / `UNREGISTER` commands, the VAPID key
+parsed out of the capability value, and the server's answer surfaced instead of
+dropped.
+
+**Blocked on the server.** Tested against rIRCd, which:
+
+1. advertises the capability as bare `draft/webpush`, with no `vapid=` value.
+   The spec puts the server's VAPID public key there, and a device needs it as
+   the application server key when it subscribes — without it most push
+   services will refuse the subscription.
+2. requires an account before `WEBPUSH REGISTER` (`FAIL WEBPUSH
+   ACCOUNT_REQUIRED`), which is right, but account creation needs an email
+   round trip that cannot be completed against the test instance.
+
+**Next, once those are settled.** Pick a UnifiedPush distributor, wire the
+receiver, register the endpoint on connect, and decrypt into the existing
+notification path — which already exists and already groups by conversation.
 
 Where it lives:
 
