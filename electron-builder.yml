@@ -9,9 +9,18 @@ files:
   - '!electron.vite.config.*'
   - '!{.eslintrc,.prettierrc,tsconfig.*}'
   - '!{PLAN,README}.md'
+  # The Android client is a separate build; its Gradle output is hundreds of
+  # megabytes and has no business inside the desktop app.
+  - '!android/*'
+  - '!docs/*'
+  - '!tests/*'
+  - '!images/*'
 asarUnpack:
   - resources/**
   - node_modules/sql.js/dist/**
+  # iroh ships a native .node per platform; it cannot be loaded from inside the
+  # asar archive, and the remote link silently disappears if it is not unpacked.
+  - node_modules/@number0/**
 icon: resources/icon.png
 mac:
   icon: resources/icon.png
@@ -22,6 +31,11 @@ mac:
         - arm64
   category: public.app-category.social-networking
 linux:
+  # A directory of PNGs (16x16 … 512x512) — electron-builder installs each into the
+  # matching /usr/share/icons/hicolor/<size>/apps dir. A single large PNG lands in
+  # hicolor/1024x1024, which is not a size the icon theme spec indexes, so desktops
+  # find no icon at all for the .desktop entry.
+  icon: resources/icons
   target:
     - AppImage
     - deb
