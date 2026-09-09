@@ -16,6 +16,13 @@ registerHandler('JOIN', (client, msg) => {
   const isMe = client.state.casemap(nick) === client.state.casemap(client.state.nick)
 
   if (isMe) {
+    // Our own JOIN carries our full mask, and it is the first time the server
+    // shows it to us. Worth keeping: it is what gets prepended to everything
+    // we say, so it decides how long a message can be.
+    if (msg.source?.user && msg.source?.host) {
+      client.state.userHost = `${msg.source.user}@${msg.source.host}`
+    }
+
     // We joined — create channel state
     client.state.getChannel(channel)
 

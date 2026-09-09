@@ -46,6 +46,15 @@ internal fun registerChannelHandlers() {
         val nick = message.nick ?: return@on
         val mine = state.isMe(nick)
 
+        // Our own JOIN carries our full mask, and it is the first time the
+        // server shows it to us. Worth keeping: it is what gets prepended to
+        // everything we say, so it decides how long a message can be.
+        if (mine) {
+            val user = message.source?.user
+            val host = message.source?.host
+            if (user != null && host != null) state.userHost = "$user@$host"
+        }
+
         val channel = state.channel(name)
 
         // extended-join: JOIN <channel> <account> :<realname>

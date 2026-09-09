@@ -23,6 +23,7 @@ import org.junit.Test
 import org.switchboard.android.irc.Casemap
 import org.switchboard.android.irc.ConnectionState
 import org.switchboard.android.irc.Irc
+import org.switchboard.android.irc.LineLength
 import org.switchboard.android.irc.IrcMessage
 import org.switchboard.android.irc.Metadata
 import org.switchboard.android.irc.Multiline
@@ -559,6 +560,50 @@ class SharedCorpusTest {
         assertNull(state.findChannel("#dev{core}"))
         assertNull(channel.user("bob{away}"))
         assertNotNull(channel.user("BOB[AWAY]"))
+    }
+
+    // ── the 512-byte line ────────────────────────────────────────────
+
+    /**
+     * Over the limit, rIRCd answers `417 :Input line was too long` and
+     * delivers nothing — the same shape as the multiline limits, in the place
+     * people hit it most often, which is pasting a paragraph.
+     */
+    @Test
+    fun `works out the same line budget the desktop works out`() {
+        for (case in load("multiline.json")["budget"]!!.jsonArray) {
+            val c = case.jsonObject
+            val name = c["name"]!!.jsonPrimitive.content
+            val isupport = c["isupport"]!!.jsonObject
+                .mapValues { (_, v) -> v.jsonPrimitive.content }
+
+            assertEquals(
+                name,
+                c["budget"]!!.jsonPrimitive.int,
+                LineLength.budget(
+                    c["nick"]!!.jsonPrimitive.content,
+                    (c["userHost"] as? JsonPrimitive)?.contentOrNull,
+                    isupport,
+                    c["command"]!!.jsonPrimitive.content,
+                    c["target"]!!.jsonPrimitive.content
+                )
+            )
+        }
+    }
+
+    @Test
+    fun `cuts a long line the same way the desktop cuts it`() {
+        for (case in load("multiline.json")["split"]!!.jsonArray) {
+            val c = case.jsonObject
+            val name = c["name"]!!.jsonPrimitive.content
+            val expected = c["pieces"]!!.jsonArray.map { it.jsonPrimitive.content }
+
+            assertEquals(
+                name,
+                expected,
+                LineLength.split(c["text"]!!.jsonPrimitive.content, c["budget"]!!.jsonPrimitive.int)
+            )
+        }
     }
 
 }

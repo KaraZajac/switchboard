@@ -289,28 +289,42 @@ class IrcConnection(
     // ── what the engine above asks for ────────────────────────────────
 
     fun say(target: String, text: String) {
-        val lines = text.split("\n")
+        // A line too long for the wire is refused outright — `417 :Input line
+        // was too long`, nothing delivered — so every line is cut to fit before
+        // anything else decides how to send it. `continued` marks the pieces
+        // that were one line before we cut them.
+        val budget = LineLength.budget(state.nick, state.userHost, state.isupport, "PRIVMSG", target)
+        val parts = mutableListOf<Pair<String, Boolean>>()
+        for (line in text.split("\n")) {
+            LineLength.split(line, budget).forEachIndexed { index, piece ->
+                parts.add(piece to (index > 0))
+            }
+        }
 
-        if (lines.size > 1 && state.capabilities.contains("draft/multiline")) {
+        if (parts.size > 1 && state.capabilities.contains("draft/multiline")) {
             val limits = Multiline.limitsFrom(state.available["draft/multiline"])
-            for (batch in Multiline.split(lines, limits)) {
+            for (batch in Multiline.split(parts.map { it.first }, limits, parts)) {
                 // A batch of one is a message with no line breaks in it, and the
                 // spec asks for a plain PRIVMSG rather than a batch wrapped
                 // around nothing.
                 if (batch.size == 1) {
-                    send("PRIVMSG", target, batch[0])
+                    send("PRIVMSG", target, batch[0].first)
                     continue
                 }
 
                 val reference = "ml${++multilineCounter}"
                 sendRaw(Irc.serialise("BATCH", listOf("+$reference", "draft/multiline", target)))
-                for (line in batch) {
-                    sendRaw("@batch=$reference " + Irc.serialise("PRIVMSG", listOf(target, line)))
+                batch.forEachIndexed { index, (line, continued) ->
+                    // The tag says "this ran on from the one before with no line
+                    // break", which is what a line we had to cut did. Never on
+                    // the first part: there is nothing before it to run on from.
+                    val concat = if (continued && index > 0) "draft/multiline-concat;" else ""
+                    sendRaw("@${concat}batch=$reference " + Irc.serialise("PRIVMSG", listOf(target, line)))
                 }
                 sendRaw(Irc.serialise("BATCH", listOf("-$reference")))
             }
         } else {
-            for (line in lines) send("PRIVMSG", target, line)
+            for ((line, _) in parts) send("PRIVMSG", target, line)
         }
 
         // Without echo-message the server never tells us what we just said, so

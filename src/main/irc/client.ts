@@ -1,4 +1,5 @@
 import { EventEmitter } from 'events'
+import { lineBudget, splitToFit } from './features/linelen'
 import type { IRCMessage } from '@shared/types/irc'
 import type { ServerConfig } from '@shared/types/server'
 import type { ChannelUser } from '@shared/types/channel'
@@ -190,21 +191,30 @@ export class IRCClient {
    * Send a message to a channel or user.
    */
   say(target: string, message: string): void {
-    this.connection.send('PRIVMSG', target, message)
+    for (const piece of splitToFit(message, lineBudget(this.state, 'PRIVMSG', target))) {
+      this.connection.send('PRIVMSG', target, piece)
+    }
   }
 
   /**
    * Send a NOTICE to a channel or user.
    */
   notice(target: string, message: string): void {
-    this.connection.send('NOTICE', target, message)
+    for (const piece of splitToFit(message, lineBudget(this.state, 'NOTICE', target))) {
+      this.connection.send('NOTICE', target, piece)
+    }
   }
 
   /**
    * Send a CTCP ACTION (/me).
    */
   action(target: string, text: string): void {
-    this.connection.send('PRIVMSG', target, `\x01ACTION ${text}\x01`)
+    // The CTCP wrapper costs bytes too, and a /me long enough to be refused is
+    // refused just as completely as anything else.
+    const budget = lineBudget(this.state, 'PRIVMSG', target) - '\x01ACTION \x01'.length
+    for (const piece of splitToFit(text, budget)) {
+      this.connection.send('PRIVMSG', target, `\x01ACTION ${piece}\x01`)
+    }
   }
 
   /**

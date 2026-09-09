@@ -1,3 +1,5 @@
+import { lineBudget, splitToFit } from './linelen'
+
 /**
  * draft/multiline — one message that happens to have line breaks in it.
  *
@@ -55,15 +57,18 @@ export function parseMultilineLimits(value: string | null | undefined): Multilin
  * refusing one line is a better outcome than this client silently deciding
  * their message was too long to send.
  */
-export function splitForLimits(lines: string[], limits: MultilineLimits): string[][] {
+export function splitForLimits<T extends string | { text: string }>(
+  lines: T[],
+  limits: MultilineLimits
+): T[][] {
   if (limits.maxBytes === null && limits.maxLines === null) return [lines]
 
-  const batches: string[][] = []
-  let current: string[] = []
+  const batches: T[][] = []
+  let current: T[] = []
   let bytes = 0
 
   for (const line of lines) {
-    const size = Buffer.byteLength(line, 'utf8')
+    const size = Buffer.byteLength(typeof line === 'string' ? line : line.text, 'utf8')
     const overBytes = limits.maxBytes !== null && current.length > 0 && bytes + size > limits.maxBytes
     const overLines = limits.maxLines !== null && current.length >= limits.maxLines
 
@@ -92,33 +97,55 @@ let batchCounter = 0
 export function sendMultilineMessage(
   client: {
     connection: { send: (...args: string[]) => void; sendRaw: (line: string) => void }
-    state: { capabilities: Set<string>; availableCapabilities: Map<string, string | null> }
+    state: {
+      capabilities: Set<string>
+      availableCapabilities: Map<string, string | null>
+      nick: string
+      userHost: string | null
+      isupport: Record<string, string | true>
+    }
   },
   target: string,
   lines: string[]
 ): void {
-  if (lines.length <= 1 || !client.state.capabilities.has('draft/multiline')) {
-    for (const line of lines) {
-      client.connection.send('PRIVMSG', target, line)
+  // A line too long for the wire is refused outright — `417 :Input line was
+  // too long`, nothing delivered — so every line is cut to fit before anything
+  // else decides how to send it. `continued` marks the pieces that were one
+  // line before we cut them.
+  const budget = lineBudget(client.state, 'PRIVMSG', target)
+  const parts: { text: string; continued: boolean }[] = []
+  for (const line of lines) {
+    splitToFit(line, budget).forEach((piece, at) => {
+      parts.push({ text: piece, continued: at > 0 })
+    })
+  }
+
+  if (parts.length <= 1 || !client.state.capabilities.has('draft/multiline')) {
+    for (const part of parts) {
+      client.connection.send('PRIVMSG', target, part.text)
     }
     return
   }
 
   const limits = parseMultilineLimits(client.state.availableCapabilities.get('draft/multiline'))
 
-  for (const batch of splitForLimits(lines, limits)) {
+  for (const batch of splitForLimits(parts, limits)) {
     if (batch.length === 1) {
       // A batch of one is a message with no line breaks in it, and the spec
       // asks for a plain PRIVMSG rather than a batch wrapped around nothing.
-      client.connection.send('PRIVMSG', target, batch[0])
+      client.connection.send('PRIVMSG', target, batch[0].text)
       continue
     }
 
     const ref = `ml${++batchCounter}`
     client.connection.send('BATCH', `+${ref}`, 'draft/multiline', target)
-    for (const line of batch) {
-      client.connection.sendRaw(`@batch=${ref} PRIVMSG ${target} :${line}`)
-    }
+    batch.forEach((part, at) => {
+      // The tag says "this ran on from the one before with no line break",
+      // which is exactly what a line we had to cut did. Never on the first
+      // part of a batch: there is nothing before it to run on from.
+      const concat = part.continued && at > 0 ? 'draft/multiline-concat;' : ''
+      client.connection.sendRaw(`@${concat}batch=${ref} PRIVMSG ${target} :${part.text}`)
+    })
     client.connection.send('BATCH', `-${ref}`)
   }
 }

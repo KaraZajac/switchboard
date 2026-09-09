@@ -3,6 +3,7 @@ import * as fs from 'fs'
 import * as path from 'path'
 import { parseMultilineLimits, splitForLimits } from '../../src/main/irc/features/multiline'
 import { combineMultiline } from '../../src/main/irc/features/batch'
+import { lineBudget, splitToFit } from '../../src/main/irc/features/linelen'
 
 /**
  * draft/multiline, against the corpus the phone reads too.
@@ -63,5 +64,68 @@ describe('putting a received multiline back together', () => {
     ]
 
     expect(combineMultiline(withValue)).toBe('one long line that had to be split')
+  })
+})
+
+/**
+ * Making one line fit on the wire.
+ *
+ * Over the limit, rIRCd answers `417 :Input line was too long` and delivers
+ * nothing — the same shape as the multiline limits, in the place people hit it
+ * most often, which is pasting a paragraph.
+ */
+describe('how much room a message has', () => {
+  for (const c of corpus.budget) {
+    it(c.name, () => {
+      const state = {
+        nick: c.nick,
+        userHost: c.userHost,
+        isupport: c.isupport as Record<string, string | true>
+      }
+      expect(lineBudget(state, c.command, c.target)).toBe(c.budget)
+    })
+  }
+
+  /** The guess must never be so tight that splitting cannot terminate */
+  it('never returns a budget too small to make progress', () => {
+    const state = { nick: 'x'.repeat(400), userHost: null, isupport: {} }
+    expect(lineBudget(state, 'PRIVMSG', '#'.repeat(200))).toBeGreaterThan(0)
+  })
+})
+
+describe('cutting a line to fit', () => {
+  for (const c of corpus.split) {
+    it(c.name, () => {
+      expect(splitToFit(c.text, c.budget)).toEqual(c.pieces)
+    })
+  }
+
+  /**
+   * The property that matters, because these are rejoined with nothing at all
+   * on the other side: what comes back has to be character-for-character what
+   * was typed.
+   */
+  it('rejoins to exactly what was typed', () => {
+    const text = 'the quick brown fox jumps over the lazy dog '.repeat(20).trim()
+    const pieces = splitToFit(text, 40)
+
+    expect(pieces.every((p) => Buffer.byteLength(p, 'utf8') <= 40)).toBe(true)
+    expect(pieces.join('')).toBe(text)
+  })
+
+  it('rejoins exactly for text with no spaces to break on either', () => {
+    const text = 'x'.repeat(500) + '日本語' + 'y'.repeat(200)
+    expect(splitToFit(text, 40).join('')).toBe(text)
+  })
+
+  /** Whatever the budget, it has to terminate and it has to fit */
+  it('always fits, for any budget', () => {
+    for (const budget of [1, 2, 3, 7, 33, 512]) {
+      const pieces = splitToFit('日本語 mixed ascii and 漢字 text here', budget)
+      expect(pieces.length).toBeGreaterThan(0)
+      for (const piece of pieces) {
+        expect(Buffer.byteLength(piece, 'utf8')).toBeLessThanOrEqual(Math.max(budget, 4))
+      }
+    }
   })
 })

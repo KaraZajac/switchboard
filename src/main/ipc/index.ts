@@ -220,13 +220,12 @@ export function registerIPCHandlers(): void {
 
     const body = command.message ?? text
 
-    if (body.includes('\n') && client.state.capabilities.has('draft/multiline')) {
-      // Multiline message — send as batch
-      const { sendMultilineMessage } = await import('../irc/features/multiline')
-      sendMultilineMessage(client, channel, body.split('\n'))
-    } else {
-      client.say(channel, body)
-    }
+    // Always through here, not only for text with line breaks in it: a single
+    // paragraph too long for one line also has to be cut, and where the server
+    // has multiline that cut can be sent as `draft/multiline-concat` — one
+    // message that had to be split, rather than two messages.
+    const { sendMultilineMessage } = await import('../irc/features/multiline')
+    sendMultilineMessage(client, channel, body.split('\n'))
   })
 
   handle('message:reply', async (_event, serverId: string, channel: string, text: string, replyTo: string) => {

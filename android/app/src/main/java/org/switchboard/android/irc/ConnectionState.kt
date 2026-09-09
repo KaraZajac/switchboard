@@ -98,6 +98,15 @@ class ConnectionState(val serverId: String) {
     val available = mutableMapOf<String, String>()
     val capabilities = mutableSetOf<String>()
     val isupport = mutableMapOf<String, String>()
+
+    /**
+     * Our own `user@host`, once the server has shown it to us.
+     *
+     * Learned from our own JOIN, which carries the full mask. It is what the
+     * server prepends to everything we say, so it is the difference between
+     * knowing how much room a message has and guessing.
+     */
+    var userHost: String? = null
     val channels = LinkedHashMap<String, ChannelState>()
     val batches = mutableMapOf<String, BatchState>()
 
@@ -177,6 +186,7 @@ class ConnectionState(val serverId: String) {
         available.clear()
         capabilities.clear()
         isupport.clear()
+        userHost = null
         channels.clear()
         batches.clear()
         metadata.clear()

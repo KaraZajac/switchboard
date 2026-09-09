@@ -52,14 +52,24 @@ object Multiline {
      * server refusing one line is better than this client quietly deciding
      * their message was too long to send.
      */
-    fun split(lines: List<String>, limits: Limits): List<List<String>> {
-        if (limits.maxBytes == null && limits.maxLines == null) return listOf(lines)
+    fun split(lines: List<String>, limits: Limits): List<List<String>> =
+        split(lines, limits, lines).map { batch -> batch }
 
-        val batches = mutableListOf<List<String>>()
-        var current = mutableListOf<String>()
+    /**
+     * The same grouping, carrying something alongside each line.
+     *
+     * [items] is in step with [lines]; the batches come back as items, so a
+     * caller that needs more than the text — whether a line was one we had to
+     * cut, say — does not have to work out the correspondence again.
+     */
+    fun <T> split(lines: List<String>, limits: Limits, items: List<T>): List<List<T>> {
+        if (limits.maxBytes == null && limits.maxLines == null) return listOf(items)
+
+        val batches = mutableListOf<List<T>>()
+        var current = mutableListOf<T>()
         var bytes = 0
 
-        for (line in lines) {
+        for ((index, line) in lines.withIndex()) {
             val size = line.toByteArray(Charsets.UTF_8).size
             val overBytes =
                 limits.maxBytes != null && current.isNotEmpty() && bytes + size > limits.maxBytes
@@ -71,7 +81,7 @@ object Multiline {
                 bytes = 0
             }
 
-            current.add(line)
+            current.add(items[index])
             bytes += size
         }
 

@@ -28,6 +28,15 @@ export class ConnectionState {
    */
   pendingNick: string | null = null
 
+  /**
+   * Our own `user@host`, once the server has shown it to us.
+   *
+   * Learned from our own JOIN, which carries the full mask. It is what the
+   * server prepends to everything we say, so it is the difference between
+   * knowing how much room a message has and guessing.
+   */
+  userHost: string | null = null
+
   /** CAP REQ lines still waiting for an ACK or NAK */
   pendingCapRequests = 0
 
@@ -93,6 +102,7 @@ export class ConnectionState {
     this.registrationState = 'disconnected'
     this.nick = ''
     this.pendingNick = null
+    this.userHost = null
     this.serverName = ''
     this.capabilities.clear()
     this.availableCapabilities.clear()
