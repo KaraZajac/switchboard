@@ -185,6 +185,12 @@ client asks for and does:
   that a nick cannot claim it: someone messaging you as "Admin" about your
   password is an old trick. The capability negotiates; the badge is untested on
   the wire, because that instance has no operator configured.
+- **A message too long for one line was dropped, not truncated.** An IRC line
+  is 512 bytes including the prefix the server prepends, and neither client
+  checked; rIRCd answers `417 :Input line was too long` and delivers nothing.
+  Pasting a paragraph was enough. Both clients cut to fit now, and where the
+  server has `draft/multiline` the pieces go as one batch with
+  `draft/multiline-concat`, so it arrives as the single message it was.
 - **Names were compared with `toLowerCase()`**, and a `casemap()` that folded
   them properly sat on the connection state being called from nowhere. Under
   rfc1459 — the RFC's default, which rIRCd relies on by advertising no
