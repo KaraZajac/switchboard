@@ -33,6 +33,7 @@ same.
 | **A9 · unattended failover** | done — foreground service, vault kept open across restarts |
 | **A10 · Doze** | done — goodbye on clean shutdown, exact-alarm backstop, wake on idle exit, battery-exemption prompt |
 | **A11 · push wake-ups** | crypto done, wire blocked — see below |
+| **Electron 44** | done — up from 33, which stopped getting Chromium patches eleven majors ago; one Node-API addon now serves both Electron and the tests |
 | **B2 · whole-database encryption** | done — real SQLite, encrypted page by page with a key the OS keychain holds; FTS5 search; migration from the sql.js file verified against a real one |
 | **B3 · Android at rest** | done — the device identity and pairing ticket sealed by the Android keystore, and out of backup |
 | **Profile metadata** | done — all six registry keys, published, subscribed and rendered on both clients |
@@ -64,6 +65,25 @@ dropped.
 **Next, once those are settled.** Pick a UnifiedPush distributor, wire the
 receiver, register the endpoint on connect, and decrypt into the existing
 notification path — which already exists and already groups by conversation.
+
+### The runtime
+
+Electron 44 (Node 24, Chromium 152), up from 33. Two things came with it.
+
+The database addon was pinned to 12.x on Electron 33 because 13.x needs
+Node-API 10 and Node 20 does not have it — and 12.x is ABI-specific, so Electron
+and the test runner each needed their own build and a script to swap the right
+one in before anything ran. Node 24 has Node-API 10, so a single binary serves
+both and the swapping is gone.
+
+electron-builder 26 dropped `win.signingHashAlgorithms` when Windows signing
+moved out to `@electron/windows-sign`. Each build also now leaves out the seven
+platform prebuilds it cannot load, which is 20MB down to 11.
+
+Verified from the packaged build rather than the dev tree: rIRCd, the encrypted
+database, FTS5 search, and the Android client pairing over iroh — direct
+connection, credentials still stripped at the boundary, the desktop primary and
+the phone a follower.
 
 Where it lives:
 
