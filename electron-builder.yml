@@ -1,11 +1,10 @@
 appId: com.switchboard.irc
 productName: Switchboard
-# The database addon is prebuilt and put in place by scripts/before-build.mjs,
-# for the architecture being packaged. Left to itself electron-builder would
-# try to compile it, which needs a C++ toolchain on every runner to arrive at
-# the same binary.
+# The database addon ships prebuilt for every platform it supports, as one
+# Node-API binary that both Electron and the test runner can load. Left to
+# itself electron-builder would try to compile it, which needs a C++ toolchain
+# on every runner to arrive at the same thing.
 npmRebuild: false
-beforeBuild: scripts/before-build.mjs
 directories:
   buildResources: resources
   output: dist
@@ -21,10 +20,6 @@ files:
   - '!docs/*'
   - '!tests/*'
   - '!images/*'
-  # The other runtime's and other arch's copies of the database addon: kept
-  # beside the one in use so a swap needs no network, but only one of them is
-  # ever the right one to ship.
-  - '!node_modules/better-sqlite3-multiple-ciphers/build/Release/runtimes/**'
 asarUnpack:
   - resources/**
   - node_modules/sql.js/dist/**
@@ -37,6 +32,8 @@ asarUnpack:
   - node_modules/@number0/**
 icon: resources/icon.png
 mac:
+  files:
+    - '!node_modules/better-sqlite3-multiple-ciphers/prebuilds/{linux,linuxmusl,win32}-*'
   icon: resources/icon.png
   target:
     - target: dmg
@@ -45,6 +42,12 @@ mac:
         - arm64
   category: public.app-category.social-networking
 linux:
+  files:
+    # The database addon ships a prebuild per platform, and seven of the eight
+    # are 20MB of dead weight in any one build. Both linux variants stay: the
+    # loader picks between glibc and musl at run time, and an AppImage can
+    # land on either.
+    - '!node_modules/better-sqlite3-multiple-ciphers/prebuilds/{darwin,win32}-*'
   # A directory of PNGs (16x16 … 512x512) — electron-builder installs each into the
   # matching /usr/share/icons/hicolor/<size>/apps dir. A single large PNG lands in
   # hicolor/1024x1024, which is not a size the icon theme spec indexes, so desktops
@@ -57,12 +60,12 @@ linux:
   maintainer: switchboard-irc
   category: Network;Chat;IRCClient
 win:
+  files:
+    - '!node_modules/better-sqlite3-multiple-ciphers/prebuilds/{darwin,linux,linuxmusl}-*'
   target:
     - target: nsis
       arch:
         - x64
-  signingHashAlgorithms:
-    - sha256
 nsis:
   oneClick: false
   perMachine: false

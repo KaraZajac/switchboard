@@ -1,15 +1,13 @@
 import Database from 'better-sqlite3-multiple-ciphers'
 
 /**
- * Pinned to 12.x, and it has to stay there while this is Electron 33.
+ * One binary, both runtimes.
  *
- * 13.x crashes the process the moment a database is opened — as the published
- * prebuild, and equally when built from source against Electron's own headers,
- * so it is not a missing Node-API function and a compiler does not fix it. Its
- * own `engines` asks for Node 22 and Electron 33 is Node 20, which is the
- * shape of the problem even if the exact call has not been chased down.
- *
- * Worth re-testing whenever Electron moves, not before.
+ * This is a Node-API build, so the same compiled addon loads under Electron
+ * and under the Node the tests run on. It was not always: on Electron 33 the
+ * only version that worked was 12.x, which is ABI-specific, and the two
+ * runtimes needed a different build swapped in for each. Electron 44 is Node
+ * 24 and has Node-API 10, so that whole arrangement is gone.
  */
 
 /**
