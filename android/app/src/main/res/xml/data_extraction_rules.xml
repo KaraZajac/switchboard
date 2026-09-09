@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android 12 and later. Two separate answers, because they are different
+  questions: `cloud-backup` is a copy sitting on someone else's computer, and
+  `device-transfer` is this phone handing over to the next one.
+
+  The identity and ticket are left out of both. They are sealed by a key that
+  cannot leave the device, so neither copy would work — and a new phone should
+  pair for itself rather than inherit a pairing the desktop cannot tell apart
+  from the old one.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="sharedpref" path="switchboard.xml" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" path="switchboard.xml" />
+    </device-transfer>
+</data-extraction-rules>

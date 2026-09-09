@@ -22,6 +22,7 @@ import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import org.switchboard.android.irc.IrcConnection
+import org.switchboard.android.pairing.DeviceIdentity
 import org.switchboard.android.irc.ServerConfig
 import org.switchboard.android.session.Cancellable
 import org.switchboard.android.session.ConnectionControl
@@ -60,6 +61,9 @@ class SwitchboardEngine(
     val store: SwitchboardStore
 ) {
     val vault = VaultStore(context)
+
+    /** This phone's identity to the desktop, and the ticket that reaches it */
+    val identity = DeviceIdentity(context)
     val remote = RemoteClient(scope)
     private val notifier = Notifier(context).also { it.createChannels() }
 
@@ -78,8 +82,7 @@ class SwitchboardEngine(
     private var link: LinkDetails? = null
 
     /** A ticket on disk means there is a desktop out there to wait for */
-    private fun hasPairedDesktop(): Boolean =
-        prefs.getString("ticket", null)?.isNotBlank() == true
+    private fun hasPairedDesktop(): Boolean = identity.ticket() != null
     private var reconnectJob: Job? = null
     private var reconnectAttempt = 0
 

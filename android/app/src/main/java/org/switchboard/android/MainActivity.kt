@@ -1,8 +1,6 @@
 package org.switchboard.android
 
-import android.content.Context
 import android.content.Intent
-import android.content.SharedPreferences
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -95,9 +93,8 @@ class MainActivity : ComponentActivity() {
 
         SwitchboardService.start(this)
 
-        val prefs = getSharedPreferences("switchboard", Context.MODE_PRIVATE)
         setContent {
-            App(engine, lifecycleScope, prefs, launchPairing) { launchPairing = null }
+            App(engine, lifecycleScope, launchPairing) { launchPairing = null }
         }
     }
 
@@ -122,7 +119,6 @@ private enum class Screen { PAIRING, SCANNING, CHAT, SETTINGS, SEARCH, BROWSE, S
 fun App(
     engine: SwitchboardEngine,
     scope: CoroutineScope,
-    prefs: SharedPreferences,
     launchPairing: PairingPayload? = null,
     onPairingConsumed: () -> Unit = {}
 ) {
@@ -130,7 +126,7 @@ fun App(
         mutableStateOf(
             // A phone that has paired before opens straight into the conversation,
             // and one that holds an unlocked vault can work with no desktop at all.
-            if (prefs.getString("ticket", null).isNullOrBlank()) Screen.PAIRING else Screen.CHAT
+            if (engine.identity.ticket() == null) Screen.PAIRING else Screen.CHAT
         )
     }
     val store = engine.store
@@ -157,11 +153,11 @@ fun App(
     suspend fun connect(ticket: String, code: String?) {
         try {
             store.status = "Connecting…"
-            engine.connectToDesktop(ticket, code, Build.MODEL ?: "Android", deviceKey(prefs))
+            engine.connectToDesktop(ticket, code, Build.MODEL ?: "Android", engine.identity.secretKey())
             engine.syncTheme()
             refill()
 
-            prefs.edit().putString("ticket", ticket).apply()
+            engine.identity.rememberTicket(ticket)
             screen = Screen.CHAT
         } catch (e: Exception) {
             store.status = "Could not reach the desktop: ${e.message}"
@@ -189,8 +185,7 @@ fun App(
         engine.onRelinked = { scope.launch { refill() } }
         engine.start()
 
-        val saved = prefs.getString("ticket", null)
-        if (!saved.isNullOrBlank()) connect(saved, null)
+        engine.identity.ticket()?.let { connect(it, null) }
     }
 
     // A pairing link this phone was opened with beats whatever it was doing.
@@ -296,7 +291,7 @@ fun App(
                     onBack = { screen = Screen.CHAT },
                     onManageServers = { screen = Screen.SERVERS },
                     onUnpair = {
-                        prefs.edit().remove("ticket").apply()
+                        engine.identity.forgetTicket()
                         scope.launch { engine.remote.close() }
                         screen = Screen.PAIRING
                     }
@@ -370,21 +365,3 @@ private suspend fun loadHistory(engine: SwitchboardEngine, serverId: String, cha
     }
 }
 
-/**
- * This device's iroh identity, created once and kept.
- *
- * The desktop's device list is a list of public keys; a phone that generated a
- * new key on every launch would have to be paired again every time.
- */
-private fun deviceKey(prefs: SharedPreferences): ByteArray {
-    prefs.getString("secretKey", null)?.let { saved ->
-        val decoded = android.util.Base64.decode(saved, android.util.Base64.NO_WRAP)
-        if (decoded.size == 32) return decoded
-    }
-
-    val key = ByteArray(32).also { java.security.SecureRandom().nextBytes(it) }
-    prefs.edit()
-        .putString("secretKey", android.util.Base64.encodeToString(key, android.util.Base64.NO_WRAP))
-        .apply()
-    return key
-}

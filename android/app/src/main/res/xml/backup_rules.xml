@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android 11 and earlier.
+
+  Everything is backed up except the preferences file holding this phone's
+  identity and its pairing ticket. Those are sealed by a key that cannot leave
+  the device, so a restored copy would unseal to nothing anyway — excluding
+  them turns "restored, and mysteriously cannot reach the desktop" into "not
+  paired yet", which is the truth and has an obvious next step.
+
+  The vault is deliberately not excluded: it is sealed with the user's own
+  passphrase and is exactly the thing worth carrying to a new phone.
+-->
+<full-backup-content>
+    <exclude domain="sharedpref" path="switchboard.xml" />
+</full-backup-content>

@@ -135,6 +135,20 @@ fun SettingsScreen(
                 fontSize = 13.sp,
                 lineHeight = 18.sp
             )
+            Spacer(Modifier.height(10.dp))
+            // What this phone proves itself with. Worth saying plainly, because
+            // a copy of it is a working second phone.
+            Text(
+                if (engine.identity.isSealed())
+                    "This phone's identity is sealed by the Android keystore, so a copy of it " +
+                        "taken off the device or out of a backup is useless."
+                else
+                    "This device has no usable keystore, so its identity is stored as-is. " +
+                        "Anything that can read the app's files could pair as this phone.",
+                color = Subtext,
+                fontSize = 12.sp,
+                lineHeight = 17.sp
+            )
             Spacer(Modifier.height(12.dp))
             Button(
                 onClick = onUnpair,
