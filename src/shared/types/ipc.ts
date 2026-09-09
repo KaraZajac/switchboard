@@ -57,6 +57,23 @@ export interface VaultStatusInfo {
   fingerprint: string | null
 }
 
+/**
+ * How much of what is on disk is actually protected.
+ *
+ * Two separate things, because they can and do differ: passwords are encrypted
+ * field by field with a key from the OS keystore, and the database as a whole
+ * is encrypted page by page with a key the same keystore holds. Without a
+ * keyring the first degrades to obfuscation and the second does not happen at
+ * all, and the user is owed both facts rather than a single reassuring light.
+ */
+export interface StorageProtection {
+  /** Whether passwords are really encrypted, rather than merely obfuscated */
+  protected: boolean
+  description: string
+  /** Whether the database file itself is encrypted */
+  databaseEncrypted: boolean
+}
+
 /** State of the peer-to-peer link that paired devices connect through */
 export interface RemoteLinkStatus {
   available: boolean
@@ -153,7 +170,7 @@ export interface RendererToMainInvocations {
   'remote:cancel-pairing': () => Promise<RemoteLinkStatus>
   'remote:revoke': (endpointId: string) => Promise<RemoteLinkStatus>
   /** Where stored credentials are protected, and whether they really are */
-  'app:secrets-status': () => Promise<{ protected: boolean; description: string }>
+  'app:secrets-status': () => Promise<StorageProtection>
   /** OS account name, cleaned up for use as an IRC nick */
   'app:default-nick': () => Promise<string>
   'window:minimize': () => Promise<void>

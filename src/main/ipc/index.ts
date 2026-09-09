@@ -18,6 +18,7 @@ import {
 import { getMessages, searchMessages, deleteMessage } from '../storage/models/message'
 import { getSetting, setSetting } from '../storage/models/settings'
 import { secretsProtected, secretsBackendDescription } from '../storage/secrets'
+import { databaseIsEncrypted } from '../storage/database'
 import { createVault, lockVault, resealVault, unlockVault, vaultStatus } from '../vault/vault'
 import {
   sessionState,
@@ -75,7 +76,8 @@ export function registerIPCHandlers(): void {
 
   handle('app:secrets-status', async () => ({
     protected: secretsProtected(),
-    description: secretsBackendDescription()
+    description: secretsBackendDescription(),
+    databaseEncrypted: databaseIsEncrypted()
   }))
 
   handle('app:default-nick', async () => {

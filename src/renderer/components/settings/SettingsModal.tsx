@@ -4,6 +4,7 @@ import { Modal } from '../common/Modal'
 import { useUIStore } from '../../stores/uiStore'
 import type { Theme } from '../../stores/uiStore'
 import { useServerStore } from '../../stores/serverStore'
+import type { StorageProtection } from '@shared/types/ipc'
 
 type Tab = 'servers' | 'appearance' | 'notifications' | 'devices' | 'network' | 'shortcuts'
 
@@ -292,7 +293,7 @@ function NotificationsTab() {
 }
 
 function NetworkTab() {
-  const [secrets, setSecrets] = useState<{ protected: boolean; description: string } | null>(null)
+  const [secrets, setSecrets] = useState<StorageProtection | null>(null)
   const [proxyType, setProxyType] = useState('none')
   const [proxyHost, setProxyHost] = useState('')
   const [proxyPort, setProxyPort] = useState('')
@@ -333,19 +334,35 @@ function NetworkTab() {
     <div className="space-y-4">
       <h3 className="text-sm font-semibold text-gray-300">Network</h3>
 
-      {/* Where passwords live on disk */}
+      {/* What is actually protected on disk */}
       {secrets && (
-        <div className="rounded border border-gray-700 bg-gray-900/50 px-3 py-2.5">
-          <div className="flex items-center gap-2 text-sm text-gray-200">
-            <span
-              className={`h-2 w-2 rounded-full ${secrets.protected ? 'bg-green-500' : 'bg-yellow-500'}`}
-            />
-            Credential storage
+        <div className="space-y-2">
+          <div className="rounded border border-gray-700 bg-gray-900/50 px-3 py-2.5">
+            <div className="flex items-center gap-2 text-sm text-gray-200">
+              <span
+                className={`h-2 w-2 rounded-full ${secrets.protected ? 'bg-green-500' : 'bg-yellow-500'}`}
+              />
+              Credential storage
+            </div>
+            <div className="mt-1 text-xs leading-relaxed text-gray-500">
+              {secrets.protected
+                ? `Server and SASL passwords are encrypted with your system keystore (${secrets.description}).`
+                : `Passwords are not protected on this system — ${secrets.description}.`}
+            </div>
           </div>
-          <div className="mt-1 text-xs leading-relaxed text-gray-500">
-            {secrets.protected
-              ? `Server and SASL passwords are encrypted with your system keystore (${secrets.description}).`
-              : `Passwords are not protected on this system — ${secrets.description}.`}
+
+          <div className="rounded border border-gray-700 bg-gray-900/50 px-3 py-2.5">
+            <div className="flex items-center gap-2 text-sm text-gray-200">
+              <span
+                className={`h-2 w-2 rounded-full ${secrets.databaseEncrypted ? 'bg-green-500' : 'bg-yellow-500'}`}
+              />
+              Message history
+            </div>
+            <div className="mt-1 text-xs leading-relaxed text-gray-500">
+              {secrets.databaseEncrypted
+                ? 'Every message, channel and server on this machine is encrypted with a key held by your system keystore. Copying the file off the disk gets nothing without the account it belongs to.'
+                : 'There is no system keystore to hold a key, so history is stored unencrypted. Anything with access to this disk can read it.'}
+            </div>
           </div>
         </div>
       )}
