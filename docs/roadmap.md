@@ -177,6 +177,22 @@ will actually take, and all three were being ignored.
   The phone had it right, which is exactly the drift the corpus exists to
   catch.
 
+Two more came from the same diff — what the server offers against what the
+client asks for and does:
+
+- **`draft/oper-tag`** was advertised and neither client asked. The server
+  marks messages from its operators, and the reason that is worth rendering is
+  that a nick cannot claim it: someone messaging you as "Admin" about your
+  password is an old trick. The capability negotiates; the badge is untested on
+  the wire, because that instance has no operator configured.
+- **Names were compared with `toLowerCase()`**, and a `casemap()` that folded
+  them properly sat on the connection state being called from nowhere. Under
+  rfc1459 — the RFC's default, which rIRCd relies on by advertising no
+  CASEMAPPING — `[ ] \ ~` are the uppercase forms of `{ } | ^`, so `bob[away]`
+  and `BOB{AWAY}` are one person and were two. `toLowerCase()` also folds the
+  whole of Unicode where a server folds A–Z, which on a `UTF8ONLY` server
+  merges two people into one. Both clients fold through ISUPPORT now.
+
 ### Pairing by camera
 
 The desktop's QR carries `switchboard://pair?ticket=…&code=…`, so a scan is the
