@@ -10,11 +10,13 @@ Written September 2026. Links to sources are at the bottom.
 
 ---
 
-## Status — what is built (8 September 2026)
+## Status — what is built (9 September 2026)
 
-Track A phases 1–4 and Track B phase 1 are working end to end, desktop and
-Android, against a live IRC network — including failover: the phone takes over
-the connection when the desktop goes away, and gives it back when it returns.
+Both tracks are working end to end, desktop and Android, against a live IRC
+network — including failover: the phone takes over the connection when the
+desktop goes away, and gives it back when it returns. What is left is A11's
+wire, which is blocked on the server, and file sharing, which is blocked on the
+same.
 
 | | |
 |---|---|
@@ -31,7 +33,8 @@ the connection when the desktop goes away, and gives it back when it returns.
 | **A9 · unattended failover** | done — foreground service, vault kept open across restarts |
 | **A10 · Doze** | done — goodbye on clean shutdown, exact-alarm backstop, wake on idle exit, battery-exemption prompt |
 | **A11 · push wake-ups** | crypto done, wire blocked — see below |
-| **B2 · whole-database encryption** | not started |
+| **B2 · whole-database encryption** | done — real SQLite, encrypted page by page with a key the OS keychain holds; FTS5 search; migration from the sql.js file verified against a real one |
+| **B3 · Android at rest** | done — the device identity and pairing ticket sealed by the Android keystore, and out of backup |
 | **Profile metadata** | done — all six registry keys, published, subscribed and rendered on both clients |
 
 ### A11 · push wake-ups — where it stands
@@ -153,7 +156,26 @@ elsewhere. Reading the wire found eight defects that no unit test would have:
 
 The phone's engine is a separate implementation and needed the same fixes, so
 the two are held together by `tests/fixtures/` — one corpus for the protocol,
-the capability list and the pairing payload, read by both test suites.
+the capability list, the pairing payload, and the capability *values*, read by
+both test suites.
+
+Those values were the next thing reading the wire found. A capability is not
+only a yes: `sasl=PLAIN,SCRAM-SHA-256`, `draft/multiline=max-bytes=4096,max-
+lines=20` and `draft/metadata-2=max-value-bytes=4096` each say what the server
+will actually take, and all three were being ignored.
+
+- **A multiline message over the limit was refused outright** — `FAIL BATCH
+  MULTILINE_MAX_LINES 20`, nothing delivered, no sign of it on the sender's
+  screen. Twenty-five lines now arrive as twenty and five.
+- **A SASL mechanism the server does not offer** got a bare `904`, which
+  reaches the user as "authentication failed" — the one reading that is
+  certainly wrong.
+- **A profile field over `max-value-bytes`** was saved locally, reported as
+  published, and present on no server anywhere.
+- **The desktop dropped `draft/multiline-concat`** on the way in, putting line
+  breaks through the middle of a sentence the sender had marked as one line.
+  The phone had it right, which is exactly the drift the corpus exists to
+  catch.
 
 ### Pairing by camera
 
