@@ -9,9 +9,13 @@
   "scripts": {
     "predev": "node scripts/native.mjs electron",
     "dev": "electron-vite dev",
+    "prebuild": "node scripts/native.mjs electron",
     "build": "electron-vite build && electron-builder",
+    "prebuild:linux": "node scripts/native.mjs electron",
     "build:linux": "electron-vite build && electron-builder --linux",
+    "prebuild:mac": "node scripts/native.mjs electron",
     "build:mac": "electron-vite build && electron-builder --mac",
+    "prebuild:win": "node scripts/native.mjs electron",
     "build:win": "electron-vite build && electron-builder --win",
     "prepreview": "node scripts/native.mjs electron",
     "preview": "electron-vite preview",

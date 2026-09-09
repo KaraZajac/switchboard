@@ -1,5 +1,6 @@
 import { EventEmitter } from 'events'
 import { lineBudget, splitToFit } from './features/linelen'
+import { groupTargets, targetMax } from '@shared/isupport'
 import type { IRCMessage } from '@shared/types/irc'
 import type { ServerConfig } from '@shared/types/server'
 import type { ChannelUser } from '@shared/types/channel'
@@ -191,8 +192,13 @@ export class IRCClient {
    * Send a message to a channel or user.
    */
   say(target: string, message: string): void {
-    for (const piece of splitToFit(message, lineBudget(this.state, 'PRIVMSG', target))) {
-      this.connection.send('PRIVMSG', target, piece)
+    // `TARGMAX=PRIVMSG:1` and a message to two people comes back `407 :Too
+    // many recipients`, delivered to neither — so a list goes as the several
+    // commands the server will actually accept.
+    for (const group of groupTargets(target, targetMax(this.state.isupport, 'PRIVMSG'))) {
+      for (const piece of splitToFit(message, lineBudget(this.state, 'PRIVMSG', group))) {
+        this.connection.send('PRIVMSG', group, piece)
+      }
     }
   }
 
@@ -200,8 +206,10 @@ export class IRCClient {
    * Send a NOTICE to a channel or user.
    */
   notice(target: string, message: string): void {
-    for (const piece of splitToFit(message, lineBudget(this.state, 'NOTICE', target))) {
-      this.connection.send('NOTICE', target, piece)
+    for (const group of groupTargets(target, targetMax(this.state.isupport, 'NOTICE'))) {
+      for (const piece of splitToFit(message, lineBudget(this.state, 'NOTICE', group))) {
+        this.connection.send('NOTICE', group, piece)
+      }
     }
   }
 

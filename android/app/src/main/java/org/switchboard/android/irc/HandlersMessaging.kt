@@ -138,14 +138,28 @@ internal fun registerMessagingHandlers() {
  */
 internal object ChatHistory {
 
+    /**
+     * The page size the server will honour.
+     *
+     * `CHATHISTORY=200` is the most it returns in one go. Asking for more is
+     * not an error and not more history — it is the server quietly doing
+     * something else with the request, so the page the caller believes in and
+     * the one it gets stop matching.
+     */
+    private fun allowed(session: IrcSession, wanted: Int): Int =
+        Isupport.number(session.state.isupport, "CHATHISTORY")?.let { minOf(wanted, it) } ?: wanted
+
     fun requestLatest(session: IrcSession, target: String, limit: Int = 50) {
         if (!session.state.capabilities.contains("draft/chathistory")) return
-        session.send("CHATHISTORY", "LATEST", target, "*", limit.toString())
+        session.send("CHATHISTORY", "LATEST", target, "*", allowed(session, limit).toString())
     }
 
     fun requestBefore(session: IrcSession, target: String, timestamp: String, limit: Int = 50) {
         if (!session.state.capabilities.contains("draft/chathistory")) return
-        session.send("CHATHISTORY", "BEFORE", target, "timestamp=$timestamp", limit.toString())
+        session.send(
+            "CHATHISTORY", "BEFORE", target, "timestamp=$timestamp",
+            allowed(session, limit).toString()
+        )
     }
 }
 

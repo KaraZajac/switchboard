@@ -1,4 +1,5 @@
 import type { IRCClient } from './client'
+import { isupportNumber, fitsLimit } from '@shared/isupport'
 
 /**
  * Slash commands typed into the composer.
@@ -21,6 +22,28 @@ export interface CommandResult {
 const CHANNEL_PREFIXES = '#&+!'
 
 const isChannel = (name: string): boolean => !!name && CHANNEL_PREFIXES.includes(name[0])
+
+/**
+ * Refuse text the server would silently cut, and say by how much.
+ *
+ * `TOPICLEN`, `AWAYLEN` and `KICKLEN` are not refusals — go over one and the
+ * server accepts the command and quietly keeps the first N bytes. The user
+ * finds out later, if at all. Better to say so now and let them decide what to
+ * cut, since they are the only one who knows which half mattered.
+ */
+function tooLongFor(
+  client: { state: { isupport: Record<string, string | true> } },
+  token: string,
+  /** The whole noun phrase, article and all — "an away message", not "away message" */
+  what: string,
+  text: string
+): string | null {
+  const limit = isupportNumber(client.state.isupport, token)
+  if (fitsLimit(text, limit)) return null
+
+  const length = Buffer.byteLength(text, 'utf8')
+  return `This network allows ${limit} characters in ${what} and yours is ${length}.`
+}
 
 export function runCommand(client: IRCClient, target: string, text: string): CommandResult {
   if (!text.startsWith('/')) return { handled: false }
@@ -98,6 +121,9 @@ export function runCommand(client: IRCClient, target: string, text: string): Com
         client.connection.send('TOPIC', target)
         return { handled: true }
       }
+      const tooLong = tooLongFor(client, 'TOPICLEN', 'a topic', rest)
+      if (tooLong) return { handled: true, error: tooLong }
+
       client.setTopic(target, rest)
       return { handled: true }
     }
@@ -121,6 +147,10 @@ export function runCommand(client: IRCClient, target: string, text: string): Com
       if (!isChannel(target)) return { handled: true, error: '/kick only works in a channel' }
       const [nick, reason] = firstAndRest()
       if (!nick) return { handled: true, error: 'Usage: /kick <nick> [reason]' }
+
+      const kickTooLong = reason && tooLongFor(client, 'KICKLEN', 'a kick reason', reason)
+      if (kickTooLong) return { handled: true, error: kickTooLong }
+
       client.kick(target, nick, reason || undefined)
       return { handled: true }
     }
@@ -134,8 +164,15 @@ export function runCommand(client: IRCClient, target: string, text: string): Com
 
     case 'away': {
       // AWAY with no message clears it
-      if (rest) client.connection.send('AWAY', rest)
-      else client.connection.send('AWAY')
+      if (!rest) {
+        client.connection.send('AWAY')
+        return { handled: true }
+      }
+
+      const awayTooLong = tooLongFor(client, 'AWAYLEN', 'an away message', rest)
+      if (awayTooLong) return { handled: true, error: awayTooLong }
+
+      client.connection.send('AWAY', rest)
       return { handled: true }
     }
 

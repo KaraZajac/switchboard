@@ -1,3 +1,4 @@
+import { isupportNumber } from '@shared/isupport'
 
 /**
  * draft/chathistory — Server-side message history.
@@ -13,10 +14,26 @@
  * Responses come as a chathistory batch containing PRIVMSG/NOTICE messages.
  */
 
+/**
+ * The limit the server will honour.
+ *
+ * `CHATHISTORY=200` in ISUPPORT is the most it will return in one go. Asking
+ * for more is not an error and not more history — it is the server quietly
+ * doing something else with the request, so the page size the caller believes
+ * in and the one it gets stop matching.
+ */
+function allowedLimit(
+  state: { isupport: Record<string, string | true> },
+  wanted: number
+): number {
+  const most = isupportNumber(state.isupport, 'CHATHISTORY')
+  return most === null ? wanted : Math.min(wanted, most)
+}
+
 export function requestChathistory(
   client: {
     connection: { send: (...args: string[]) => void }
-    state: { capabilities: Set<string> }
+    state: { capabilities: Set<string>; isupport: Record<string, string | true> }
   },
   target: string,
   options: {
@@ -30,7 +47,7 @@ export function requestChathistory(
   }
 
   const direction = options.direction || 'LATEST'
-  const limit = options.limit || 50
+  const limit = allowedLimit(client.state, options.limit || 50)
   const reference = options.reference || '*'
 
   client.connection.send('CHATHISTORY', direction, target, reference, limit.toString())
@@ -43,7 +60,7 @@ export function requestChathistory(
 export function requestChathistoryBetween(
   client: {
     connection: { send: (...args: string[]) => void }
-    state: { capabilities: Set<string> }
+    state: { capabilities: Set<string>; isupport: Record<string, string | true> }
   },
   target: string,
   start: string,
@@ -54,7 +71,14 @@ export function requestChathistoryBetween(
     return false
   }
 
-  client.connection.send('CHATHISTORY', 'BETWEEN', target, start, end, limit.toString())
+  client.connection.send(
+    'CHATHISTORY',
+    'BETWEEN',
+    target,
+    start,
+    end,
+    allowedLimit(client.state, limit).toString()
+  )
   return true
 }
 
@@ -64,7 +88,7 @@ export function requestChathistoryBetween(
 export function requestChathistoryTargets(
   client: {
     connection: { send: (...args: string[]) => void }
-    state: { capabilities: Set<string> }
+    state: { capabilities: Set<string>; isupport: Record<string, string | true> }
   },
   from: string,
   to: string,
@@ -74,6 +98,12 @@ export function requestChathistoryTargets(
     return false
   }
 
-  client.connection.send('CHATHISTORY', 'TARGETS', from, to, limit.toString())
+  client.connection.send(
+    'CHATHISTORY',
+    'TARGETS',
+    from,
+    to,
+    allowedLimit(client.state, limit).toString()
+  )
   return true
 }

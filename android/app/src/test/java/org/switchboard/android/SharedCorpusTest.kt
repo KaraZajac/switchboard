@@ -23,6 +23,7 @@ import org.junit.Test
 import org.switchboard.android.irc.Casemap
 import org.switchboard.android.irc.ConnectionState
 import org.switchboard.android.irc.Irc
+import org.switchboard.android.irc.Isupport
 import org.switchboard.android.irc.LineLength
 import org.switchboard.android.irc.IrcMessage
 import org.switchboard.android.irc.Metadata
@@ -604,6 +605,62 @@ class SharedCorpusTest {
                 LineLength.split(c["text"]!!.jsonPrimitive.content, c["budget"]!!.jsonPrimitive.int)
             )
         }
+    }
+
+    // ── the numbers in ISUPPORT ──────────────────────────────────────
+
+    /**
+     * TARGMAX is the one that loses the message: `PRIVMSG:1`, and a message
+     * addressed to two people comes back `407 :Too many recipients` —
+     * delivered to neither, which is not what "too many" sounds like.
+     */
+    @Test
+    fun `reads the same target limits the desktop reads`() {
+        for (case in load("cap-values.json")["targmax"]!!.jsonArray) {
+            val c = case.jsonObject
+            val name = c["name"]!!.jsonPrimitive.content
+            val value = (c["value"] as? JsonPrimitive)?.contentOrNull
+            val isupport = if (value == null) emptyMap() else mapOf("TARGMAX" to value)
+
+            assertEquals(
+                name,
+                (c["max"] as? JsonPrimitive)?.intOrNull,
+                Isupport.targetMax(isupport, c["command"]!!.jsonPrimitive.content)
+            )
+        }
+    }
+
+    @Test
+    fun `groups recipients the same way the desktop groups them`() {
+        for (case in load("cap-values.json")["groups"]!!.jsonArray) {
+            val c = case.jsonObject
+            val name = c["name"]!!.jsonPrimitive.content
+            val expected = c["groups"]!!.jsonArray.map { it.jsonPrimitive.content }
+
+            assertEquals(
+                name,
+                expected,
+                Isupport.groupTargets(
+                    c["targets"]!!.jsonPrimitive.content,
+                    (c["max"] as? JsonPrimitive)?.intOrNull
+                )
+            )
+        }
+    }
+
+    /** Bytes, which is what the server counts, not characters */
+    @Test
+    fun `measures a stated length the way the desktop measures it`() {
+        assertEquals(307, Isupport.number(mapOf("TOPICLEN" to "307"), "TOPICLEN"))
+        assertNull(Isupport.number(mapOf("TOPICLEN" to "0"), "TOPICLEN"))
+        assertNull(Isupport.number(mapOf("TOPICLEN" to "lots"), "TOPICLEN"))
+        assertNull(Isupport.number(emptyMap(), "TOPICLEN"))
+
+        assertTrue(Isupport.fits("abcdefghij", 10))
+        assertFalse(Isupport.fits("abcdefghijk", 10))
+        assertTrue(Isupport.fits("日本語", 10))
+        assertFalse(Isupport.fits("日本語です", 10))
+        assertTrue(Isupport.fits("anything at all", null))
     }
 
 }

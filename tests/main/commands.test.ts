@@ -31,13 +31,19 @@ const client = {
   connection: {
     send: record('send'),
     sendRaw: record('sendRaw')
-  }
+  },
+  // What the server said it will take. Empty by default — a server that states
+  // nothing places no limit, which is the case most of these run under.
+  state: { isupport: {} as Record<string, string | true> }
 } as any
 
 const run = (text: string, target = '#chan') => runCommand(client, target, text)
 
 beforeEach(() => {
   calls = []
+  // A server that states nothing places no limit, which is what most of these
+  // run under; the cases that care set their own.
+  client.state.isupport = {}
 })
 
 describe('slash commands', () => {
@@ -146,5 +152,67 @@ describe('slash commands', () => {
   it('passes /raw through untouched', () => {
     run('/raw PRIVMSG #chan :hi')
     expect(calls).toEqual([{ method: 'sendRaw', args: ['PRIVMSG #chan :hi'] }])
+  })
+})
+
+/**
+ * Limits the server states but does not enforce with an error.
+ *
+ * `TOPICLEN` and its neighbours are not refusals: go over one and the server
+ * accepts the command and quietly keeps the first N bytes, so the user finds
+ * out later, if at all.
+ */
+describe('text the server would silently cut', () => {
+  beforeEach(() => {
+    client.state.isupport = { TOPICLEN: '20', AWAYLEN: '10', KICKLEN: '8' }
+  })
+
+  it('refuses a topic too long for this network, and says by how much', () => {
+    const result = run(`/topic ${'t'.repeat(40)}`)
+
+    expect(result.error).toContain('20')
+    expect(result.error).toContain('40')
+    expect(calls.find((c) => c.method === 'setTopic')).toBeUndefined()
+  })
+
+  it('lets a topic that fits through', () => {
+    run('/topic a short one')
+    expect(calls).toContainEqual({ method: 'setTopic', args: ['#chan', 'a short one'] })
+  })
+
+  it('refuses an away message too long for this network', () => {
+    expect(run(`/away ${'a'.repeat(30)}`).error).toContain('10')
+    expect(calls.find((c) => c.method === 'send')).toBeUndefined()
+  })
+
+  /** Clearing it is not a message, so there is nothing to be too long */
+  it('still lets you come back', () => {
+    run('/away')
+    expect(calls).toContainEqual({ method: 'send', args: ['AWAY'] })
+  })
+
+  it('refuses a kick reason too long for this network', () => {
+    expect(run(`/kick robin ${'r'.repeat(20)}`).error).toContain('8')
+    expect(calls.find((c) => c.method === 'kick')).toBeUndefined()
+  })
+
+  it('kicks with no reason at all regardless', () => {
+    run('/kick robin')
+    expect(calls).toContainEqual({ method: 'kick', args: ['#chan', 'robin', undefined] })
+  })
+
+  /** Bytes, not characters — which is what the server counts */
+  it('counts a limit in bytes rather than characters', () => {
+    client.state.isupport = { TOPICLEN: '10' }
+
+    // Five characters, fifteen bytes
+    expect(run('/topic 日本語です').error).toContain('15')
+  })
+
+  it('places no limit when the server states none', () => {
+    client.state.isupport = {}
+    run(`/topic ${'t'.repeat(500)}`)
+
+    expect(calls.find((c) => c.method === 'setTopic')).toBeDefined()
   })
 })

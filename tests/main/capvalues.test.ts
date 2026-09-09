@@ -3,6 +3,7 @@ import * as fs from 'fs'
 import * as path from 'path'
 import { parseMetadataLimits, metadataValueFits } from '../../src/main/irc/features/metadata'
 import { saslMechanismsFrom } from '../../src/main/irc/capability'
+import { targetMax, groupTargets, isupportNumber, fitsLimit } from '../../src/shared/isupport'
 
 /**
  * The values servers put on their capabilities.
@@ -46,4 +47,55 @@ describe('whether a profile field will be kept', () => {
       expect(metadataValueFits(withValue('draft/metadata-2', c.value), c.text)).toBe(c.fits)
     })
   }
+})
+
+/**
+ * TARGMAX, which is the one that loses the message.
+ *
+ * `PRIVMSG:1` and a message addressed to two people comes back `407 :Too many
+ * recipients` — delivered to neither, which is not what "too many" sounds like
+ * it should mean.
+ */
+describe('how many people one command may address', () => {
+  for (const c of corpus.targmax) {
+    it(c.name, () => {
+      const isupport = c.value === null ? {} : { TARGMAX: c.value }
+      expect(targetMax(isupport, c.command)).toBe(c.max)
+    })
+  }
+})
+
+describe('splitting a target list into commands the server will take', () => {
+  for (const c of corpus.groups) {
+    it(c.name, () => {
+      expect(groupTargets(c.targets, c.max)).toEqual(c.groups)
+    })
+  }
+
+  it('never loses or reorders a recipient', () => {
+    const names = Array.from({ length: 17 }, (_, i) => `person${i}`)
+    const groups = groupTargets(names.join(','), 5)
+
+    expect(groups.join(',').split(',')).toEqual(names)
+    expect(groups.every((g) => g.split(',').length <= 5)).toBe(true)
+  })
+})
+
+describe('lengths the server states but does not enforce', () => {
+  it('reads a positive number and nothing else', () => {
+    expect(isupportNumber({ TOPICLEN: '307' }, 'TOPICLEN')).toBe(307)
+    expect(isupportNumber({ TOPICLEN: '0' }, 'TOPICLEN')).toBeNull()
+    expect(isupportNumber({ TOPICLEN: 'lots' }, 'TOPICLEN')).toBeNull()
+    expect(isupportNumber({ TOPICLEN: true }, 'TOPICLEN')).toBeNull()
+    expect(isupportNumber({}, 'TOPICLEN')).toBeNull()
+  })
+
+  /** Bytes, which is what the server counts, not characters */
+  it('measures the limit in bytes', () => {
+    expect(fitsLimit('abcdefghij', 10)).toBe(true)
+    expect(fitsLimit('abcdefghijk', 10)).toBe(false)
+    expect(fitsLimit('日本語', 10)).toBe(true)
+    expect(fitsLimit('日本語です', 10)).toBe(false)
+    expect(fitsLimit('anything at all', null)).toBe(true)
+  })
 })

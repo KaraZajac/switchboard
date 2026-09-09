@@ -293,6 +293,15 @@ class IrcConnection(
         // was too long`, nothing delivered — so every line is cut to fit before
         // anything else decides how to send it. `continued` marks the pieces
         // that were one line before we cut them.
+        // `TARGMAX=PRIVMSG:1` and a message to two people comes back `407 :Too
+        // many recipients`, delivered to neither — so a list goes as the
+        // several commands the server will actually accept.
+        val groups = Isupport.groupTargets(target, Isupport.targetMax(state.isupport, "PRIVMSG"))
+        if (groups.size > 1) {
+            for (group in groups) say(group, text)
+            return
+        }
+
         val budget = LineLength.budget(state.nick, state.userHost, state.isupport, "PRIVMSG", target)
         val parts = mutableListOf<Pair<String, Boolean>>()
         for (line in text.split("\n")) {
@@ -347,6 +356,7 @@ class IrcConnection(
     fun join(channel: String) = send("JOIN", channel)
     fun part(channel: String) = send("PART", channel)
     fun setTopic(channel: String, topic: String) = send("TOPIC", channel, topic)
+
     fun setNick(nick: String) {
         state.desiredNick = nick
         state.pendingNick = nick
