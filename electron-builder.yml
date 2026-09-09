@@ -1,5 +1,11 @@
 appId: com.switchboard.irc
 productName: Switchboard
+# The database addon is prebuilt and put in place by scripts/before-build.mjs,
+# for the architecture being packaged. Left to itself electron-builder would
+# try to compile it, which needs a C++ toolchain on every runner to arrive at
+# the same binary.
+npmRebuild: false
+beforeBuild: scripts/before-build.mjs
 directories:
   buildResources: resources
   output: dist
@@ -15,9 +21,17 @@ files:
   - '!docs/*'
   - '!tests/*'
   - '!images/*'
+  # The other runtime's and other arch's copies of the database addon: kept
+  # beside the one in use so a swap needs no network, but only one of them is
+  # ever the right one to ship.
+  - '!node_modules/better-sqlite3-multiple-ciphers/build/Release/runtimes/**'
 asarUnpack:
   - resources/**
   - node_modules/sql.js/dist/**
+  # SQLite, with the encryption. A .node cannot be loaded from inside the asar
+  # archive, and this one is loaded before the first window exists — packed in,
+  # the app does not start at all.
+  - node_modules/better-sqlite3-multiple-ciphers/**
   # iroh ships a native .node per platform; it cannot be loaded from inside the
   # asar archive, and the remote link silently disappears if it is not unpacked.
   - node_modules/@number0/**
