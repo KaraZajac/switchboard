@@ -19,7 +19,7 @@ import { getMessages, searchMessages, deleteMessage } from '../storage/models/me
 import { getSetting, setSetting } from '../storage/models/settings'
 import { secretsProtected, secretsBackendDescription } from '../storage/secrets'
 import { databaseIsEncrypted } from '../storage/database'
-import { serversChanged } from './notify'
+import { serversChanged, monitorChanged, settingChanged, readMarkerChanged } from './notify'
 import { createVault, lockVault, resealVault, unlockVault, vaultStatus } from '../vault/vault'
 import {
   sessionState,
@@ -527,6 +527,9 @@ export function registerIPCHandlers(): void {
 
   handle('settings:set', async (_event, key: string, value: unknown) => {
     setSetting(key, value)
+    // May not have come from the window: a paired phone picking a theme
+    // reaches the same handler, and the two are meant to match.
+    settingChanged(key)
   })
 
   // ── Read markers ─────────────────────────────────────────────────
@@ -539,7 +542,13 @@ export function registerIPCHandlers(): void {
     const client = ircManager.getClient(serverId)
     if (client && client.state.capabilities.has('draft/read-marker')) {
       client.connection.send('MARKREAD', channel, `timestamp=${timestamp}`)
+      // The server will echo it, and the window hears about it that way.
+      return
     }
+
+    // Without the capability there is no echo, so this is the only way the
+    // window learns the phone has read a conversation.
+    readMarkerChanged(serverId, channel, timestamp)
   })
 
   handle('read-marker:get', async (_event, serverId: string, channel: string) => {
@@ -559,6 +568,8 @@ export function registerIPCHandlers(): void {
     if (client) {
       client.connection.send('MONITOR', '+', nicks.join(','))
     }
+    // The server echoes who is online, never who is on the list
+    monitorChanged(serverId)
   })
 
   handle('monitor:remove', async (_event, serverId: string, nicks: string[]) => {
@@ -568,6 +579,7 @@ export function registerIPCHandlers(): void {
     if (client) {
       client.connection.send('MONITOR', '-', nicks.join(','))
     }
+    monitorChanged(serverId)
   })
 
   handle('monitor:list', async (_event, serverId: string) => {

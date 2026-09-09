@@ -3,8 +3,7 @@ import { useServerStore } from '../stores/serverStore'
 import { useChannelStore } from '../stores/channelStore'
 import { useMessageStore } from '../stores/messageStore'
 import { useUserStore } from '../stores/userStore'
-import { useUIStore } from '../stores/uiStore'
-import { syncThemeFromSettings } from '../stores/uiStore'
+import { useUIStore, syncThemeFromSettings } from '../stores/uiStore'
 import { isChannelName, isServiceNick } from '@shared/constants'
 
 /**
@@ -400,6 +399,36 @@ export function useIRCEvents(): void {
         if (useUIStore.getState().notificationsEnabled && !isServerMuted) {
           api.invoke('notification:send', `Invited to ${channel}`, `${by} invited you to ${channel}`)
         }
+      })
+    )
+
+    /**
+     * The watched list changed somewhere other than here.
+     *
+     * The server only ever echoes who is *online*, never who is on the list,
+     * so a friend added from the phone was invisible on the desktop — and
+     * their online notice arrived for a nick this window did not think it was
+     * watching.
+     */
+    cleanups.push(
+      api.on('monitor:changed', ({ serverId }) => {
+        api.invoke('monitor:list', serverId).then((nicks) => {
+          useUserStore.getState().setMonitorList(serverId, nicks ?? [])
+          if (nicks && nicks.length > 0) api.invoke('monitor:status', serverId)
+        })
+      })
+    )
+
+    /**
+     * A shared setting changed somewhere other than here.
+     *
+     * The theme is the one that shows: both clients share it deliberately, and
+     * picking one on the phone left this window on the old one until restart.
+     * Re-reading is a no-op when this window is the one that set it.
+     */
+    cleanups.push(
+      api.on('settings:changed', ({ key }) => {
+        if (key === 'theme') void syncThemeFromSettings()
       })
     )
 

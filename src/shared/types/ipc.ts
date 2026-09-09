@@ -96,6 +96,10 @@ export interface MainToRendererEvents {
    * window re-reads, so there is one description of the servers.
    */
   'servers:changed': undefined
+  /** The watched-nicks list for one network changed somewhere other than here */
+  'monitor:changed': { serverId: string }
+  /** A stored setting changed somewhere other than here — the theme, most visibly */
+  'settings:changed': { key: string }
   'irc:connected': { serverId: string; nick: string }
   'irc:disconnected': { serverId: string; reason: string }
   'irc:message': { serverId: string; channel: string; message: ChatMessage }
