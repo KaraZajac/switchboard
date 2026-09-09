@@ -1,4 +1,5 @@
 import { app, BrowserWindow, Menu, Tray, session, shell, nativeImage } from 'electron'
+import { setNotifier } from './ipc/notify'
 import { join } from 'path'
 import { autoUpdater } from 'electron-updater'
 import { registerIPCHandlers } from './ipc/index'
@@ -246,6 +247,10 @@ function sendToRenderer(channel: string, data: unknown): void {
     mainWindow.webContents.send(channel, data)
   }
 }
+
+// Anything that changes the stored servers without going through the window —
+// a paired phone, an adopted vault — tells it so through here.
+setNotifier(sendToRenderer)
 
 // Track whether we're quitting vs just closing the window
 let isQuitting = false

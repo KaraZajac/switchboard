@@ -29,13 +29,16 @@ function AppInner() {
   // Set up all IPC event listeners
   useIRCEvents()
 
-  // Load servers on mount
-  useEffect(() => {
-    if (!window.switchboard) {
-      console.error('window.switchboard is not defined — preload script may have failed')
-      return
-    }
-    window.switchboard.invoke('server:list').then((servers) => {
+  /**
+   * Read the stored servers into the window.
+   *
+   * On mount, and again whenever they change somewhere else — a paired phone
+   * editing them, or an adopted vault replacing the list. Re-reading rather
+   * than applying a diff keeps one description of the servers, and it is the
+   * stored one.
+   */
+  const loadServers = useCallback(() => {
+    return window.switchboard.invoke('server:list').then((servers) => {
       useServerStore.getState().setServers(servers)
       if (servers.length > 0 && !useServerStore.getState().activeServerId) {
         useServerStore.getState().setActiveServer(servers[0].id)
@@ -48,14 +51,31 @@ function AppInner() {
           if (value) useServerStore.getState().setUserMetadata(server.id, server.nick, key, value)
         }
       }
-    }).catch((err) => {
+    })
+  }, [])
+
+  // Load servers on mount
+  useEffect(() => {
+    if (!window.switchboard) {
+      console.error('window.switchboard is not defined — preload script may have failed')
+      return
+    }
+    loadServers().catch((err) => {
       console.error('Failed to load servers:', err)
+    })
+
+    const off = window.switchboard.on('servers:changed', () => {
+      loadServers().catch((err) => {
+        console.error('Failed to reload servers:', err)
+      })
     })
 
     initMutePersistence().catch((err) => {
       console.error('Failed to restore mutes:', err)
     })
-  }, [])
+
+    return off
+  }, [loadServers])
 
   // Global keyboard shortcuts
   const handleGlobalKeyDown = useCallback((e: KeyboardEvent) => {

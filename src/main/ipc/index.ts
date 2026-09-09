@@ -19,6 +19,7 @@ import { getMessages, searchMessages, deleteMessage } from '../storage/models/me
 import { getSetting, setSetting } from '../storage/models/settings'
 import { secretsProtected, secretsBackendDescription } from '../storage/secrets'
 import { databaseIsEncrypted } from '../storage/database'
+import { serversChanged } from './notify'
 import { createVault, lockVault, resealVault, unlockVault, vaultStatus } from '../vault/vault'
 import {
   sessionState,
@@ -119,18 +120,23 @@ export function registerIPCHandlers(): void {
     const id = addServer(config)
     // The vault is what the other device would connect with — keep it current
     resealVault()
+    // The window keeps its own copy and updates it as it acts. This call may
+    // not have come from the window: a paired phone reaches the same handler.
+    serversChanged()
     return id
   })
 
   handle('server:update', async (_event, serverId: string, updates) => {
     updateServer(serverId, updates)
     resealVault()
+    serversChanged()
   })
 
   handle('server:remove', async (_event, serverId: string) => {
     ircManager.disconnect(serverId)
     removeServer(serverId)
     resealVault()
+    serversChanged()
   })
 
   handle('server:connect', async (_event, serverId: string) => {

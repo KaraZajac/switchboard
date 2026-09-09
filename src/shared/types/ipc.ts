@@ -90,6 +90,12 @@ export interface RemoteLinkStatus {
 // ── Main → Renderer events ──────────────────────────────────────────
 
 export interface MainToRendererEvents {
+  /**
+   * The stored server list changed somewhere other than this window — a paired
+   * phone edited it, or an adopted vault replaced it. Carries nothing: the
+   * window re-reads, so there is one description of the servers.
+   */
+  'servers:changed': undefined
   'irc:connected': { serverId: string; nick: string }
   'irc:disconnected': { serverId: string; reason: string }
   'irc:message': { serverId: string; channel: string; message: ChatMessage }

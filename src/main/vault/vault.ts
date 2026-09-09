@@ -1,4 +1,5 @@
 import { getSetting, setSetting } from '../storage/models/settings'
+import { serversChanged } from '../ipc/notify'
 import { getAllServers, removeServer, upsertServer } from '../storage/models/server'
 import type { ServerConfig } from '@shared/types/server'
 import {
@@ -220,4 +221,8 @@ function applyPayload(payload: VaultPayload): void {
   for (const id of local.keys()) {
     removeServer(id)
   }
+
+  // The whole list has just been replaced by another device's. The window is
+  // still showing the one it read at startup.
+  serversChanged()
 }
