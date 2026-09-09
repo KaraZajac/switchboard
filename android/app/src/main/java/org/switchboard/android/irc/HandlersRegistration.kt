@@ -220,7 +220,7 @@ internal fun registerRegistrationHandlers() {
         session.emit("irc:error", buildJsonObject {
             put("serverId", session.state.serverId)
             put("code", "432")
-            put("error", message.params.lastOrNull() ?: "That nickname is not allowed")
+            put("message", message.params.lastOrNull() ?: "That nickname is not allowed")
         })
     }
 
@@ -312,14 +312,14 @@ internal fun registerRegistrationHandlers() {
         }
         session.emit("irc:error", buildJsonObject {
             put("serverId", state.serverId)
-            put("error", "Nickname ${message.param(1)} is already in use")
+            put("message", "Nickname ${message.param(1)} is already in use")
         })
     }
 
     Handlers.on("ERROR") { session, message ->
         session.emit("irc:error", buildJsonObject {
             put("serverId", session.state.serverId)
-            put("error", message.params.lastOrNull() ?: "Server closed the connection")
+            put("message", message.params.lastOrNull() ?: "Server closed the connection")
         })
     }
 }
@@ -381,7 +381,7 @@ internal object Sasl {
         if (!succeeded) {
             session.emit("irc:error", buildJsonObject {
                 put("serverId", session.state.serverId)
-                put("error", reason ?: "SASL authentication failed")
+                put("message", reason ?: "SASL authentication failed")
             })
         }
         if (!session.state.registered) session.sendRaw("CAP END")

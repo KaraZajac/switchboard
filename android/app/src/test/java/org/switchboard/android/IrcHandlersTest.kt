@@ -516,8 +516,8 @@ class IrcHandlersTest {
 
         val error = session.eventsOn("irc:error").single()
         assertEquals("474", error.str("code"))
-        assertEquals("#chan", error.str("target"))
-        assertEquals("Cannot join channel (+b)", error.str("error"))
+        assertEquals("#chan", error.str("command"))
+        assertEquals("Cannot join channel (+b)", error.str("message"))
     }
 
     // ── MONITOR ──────────────────────────────────────────────────────

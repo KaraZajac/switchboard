@@ -40,6 +40,7 @@ import org.switchboard.android.ui.Mantle
 import org.switchboard.android.ui.PairingScreen
 import org.switchboard.android.ui.ScannerScreen
 import org.switchboard.android.ui.SettingsScreen
+import org.switchboard.android.readMarkerFor
 
 /**
  * Switchboard for Android.
@@ -346,6 +347,12 @@ private suspend fun openWhenJoined(
  */
 private suspend fun loadHistory(engine: SwitchboardEngine, serverId: String, channel: String) {
     if (engine.mode == EngineMode.HOLDING) return
+
+    // Where we left off, before anything is marked read — opening the
+    // conversation is what moves the marker, so asking afterwards always
+    // answers "the end".
+    engine.store.markEntryPoint(serverId, channel, engine.readMarkerFor(serverId, channel))
+
     if (engine.store.messagesFor(serverId, channel).isNotEmpty()) return
 
     runCatching {

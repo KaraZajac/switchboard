@@ -331,7 +331,21 @@ suspend fun SwitchboardEngine.searchMessages(
     val term = query.trim()
     if (term.isEmpty()) return emptyList()
 
-    if (isHolding) return store.searchLocally(serverId, term, channel)
+    if (isHolding) {
+        // Ask the network, where it can answer: the phone's own memory starts
+        // at whenever it took over, which is a thin thing to call a search.
+        val connection = connections[serverId]
+        if (connection != null && connection.supportsSearch) {
+            store.beginSearch()
+            connection.search(term, channel)
+            withTimeoutOrNull(SEARCH_TIMEOUT_MS) {
+                while (!store.searchComplete) delay(150)
+            }
+            store.endSearch()
+            if (store.searchResults.isNotEmpty()) return store.searchResults.toList()
+        }
+        return store.searchLocally(serverId, term, channel)
+    }
 
     val answer = ask(
         "message:search",
@@ -352,6 +366,17 @@ suspend fun SwitchboardEngine.searchMessages(
 }
 
 // ── read markers ─────────────────────────────────────────────────────
+
+/**
+ * Where this conversation was left off, from whichever device left it.
+ *
+ * Read once, on opening: the line marks a place, and a place that moves as you
+ * read is not one.
+ */
+suspend fun SwitchboardEngine.readMarkerFor(serverId: String, channel: String): String? {
+    if (isHolding) return null
+    return ask("read-marker:get", JsonPrimitive(serverId), JsonPrimitive(channel)).text()
+}
 
 /**
  * Say where we have read up to.
@@ -511,6 +536,7 @@ suspend fun SwitchboardEngine.previewLink(url: String): LinkPreview? {
 // ── plumbing ─────────────────────────────────────────────────────────
 
 private const val LIST_TIMEOUT_MS = 15_000L
+private const val SEARCH_TIMEOUT_MS = 10_000L
 private const val HISTORY_PAGE = 50
 
 /** Seal a new server list and offer it to whoever else holds the vault */

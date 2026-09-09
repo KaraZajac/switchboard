@@ -282,7 +282,7 @@ class IrcConnection(
     private fun emitError(reason: String) {
         emit("irc:error", buildJsonObject {
             put("serverId", config.id)
-            put("error", reason)
+            put("message", reason)
         })
     }
 
@@ -436,6 +436,21 @@ class IrcConnection(
     fun monitorRemove(nicks: List<String>) {
         if (nicks.isEmpty() || !state.isupport.containsKey("MONITOR")) return
         send("MONITOR", "-", nicks.joinToString(","))
+    }
+
+    /** Whether this network can search its own history for us */
+    val supportsSearch: Boolean get() = state.capabilities.contains("draft/search")
+
+    /**
+     * draft/search — ask the network what was said.
+     *
+     * Answers arrive as a batch, not as a reply to this line, which is why the
+     * caller waits on the store rather than on a return value.
+     */
+    fun search(query: String, channel: String?) {
+        if (!supportsSearch) return
+        if (channel.isNullOrBlank()) send("SEARCH", query)
+        else send("SEARCH", "in:$channel $query")
     }
 
     fun monitorList() {

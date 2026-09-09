@@ -193,7 +193,7 @@ internal fun registerMonitorHandlers() {
     Handlers.on("734") { session, message ->
         session.emit("irc:error", buildJsonObject {
             put("serverId", session.state.serverId)
-            put("error", "Monitor list is full: ${message.params.lastOrNull()}")
+            put("message", "Monitor list is full: ${message.params.lastOrNull()}")
         })
     }
 }

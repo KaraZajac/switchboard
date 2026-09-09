@@ -130,7 +130,7 @@ internal fun registerErrorHandlers() {
             if (severity == "FAIL") {
                 session.emit("irc:error", buildJsonObject {
                     put("serverId", session.state.serverId)
-                    put("error", message.params.lastOrNull() ?: "The server refused that")
+                    put("message", message.params.lastOrNull() ?: "The server refused that")
                 })
             }
         }
@@ -158,8 +158,10 @@ internal fun registerErrorHandlers() {
             session.emit("irc:error", buildJsonObject {
                 put("serverId", session.state.serverId)
                 put("code", numeric)
-                put("target", message.param(1))
-                put("error", message.params.lastOrNull()?.takeIf { it.isNotBlank() } ?: fallback)
+                // `command` rather than `target`, because that is what the
+                // desktop calls it — the store reads whichever client sent it
+                put("command", message.param(1))
+                put("message", message.params.lastOrNull()?.takeIf { it.isNotBlank() } ?: fallback)
             })
         }
     }

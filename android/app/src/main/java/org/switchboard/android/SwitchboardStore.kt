@@ -64,6 +64,9 @@ data class Member(
     val isBot: Boolean = false
 )
 
+/** Something the server declined to do, in words worth showing */
+data class ServerRefusal(val text: String, val subject: String?, val at: Long)
+
 /** IRCv3 draft/metadata-2 keys we render */
 data class UserMetadata(
     val displayName: String? = null,
@@ -103,6 +106,50 @@ class SwitchboardStore {
     val channelListing = mutableStateListOf<ChannelListing>()
     var channelListComplete by mutableStateOf(true)
         private set
+
+    /**
+     * The last thing the server refused, and when.
+     *
+     * Errors were emitted and then dropped, so a join that failed or a message
+     * the channel would not take did nothing and said nothing — which reads as
+     * the app being broken rather than the server saying no.
+     */
+    var lastError by mutableStateOf<ServerRefusal?>(null)
+        private set
+
+    fun clearError() { lastError = null }
+
+    /**
+     * Where we had read up to when a conversation was opened.
+     *
+     * Frozen on entry rather than followed live: a line that moves down as you
+     * read is not a place, and the whole point is to be able to find where you
+     * left off after being away.
+     */
+    val readUpTo = mutableStateMapOf<String, String>()                      // "serverId:#chan" -> timestamp
+
+    /** Note the marker for a conversation being opened, if we have one */
+    fun markEntryPoint(serverId: String, channel: String, timestamp: String?) {
+        val conversation = key(serverId, channel)
+        if (timestamp.isNullOrBlank()) readUpTo.remove(conversation)
+        else readUpTo[conversation] = timestamp
+    }
+
+    /** The timestamp the "new messages" line belongs after, if any */
+    fun entryPoint(serverId: String, channel: String): String? =
+        readUpTo[key(serverId, channel)]
+
+    /** What the network answered the last SEARCH with */
+    val searchResults = mutableStateListOf<SearchHit>()
+    var searchComplete by mutableStateOf(true)
+        private set
+
+    fun beginSearch() {
+        searchResults.clear()
+        searchComplete = false
+    }
+
+    fun endSearch() { searchComplete = true }
 
     /** MONITOR: who we asked the server to tell us about */
     val watched = mutableStateMapOf<String, MutableList<String>>()          // serverId -> nicks
@@ -410,6 +457,41 @@ class SwitchboardStore {
                 updateMessage(serverId, channel, target) {
                     it.copy(redactedBy = data["by"]?.str() ?: "someone")
                 }
+            }
+
+            "irc:error" -> {
+                val text = data["message"]?.str()?.takeIf { it.isNotBlank() } ?: return
+                lastError = ServerRefusal(
+                    text = text,
+                    subject = data["command"]?.str()?.takeIf { it.isNotBlank() },
+                    at = System.currentTimeMillis()
+                )
+            }
+
+            // draft/read-marker — another device says where it had read up to
+            "irc:read-marker" -> {
+                val channel = data["channel"]?.str() ?: return
+                val timestamp = data["timestamp"]?.str() ?: return
+                if (conversationKey() != key(serverId, channel)) {
+                    markEntryPoint(serverId, channel, timestamp)
+                }
+            }
+
+            "irc:search-results" -> {
+                searchResults.clear()
+                data["messages"]?.jsonArray?.forEach { entry ->
+                    val row = entry.jsonObject
+                    searchResults.add(
+                        SearchHit(
+                            channel = row["channel"]?.str().orEmpty(),
+                            nick = row["nick"]?.str().orEmpty(),
+                            content = row["content"]?.str().orEmpty(),
+                            timestamp = row["timestamp"]?.str().orEmpty(),
+                            id = row["id"]?.str().orEmpty()
+                        )
+                    )
+                }
+                searchComplete = true
             }
 
             "irc:list-entry" -> {

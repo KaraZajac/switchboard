@@ -69,6 +69,7 @@ import org.switchboard.android.SwitchboardEngine
 import org.switchboard.android.editMessage
 import org.switchboard.android.join
 import org.switchboard.android.loadOlder
+import org.switchboard.android.previewLink
 import org.switchboard.android.react
 import org.switchboard.android.redact
 import org.switchboard.android.reply
@@ -267,6 +268,24 @@ private fun Conversation(
             )
         }
 
+        // What the server last refused, shown briefly and then let go.
+        //
+        // A refusal is worth interrupting for and not worth keeping: it is
+        // about the thing you just tried, and a banner that stays becomes
+        // furniture nobody reads.
+        store.lastError?.let { refusal ->
+            LaunchedEffect(refusal.at) {
+                kotlinx.coroutines.delay(6_000)
+                store.clearError()
+            }
+            Banner(
+                text = refusal.subject?.let { "${refusal.text} — $it" } ?: refusal.text,
+                color = Red,
+                action = "Dismiss",
+                onClick = { store.clearError() }
+            )
+        }
+
         var replyingTo by remember(store.activeChannel) { mutableStateOf<Message?>(null) }
         var reactingTo by remember { mutableStateOf<Message?>(null) }
         var editingMessage by remember(store.activeChannel) { mutableStateOf<Message?>(null) }
@@ -294,6 +313,7 @@ private fun Conversation(
                 val channel = store.activeChannel ?: return@MessageList
                 engine.react(serverId, channel, message.id, emoji, remove = mine)
             },
+            onPreview = { url -> engine.previewLink(url) },
             onLoadOlder = {
                 val serverId = store.activeServerId
                 val channel = store.activeChannel

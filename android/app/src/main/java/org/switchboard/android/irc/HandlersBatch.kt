@@ -1,5 +1,7 @@
 package org.switchboard.android.irc
 
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
@@ -31,7 +33,11 @@ private val DEFERRED = setOf(
     "netsplit",
     "netjoin",
     "draft/multiline",
-    "multiline"
+    "multiline",
+    // Search results are answers to a question, not new traffic: dispatching
+    // them live would drop somebody's old messages into the live conversation.
+    "search",
+    "draft/search"
 )
 
 internal fun registerBatchHandlers() {
@@ -116,6 +122,28 @@ private fun processBatch(session: IrcSession, batch: BatchState) {
                     })
                 })
             }
+        }
+
+        "search", "draft/search" -> {
+            // The same event the desktop sends when it searches on our behalf,
+            // so the screen showing them does not know which client asked.
+            session.emit("irc:search-results", buildJsonObject {
+                put("serverId", state.serverId)
+                put("messages", buildJsonArray {
+                    for (message in batch.messages) {
+                        if (message.command != "PRIVMSG" && message.command != "NOTICE") continue
+                        val from = message.nick ?: continue
+                        val text = message.param(1) ?: continue
+                        add(buildJsonObject {
+                            put("id", messageId(message, state.serverId))
+                            put("channel", message.param(0))
+                            put("nick", from)
+                            put("content", text)
+                            put("timestamp", timestampOf(message))
+                        })
+                    }
+                })
+            })
         }
 
         "draft/multiline", "multiline" -> {

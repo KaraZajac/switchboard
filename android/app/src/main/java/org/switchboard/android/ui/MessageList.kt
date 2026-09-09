@@ -16,6 +16,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -58,6 +60,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.switchboard.android.Message
 import org.switchboard.android.SwitchboardStore
+import org.switchboard.android.LinkPreview
 import org.switchboard.android.UserMetadata
 import org.switchboard.android.isChannel
 
@@ -75,6 +78,8 @@ fun MessageList(
     onAction: (Message, MessageAction) -> Unit = { _, _ -> },
     /** An existing reaction was tapped: add it, or take it back if it is ours */
     onReaction: (Message, String, Boolean) -> Unit = { _, _, _ -> },
+    /** What a link points at, fetched through whichever client is connected */
+    onPreview: suspend (String) -> LinkPreview? = { null },
     onLoadOlder: suspend () -> Int = { 0 }
 ) {
     val serverId = store.activeServerId
@@ -87,6 +92,11 @@ fun MessageList(
 
     val listState = rememberLazyListState()
     val myNick = serverId?.let { store.servers[it]?.nick }.orEmpty()
+    val entryPoint = if (serverId != null && channel != null) {
+        store.entryPoint(serverId, channel)
+    } else {
+        null
+    }
 
     // Follow the conversation on a new message, but not when older ones are
     // prepended — keying on the newest id rather than the count is what tells
@@ -193,8 +203,20 @@ fun MessageList(
                 previous.type == message.type &&
                 withinFiveMinutes(previous.timestamp, message.timestamp)
 
+            // The first message you had not seen when you opened this. A day
+            // divider says when; this says where you left off, which after a
+            // night away is the more useful of the two.
+            if (!newDay && previous != null && entryPoint != null &&
+                previous.timestamp <= entryPoint && message.timestamp > entryPoint
+            ) {
+                UnreadDivider()
+            }
+
             if (newDay) DayDivider(message.timestamp)
-            MessageRow(store, serverId, message, grouped, messages, myNick, onAction, onReaction)
+            MessageRow(
+                store, serverId, message, grouped, messages, myNick,
+                onAction, onReaction, onPreview
+            )
         }
     }
 }
@@ -204,6 +226,80 @@ private inline fun <T> LazyListScope.indexed(
     items: List<T>,
     crossinline content: @Composable (Int, T) -> Unit
 ) = items(items.size) { index -> content(index, items[index]) }
+
+/**
+ * What a link points at.
+ *
+ * Fetched through the desktop, which does the request and the caching — the
+ * phone asking sites directly would leak where its owner is and what they are
+ * reading to every host anyone links.
+ */
+@Composable
+private fun LinkCard(url: String, fetch: suspend (String) -> LinkPreview?) {
+    var preview by remember(url) { mutableStateOf<LinkPreview?>(null) }
+
+    LaunchedEffect(url) { preview = fetch(url) }
+
+    val shown = preview ?: return
+    val title = shown.title?.takeIf { it.isNotBlank() } ?: return
+    val opener = LocalUriHandler.current
+
+    Spacer(Modifier.height(6.dp))
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(6.dp))
+            .background(Mantle)
+            .clickable { runCatching { opener.openUri(url) } }
+            .height(IntrinsicSize.Min)
+    ) {
+        Box(Modifier.width(3.dp).fillMaxHeight().background(Blue))
+        Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
+            shown.siteName?.takeIf { it.isNotBlank() }?.let {
+                Text(it, color = Overlay, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(2.dp))
+            }
+            Text(
+                title,
+                color = Blue,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            shown.description?.takeIf { it.isNotBlank() }?.let {
+                Spacer(Modifier.height(3.dp))
+                Text(
+                    it,
+                    color = Subtext,
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+}
+
+/** Where you left off, in the colour of something that wants noticing */
+@Composable
+private fun UnreadDivider() {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(Modifier.weight(1f).height(1.dp).background(Red.copy(alpha = 0.55f)))
+        Text(
+            "New messages",
+            color = Red,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(horizontal = 10.dp)
+        )
+        Box(Modifier.weight(1f).height(1.dp).background(Red.copy(alpha = 0.55f)))
+    }
+}
 
 /** Something is happening above the fold, so the list does not just sit still */
 @Composable
@@ -277,7 +373,8 @@ private fun MessageRow(
     all: List<Message>,
     myNick: String,
     onAction: (Message, MessageAction) -> Unit,
-    onReaction: (Message, String, Boolean) -> Unit
+    onReaction: (Message, String, Boolean) -> Unit,
+    onPreview: suspend (String) -> LinkPreview?
 ) {
     var showActions by remember(message.id) { mutableStateOf(false) }
     val profile = if (serverId != null) {
@@ -355,6 +452,11 @@ private fun MessageRow(
 
                 else -> Linkified(body, message.editedAt != null) { showActions = true }
             }
+
+            // What a link points at, on the same accent bar the desktop uses.
+            // Only the first: a message full of URLs should not become a wall
+            // of cards on a phone screen.
+            LINK.find(body)?.value?.let { url -> LinkCard(url, onPreview) }
 
             if (message.reactions.isNotEmpty()) {
                 Spacer(Modifier.height(5.dp))
