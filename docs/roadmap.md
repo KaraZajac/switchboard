@@ -191,6 +191,13 @@ client asks for and does:
   Pasting a paragraph was enough. Both clients cut to fit now, and where the
   server has `draft/multiline` the pieces go as one batch with
   `draft/multiline-concat`, so it arrives as the single message it was.
+- **A message to two people reached neither.** `TARGMAX=PRIVMSG:1` means one
+  recipient per command; sending to a list came back `407 :Too many
+  recipients`. It goes as several commands now.
+- **`TOPICLEN`, `AWAYLEN` and `KICKLEN` fail the other way** — nothing is
+  refused, the server just keeps the first N bytes, and the user finds out
+  later that half their sentence is gone. Both clients say so before sending
+  instead, counted in bytes because that is what the server counts.
 - **Names were compared with `toLowerCase()`**, and a `casemap()` that folded
   them properly sat on the connection state being called from nowhere. Under
   rfc1459 — the RFC's default, which rIRCd relies on by advertising no
