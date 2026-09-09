@@ -147,17 +147,10 @@ private fun processBatch(session: IrcSession, batch: BatchState) {
         }
 
         "draft/multiline", "multiline" -> {
-            // The parts are one message, joined by newlines. A blank
-            // draft/multiline-concat tag means the parts run together with no
-            // separator at all, which is how a long word gets split.
             val lines = batch.messages.filter { it.command == "PRIVMSG" }
             val first = lines.firstOrNull() ?: return
 
-            val text = StringBuilder()
-            for ((index, line) in lines.withIndex()) {
-                if (index > 0 && !line.hasTag("draft/multiline-concat")) text.append('\n')
-                text.append(line.param(1).orEmpty())
-            }
+            val text = Multiline.combine(lines)
 
             val target = batch.params.firstOrNull() ?: first.param(0).orEmpty()
             val from = first.nick ?: return
@@ -169,7 +162,7 @@ private fun processBatch(session: IrcSession, batch: BatchState) {
                 put("message", buildJsonObject {
                     put("id", messageId(first, state.serverId))
                     put("nick", from)
-                    put("content", text.toString())
+                    put("content", text)
                     put("timestamp", timestampOf(first))
                     put("type", "privmsg")
                 })

@@ -9,6 +9,7 @@ import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.int
+import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -20,6 +21,8 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.switchboard.android.irc.Irc
+import org.switchboard.android.irc.IrcMessage
+import org.switchboard.android.irc.Multiline
 import org.switchboard.android.ui.DEFAULT_PALETTE
 import org.switchboard.android.ui.PALETTES
 import org.switchboard.android.ui.paletteFor
@@ -392,5 +395,61 @@ class SharedCorpusTest {
         assertEquals(default, DEFAULT_PALETTE.id)
         assertEquals(default, paletteFor("no-such-theme").id)
     }
+    // ── draft/multiline ──────────────────────────────────────────────
+
+    /**
+     * The two clients had already drifted here: this one honoured
+     * `draft/multiline-concat` and the desktop joined everything with a
+     * newline, so the same message read differently depending which screen you
+     * were looking at.
+     */
+    @Test
+    fun `reads the same multiline limits the desktop reads`() {
+        for (case in load("multiline.json")["limits"]!!.jsonArray) {
+            val c = case.jsonObject
+            val name = c["name"]!!.jsonPrimitive.content
+            val limits = Multiline.limitsFrom(c["value"]!!.jsonPrimitive.content)
+
+            assertEquals(name, c["maxBytes"]!!.jsonPrimitive.intOrNull, limits.maxBytes)
+            assertEquals(name, c["maxLines"]!!.jsonPrimitive.intOrNull, limits.maxLines)
+        }
+    }
+
+    @Test
+    fun `splits a message into the same batches the desktop would`() {
+        for (case in load("multiline.json")["splits"]!!.jsonArray) {
+            val c = case.jsonObject
+            val name = c["name"]!!.jsonPrimitive.content
+            val lines = c["lines"]!!.jsonArray.map { it.jsonPrimitive.content }
+            val expected = c["batches"]!!.jsonArray.map { batch ->
+                batch.jsonArray.map { it.jsonPrimitive.content }
+            }
+
+            val limits = Multiline.limitsFrom(c["value"]!!.jsonPrimitive.content)
+            assertEquals(name, expected, Multiline.split(lines, limits))
+        }
+    }
+
+    @Test
+    fun `puts a received multiline back together the way the desktop does`() {
+        for (case in load("multiline.json")["concat"]!!.jsonArray) {
+            val c = case.jsonObject
+            val name = c["name"]!!.jsonPrimitive.content
+
+            val parts = c["parts"]!!.jsonArray.map { part ->
+                val p = part.jsonObject
+                val concat = p["concat"]!!.jsonPrimitive.content == "true"
+                IrcMessage(
+                    tags = if (concat) mapOf("draft/multiline-concat" to "") else emptyMap(),
+                    prefix = "robin!r@h",
+                    command = "PRIVMSG",
+                    params = listOf("#lounge", p["text"]!!.jsonPrimitive.content)
+                )
+            }
+
+            assertEquals(name, c["text"]!!.jsonPrimitive.content, Multiline.combine(parts))
+        }
+    }
+
 }
 

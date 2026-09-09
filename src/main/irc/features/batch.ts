@@ -121,6 +121,23 @@ function isDeferred(
 }
 
 /**
+ * The parts of a multiline message, as the one message they were.
+ *
+ * Exported because this is the rule the shared corpus pins, and pinning a copy
+ * of it in the test would pass whether or not this is what runs.
+ */
+export function combineMultiline(
+  parts: { tags?: Record<string, string | true>; params: string[] }[]
+): string {
+  let text = ''
+  parts.forEach((part, at) => {
+    if (at > 0 && part.tags?.['draft/multiline-concat'] === undefined) text += '\n'
+    text += part.params[1] || ''
+  })
+  return text
+}
+
+/**
  * Process a completed batch based on its type.
  */
 function processBatch(client: { events: { emit: (event: string, ...args: unknown[]) => boolean } }, batch: IRCBatch): void {
@@ -157,17 +174,19 @@ function processBatch(client: { events: { emit: (event: string, ...args: unknown
       })
       break
 
-    case 'draft/multiline': {
-      // Concatenate all PRIVMSG content into a single message
+    case 'draft/multiline':
+    case 'multiline': {
+      // One message that was split across several lines, put back together.
+      //
+      // A part tagged `draft/multiline-concat` continues the one before it with
+      // no line break: it is how a sender says "this was one long line the
+      // protocol made me split". Joining everything with a newline instead puts
+      // breaks in the middle of their sentence.
       const target = batch.params[0] || ''
-      const multilineMessages = batch.messages.filter((m) => m.command === 'PRIVMSG')
-      if (multilineMessages.length > 0) {
-        const combinedContent = multilineMessages.map((m) => m.params[1] || '').join('\n')
-        // Create a synthetic message with combined content
-        const first = multilineMessages[0]
-        const syntheticMsg = { ...first, params: [target, combinedContent] }
-        dispatchMessage(client, syntheticMsg)
-      }
+      const parts = batch.messages.filter((m) => m.command === 'PRIVMSG')
+      if (parts.length === 0) break
+
+      dispatchMessage(client, { ...parts[0], params: [target, combineMultiline(parts)] })
       break
     }
 

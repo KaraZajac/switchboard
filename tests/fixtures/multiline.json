@@ -1,0 +1,136 @@
+{
+  "$comment": "draft/multiline, shared by tests/main/multiline.test.ts and the Android SharedCorpusTest. The two clients had already drifted here once — the phone honoured draft/multiline-concat and the desktop did not — which is exactly what this file is for.",
+
+  "$limits": "The capability value carries what the server will accept. Exceeding either is not a truncated message, it is FAIL BATCH MULTILINE_MAX_BYTES and nothing delivered at all, so the client has to do the splitting.",
+  "limits": [
+    {
+      "name": "both limits given",
+      "value": "max-bytes=4096,max-lines=24",
+      "maxBytes": 4096,
+      "maxLines": 24
+    },
+    {
+      "name": "order does not matter",
+      "value": "max-lines=8,max-bytes=512",
+      "maxBytes": 512,
+      "maxLines": 8
+    },
+    {
+      "name": "only one of them",
+      "value": "max-bytes=1024",
+      "maxBytes": 1024,
+      "maxLines": null
+    },
+    {
+      "name": "advertised bare — the server names no limit of its own",
+      "value": "",
+      "maxBytes": null,
+      "maxLines": null
+    },
+    {
+      "name": "a value we cannot read is not a limit of zero",
+      "value": "max-bytes=,max-lines=nonsense",
+      "maxBytes": null,
+      "maxLines": null
+    },
+    {
+      "name": "unknown keys are ignored rather than fatal",
+      "value": "max-bytes=200,something-new=1",
+      "maxBytes": 200,
+      "maxLines": null
+    }
+  ],
+
+  "$splits": "Lines going out, grouped into the batches they must be sent as. Byte counts are of the message content only, which is what the spec limits — UTF-8 bytes, not characters.",
+  "splits": [
+    {
+      "name": "under both limits, one batch",
+      "value": "max-bytes=4096,max-lines=24",
+      "lines": ["first", "second", "third"],
+      "batches": [["first", "second", "third"]]
+    },
+    {
+      "name": "too many lines, split on the line count",
+      "value": "max-lines=2",
+      "lines": ["a", "b", "c", "d", "e"],
+      "batches": [["a", "b"], ["c", "d"], ["e"]]
+    },
+    {
+      "name": "too many bytes, split on the byte count",
+      "value": "max-bytes=10",
+      "lines": ["12345", "67890", "abcde"],
+      "batches": [["12345", "67890"], ["abcde"]]
+    },
+    {
+      "name": "whichever limit is hit first",
+      "value": "max-bytes=10,max-lines=3",
+      "lines": ["1234567890", "a", "b", "c", "d"],
+      "batches": [["1234567890"], ["a", "b", "c"], ["d"]]
+    },
+    {
+      "name": "counted in UTF-8 bytes, not characters",
+      "value": "max-bytes=8",
+      "lines": ["日本語", "日本語"],
+      "batches": [["日本語"], ["日本語"]]
+    },
+    {
+      "name": "a single line over the limit goes alone rather than never",
+      "value": "max-bytes=4",
+      "lines": ["far too long to fit"],
+      "batches": [["far too long to fit"]]
+    },
+    {
+      "name": "no limits advertised, nothing to split on",
+      "value": "",
+      "lines": ["a", "b", "c"],
+      "batches": [["a", "b", "c"]]
+    }
+  ],
+
+  "$concat": "Coming back the other way. A part tagged draft/multiline-concat continues the one before it with no line break — it is how a sender says 'this was one long line that had to be split', and joining everything with \\n instead puts breaks in the middle of their sentence.",
+  "concat": [
+    {
+      "name": "plain parts are separate lines",
+      "parts": [
+        { "text": "first", "concat": false },
+        { "text": "second", "concat": false }
+      ],
+      "text": "first\nsecond"
+    },
+    {
+      "name": "a concat part runs straight on",
+      "parts": [
+        { "text": "one long line that ", "concat": false },
+        { "text": "had to be split", "concat": true }
+      ],
+      "text": "one long line that had to be split"
+    },
+    {
+      "name": "concat on the first part means nothing, there is nothing before it",
+      "parts": [
+        { "text": "first", "concat": true },
+        { "text": "second", "concat": false }
+      ],
+      "text": "first\nsecond"
+    },
+    {
+      "name": "mixed, which is the case that gets it wrong",
+      "parts": [
+        { "text": "alpha", "concat": false },
+        { "text": "beta", "concat": false },
+        { "text": "-continued", "concat": true },
+        { "text": "gamma", "concat": false }
+      ],
+      "text": "alpha\nbeta-continued\ngamma"
+    },
+    {
+      "name": "an empty part is a blank line, not nothing",
+      "parts": [
+        { "text": "alpha", "concat": false },
+        { "text": "", "concat": false },
+        { "text": "beta", "concat": false }
+      ],
+      "text": "alpha\n\nbeta"
+    }
+  ]
+}

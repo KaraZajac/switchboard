@@ -292,12 +292,23 @@ class IrcConnection(
         val lines = text.split("\n")
 
         if (lines.size > 1 && state.capabilities.contains("draft/multiline")) {
-            val reference = "ml${++multilineCounter}"
-            sendRaw(Irc.serialise("BATCH", listOf("+$reference", "draft/multiline", target)))
-            for (line in lines) {
-                sendRaw("@batch=$reference " + Irc.serialise("PRIVMSG", listOf(target, line)))
+            val limits = Multiline.limitsFrom(state.available["draft/multiline"])
+            for (batch in Multiline.split(lines, limits)) {
+                // A batch of one is a message with no line breaks in it, and the
+                // spec asks for a plain PRIVMSG rather than a batch wrapped
+                // around nothing.
+                if (batch.size == 1) {
+                    send("PRIVMSG", target, batch[0])
+                    continue
+                }
+
+                val reference = "ml${++multilineCounter}"
+                sendRaw(Irc.serialise("BATCH", listOf("+$reference", "draft/multiline", target)))
+                for (line in batch) {
+                    sendRaw("@batch=$reference " + Irc.serialise("PRIVMSG", listOf(target, line)))
+                }
+                sendRaw(Irc.serialise("BATCH", listOf("-$reference")))
             }
-            sendRaw(Irc.serialise("BATCH", listOf("-$reference")))
         } else {
             for (line in lines) send("PRIVMSG", target, line)
         }
