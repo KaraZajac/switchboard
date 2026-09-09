@@ -54,7 +54,13 @@ data class Message(
     /** Taken back with draft/message-redaction; kept as a tombstone, not deleted */
     val redactedBy: String? = null,
     /** When it was last changed, which is also why the "(edited)" mark shows */
-    val editedAt: String? = null
+    val editedAt: String? = null,
+    /**
+     * The operator name on a `draft/oper` tag, when the server said the sender
+     * is one. Worth showing: someone claiming to be staff in a DM is a common
+     * enough trick that being able to tell is the point of the capability.
+     */
+    val oper: String? = null
 )
 
 data class Member(
@@ -692,6 +698,7 @@ private fun JsonObject.toMessage(): Message = Message(
     // Stored history carries this, so a correction stays visibly a correction
     // after a restart rather than quietly becoming the original wording
     editedAt = this["editedAt"]?.str(),
+    oper = this["oper"]?.str(),
     // And the reactions, for the same reason: the desktop keeps them now, so
     // reopening a conversation should not quietly strip them off again
     reactions = (this["reactions"] as? JsonObject)

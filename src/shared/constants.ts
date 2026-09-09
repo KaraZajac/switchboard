@@ -72,6 +72,9 @@ export const REQUESTED_CAPS = [
   'draft/search',
   'draft/auto-join',
   'draft/client-batch',
+  // Marks messages from network operators, so someone claiming to be staff
+  // can be told apart from someone who is.
+  'draft/oper-tag',
   'draft/extended-isupport',
   // Server-side names for features that are client tags in the spec
   'draft/channel-context',

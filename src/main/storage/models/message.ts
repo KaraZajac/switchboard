@@ -2,6 +2,7 @@ import { getDb } from '../database'
 import type { ChatMessage } from '@shared/types/message'
 import { v4 as uuid } from 'uuid'
 import { reactionsFor, clearReactions } from './reaction'
+import { operFrom } from '@shared/tags'
 
 /**
  * Message storage operations.
@@ -169,6 +170,7 @@ export function deleteMessage(msgid: string): void {
 }
 
 function rowToMessage(row: unknown[]): ChatMessage {
+  const tags = JSON.parse((row[7] as string) || '{}')
   return {
     id: row[0] as string,
     serverId: row[1] as string,
@@ -177,11 +179,15 @@ function rowToMessage(row: unknown[]): ChatMessage {
     userHost: row[4] as string | null,
     content: row[5] as string,
     type: row[6] as ChatMessage['type'],
-    tags: JSON.parse((row[7] as string) || '{}'),
+    tags,
     replyTo: row[8] as string | null,
     timestamp: row[9] as string,
     editedAt: (row[11] as string | null) || undefined,
     account: null,
+    // Read back off the stored tags rather than a column of its own: the
+    // whole tag record was kept, so the operator mark survives a restart
+    // instead of quietly dropping off the message it was on.
+    oper: operFrom(tags),
     pending: false,
     reactions: {},
     channelContext: null

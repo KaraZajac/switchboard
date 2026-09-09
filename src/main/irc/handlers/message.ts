@@ -1,4 +1,5 @@
 import { registerHandler } from './registry'
+import { operFrom } from '@shared/tags'
 
 /** App name and version for CTCP VERSION replies */
 const APP_VERSION = 'Switchboard IRC Client 1.0'
@@ -52,6 +53,7 @@ registerHandler('PRIVMSG', (client, msg) => {
   const replyTo = typeof msg.tags['+reply'] === 'string' ? msg.tags['+reply'] : undefined
   const label = typeof msg.tags['label'] === 'string' ? msg.tags['label'] : undefined
   const editOf = typeof msg.tags['+draft/edit'] === 'string' ? msg.tags['+draft/edit'] : undefined
+  const oper = operFrom(msg.tags)
 
   // Check if this is an echo of our own message
   const isEcho = nick.toLowerCase() === client.state.nick.toLowerCase()
@@ -69,6 +71,7 @@ registerHandler('PRIVMSG', (client, msg) => {
     replyTo,
     editOf,
     label,
+    oper,
     userHost: msg.source
       ? `${msg.source.user || ''}@${msg.source.host || ''}`
       : null,

@@ -61,6 +61,9 @@ internal fun registerMessagingHandlers() {
                     put("timestamp", timestampOf(message))
                     put("type", if (command == "NOTICE") "notice" else "privmsg")
                     put("account", message.tag("account"))
+                    // draft/oper-tag: the server naming the sender as one of
+                    // its operators, which is not something a nick can claim
+                    put("oper", message.tag("draft/oper"))
                     // draft/message-edit and the reply client tag
                     put("replyTo", message.tag("+draft/reply") ?: message.tag("+reply"))
                 })

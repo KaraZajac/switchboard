@@ -422,6 +422,9 @@ private fun MessageRow(
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     Text(name, color = color, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                    // draft/oper-tag — the server naming the sender as one of
+                    // its operators, which is not something a nick can claim.
+                    message.oper?.let { Pill("OPERATOR", Yellow) }
                     profile.pronouns?.takeIf { it.isNotBlank() }?.let {
                         Pill(it, Overlay)
                     }

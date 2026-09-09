@@ -537,6 +537,7 @@ class IrcConnection(
             "draft/search",
             "draft/auto-join",
             "draft/client-batch",
+            "draft/oper-tag",
             "draft/extended-isupport",
             "draft/channel-context",
             "draft/react",

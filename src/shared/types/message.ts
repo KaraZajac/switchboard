@@ -24,4 +24,11 @@ export interface ChatMessage {
   deleted?: boolean
   /** Timestamp when message was last edited */
   editedAt?: string
+  /**
+   * The operator name from a `draft/oper` tag, when the server said the sender
+   * is one of its operators. Worth showing: someone claiming to be staff in a
+   * DM is a common enough trick that being able to tell is the point of the
+   * capability — and this is the server saying it, not a nick.
+   */
+  oper?: string | null
 }

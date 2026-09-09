@@ -177,6 +177,18 @@ export function MessageItem({ message, prevMessage, onReply }: MessageItemProps)
         <div className="flex items-baseline gap-2">
           <NickWithPopup nick={message.nick} serverId={message.serverId} className="font-medium text-gray-100 hover:underline cursor-pointer" />
           <span className="text-xs text-gray-500">{formatTimeFull(message.timestamp)}</span>
+          {message.oper !== null && message.oper !== undefined && (
+            <span
+              className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-medium text-amber-300"
+              title={
+                message.oper
+                  ? `The server says this is a network operator (${message.oper})`
+                  : 'The server says this is a network operator'
+              }
+            >
+              operator
+            </span>
+          )}
           {message.channelContext && (
             <span className="rounded bg-gray-700/50 px-1.5 py-0.5 text-[10px] text-gray-400">
               from {message.channelContext}
