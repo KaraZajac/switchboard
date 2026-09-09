@@ -1,6 +1,18 @@
 import Database from 'better-sqlite3-multiple-ciphers'
 
 /**
+ * Pinned to 12.x, and it has to stay there while this is Electron 33.
+ *
+ * 13.x crashes the process the moment a database is opened — as the published
+ * prebuild, and equally when built from source against Electron's own headers,
+ * so it is not a missing Node-API function and a compiler does not fix it. Its
+ * own `engines` asks for Node 22 and Electron 33 is Node 20, which is the
+ * shape of the problem even if the exact call has not been chased down.
+ *
+ * Worth re-testing whenever Electron moves, not before.
+ */
+
+/**
  * The database, behind the shape the rest of the app already speaks.
  *
  * This exists to make one change at a time. Moving off sql.js and turning on
