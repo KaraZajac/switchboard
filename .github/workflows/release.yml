@@ -104,18 +104,65 @@ jobs:
           name: android-builds
           path: android-out/*.apk
 
+  # electron-builder publishes as it builds: `publish: github` in
+  # electron-builder.yml plus a token on a tag means each desktop job uploads
+  # into one draft release, with the blockmaps and `latest*.yml` that
+  # auto-update needs. This job adds what electron-builder knows nothing about
+  # — the APKs — and then takes the draft live.
+  #
+  # It used to be `softprops/action-gh-release`, which created a release of its
+  # own for the same tag. Both then existed: the draft held every artifact and
+  # the published one held none, and the published one is what the tag points
+  # at. v1.2.0-beta shipped 6 of its 12 artifacts that way and nobody noticed,
+  # because the run's only visible failure was in its last step.
   publish:
     needs: [build-macos, build-linux, build-windows, build-android]
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
       - uses: actions/download-artifact@v5
         with:
           path: artifacts
           merge-multiple: true
-      - uses: softprops/action-gh-release@v2
-        with:
-          files: artifacts/*
-          generate_release_notes: true
-          prerelease: ${{ contains(github.ref_name, 'beta') || contains(github.ref_name, 'alpha') || contains(github.ref_name, 'rc') }}
+
+      - name: Find the release electron-builder made
+        id: release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          id=$(gh api "repos/$GITHUB_REPOSITORY/releases" \
+            --jq '[.[] | select(.tag_name == "${{ github.ref_name }}")][0].id // empty')
+          if [ -z "$id" ]; then
+            # No desktop build published one — the APKs still deserve a release.
+            id=$(gh api -X POST "repos/$GITHUB_REPOSITORY/releases" \
+              -f tag_name='${{ github.ref_name }}' -F draft=true --jq .id)
+          fi
+          echo "id=$id" >> "$GITHUB_OUTPUT"
+
+      - name: Add the Android builds
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload '${{ github.ref_name }}' artifacts/*.apk --clobber
+
+      - name: Take it live
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git tag -l --format='%(contents)' '${{ github.ref_name }}' > notes.md
+          gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/${{ steps.release.outputs.id }}" \
+            -F draft=false \
+            -F prerelease=${{ contains(github.ref_name, 'beta') || contains(github.ref_name, 'alpha') || contains(github.ref_name, 'rc') }} \
+            -f body@notes.md \
+            --jq '"published \(.html_url) with \(.assets|length) assets"'
+
+      # A release with nothing on it is the failure this job exists to prevent,
+      # and it is invisible unless something looks.
+      - name: Check it actually has the artifacts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          count=$(gh api "repos/$GITHUB_REPOSITORY/releases/${{ steps.release.outputs.id }}" --jq '.assets|length')
+          echo "$count assets on ${{ github.ref_name }}"
+          [ "$count" -ge 8 ] || { echo "::error::only $count assets — expected the desktop builds and the APKs"; exit 1; }
