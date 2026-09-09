@@ -11,7 +11,7 @@ registerHandler('ACCOUNT', (client, msg) => {
 
   // Update account in all channels this user is in
   for (const [, channel] of client.state.channels) {
-    const user = channel.users.get(nick.toLowerCase())
+    const user = channel.users.get(client.state.casemap(nick))
     if (user) {
       user.account = account
     }

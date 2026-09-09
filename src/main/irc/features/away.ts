@@ -12,7 +12,7 @@ registerHandler('AWAY', (client, msg) => {
 
   // Update away status in all channels
   for (const [, channel] of client.state.channels) {
-    const user = channel.users.get(nick.toLowerCase())
+    const user = channel.users.get(client.state.casemap(nick))
     if (user) {
       user.away = isAway
       user.awayMessage = message

@@ -43,7 +43,7 @@ registerHandler('PRIVMSG', (client, msg) => {
 
   // Determine the "channel" for display purposes
   // If target is our nick, it's a PM — use the sender's nick as the channel key
-  const isPrivate = target.toLowerCase() === client.state.nick.toLowerCase()
+  const isPrivate = client.state.casemap(target) === client.state.casemap(client.state.nick)
   const channel = isPrivate ? nick : target
 
   // Extract relevant tags
@@ -56,7 +56,7 @@ registerHandler('PRIVMSG', (client, msg) => {
   const oper = operFrom(msg.tags)
 
   // Check if this is an echo of our own message
-  const isEcho = nick.toLowerCase() === client.state.nick.toLowerCase()
+  const isEcho = client.state.casemap(nick) === client.state.casemap(client.state.nick)
 
   client.events.emit('privmsg', {
     channel,
@@ -93,7 +93,7 @@ registerHandler('NOTICE', (client, msg) => {
   }
 
   const isPrivate =
-    target.toLowerCase() === client.state.nick.toLowerCase() || target === '*'
+    client.state.casemap(target) === client.state.casemap(client.state.nick) || target === '*'
   const channel = isPrivate ? nick : target
 
   const msgid = typeof msg.tags['msgid'] === 'string' ? msg.tags['msgid'] : undefined
@@ -133,13 +133,13 @@ registerHandler('TAGMSG', (client, msg) => {
   const target = msg.params[0]
   const nick = msg.source?.nick || ''
 
-  const isPrivate = target.toLowerCase() === client.state.nick.toLowerCase()
+  const isPrivate = client.state.casemap(target) === client.state.casemap(client.state.nick)
   const channel = isPrivate ? nick : target
 
   // Handle typing notifications (skip our own echoed typing)
   const typing = msg.tags['+typing'] ?? msg.tags['+draft/typing']
   if (typeof typing === 'string') {
-    if (nick.toLowerCase() !== client.state.nick.toLowerCase()) {
+    if (client.state.casemap(nick) !== client.state.casemap(client.state.nick)) {
       client.events.emit('typing', {
         channel,
         nick,

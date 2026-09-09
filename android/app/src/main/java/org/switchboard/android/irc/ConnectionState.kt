@@ -22,7 +22,15 @@ data class ChannelUser(
     val isBot: Boolean = false
 )
 
-class ChannelState(val name: String) {
+/**
+ * @param fold how this server compares names. Passed in rather than looked up,
+ * because a channel has no view of ISUPPORT — and taken as a function so it
+ * keeps answering correctly if `005` arrives after the channel exists.
+ */
+class ChannelState(
+    val name: String,
+    private val fold: (String) -> String = { Casemap.fold(it) }
+) {
     var topic: String? = null
     var topicSetBy: String? = null
     var topicSetAt: Long? = null
@@ -30,7 +38,7 @@ class ChannelState(val name: String) {
     val modes = mutableMapOf<String, String?>()
     val users = LinkedHashMap<String, ChannelUser>()
 
-    private fun key(nick: String) = nick.lowercase()
+    private fun key(nick: String) = fold(nick)
 
     fun user(nick: String): ChannelUser? = users[key(nick)]
 
@@ -103,12 +111,22 @@ class ConnectionState(val serverId: String) {
     val pendingNames = mutableMapOf<String, MutableList<String>>()
 
     fun channel(name: String): ChannelState =
-        channels.getOrPut(name.lowercase()) { ChannelState(name) }
+        channels.getOrPut(casemap(name)) { ChannelState(name) { nick -> casemap(nick) } }
 
     fun findChannel(name: String?): ChannelState? =
-        name?.let { channels[it.lowercase()] }
+        name?.let { channels[casemap(it)] }
 
-    fun isMe(nick: String?): Boolean = nick != null && nick.equals(this.nick, ignoreCase = true)
+    fun isMe(nick: String?): Boolean = nick != null && casemap(nick) == casemap(this.nick)
+
+    /**
+     * A name as this server would compare it.
+     *
+     * Read from ISUPPORT every time rather than cached, because `005` arrives
+     * after this object exists and a stale answer means two spellings of one
+     * nick living in the map as two people.
+     */
+    fun casemap(name: String): String =
+        Casemap.fold(name, Casemap.mappingOf(isupport["CASEMAPPING"]))
 
     /**
      * Split a NAMES entry into its mode prefixes and the nick.

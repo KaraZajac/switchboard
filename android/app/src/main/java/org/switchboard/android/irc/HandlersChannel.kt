@@ -91,7 +91,7 @@ internal fun registerChannelHandlers() {
         val mine = state.isMe(nick)
 
         val channel = state.findChannel(name)
-        if (mine) state.channels.remove(name.lowercase()) else channel?.removeUser(nick)
+        if (mine) state.channels.remove(state.casemap(name)) else channel?.removeUser(nick)
 
         session.emit("irc:part", buildJsonObject {
             put("serverId", state.serverId)
@@ -108,7 +108,7 @@ internal fun registerChannelHandlers() {
         val target = message.param(1) ?: return@on
         val mine = state.isMe(target)
 
-        if (mine) state.channels.remove(name.lowercase())
+        if (mine) state.channels.remove(state.casemap(name))
         else state.findChannel(name)?.removeUser(target)
 
         session.emit("irc:kick", buildJsonObject {
@@ -159,7 +159,7 @@ internal fun registerChannelHandlers() {
     Handlers.on("353") { session, message ->
         val name = message.param(2) ?: return@on
         val names = message.params.lastOrNull()?.split(" ")?.filter { it.isNotEmpty() } ?: return@on
-        session.state.pendingNames.getOrPut(name.lowercase()) { mutableListOf() }.addAll(names)
+        session.state.pendingNames.getOrPut(session.state.casemap(name)) { mutableListOf() }.addAll(names)
     }
 
     // RPL_ENDOFNAMES
@@ -167,12 +167,12 @@ internal fun registerChannelHandlers() {
         val state = session.state
         val name = message.param(1) ?: return@on
         val channel = state.channel(name)
-        val names = state.pendingNames.remove(name.lowercase()) ?: emptyList<String>()
+        val names = state.pendingNames.remove(state.casemap(name)) ?: emptyList<String>()
 
         channel.users.clear()
         for (entry in names) {
             val parsed = state.parseNamesEntry(entry)
-            channel.users[parsed.nick.lowercase()] = parsed
+            channel.users[state.casemap(parsed.nick)] = parsed
         }
         channel.namesReceived = true
 
@@ -230,12 +230,12 @@ internal fun registerChannelHandlers() {
         val from = message.param(0) ?: return@on
         val to = message.param(1) ?: return@on
 
-        state.channels.remove(from.lowercase())?.let { old ->
+        state.channels.remove(state.casemap(from))?.let { old ->
             val renamed = ChannelState(to)
             renamed.topic = old.topic
             renamed.namesReceived = old.namesReceived
             renamed.users.putAll(old.users)
-            state.channels[to.lowercase()] = renamed
+            state.channels[state.casemap(to)] = renamed
         }
 
         session.emit("irc:rename", buildJsonObject {

@@ -1,0 +1,41 @@
+{
+  "$comment": "How a nick or channel name is folded for comparison, shared by tests/main/casemap.test.ts and the Android SharedCorpusTest. Which characters count as the same letter is the server's decision, and both clients have to make it the same way or the same person appears twice on one screen and once on the other.",
+
+  "$cases": "`value` is what the server put in ISUPPORT, or null for a server that said nothing — which the RFC says means rfc1459.",
+  "cases": [
+    { "name": "plain ascii is just lowercased", "value": null, "input": "SomeNick", "folded": "somenick" },
+    { "name": "channels too", "value": null, "input": "#Lounge", "folded": "#lounge" },
+
+    { "name": "rfc1459 folds square brackets", "value": null, "input": "bob[away]", "folded": "bob{away}" },
+    { "name": "rfc1459 folds a backslash", "value": null, "input": "n\\a", "folded": "n|a" },
+    { "name": "rfc1459 folds a tilde", "value": null, "input": "~home", "folded": "^home" },
+    { "name": "named explicitly, same answer", "value": "rfc1459", "input": "bob[away]", "folded": "bob{away}" },
+
+    { "name": "rfc1459-strict leaves the tilde alone", "value": "rfc1459-strict", "input": "~home", "folded": "~home" },
+    { "name": "rfc1459-strict still folds the brackets", "value": "rfc1459-strict", "input": "bob[away]", "folded": "bob{away}" },
+
+    { "name": "ascii leaves all of them alone", "value": "ascii", "input": "bob[away]", "folded": "bob[away]" },
+    { "name": "ascii still lowercases letters", "value": "ascii", "input": "BOB[AWAY]", "folded": "bob[away]" },
+
+    { "name": "a mapping we do not know falls back to rfc1459", "value": "something-new", "input": "bob[away]", "folded": "bob{away}" },
+
+    { "$note": "toLowerCase() folds the whole of Unicode; a server folds A-Z. Two names that differ only outside ASCII are two different people to it.",
+      "name": "non-ascii letters are left exactly as they are", "value": "ascii", "input": "İstanbul", "folded": "İstanbul" },
+    { "name": "and under rfc1459 as well", "value": null, "input": "Ärger", "folded": "Ärger" },
+    { "name": "the ascii half of a mixed name still folds", "value": null, "input": "MIXEDÄrger", "folded": "mixedÄrger" },
+    { "name": "cyrillic is not latin", "value": null, "input": "Привет", "folded": "Привет" },
+
+    { "name": "digits and punctuation are untouched", "value": null, "input": "user_42-x.y", "folded": "user_42-x.y" },
+    { "name": "an empty name folds to nothing", "value": null, "input": "", "folded": "" }
+  ],
+
+  "$same": "Pairs a server treats as one name, and pairs it does not.",
+  "same": [
+    { "name": "case alone", "value": null, "a": "Robin", "b": "robin", "same": true },
+    { "name": "brackets and braces, under rfc1459", "value": null, "a": "bob[away]", "b": "BOB{AWAY}", "same": true },
+    { "name": "brackets and braces, under ascii", "value": "ascii", "a": "bob[away]", "b": "bob{away}", "same": false },
+    { "name": "tilde and caret, under rfc1459", "value": null, "a": "~x", "b": "^X", "same": true },
+    { "name": "tilde and caret, under rfc1459-strict", "value": "rfc1459-strict", "a": "~x", "b": "^x", "same": false },
+    { "name": "two different people who share an ascii spelling", "value": "ascii", "a": "İx", "b": "ix", "same": false }
+  ]
+}

@@ -268,11 +268,11 @@ export class IRCClient {
    */
   startNickRecovery(): void {
     if (this.nickRecovery) return
-    if (this.state.nick.toLowerCase() === this.state.desiredNick.toLowerCase()) return
+    if (this.state.casemap(this.state.nick) === this.state.casemap(this.state.desiredNick)) return
 
     this.nickRecovery = setInterval(() => {
       if (this.state.registrationState !== 'connected') return
-      if (this.state.nick.toLowerCase() === this.state.desiredNick.toLowerCase()) {
+      if (this.state.casemap(this.state.nick) === this.state.casemap(this.state.desiredNick)) {
         this.stopNickRecovery()
         return
       }

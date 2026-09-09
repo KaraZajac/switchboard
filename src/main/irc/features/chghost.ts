@@ -11,7 +11,7 @@ registerHandler('CHGHOST', (client, msg) => {
 
   // Update in all channels
   for (const [, channel] of client.state.channels) {
-    const user = channel.users.get(nick.toLowerCase())
+    const user = channel.users.get(client.state.casemap(nick))
     if (user) {
       user.user = newUser
       user.host = newHost

@@ -111,7 +111,7 @@ export function syncMetadata(
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function remember(client: any, target: string, key: string, value: string): void {
   const store = client.state.metadata as Map<string, Record<string, string>>
-  const mapKey = target.toLowerCase()
+  const mapKey = client.state.casemap(target)
   const current = { ...(store.get(mapKey) ?? {}) }
 
   if (value === '') {

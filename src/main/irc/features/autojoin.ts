@@ -26,7 +26,7 @@ registerHandler('AUTOJOIN', (client, msg) => {
     if (pendingChannels.length > 0) {
       // Filter out channels we're already in
       const toJoin = pendingChannels.filter(
-        (ch) => !client.state.channels.has(ch.toLowerCase())
+        (ch) => !client.state.channels.has(client.state.casemap(ch))
       )
       if (toJoin.length > 0) {
         client.connection.send('JOIN', toJoin.join(','))

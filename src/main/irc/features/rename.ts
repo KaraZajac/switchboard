@@ -10,11 +10,11 @@ registerHandler('RENAME', (client, msg) => {
   const reason = msg.params[2] || null
 
   // Update channel state
-  const ch = client.state.channels.get(oldName.toLowerCase())
+  const ch = client.state.channels.get(client.state.casemap(oldName))
   if (ch) {
-    client.state.channels.delete(oldName.toLowerCase())
+    client.state.channels.delete(client.state.casemap(oldName))
     ch.name = newName
-    client.state.channels.set(newName.toLowerCase(), ch)
+    client.state.channels.set(client.state.casemap(newName), ch)
   }
 
   client.events.emit('channelRename', { oldName, newName, reason })

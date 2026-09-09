@@ -126,7 +126,8 @@ registerHandler('433', (client, msg) => {
   //
   // Whatever we asked for, we did not get it — forget it, so a later NICK for
   // somebody else who takes that name is not mistaken for ours.
-  if (client.state.pendingNick?.toLowerCase() === (msg.params[1] || '').toLowerCase()) {
+  if (client.state.pendingNick !== null &&
+    client.state.casemap(client.state.pendingNick) === client.state.casemap(msg.params[1] || '')) {
     client.state.pendingNick = null
   }
 
@@ -168,15 +169,15 @@ registerHandler('NICK', (client, msg) => {
   // Is this our own change? Normally the prefix says so. When it does not —
   // a server that puts the new nick there instead of the old — the nick we
   // asked for and have not yet heard about does.
-  const byPrefix = oldNick.toLowerCase() === client.state.nick.toLowerCase()
+  const byPrefix = client.state.casemap(oldNick) === client.state.casemap(client.state.nick)
   const byRequest =
     client.state.pendingNick !== null &&
-    newNick.toLowerCase() === client.state.pendingNick.toLowerCase()
+    client.state.casemap(newNick) === client.state.casemap(client.state.pendingNick)
 
   if (byPrefix || byRequest) {
     client.state.nick = newNick
     client.state.pendingNick = null
-    if (newNick.toLowerCase() === client.state.desiredNick.toLowerCase()) {
+    if (client.state.casemap(newNick) === client.state.casemap(client.state.desiredNick)) {
       client.stopNickRecovery()
     }
   }
@@ -189,8 +190,8 @@ registerHandler('NICK', (client, msg) => {
   // A person's profile belongs to the person, not to the name they had at the
   // time. Leaving it behind means a rename — including our own, every time the
   // fallback nick is given back — quietly drops their display name and avatar.
-  const from = oldNick.toLowerCase()
-  const to = newNick.toLowerCase()
+  const from = client.state.casemap(oldNick)
+  const to = client.state.casemap(newNick)
   if (from !== to) {
     const profile = client.state.metadata.get(from)
     if (profile) {

@@ -13,7 +13,7 @@ registerHandler('JOIN', (client, msg) => {
   const account = msg.params[1] !== '*' ? msg.params[1] : null
   const realname = msg.params[2] || null
 
-  const isMe = nick.toLowerCase() === client.state.nick.toLowerCase()
+  const isMe = client.state.casemap(nick) === client.state.casemap(client.state.nick)
 
   if (isMe) {
     // We joined — create channel state
@@ -41,7 +41,7 @@ registerHandler('JOIN', (client, msg) => {
     syncMetadata(client, nick)
   }
 
-  const ch = client.state.channels.get(channel.toLowerCase())
+  const ch = client.state.channels.get(client.state.casemap(channel))
   if (ch) {
     const user = ch.setUser(nick, {
       nick,
@@ -64,9 +64,9 @@ registerHandler('PART', (client, msg) => {
   const channel = msg.params[0]
   const reason = msg.params[1] || null
 
-  const isMe = nick.toLowerCase() === client.state.nick.toLowerCase()
+  const isMe = client.state.casemap(nick) === client.state.casemap(client.state.nick)
 
-  const ch = client.state.channels.get(channel.toLowerCase())
+  const ch = client.state.channels.get(client.state.casemap(channel))
   if (ch) {
     ch.removeUser(nick)
   }
@@ -87,9 +87,9 @@ registerHandler('KICK', (client, msg) => {
   const reason = msg.params[2] || null
   const by = msg.source?.nick || ''
 
-  const isMe = kicked.toLowerCase() === client.state.nick.toLowerCase()
+  const isMe = client.state.casemap(kicked) === client.state.casemap(client.state.nick)
 
-  const ch = client.state.channels.get(channel.toLowerCase())
+  const ch = client.state.channels.get(client.state.casemap(channel))
   if (ch) {
     ch.removeUser(kicked)
   }
@@ -109,7 +109,7 @@ registerHandler('TOPIC', (client, msg) => {
   const topic = msg.params[1] || ''
   const setBy = msg.source?.nick || null
 
-  const ch = client.state.channels.get(channel.toLowerCase())
+  const ch = client.state.channels.get(client.state.casemap(channel))
   if (ch) {
     ch.topic = topic
     ch.topicSetBy = setBy
@@ -127,7 +127,7 @@ registerHandler('332', (client, msg) => {
   const channel = msg.params[1]
   const topic = msg.params[2] || ''
 
-  const ch = client.state.channels.get(channel.toLowerCase())
+  const ch = client.state.channels.get(client.state.casemap(channel))
   if (ch) {
     ch.topic = topic
   }
@@ -144,7 +144,7 @@ registerHandler('333', (client, msg) => {
   const setBy = msg.params[2]
   const timestamp = msg.params[3]
 
-  const ch = client.state.channels.get(channel.toLowerCase())
+  const ch = client.state.channels.get(client.state.casemap(channel))
   if (ch) {
     ch.topicSetBy = setBy
     ch.topicSetAt = timestamp
@@ -161,7 +161,7 @@ registerHandler('353', (client, msg) => {
   const channel = msg.params[2]
   const namesList = msg.params[3] || ''
 
-  const ch = client.state.channels.get(channel.toLowerCase())
+  const ch = client.state.channels.get(client.state.casemap(channel))
   if (!ch) return
 
   // Get prefix characters from ISUPPORT or use defaults
@@ -206,7 +206,7 @@ registerHandler('353', (client, msg) => {
 registerHandler('366', (client, msg) => {
   // params: <nick> <channel> :End of /NAMES list
   const channel = msg.params[1]
-  const ch = client.state.channels.get(channel.toLowerCase())
+  const ch = client.state.channels.get(client.state.casemap(channel))
   if (ch) {
     ch.namesReceived = true
     const users: ChannelUser[] = Array.from(ch.users.values())
@@ -231,7 +231,7 @@ registerHandler('MODE', (client, msg) => {
     const modeParams = msg.params.slice(2)
     const setBy = msg.source?.nick || null
 
-    const ch = client.state.channels.get(target.toLowerCase())
+    const ch = client.state.channels.get(client.state.casemap(target))
     if (ch) {
       applyChannelModes(ch, modeStr, modeParams, client)
     }
@@ -254,7 +254,7 @@ registerHandler('INVITE', (client, msg) => {
   const channel = msg.params[1]
   const by = msg.source?.nick || ''
 
-  const isMe = target.toLowerCase() === client.state.nick.toLowerCase()
+  const isMe = client.state.casemap(target) === client.state.casemap(client.state.nick)
 
   client.events.emit('invite', { channel, by, target, isMe })
 })
@@ -320,7 +320,7 @@ function applyChannelModes(
   ch: ReturnType<typeof import('../state').ConnectionState.prototype.getChannel>,
   modeStr: string,
   params: string[],
-  client: { state: { isupport: Record<string, string | true> } }
+  client: { state: { isupport: Record<string, string | true>; casemap(name: string): string } }
 ): void {
   const prefixMap = parsePrefixIsupport(client.state.isupport['PREFIX'] as string | undefined)
   const prefixModes = new Set(Object.keys(prefixMap))
@@ -343,7 +343,7 @@ function applyChannelModes(
       const nick = params[paramIdx++]
       if (!nick) continue
 
-      const user = ch.users.get(nick.toLowerCase())
+      const user = ch.users.get(client.state.casemap(nick))
       if (user) {
         const prefix = prefixMap[char]
         if (adding) {

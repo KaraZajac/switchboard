@@ -1,4 +1,5 @@
 import type { RegistrationState, IRCBatch } from '@shared/types/irc'
+import { foldCase, casemappingOf } from '@shared/casemap'
 import type { ChannelUser } from '@shared/types/channel'
 import type { UserMetadata } from '@shared/types/metadata'
 
@@ -111,37 +112,34 @@ export class ConnectionState {
 
   /** Get or create channel state */
   getChannel(name: string): ChannelStateData {
-    const lower = name.toLowerCase()
-    let ch = this.channels.get(lower)
+    const key = this.casemap(name)
+    let ch = this.channels.get(key)
     if (!ch) {
-      ch = new ChannelStateData(name)
-      this.channels.set(lower, ch)
+      ch = new ChannelStateData(name, (nick) => this.casemap(nick))
+      this.channels.set(key, ch)
     }
     return ch
   }
 
   /** Remove a channel from tracking */
   removeChannel(name: string): void {
-    this.channels.delete(name.toLowerCase())
+    this.channels.delete(this.casemap(name))
   }
 
   /** Check if we're in a channel */
   inChannel(name: string): boolean {
-    return this.channels.has(name.toLowerCase())
+    return this.channels.has(this.casemap(name))
   }
 
-  /** Get the CASEMAPPING function based on ISUPPORT */
-  casemap(str: string): string {
-    const mapping = this.isupport['CASEMAPPING']
-    if (mapping === 'ascii' || mapping === true) {
-      return str.toLowerCase()
-    }
-    // Default to rfc1459 casemapping
-    return str.toLowerCase()
-      .replace(/\[/g, '{')
-      .replace(/\]/g, '}')
-      .replace(/\\/g, '|')
-      .replace(/~/g, '^')
+  /**
+   * A name as this server would compare it.
+   *
+   * Read from ISUPPORT every time rather than cached, because `005` arrives
+   * after the state object exists and a stale answer here means two spellings
+   * of one nick living in the map as two people.
+   */
+  casemap(name: string): string {
+    return foldCase(name, casemappingOf(this.isupport['CASEMAPPING']))
   }
 }
 
@@ -164,19 +162,29 @@ export class ChannelStateData {
   /** Channel modes */
   modes: Record<string, string | true> = {}
 
-  /** Users in the channel, keyed by lowercase nick */
+  /** Users in the channel, keyed by the folded nick */
   users = new Map<string, ChannelUser>()
 
   /** Whether we've received the initial NAMES list */
   namesReceived = false
 
-  constructor(name: string) {
+  /**
+   * How this server folds a nick.
+   *
+   * Passed in rather than looked up, because a channel has no view of
+   * ISUPPORT — and taken as a function rather than a value so it keeps
+   * answering correctly if `005` arrives after the channel exists.
+   */
+  private readonly fold: (nick: string) => string
+
+  constructor(name: string, fold: (nick: string) => string = (nick) => foldCase(nick)) {
     this.name = name
+    this.fold = fold
   }
 
   /** Add or update a user in the channel */
   setUser(nick: string, data: Partial<ChannelUser>): ChannelUser {
-    const lower = nick.toLowerCase()
+    const lower = this.fold(nick)
     const existing = this.users.get(lower)
     const user: ChannelUser = {
       nick: data.nick ?? existing?.nick ?? nick,
@@ -195,22 +203,22 @@ export class ChannelStateData {
 
   /** Remove a user from the channel */
   removeUser(nick: string): void {
-    this.users.delete(nick.toLowerCase())
+    this.users.delete(this.fold(nick))
   }
 
   /** Rename a user in the channel */
   renameUser(oldNick: string, newNick: string): void {
-    const lower = oldNick.toLowerCase()
+    const lower = this.fold(oldNick)
     const user = this.users.get(lower)
     if (user) {
       this.users.delete(lower)
       user.nick = newNick
-      this.users.set(newNick.toLowerCase(), user)
+      this.users.set(this.fold(newNick), user)
     }
   }
 
   /** Check if a nick is in the channel */
   hasUser(nick: string): boolean {
-    return this.users.has(nick.toLowerCase())
+    return this.users.has(this.fold(nick))
   }
 }

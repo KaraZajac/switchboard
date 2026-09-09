@@ -118,7 +118,7 @@ internal object Metadata {
     }
 
     private fun remember(session: IrcSession, target: String, key: String, value: String) {
-        val store = session.state.metadata.getOrPut(target.lowercase()) { mutableMapOf() }
+        val store = session.state.metadata.getOrPut(session.state.casemap(target)) { mutableMapOf() }
         if (value.isEmpty()) store.remove(key) else store[key] = value
     }
 

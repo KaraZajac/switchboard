@@ -64,6 +64,8 @@ object Sts {
     /** Record what a server has told us, or drop it when duration is zero */
     @Synchronized
     fun remember(host: String, port: Int, durationSeconds: Long) {
+        // A hostname, not an IRC name: DNS folds ASCII case and nothing else,
+        // so `lowercase` is right here and `casemap` would be wrong.
         val key = host.lowercase()
         if (durationSeconds == 0L) {
             policies.remove(key)

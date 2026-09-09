@@ -20,6 +20,8 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.switchboard.android.irc.Casemap
+import org.switchboard.android.irc.ConnectionState
 import org.switchboard.android.irc.Irc
 import org.switchboard.android.irc.IrcMessage
 import org.switchboard.android.irc.Metadata
@@ -497,6 +499,66 @@ class SharedCorpusTest {
             val fits = limit == null || text.toByteArray(Charsets.UTF_8).size <= limit
             assertEquals(name, c["fits"]!!.jsonPrimitive.content == "true", fits)
         }
+    }
+
+    // ── casemapping ──────────────────────────────────────────────────
+
+    /**
+     * Which characters count as the same letter is the server's decision, and
+     * both clients have to make it the same way — otherwise the same person
+     * appears twice on one screen and once on the other.
+     */
+    @Test
+    fun `folds names the way the desktop folds them`() {
+        for (case in load("casemapping.json")["cases"]!!.jsonArray) {
+            val c = case.jsonObject
+            val name = c["name"]!!.jsonPrimitive.content
+            val mapping = Casemap.mappingOf((c["value"] as? JsonPrimitive)?.contentOrNull)
+
+            assertEquals(
+                name,
+                c["folded"]!!.jsonPrimitive.content,
+                Casemap.fold(c["input"]!!.jsonPrimitive.content, mapping)
+            )
+        }
+    }
+
+    @Test
+    fun `agrees with the desktop on which names are the same name`() {
+        for (case in load("casemapping.json")["same"]!!.jsonArray) {
+            val c = case.jsonObject
+            val name = c["name"]!!.jsonPrimitive.content
+            val mapping = Casemap.mappingOf((c["value"] as? JsonPrimitive)?.contentOrNull)
+
+            val same = Casemap.fold(c["a"]!!.jsonPrimitive.content, mapping) ==
+                Casemap.fold(c["b"]!!.jsonPrimitive.content, mapping)
+            assertEquals(name, c["same"]!!.jsonPrimitive.content == "true", same)
+        }
+    }
+
+    /** Folding correctly in a helper nobody calls is worth nothing */
+    @Test
+    fun `finds a person the server considers the same person`() {
+        val state = ConnectionState("s1")
+        val channel = state.channel("#dev[core]")
+        channel.setUser("bob[away]") { it }
+
+        assertNotNull(state.findChannel("#DEV{CORE}"))
+        assertNotNull(channel.user("BOB{AWAY}"))
+    }
+
+    /** On an ascii server those really are two people, and must stay two */
+    @Test
+    fun `keeps names apart when the server says ascii`() {
+        val state = ConnectionState("s1")
+        state.isupport["CASEMAPPING"] = "ascii"
+
+        val channel = state.channel("#dev[core]")
+        channel.setUser("bob[away]") { it }
+
+        assertNull(state.findChannel("#dev{core}"))
+        assertNull(channel.user("bob{away}"))
+        assertNotNull(channel.user("BOB[AWAY]"))
     }
 
 }

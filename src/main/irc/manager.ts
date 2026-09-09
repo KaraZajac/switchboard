@@ -1,4 +1,5 @@
 import { BrowserWindow } from 'electron'
+import { foldCase } from '@shared/casemap'
 import type { ServerConfig } from '@shared/types/server'
 import type { IRCMessage } from '@shared/types/irc'
 import type { ChatMessage } from '@shared/types/message'
@@ -41,8 +42,10 @@ export class IRCManager {
     // Registration already knows how to join this list (including the delay for
     // an identify command), so merge rather than joining separately.
     const remembered = getJoinedChannels(config.id)
-    const known = new Set(config.autoJoin.map((name) => name.toLowerCase()))
-    const autoJoin = [...config.autoJoin, ...remembered.filter((n) => !known.has(n.toLowerCase()))]
+    // Folded with the default mapping: this runs before there is a connection
+    // to ask, and it is only deduplicating a list of channel names.
+    const known = new Set(config.autoJoin.map((name) => foldCase(name)))
+    const autoJoin = [...config.autoJoin, ...remembered.filter((n) => !known.has(foldCase(n)))]
 
     const client = new IRCClient({ ...config, autoJoin })
     this.clients.set(config.id, client)
@@ -242,7 +245,7 @@ export class IRCManager {
     // rendered name was the server echoing it back. A server without
     // `draft/metadata-2` never will, and one that has it may not until it
     // feels like it.
-    const own = client.state.nick.toLowerCase()
+    const own = client.state.casemap(client.state.nick)
     const known = client.state.metadata.get(own) ?? {}
     const seeded: Record<string, string> = { ...known }
     for (const [key, value] of Object.entries(profile)) {

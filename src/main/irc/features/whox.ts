@@ -55,7 +55,7 @@ registerHandler('354', (client, msg) => {
   const account = params[8] === '0' ? null : params[8]
   const realname = params[9]
 
-  const ch = client.state.channels.get(channel.toLowerCase())
+  const ch = client.state.channels.get(client.state.casemap(channel))
   if (!ch) return
 
   // Parse flags: H=here, G=gone(away), *=ircop, @+=prefixes, B=bot
@@ -87,7 +87,7 @@ registerHandler('354', (client, msg) => {
  */
 registerHandler('315', (client, msg) => {
   const channel = msg.params[1]
-  const ch = client.state.channels.get(channel?.toLowerCase())
+  const ch = client.state.channels.get(channel ? client.state.casemap(channel) : undefined)
   if (!ch) return
 
   // Safety net for servers whose WHOX replies we could not use (unexpected field

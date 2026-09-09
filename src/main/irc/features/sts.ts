@@ -38,6 +38,8 @@ export function persistSTSPoliciesWith(backing: typeof store): void {
  * Returns the policy if valid, null otherwise.
  */
 export function getSTSPolicy(host: string): STSPolicy | null {
+  // A hostname, not an IRC name: DNS folds ASCII case and nothing else, so
+  // `toLowerCase` is right here and `casemap` would be wrong.
   const policy = stsPolicies.get(host.toLowerCase())
   if (!policy) return null
 
