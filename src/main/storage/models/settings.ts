@@ -1,4 +1,4 @@
-import { getDb, saveDatabase } from '../database'
+import { getDb } from '../database'
 
 /**
  * Key-value settings storage.
@@ -24,11 +24,9 @@ export function setSetting(key: string, value: unknown): void {
     'INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)',
     [key, JSON.stringify(value)]
   )
-  saveDatabase()
 }
 
 export function deleteSetting(key: string): void {
   const db = getDb()
   db.run('DELETE FROM settings WHERE key = ?', [key])
-  saveDatabase()
 }

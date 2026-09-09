@@ -1,4 +1,4 @@
-import { getDb, saveDatabase } from '../database'
+import { getDb } from '../database'
 import type { ServerConfig } from '@shared/types/server'
 import type { SASLMechanism } from '@shared/types/irc'
 import type { UserMetadata } from '@shared/types/metadata'
@@ -72,7 +72,6 @@ export function addServer(config: Omit<ServerConfig, 'id' | 'sortOrder'>): strin
     ]
   )
 
-  saveDatabase()
   return id
 }
 
@@ -107,7 +106,6 @@ export function updateServer(id: string, updates: Partial<ServerConfig>): void {
   values.push(id)
 
   db.run(`UPDATE servers SET ${fields.join(', ')} WHERE id = ?`, values)
-  saveDatabase()
 }
 
 /**
@@ -153,13 +151,11 @@ export function upsertServer(config: ServerConfig): void {
       JSON.stringify(config.profile ?? {})
     ]
   )
-  saveDatabase()
 }
 
 export function removeServer(id: string): void {
   const db = getDb()
   db.run('DELETE FROM servers WHERE id = ?', [id])
-  saveDatabase()
 }
 
 // ── Row mapping helpers ────────────────────────────────────────────
@@ -258,6 +254,5 @@ export function encryptStoredCredentials(): { migrated: number; protected: boole
     migrated++
   }
 
-  if (migrated > 0) saveDatabase()
   return { migrated, protected: secretsProtected() }
 }

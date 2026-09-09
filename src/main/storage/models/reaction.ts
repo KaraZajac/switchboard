@@ -1,4 +1,4 @@
-import { getDb, saveDatabase } from '../database'
+import { getDb } from '../database'
 
 /**
  * Reactions on messages.
@@ -32,7 +32,6 @@ export function setReaction(
     )
   }
 
-  saveDatabase()
 }
 
 /**

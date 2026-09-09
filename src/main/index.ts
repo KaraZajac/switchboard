@@ -3,7 +3,7 @@ import { join } from 'path'
 import { autoUpdater } from 'electron-updater'
 import { registerIPCHandlers } from './ipc/index'
 import { ircManager } from './irc/manager'
-import { initDatabase, closeDatabase, saveDatabase } from './storage/database'
+import { initDatabase, closeDatabase } from './storage/database'
 import { loadSTSPolicies, persistSTSPoliciesWith } from './irc/features/sts'
 import { allSTSPolicies, saveSTSPolicy, forgetSTSPolicy } from './storage/models/sts'
 import { stopRemoteLink } from './remote/link'
@@ -303,9 +303,6 @@ app.whenReady().then(async () => {
   // Set up auto-updater
   setupAutoUpdater()
 
-  // Periodically flush message database to disk (every 30s)
-  setInterval(() => saveDatabase(), 30_000)
-
   // Auto-connect servers once the renderer is listening (it calls
   // 'app:renderer-ready'). This timer is the fallback for a renderer that never
   // reports in, so a broken window still leaves the connections up.
@@ -352,7 +349,8 @@ async function shutdown(): Promise<void> {
 
   await withTimeout(stopRemoteLink().catch(() => {}), 1500)
 
-  saveDatabase()
   ircManager.destroyAll()
+  // Checkpoints the write-ahead log and takes it away with it, so the next
+  // launch opens one file rather than recovering from two.
   closeDatabase()
 }

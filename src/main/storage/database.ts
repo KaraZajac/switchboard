@@ -1,107 +1,93 @@
-import initSqlJs, { type Database as SqlJsDatabase } from 'sql.js'
 import { app } from 'electron'
 import * as fs from 'fs'
 import * as path from 'path'
+import { SqliteDatabase } from './driver'
+import { databaseKey, keyPragma } from './key'
+import { migrateFromSqlJs } from './migrate'
 
-let db: SqlJsDatabase | null = null
+let db: SqliteDatabase | null = null
 let dbPath: string
+let encrypted = false
 
-/**
- * Initialize the SQLite database using sql.js (pure JS SQLite).
- * Creates the database file in the user's app data directory.
- */
-export async function initDatabase(): Promise<void> {
-  const SQL = await initSqlJs()
-
-  dbPath = path.join(app.getPath('userData'), 'switchboard.db')
-
-  db = openExisting(SQL) ?? new SQL.Database()
-
-  // Run migrations
-  runMigrations()
-
-  // Enable WAL mode for better concurrent access
-  db.run('PRAGMA journal_mode = WAL')
-  db.run('PRAGMA foreign_keys = ON')
+/** Whether what is on disk is encrypted, for Settings to report honestly */
+export function databaseIsEncrypted(): boolean {
+  return encrypted
 }
 
 /**
- * Open what is on disk, falling back to the previous copy.
+ * Open the database, migrating and encrypting it if this is the first run.
  *
- * A database that will not open is the worst thing that can happen here — it is
- * the user's servers, their credentials and their history. The backup is the
- * copy from before the last save, so at worst they lose one write rather than
- * everything.
+ * The file is real SQLite now rather than sql.js, which changes three things
+ * that mattered: it is encrypted page by page with a key the OS keychain
+ * holds; writes reach the disk as they happen instead of the whole database
+ * being serialised after every message; and full-text search exists, so
+ * message search can stop being a substring scan.
  */
-function openExisting(SQL: Awaited<ReturnType<typeof initSqlJs>>): SqlJsDatabase | null {
-  for (const candidate of [dbPath, `${dbPath}.bak`]) {
-    if (!fs.existsSync(candidate)) continue
-    try {
-      const database = new SQL.Database(fs.readFileSync(candidate))
-      // Constructing does not read the file; reading the schema does, and that
-      // is what tells a real database apart from a truncated or zeroed one.
-      database.exec('SELECT count(*) FROM sqlite_master')
+export async function initDatabase(): Promise<void> {
+  const userData = app.getPath('userData')
+  dbPath = path.join(userData, 'switchboard.sqlite')
+  const legacyPath = path.join(userData, 'switchboard.db')
 
-      if (candidate !== dbPath) {
-        console.warn('Main database was unreadable; recovered from the backup')
-        fs.copyFileSync(candidate, dbPath)
+  const key = databaseKey()
+  encrypted = key !== null
+
+  if (!encrypted) {
+    // No keyring — common on headless boxes and minimal desktops. Carrying on
+    // unencrypted is the right call: refusing to start would lose someone
+    // their client over a missing daemon, and the alternative of writing the
+    // key out in the clear beside the database it unlocks protects nobody.
+    console.warn(
+      'No OS keychain available, so the database is not encrypted. ' +
+        'Settings → Network reports this.'
+    )
+  }
+
+  const fresh = !fs.existsSync(dbPath)
+  db = new SqliteDatabase(dbPath, key ? keyPragma(key) : null)
+
+  // The one-time move out of sql.js. Only into an empty database, and the old
+  // file is left alone until a later run has proved this one opens.
+  if (fresh && fs.existsSync(legacyPath)) {
+    try {
+      const result = await migrateFromSqlJs(legacyPath, db)
+      if (result.migrated) {
+        console.info(
+          `Moved ${result.rows} rows across ${result.tables} tables into the ` +
+            (encrypted ? 'encrypted database' : 'new database')
+        )
+        fs.renameSync(legacyPath, `${legacyPath}.migrated`)
       }
-      return database
     } catch (err) {
-      console.error(`Could not open ${path.basename(candidate)}:`, err)
+      // Leave the old database exactly where it is and start clean rather than
+      // carry on writing into a half-filled one.
+      console.error('Could not migrate the old database:', err)
+      db.close()
+      fs.rmSync(dbPath, { force: true })
+      db = new SqliteDatabase(dbPath, key ? keyPragma(key) : null)
     }
   }
-  return null
+
+  runMigrations()
 }
 
 /**
  * Get the database instance. Throws if not initialized.
  */
-export function getDb(): SqlJsDatabase {
+export function getDb(): SqliteDatabase {
   if (!db) throw new Error('Database not initialized')
   return db
 }
 
 /**
- * Save the database to disk.
- * sql.js is in-memory, so we need to explicitly save.
- */
-export function saveDatabase(): void {
-  if (!db) return
-  const buffer = Buffer.from(db.export())
-
-  // Write beside the real file, flush, then rename over it. A plain write
-  // truncates first, so a crash or a power cut part-way through leaves a
-  // half-written database — and this runs on every message, which is a lot of
-  // chances to be interrupted.
-  const temporary = `${dbPath}.tmp`
-  const handle = fs.openSync(temporary, 'w')
-  try {
-    fs.writeFileSync(handle, buffer)
-    fs.fsyncSync(handle)
-  } finally {
-    fs.closeSync(handle)
-  }
-
-  // Keep the previous copy: rename is atomic, but the bytes it replaces are
-  // the only other version that exists.
-  if (fs.existsSync(dbPath)) {
-    try {
-      fs.copyFileSync(dbPath, `${dbPath}.bak`)
-    } catch (err) {
-      console.error('Could not refresh the database backup:', err)
-    }
-  }
-
-  fs.renameSync(temporary, dbPath)
-}
-
-/**
- * Close and save the database.
+ * Close the database.
+ *
+ * This checkpoints the write-ahead log and removes it, which is the only part
+ * of shutdown that still matters — everything written before now is already on
+ * disk. There is no save: sql.js held the whole database in memory and had to
+ * be serialised out after every message, and that is what has been left behind.
  */
 export function closeDatabase(): void {
   if (db) {
-    saveDatabase()
     db.close()
     db = null
   }
@@ -350,5 +336,29 @@ function runMigrations(): void {
     db.run("INSERT INTO migrations (name) VALUES ('008_remote_devices')")
   }
 
-  saveDatabase()
+  // Migration 012: keep the search index honest when a message is edited.
+  //
+  // 002 built the index with an insert and a delete trigger, from a time when
+  // a message could only ever appear or go away. Edits arrived later, and an
+  // external-content FTS5 table does not notice an UPDATE it was not told
+  // about: search would go on matching the text that had been replaced, and
+  // then show the row as it reads now.
+  if (!applied.has('012_fts_edits') && hasFts()) {
+    db.run(`
+      CREATE TRIGGER IF NOT EXISTS messages_au AFTER UPDATE OF content ON messages BEGIN
+        INSERT INTO messages_fts(messages_fts, rowid, id, server_id, channel, nick, content, timestamp)
+        VALUES ('delete', old.rowid, old.id, old.server_id, old.channel, old.nick, old.content, old.timestamp);
+        INSERT INTO messages_fts(rowid, id, server_id, channel, nick, content, timestamp)
+        VALUES (new.rowid, new.id, new.server_id, new.channel, new.nick, new.content, new.timestamp);
+      END
+    `)
+    db.run("INSERT INTO migrations (name) VALUES ('012_fts_edits')")
+  }
+}
+
+/** Whether the search index exists — it does not on a build without FTS5 */
+function hasFts(): boolean {
+  if (!db) return false
+  const rows = db.exec("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'messages_fts'")
+  return rows.length > 0 && rows[0].values.length > 0
 }

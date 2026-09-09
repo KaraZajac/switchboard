@@ -1,4 +1,4 @@
-import { getDb, saveDatabase } from '../database'
+import { getDb } from '../database'
 import { v4 as uuid } from 'uuid'
 
 /**
@@ -46,7 +46,6 @@ export function markChannelJoined(serverId: string, name: string): void {
     )
   }
 
-  saveDatabase()
 }
 
 /** Record that we left a channel, so it is not rejoined on the next launch. */
@@ -56,5 +55,4 @@ export function markChannelParted(serverId: string, name: string): void {
     serverId,
     name
   ])
-  saveDatabase()
 }

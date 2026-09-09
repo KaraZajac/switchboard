@@ -1,4 +1,4 @@
-import { getDb, saveDatabase } from '../database'
+import { getDb } from '../database'
 
 export function getMonitorList(serverId: string): string[] {
   const db = getDb()
@@ -14,7 +14,6 @@ export function addToMonitorList(serverId: string, nicks: string[]): void {
     stmt.run([serverId, nick])
   }
   stmt.free()
-  saveDatabase()
 }
 
 export function removeFromMonitorList(serverId: string, nicks: string[]): void {
@@ -22,11 +21,9 @@ export function removeFromMonitorList(serverId: string, nicks: string[]): void {
   for (const nick of nicks) {
     db.run('DELETE FROM monitor_list WHERE server_id = ? AND nick = ?', [serverId, nick])
   }
-  saveDatabase()
 }
 
 export function clearMonitorList(serverId: string): void {
   const db = getDb()
   db.run('DELETE FROM monitor_list WHERE server_id = ?', [serverId])
-  saveDatabase()
 }

@@ -1,4 +1,4 @@
-import { getDb, saveDatabase } from '../database'
+import { getDb } from '../database'
 
 /**
  * Devices paired to this desktop over the remote link.
@@ -44,7 +44,6 @@ export function pairDevice(endpointId: string, name: string): void {
      ON CONFLICT(endpoint_id) DO UPDATE SET name = excluded.name, last_seen_at = datetime('now')`,
     [endpointId, name]
   )
-  saveDatabase()
 }
 
 export function touchDevice(endpointId: string): void {
@@ -57,5 +56,4 @@ export function touchDevice(endpointId: string): void {
 export function revokeDevice(endpointId: string): void {
   const db = getDb()
   db.run('DELETE FROM remote_devices WHERE endpoint_id = ?', [endpointId])
-  saveDatabase()
 }

@@ -3,8 +3,7 @@ import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest'
 const state = vi.hoisted(() => ({ db: null as unknown as { run: (...a: unknown[]) => void } }))
 
 vi.mock('../../src/main/storage/database', () => ({
-  getDb: () => state.db,
-  saveDatabase: () => {}
+  getDb: () => state.db
 }))
 
 const { getJoinedChannels, markChannelJoined, markChannelParted } = await import(

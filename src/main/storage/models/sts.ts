@@ -1,4 +1,4 @@
-import { getDb, saveDatabase } from '../database'
+import { getDb } from '../database'
 import type { STSPolicy } from '../../irc/features/sts'
 
 /**
@@ -30,11 +30,9 @@ export function saveSTSPolicy(policy: STSPolicy): void {
      VALUES (?, ?, ?, ?)`,
     [policy.host.toLowerCase(), policy.port, policy.duration, policy.cachedAt]
   )
-  saveDatabase()
 }
 
 export function forgetSTSPolicy(host: string): void {
   const db = getDb()
   db.run('DELETE FROM sts_policies WHERE host = ?', [host.toLowerCase()])
-  saveDatabase()
 }
