@@ -1,0 +1,54 @@
+{
+  "$comment": "The values servers put on their capabilities, and what both clients must make of them. Read by tests/main/capvalues.test.ts and the Android SharedCorpusTest. Every one of these was being ignored until it was not: the client sent something the server had already said it would refuse, and the refusal arrived as a bare FAIL nobody could act on.",
+
+  "$sasl": "sasl=PLAIN,SCRAM-SHA-256 — offering a mechanism that is not on the list gets a bare 904, and a user staring at 'authentication failed' with no way to know their account was never the problem. A bare `sasl` names nothing, which is not the same as naming nothing acceptable.",
+  "sasl": [
+    { "name": "two mechanisms", "value": "PLAIN,SCRAM-SHA-256", "mechanisms": ["PLAIN", "SCRAM-SHA-256"] },
+    { "name": "one", "value": "PLAIN", "mechanisms": ["PLAIN"] },
+    { "name": "case is not significant", "value": "plain,external", "mechanisms": ["PLAIN", "EXTERNAL"] },
+    { "name": "spaces around the commas", "value": "PLAIN, EXTERNAL", "mechanisms": ["PLAIN", "EXTERNAL"] },
+    { "name": "no value — the server has not said", "value": "", "mechanisms": null },
+    { "name": "an empty list is not a list", "value": ",,", "mechanisms": null }
+  ],
+
+  "$metadata": "draft/metadata-2=max-subs=50,max-keys=50,max-value-bytes=4096",
+  "metadata": [
+    {
+      "name": "all three",
+      "value": "max-subs=50,max-keys=50,max-value-bytes=4096",
+      "maxSubs": 50,
+      "maxKeys": 50,
+      "maxValueBytes": 4096
+    },
+    {
+      "name": "only what it cares about",
+      "value": "max-value-bytes=512",
+      "maxSubs": null,
+      "maxKeys": null,
+      "maxValueBytes": 512
+    },
+    {
+      "name": "advertised bare",
+      "value": "",
+      "maxSubs": null,
+      "maxKeys": null,
+      "maxValueBytes": null
+    },
+    {
+      "name": "a value we cannot read is not a limit of zero",
+      "value": "max-subs=lots,max-value-bytes=-1",
+      "maxSubs": null,
+      "maxKeys": null,
+      "maxValueBytes": null
+    }
+  ],
+
+  "$fits": "Whether a value is short enough to keep, counted in UTF-8 bytes — which is what the limit is in, so a profile in Japanese hits it at a third of the characters an English one does.",
+  "fits": [
+    { "name": "well under", "value": "max-value-bytes=16", "text": "she/her", "fits": true },
+    { "name": "exactly at the limit", "value": "max-value-bytes=7", "text": "she/her", "fits": true },
+    { "name": "one byte over", "value": "max-value-bytes=6", "text": "she/her", "fits": false },
+    { "name": "counted in bytes, not characters", "value": "max-value-bytes=8", "text": "日本語です", "fits": false },
+    { "name": "no limit named, anything fits", "value": "", "text": "a very long bio indeed", "fits": true }
+  ]
+}

@@ -121,6 +121,24 @@ registerHandler('CAP', (client, msg) => {
 
       // If SASL was acknowledged, we need to authenticate before CAP END
       if (client.state.capabilities.has('sasl') && client.config.saslMechanism) {
+        // The capability value lists what the server will actually take —
+        // `sasl=PLAIN,SCRAM-SHA-256`. Sending a mechanism that is not on it
+        // gets a bare 904 and a user staring at "authentication failed" with
+        // no way to know their account was never the problem.
+        const offered = saslMechanismsFrom(client.state.availableCapabilities.get('sasl'))
+        if (offered && !offered.includes(client.config.saslMechanism)) {
+          client.events.emit('error', {
+            code: 'SASL',
+            message:
+              `This server does not offer ${client.config.saslMechanism}. ` +
+              `It accepts ${offered.join(', ')}.`
+          })
+          client.connection.send('CAP', 'END')
+          client.state.capNegotiating = false
+          client.events.emit('capNegotiated', Array.from(client.state.capabilities))
+          break
+        }
+
         // Send AUTHENTICATE <mechanism> to begin SASL auth
         client.connection.send('AUTHENTICATE', client.config.saslMechanism)
         client.events.emit('capNegotiated', Array.from(client.state.capabilities))
@@ -208,6 +226,22 @@ const MAX_LINE_BYTES = 512
  * split, and each CAP REQ is atomic — the server ACKs or NAKs a whole line — so
  * splitting changes nothing except that it fits.
  */
+/**
+ * The mechanisms the server named, or null if it named none.
+ *
+ * `sasl` with no value means the server will take whatever it takes and has
+ * not said what — which is not the same as taking nothing, so the caller has
+ * to go ahead and find out.
+ */
+export function saslMechanismsFrom(value: string | null | undefined): string[] | null {
+  if (!value) return null
+  const named = value
+    .split(',')
+    .map((mechanism) => mechanism.trim().toUpperCase())
+    .filter(Boolean)
+  return named.length > 0 ? named : null
+}
+
 export function requestCapabilities(
   client: {
     connection: { send: (...args: string[]) => void }

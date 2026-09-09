@@ -24,11 +24,79 @@ import { METADATA_KEYS } from '@shared/types/metadata'
  * rather than us asking per nick.
  */
 
-/** Subscribe to the keys we render, and pull what is already set. */
+/** What the server said it will hold, from `draft/metadata-2=…` */
+export interface MetadataLimits {
+  maxSubs: number | null
+  maxKeys: number | null
+  maxValueBytes: number | null
+}
+
+/**
+ * Read the limits out of the capability value.
+ *
+ * rIRCd advertises `max-subs=50,max-keys=50,max-value-bytes=4096`, and a value
+ * over the last of those is refused rather than truncated — so a profile with
+ * a long bio in it is not saved anywhere, and until this the user was told it
+ * had been.
+ */
+export function parseMetadataLimits(value: string | null | undefined): MetadataLimits {
+  const limits: MetadataLimits = { maxSubs: null, maxKeys: null, maxValueBytes: null }
+  if (!value) return limits
+
+  for (const token of value.split(',')) {
+    const at = token.indexOf('=')
+    if (at === -1) continue
+
+    const key = token.slice(0, at).trim()
+    const count = Number(token.slice(at + 1).trim())
+    if (!Number.isInteger(count) || count <= 0) continue
+
+    if (key === 'max-subs') limits.maxSubs = count
+    if (key === 'max-keys') limits.maxKeys = count
+    if (key === 'max-value-bytes') limits.maxValueBytes = count
+  }
+
+  return limits
+}
+
+/** The limits this connection is under, or none if the server named none */
+export function metadataLimitsOf(client: {
+  state: { availableCapabilities: Map<string, string | null> }
+}): MetadataLimits {
+  return parseMetadataLimits(client.state.availableCapabilities.get('draft/metadata-2'))
+}
+
+/**
+ * Subscribe to the keys we render, and pull what is already set.
+ *
+ * Trimmed to `max-subs` where the server named one. Asking for more than it
+ * will take gets the whole subscription refused, which costs every profile on
+ * the network rather than the one key past the limit.
+ */
 export function subscribeToMetadata(client: {
   connection: { send: (...args: string[]) => void }
+  state: { availableCapabilities: Map<string, string | null> }
 }): void {
-  client.connection.send('METADATA', '*', 'SUB', ...METADATA_KEYS)
+  const limits = metadataLimitsOf(client)
+  const keys =
+    limits.maxSubs === null ? METADATA_KEYS : METADATA_KEYS.slice(0, limits.maxSubs)
+  if (keys.length === 0) return
+
+  client.connection.send('METADATA', '*', 'SUB', ...keys)
+}
+
+/**
+ * Whether a value is short enough for this server to keep.
+ *
+ * Counted in UTF-8 bytes, which is what the limit is in — a bio in Japanese
+ * hits it at a third of the characters an English one does.
+ */
+export function metadataValueFits(
+  client: { state: { availableCapabilities: Map<string, string | null> } },
+  value: string
+): boolean {
+  const limit = metadataLimitsOf(client).maxValueBytes
+  return limit === null || Buffer.byteLength(value, 'utf8') <= limit
 }
 
 /** Ask for the subscribed metadata of a target and, for a channel, its members. */

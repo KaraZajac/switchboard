@@ -31,7 +31,7 @@ import {
 } from '../remote/link'
 import { DEFAULT_NICK } from '@shared/constants'
 import { getReadMarker, setReadMarker, getAllReadMarkers } from '../storage/models/readmarker'
-import { expectCleared } from '../irc/features/metadata'
+import { expectCleared, metadataValueFits, metadataLimitsOf } from '../irc/features/metadata'
 
 /**
  * Register all IPC handlers.
@@ -405,6 +405,15 @@ export function registerIPCHandlers(): void {
         saved: true,
         published: false,
         reason: 'This network does not support profiles, so nobody here will see it'
+      }
+    }
+
+    if (value && !metadataValueFits(client, value)) {
+      const limit = metadataLimitsOf(client).maxValueBytes
+      return {
+        saved: true,
+        published: false,
+        reason: `This network keeps at most ${limit} bytes per field, and that one is longer`
       }
     }
 

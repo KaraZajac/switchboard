@@ -15,9 +15,75 @@ internal object Metadata {
     /** The keys we render, matching `src/shared/types/metadata.ts` */
     val KEYS = listOf("avatar", "display-name", "homepage", "pronouns", "status", "color")
 
+    /** What the server said it will hold, from `draft/metadata-2=…` */
+    data class Limits(
+        val maxSubs: Int? = null,
+        val maxKeys: Int? = null,
+        val maxValueBytes: Int? = null
+    )
+
+    /**
+     * Read the limits out of the capability value.
+     *
+     * rIRCd advertises `max-subs=50,max-keys=50,max-value-bytes=4096`, and a
+     * value over the last of those is refused rather than truncated — so a
+     * profile with a long bio in it is not saved anywhere, and the user was
+     * told that it had been.
+     */
+    fun limitsFrom(value: String?): Limits {
+        if (value.isNullOrBlank()) return Limits()
+
+        var subs: Int? = null
+        var keys: Int? = null
+        var valueBytes: Int? = null
+
+        for (token in value.split(',')) {
+            val at = token.indexOf('=')
+            if (at == -1) continue
+
+            val key = token.substring(0, at).trim()
+            val count = token.substring(at + 1).trim().toIntOrNull() ?: continue
+            if (count <= 0) continue
+
+            when (key) {
+                "max-subs" -> subs = count
+                "max-keys" -> keys = count
+                "max-value-bytes" -> valueBytes = count
+            }
+        }
+
+        return Limits(subs, keys, valueBytes)
+    }
+
+    private fun limitsOf(session: IrcSession): Limits =
+        limitsFrom(session.state.available["draft/metadata-2"])
+
+    /**
+     * Whether a value is short enough for this server to keep.
+     *
+     * Counted in UTF-8 bytes, which is what the limit is in — a bio in
+     * Japanese hits it at a third of the characters an English one does.
+     */
+    fun valueFits(session: IrcSession, value: String): Boolean {
+        val limit = limitsOf(session).maxValueBytes ?: return true
+        return value.toByteArray(Charsets.UTF_8).size <= limit
+    }
+
+    /**
+     * Subscribe, trimmed to what the server will take.
+     *
+     * Asking for more keys than `max-subs` gets the whole subscription
+     * refused, which costs every profile on the network rather than the one
+     * key past the limit.
+     */
     fun subscribe(session: IrcSession) {
         if (!session.state.capabilities.contains("draft/metadata-2")) return
-        session.send("METADATA", "*", "SUB", *KEYS.toTypedArray())
+
+        val maxSubs = limitsOf(session).maxSubs
+        val keys = if (maxSubs == null) KEYS else KEYS.take(maxSubs)
+        if (keys.isEmpty()) return
+
+        session.send("METADATA", "*", "SUB", *keys.toTypedArray())
     }
 
     fun sync(session: IrcSession, target: String) {
@@ -44,6 +110,9 @@ internal object Metadata {
         }
         for ((key, value) in profile) {
             if (key !in KEYS) continue
+            // Over the server's limit is refused outright, and one refused key
+            // must not take the rest of the profile with it.
+            if (!valueFits(session, value)) continue
             session.send("METADATA", "*", "SET", key, value)
         }
     }

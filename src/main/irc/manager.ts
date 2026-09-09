@@ -9,7 +9,7 @@ import { setReaction } from '../storage/models/reaction'
 import { getMonitorList } from '../storage/models/monitor'
 import { getAllServers } from '../storage/models/server'
 import { getJoinedChannels, markChannelJoined, markChannelParted } from '../storage/models/channel'
-import { subscribeToMetadata } from './features/metadata'
+import { subscribeToMetadata, metadataValueFits } from './features/metadata'
 import type { UserMetadata } from '@shared/types/metadata'
 import { v4 as uuid } from 'uuid'
 
@@ -256,6 +256,9 @@ export class IRCManager {
 
     for (const [key, value] of Object.entries(profile)) {
       if (!value) continue
+      // Over the server's limit is refused outright, and one refused key must
+      // not take the rest of the profile with it.
+      if (!metadataValueFits(client, value)) continue
       client.connection.send('METADATA', '*', 'SET', key, value)
     }
   }

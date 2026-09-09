@@ -22,7 +22,9 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.switchboard.android.irc.Irc
 import org.switchboard.android.irc.IrcMessage
+import org.switchboard.android.irc.Metadata
 import org.switchboard.android.irc.Multiline
+import org.switchboard.android.irc.Sasl
 import org.switchboard.android.ui.DEFAULT_PALETTE
 import org.switchboard.android.ui.PALETTES
 import org.switchboard.android.ui.paletteFor
@@ -448,6 +450,52 @@ class SharedCorpusTest {
             }
 
             assertEquals(name, c["text"]!!.jsonPrimitive.content, Multiline.combine(parts))
+        }
+    }
+
+    // ── the values servers put on their capabilities ─────────────────
+
+    /**
+     * A capability is not only a yes. `sasl=PLAIN`,
+     * `draft/metadata-2=max-value-bytes=4096` and
+     * `draft/multiline=max-lines=20` each say what the server will actually
+     * take, and ignoring them means sending something it has already said it
+     * will refuse.
+     */
+    @Test
+    fun `reads the same SASL mechanisms the desktop reads`() {
+        for (case in load("cap-values.json")["sasl"]!!.jsonArray) {
+            val c = case.jsonObject
+            val name = c["name"]!!.jsonPrimitive.content
+            val expected = (c["mechanisms"] as? JsonArray)?.map { it.jsonPrimitive.content }
+
+            assertEquals(name, expected, Sasl.mechanismsFrom(c["value"]!!.jsonPrimitive.content))
+        }
+    }
+
+    @Test
+    fun `reads the same metadata limits the desktop reads`() {
+        for (case in load("cap-values.json")["metadata"]!!.jsonArray) {
+            val c = case.jsonObject
+            val name = c["name"]!!.jsonPrimitive.content
+            val limits = Metadata.limitsFrom(c["value"]!!.jsonPrimitive.content)
+
+            assertEquals(name, c["maxSubs"]!!.jsonPrimitive.intOrNull, limits.maxSubs)
+            assertEquals(name, c["maxKeys"]!!.jsonPrimitive.intOrNull, limits.maxKeys)
+            assertEquals(name, c["maxValueBytes"]!!.jsonPrimitive.intOrNull, limits.maxValueBytes)
+        }
+    }
+
+    @Test
+    fun `agrees with the desktop on whether a profile field will be kept`() {
+        for (case in load("cap-values.json")["fits"]!!.jsonArray) {
+            val c = case.jsonObject
+            val name = c["name"]!!.jsonPrimitive.content
+            val limit = Metadata.limitsFrom(c["value"]!!.jsonPrimitive.content).maxValueBytes
+            val text = c["text"]!!.jsonPrimitive.content
+
+            val fits = limit == null || text.toByteArray(Charsets.UTF_8).size <= limit
+            assertEquals(name, c["fits"]!!.jsonPrimitive.content == "true", fits)
         }
     }
 

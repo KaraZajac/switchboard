@@ -65,7 +65,29 @@ internal fun registerCapabilityHandlers() {
                 }
 
                 if (state.capabilities.contains("sasl") && session.config.saslPassword != null) {
-                    session.send("AUTHENTICATE", session.config.saslMechanism ?: "PLAIN")
+                    val wanted = session.config.saslMechanism ?: "PLAIN"
+
+                    // The capability value lists what the server will actually
+                    // take — `sasl=PLAIN,SCRAM-SHA-256`. Sending a mechanism
+                    // that is not on it gets a bare 904, and a user staring at
+                    // "authentication failed" with no way to know their account
+                    // was never the problem.
+                    val offered = Sasl.mechanismsFrom(state.available["sasl"])
+                    if (offered != null && wanted !in offered) {
+                        session.emit("irc:error", buildJsonObject {
+                            put("serverId", state.serverId)
+                            put("code", "SASL")
+                            put(
+                                "message",
+                                "This server does not offer $wanted. " +
+                                    "It accepts ${offered.joinToString(", ")}."
+                            )
+                        })
+                        session.sendRaw("CAP END")
+                        return@on
+                    }
+
+                    session.send("AUTHENTICATE", wanted)
                     // CAP END waits for the SASL exchange to finish
                     return@on
                 }
@@ -333,6 +355,19 @@ internal fun registerRegistrationHandlers() {
 internal object Sasl {
 
     private val encoder: Base64.Encoder = Base64.getEncoder()
+
+    /**
+     * The mechanisms the server named, or null if it named none.
+     *
+     * `sasl` with no value means the server will take whatever it takes and
+     * has not said what — which is not the same as taking nothing, so the
+     * caller has to go ahead and find out.
+     */
+    fun mechanismsFrom(value: String?): List<String>? {
+        if (value.isNullOrBlank()) return null
+        val named = value.split(',').map { it.trim().uppercase() }.filter { it.isNotEmpty() }
+        return named.ifEmpty { null }
+    }
 
     /** In-flight SCRAM exchange, one per connection at a time */
     private val scram = mutableMapOf<String, Scram>()
