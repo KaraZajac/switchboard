@@ -76,8 +76,36 @@ jobs:
             dist/*.exe
             dist/latest.yml
 
+  build-android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+      # Debug-signed on purpose. There is no release keystore, and generating
+      # one per run would sign every release with a different key — which
+      # Android reads as a different app and refuses to install over the last
+      # one. A debug build installs, and upgrades, and says what it is.
+      - name: Build the Android client
+        working-directory: android
+        run: ./gradlew :app:assembleDebug --no-daemon
+      - name: Name the APKs after the release
+        run: |
+          mkdir -p android-out
+          for apk in android/app/build/outputs/apk/debug/*.apk; do
+            abi=$(basename "$apk" | sed -e 's/^app-//' -e 's/-debug\.apk$//')
+            cp "$apk" "android-out/switchboard-${{ github.ref_name }}-$abi.apk"
+          done
+      - uses: actions/upload-artifact@v5
+        with:
+          name: android-builds
+          path: android-out/*.apk
+
   publish:
-    needs: [build-macos, build-linux, build-windows]
+    needs: [build-macos, build-linux, build-windows, build-android]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v5
