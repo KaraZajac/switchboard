@@ -155,6 +155,28 @@ class IrcHandlersTest {
     }
 
     @Test
+    fun `331 clears a topic that has since been removed`() {
+        register()
+        feed(":kara!u@h JOIN #chan")
+        feed(":irc.example.org 332 kara #chan :a topic somebody has since removed")
+        feed(":irc.example.org 333 kara #chan nick!u@h 1789059187")
+        assertEquals(
+            "a topic somebody has since removed",
+            session.state.findChannel("#chan")?.topic
+        )
+
+        // Every family sends this on joining a channel with no topic — solanum,
+        // ergo and UnrealIRCd all do. Ignoring it left the header showing a
+        // topic that had been cleared while we were away.
+        feed(":irc.example.org 331 kara #chan :No topic is set.")
+
+        val channel = session.state.findChannel("#chan")!!
+        assertNull(channel.topic)
+        assertNull(channel.topicSetBy)
+        assertEquals("", session.eventsOn("irc:topic").last().str("topic"))
+    }
+
+    @Test
     fun `reads multi-prefix and userhost-in-names entries`() {
         register()
         feed(":kara!u@h JOIN #chan")

@@ -144,6 +144,28 @@ registerHandler('332', (client, msg) => {
 })
 
 /**
+ * RPL_NOTOPIC (331) — This channel has no topic
+ *
+ * The answer to joining a channel nobody has ever set a topic on, and to
+ * asking about one whose topic has since been cleared. Without it the last
+ * topic we were told about stayed in the header, so a rejoin after somebody
+ * emptied it went on showing a topic that no longer existed.
+ */
+registerHandler('331', (client, msg) => {
+  // params: <nick> <channel> :No topic is set
+  const channel = msg.params[1]
+
+  const ch = client.state.channels.get(client.state.casemap(channel))
+  if (ch) {
+    ch.topic = null
+    ch.topicSetBy = null
+    ch.topicSetAt = null
+  }
+
+  client.events.emit('topic', { channel, topic: '', setBy: null })
+})
+
+/**
  * RPL_TOPICWHOTIME (333) — Who set the topic and when
  */
 registerHandler('333', (client, msg) => {

@@ -267,6 +267,23 @@
           "ends here"
         ]
       }
+    },
+    {
+      "name": "a tagged CAP ACK, which is what Ergo sends the moment server-time is asked for",
+      "raw": "@time=2026-09-10T16:50:53.094Z :testnet.ergo.chat CAP * ACK :multi-prefix server-time",
+      "parsed": {
+        "tags": {
+          "time": "2026-09-10T16:50:53.094Z"
+        },
+        "prefix": "testnet.ergo.chat",
+        "nick": "testnet.ergo.chat",
+        "command": "CAP",
+        "params": [
+          "*",
+          "ACK",
+          "multi-prefix server-time"
+        ]
+      }
     }
   ],
   "serialise": [

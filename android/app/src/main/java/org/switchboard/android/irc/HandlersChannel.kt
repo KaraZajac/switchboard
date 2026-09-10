@@ -157,6 +157,28 @@ internal fun registerChannelHandlers() {
         })
     }
 
+    /**
+     * RPL_NOTOPIC — this channel has no topic.
+     *
+     * The answer to joining a channel nobody has ever set a topic on, and to
+     * asking about one whose topic has since been cleared. Without it the last
+     * topic we were told about stayed in the header, so a rejoin after somebody
+     * emptied it went on showing a topic that no longer existed.
+     */
+    Handlers.on("331") { session, message ->
+        val name = message.param(1) ?: return@on
+        session.state.findChannel(name)?.let {
+            it.topic = null
+            it.topicSetBy = null
+            it.topicSetAt = null
+        }
+        session.emit("irc:topic", buildJsonObject {
+            put("serverId", session.state.serverId)
+            put("channel", name)
+            put("topic", "")
+        })
+    }
+
     // RPL_TOPICWHOTIME
     Handlers.on("333") { session, message ->
         val channel = session.state.findChannel(message.param(1)) ?: return@on

@@ -258,6 +258,26 @@ describe('Channel Handlers', () => {
     })
   })
 
+  it('clears the topic on RPL_NOTOPIC (331)', () => {
+    const { client, events, state } = createMockClient()
+    const ch = state.getChannel('#test')
+    ch.topic = 'a topic somebody has since removed'
+    ch.topicSetBy = 'Nick'
+    ch.topicSetAt = '2026-01-01T00:00:00.000Z'
+
+    const handler = vi.fn()
+    events.on('topic', handler)
+
+    // Every family sends this on joining a channel with no topic — solanum,
+    // ergo and UnrealIRCd all do. Ignoring it left the header showing a topic
+    // that had been cleared while we were away.
+    dispatchMessage(client, parseMessage(':server 331 TestUser #test :No topic is set.'))
+
+    expect(state.getChannel('#test').topic).toBeNull()
+    expect(state.getChannel('#test').topicSetBy).toBeNull()
+    expect(handler).toHaveBeenCalledWith({ channel: '#test', topic: '', setBy: null })
+  })
+
   it('parses RPL_NAMREPLY (353) with prefixes', () => {
     const { client, state } = createMockClient()
     state.getChannel('#test')
