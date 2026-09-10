@@ -419,6 +419,20 @@ export function useIRCEvents(): void {
     cleanups.push(
       api.on('irc:read-marker', ({ serverId, channel, timestamp }) => {
         useChannelStore.getState().setReadMarker(serverId, channel, timestamp)
+
+        // Somebody read this — on the phone, most likely, since that is what
+        // MARKREAD is for. Drawing the divider and leaving the badge lit means
+        // catching up in bed and still finding forty unread in the morning,
+        // which is the thing draft/read-marker exists to prevent.
+        //
+        // Only when there is nothing newer than the marker: a channel that has
+        // moved on since it was read is genuinely unread again.
+        const key = `${serverId}:${channel.toLowerCase()}`
+        const held = useMessageStore.getState().messages[key] ?? []
+        const newest = held[held.length - 1]?.timestamp
+        if (!newest || newest <= timestamp) {
+          useChannelStore.getState().clearUnread(serverId, channel)
+        }
       })
     )
 

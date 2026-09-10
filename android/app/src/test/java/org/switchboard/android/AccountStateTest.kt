@@ -526,3 +526,86 @@ class TypingTest {
         assertTrue(store.typingIn(server, "#lounge").isEmpty())
     }
 }
+
+/**
+ * Reading on the other device.
+ *
+ * `draft/read-marker` is how the two clients agree about what has been seen.
+ * Drawing the divider and leaving the badge lit is half the feature: catching
+ * up in bed and still finding forty unread in the morning is the thing it
+ * exists to prevent.
+ */
+class ReadMarkerTest {
+
+    private lateinit var store: SwitchboardStore
+    private val server = "s1"
+
+    @Before
+    fun setUp() {
+        store = SwitchboardStore()
+        store.servers[server] = Server(id = server, name = "Test", host = "h", nick = "kara")
+        store.channels[server] = mutableListOf(Channel("#lounge"))
+        // Somewhere else, so arriving messages count as unread
+        store.activeServerId = server
+        store.activeChannel = "#elsewhere"
+    }
+
+    private fun arrive(id: String, at: String, text: String = "hello") {
+        store.handleEvent("irc:message", buildJsonObject {
+            put("serverId", server)
+            put("channel", "#lounge")
+            put("message", buildJsonObject {
+                put("id", id)
+                put("nick", "robin")
+                put("content", text)
+                put("timestamp", at)
+                put("type", "privmsg")
+            })
+        })
+    }
+
+    private fun read(at: String) {
+        store.handleEvent("irc:read-marker", buildJsonObject {
+            put("serverId", server)
+            put("channel", "#lounge")
+            put("timestamp", at)
+        })
+    }
+
+    private fun unread() = store.channelsFor(server).first { it.name == "#lounge" }.unread
+
+    @Test
+    fun `reading it elsewhere puts the badge out`() {
+        arrive("a", "2026-09-10T12:00:00Z")
+        arrive("b", "2026-09-10T12:00:01Z")
+        assertEquals(2, unread())
+
+        read("2026-09-10T12:00:01Z")
+        assertEquals(0, unread())
+    }
+
+    @Test
+    fun `a mention counted there is cleared too`() {
+        arrive("a", "2026-09-10T12:00:00Z", "kara: are you there?")
+        assertEquals(1, store.channelsFor(server).first { it.name == "#lounge" }.mentions)
+
+        read("2026-09-10T12:00:00Z")
+        assertEquals(0, store.channelsFor(server).first { it.name == "#lounge" }.mentions)
+    }
+
+    /** A channel that moved on since it was read is unread again */
+    @Test
+    fun `a marker older than the newest message leaves the badge alone`() {
+        arrive("a", "2026-09-10T12:00:00Z")
+        arrive("b", "2026-09-10T12:05:00Z")
+
+        read("2026-09-10T12:00:00Z")
+        assertEquals(2, unread())
+    }
+
+    @Test
+    fun `a marker for a channel with nothing in it is harmless`() {
+        read("2026-09-10T12:00:00Z")
+        assertEquals(0, unread())
+    }
+}

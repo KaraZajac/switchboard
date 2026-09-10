@@ -663,6 +663,20 @@ class SwitchboardStore {
                 if (conversationKey() != key(serverId, channel)) {
                     markEntryPoint(serverId, channel, timestamp)
                 }
+
+                // Somebody read this on the other device. Drawing the divider
+                // and leaving the badge lit is half the feature: catching up at
+                // the desk and still finding forty unread on the phone is what
+                // draft/read-marker exists to prevent.
+                //
+                // Only when there is nothing newer than the marker: a channel
+                // that has moved on since it was read is unread again.
+                val newest = messagesFor(serverId, channel).lastOrNull()?.timestamp
+                if (newest == null || newest <= timestamp) {
+                    channels[serverId] = (channels[serverId] ?: return)
+                        .map { if (it.name.equals(channel, true)) it.copy(unread = 0, mentions = 0) else it }
+                        .toMutableStateList()
+                }
             }
 
             "irc:search-results" -> {
