@@ -9,6 +9,7 @@ import { useUserStore, type MonitoredNick } from '../../stores/userStore'
 import { nickColor } from '../../utils/nickColor'
 import { displayNameFor, metadataColor } from '@shared/types/metadata'
 import { namesYou } from '@shared/mentions'
+import { speak } from '../../utils/speak'
 
 interface MessageItemProps {
   message: ChatMessage
@@ -49,7 +50,16 @@ export function MessageItem({ message, prevMessage, onReply }: MessageItemProps)
     if (trimmed && trimmed !== message.content) {
       // Optimistic update
       useMessageStore.getState().editMessage(message.serverId, message.channel, message.id, trimmed, new Date().toISOString())
-      window.switchboard.invoke('message:edit', message.serverId, message.channel, message.id, trimmed)
+      speak(
+        window.switchboard.invoke(
+          'message:edit',
+          message.serverId,
+          message.channel,
+          message.id,
+          trimmed
+        ),
+        'That edit did not go'
+      )
     }
     setEditing(false)
   }

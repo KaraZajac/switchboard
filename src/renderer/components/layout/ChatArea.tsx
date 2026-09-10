@@ -7,6 +7,7 @@ import { useUIStore } from '../../stores/uiStore'
 import type { ChannelUser } from '@shared/types/channel'
 import { SwitchboardIcon } from '../common/SwitchboardIcon'
 import { isChannelName } from '@shared/constants'
+import { speak } from '../../utils/speak'
 
 const STABLE_EMPTY_USERS: ChannelUser[] = []
 const STABLE_EMPTY_CHANNELS: { name: string; serverId: string; topic: string | null; topicSetBy: string | null; unreadCount: number; mentionCount: number; muted: boolean }[] = []
@@ -220,7 +221,7 @@ export function ChatArea() {
   const handleSend = useCallback(
     (text: string) => {
       if (!activeServerId || !activeChannel) return
-      window.switchboard.invoke('message:send', activeServerId, activeChannel, text)
+      speak(window.switchboard.invoke('message:send', activeServerId, activeChannel, text))
     },
     [activeServerId, activeChannel]
   )
@@ -228,7 +229,9 @@ export function ChatArea() {
   const handleSendReply = useCallback(
     (text: string, replyTo: string) => {
       if (!activeServerId || !activeChannel) return
-      window.switchboard.invoke('message:reply', activeServerId, activeChannel, text, replyTo)
+      speak(
+        window.switchboard.invoke('message:reply', activeServerId, activeChannel, text, replyTo)
+      )
     },
     [activeServerId, activeChannel]
   )
@@ -423,7 +426,7 @@ function ServerMessages({ serverId }: { serverId: string }) {
   const handleCommand = useCallback(() => {
     const text = command.trim()
     if (!text) return
-    window.switchboard.invoke('message:send', serverId, '*', text)
+    speak(window.switchboard.invoke('message:send', serverId, '*', text), 'That command did not run')
     setCommand('')
   }, [serverId, command])
 
