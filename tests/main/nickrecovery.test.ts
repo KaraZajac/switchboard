@@ -3,6 +3,7 @@ import { IRCClient, NICK_RECOVERY_INTERVAL_MS } from '../../src/main/irc/client'
 import type { ServerConfig } from '@shared/types/server'
 import { dispatchMessage } from '../../src/main/irc/handlers/registry'
 import '../../src/main/irc/handlers/registration'
+import '../../src/main/irc/sasl'
 import { parseMessage } from '../../src/main/irc/parser'
 
 /**
@@ -208,3 +209,69 @@ describe('following our own nick change', () => {
   })
 })
 
+
+/**
+ * The nick that was refused because we had not authenticated yet.
+ *
+ * A server that protects registered names refuses one to a connection with no
+ * account on it — rIRCd answers 433 "Nickname is registered to another
+ * account" — and NICK goes out long before SASL can begin. So for anyone with
+ * an account that is the ordinary path, not a corner of one: they arrive as
+ * `kara_`, on their own registered name, and nothing says why.
+ */
+describe('taking back a registered nick once logged in', () => {
+  it('asks again the moment SASL succeeds', () => {
+    const { client, sent } = clientOnPaper()
+
+    feed(client, ':irc.example.org 433 * kara :Nickname is registered to another account')
+    expect(client.state.nick).toBe('kara_')
+
+    sent.length = 0
+    feed(client, ':irc.example.org 903 kara_ :SASL authentication successful')
+
+    // Before CAP END, so registration finishes under the right name and
+    // auto-join does not join everything as kara_.
+    expect(sent.indexOf('NICK kara')).toBeGreaterThanOrEqual(0)
+    expect(sent.indexOf('NICK kara')).toBeLessThan(sent.indexOf('CAP END'))
+    client.destroy()
+  })
+
+  it('says nothing when the nick was never in doubt', () => {
+    const { client, sent } = clientOnPaper()
+    client.state.nick = 'kara'
+
+    feed(client, ':irc.example.org 903 kara :SASL authentication successful')
+
+    expect(sent.filter((line) => line.startsWith('NICK'))).toEqual([])
+    client.destroy()
+  })
+
+  /** Being renamed and left to notice is the failure this prevents */
+  it('explains the name it settled for, once that is settled', () => {
+    const { client } = clientOnPaper()
+    const said: string[] = []
+    client.events.on('error', (e: { message: string }) => said.push(e.message))
+
+    feed(client, ':irc.example.org 433 * kara :Nickname is registered to another account')
+    expect(said, 'nothing is final yet — SASL may still win it back').toEqual([])
+
+    feed(client, ':irc.example.org 001 kara_ :Welcome')
+
+    expect(said).toHaveLength(1)
+    expect(said[0]).toContain('kara_')
+    expect(said[0]).toContain('kara')
+    expect(said[0]).toContain('registered to another account')
+    client.destroy()
+  })
+
+  it('stays quiet when we got the name we asked for', () => {
+    const { client } = clientOnPaper()
+    const said: string[] = []
+    client.events.on('error', (e: { message: string }) => said.push(e.message))
+
+    feed(client, ':irc.example.org 001 kara :Welcome')
+
+    expect(said).toEqual([])
+    client.destroy()
+  })
+})

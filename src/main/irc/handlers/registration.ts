@@ -9,6 +9,20 @@ registerHandler('001', (client, msg) => {
   client.state.registrationState = 'connected'
   client.state.serverName = msg.prefix || ''
 
+  // We are called something, and it is not always what was asked for. Say so
+  // now, once it is settled — being quietly renamed and left to notice is how
+  // someone spends an evening wondering why nobody answers them.
+  if (client.state.desiredNick && client.state.casemap(nick) !== client.state.casemap(client.state.desiredNick)) {
+    client.events.emit('error', {
+      code: '433',
+      command: 'NICK',
+      message:
+        `Connected as ${nick} rather than ${client.state.desiredNick}` +
+        (client.state.nickRefusedReason ? ` — ${client.state.nickRefusedReason}` : '')
+    })
+  }
+  client.state.nickRefusedReason = null
+
   client.events.emit('registered', {
     nick,
     message: msg.params[1] || ''
@@ -130,6 +144,8 @@ registerHandler('433', (client, msg) => {
     client.state.casemap(client.state.pendingNick) === client.state.casemap(msg.params[1] || '')) {
     client.state.pendingNick = null
   }
+
+  client.state.nickRefusedReason = msg.params[2] || 'the server refused it'
 
   if (client.state.registrationState !== 'connected') {
     // During registration, try an alternative nick

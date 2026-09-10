@@ -37,6 +37,15 @@ export class ConnectionState {
    */
   userHost: string | null = null
 
+  /**
+   * Why the server refused the nick we asked for, if it did.
+   *
+   * Kept so that arriving under a different name can be explained at the point
+   * it becomes final, rather than the user simply finding themselves called
+   * something else.
+   */
+  nickRefusedReason: string | null = null
+
   /** CAP REQ lines still waiting for an ACK or NAK */
   pendingCapRequests = 0
 
@@ -103,6 +112,7 @@ export class ConnectionState {
     this.nick = ''
     this.pendingNick = null
     this.userHost = null
+    this.nickRefusedReason = null
     this.serverName = ''
     this.capabilities.clear()
     this.availableCapabilities.clear()

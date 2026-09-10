@@ -83,6 +83,15 @@ class ConnectionState(val serverId: String) {
      * still called something it is not for the rest of the session.
      */
     var pendingNick: String? = null
+
+    /**
+     * Why the server refused the nick we asked for, if it did.
+     *
+     * Kept so that arriving under a different name can be explained at the
+     * point it becomes final, rather than the user simply finding themselves
+     * called something else.
+     */
+    var nickRefusedReason: String? = null
     var account: String? = null
     var registered = false
     var serverName = ""

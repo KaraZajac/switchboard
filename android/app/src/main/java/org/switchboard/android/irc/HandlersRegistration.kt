@@ -200,6 +200,23 @@ internal fun registerRegistrationHandlers() {
         state.registered = true
         state.serverName = message.prefix ?: state.serverName
 
+        // We are called something, and it is not always what was asked for.
+        // Say so now, once it is settled — being quietly renamed and left to
+        // notice is how someone spends an evening wondering why nobody
+        // answers them.
+        if (state.desiredNick.isNotBlank() && state.casemap(state.nick) != state.casemap(state.desiredNick)) {
+            val why = state.nickRefusedReason
+            session.emit("irc:error", buildJsonObject {
+                put("serverId", state.serverId)
+                put(
+                    "message",
+                    "Connected as ${state.nick} rather than ${state.desiredNick}" +
+                        (if (why != null) " — $why" else "")
+                )
+            })
+        }
+        state.nickRefusedReason = null
+
         session.emit("irc:connected", buildJsonObject {
             put("serverId", state.serverId)
             put("nick", state.nick)
@@ -327,14 +344,24 @@ internal fun registerRegistrationHandlers() {
             state.pendingNick = null
         }
 
+        // The server's own words: "already in use" and "registered to another
+        // account" are different problems and only one of them is the user's
+        // to solve.
+        state.nickRefusedReason = message.params.lastOrNull()
+
         if (!state.registered) {
             val attempted = message.param(1) ?: state.nick
             state.nick = "${attempted}_"
             session.send("NICK", state.nick)
+            // Nothing is settled yet — SASL may still win the name back, and
+            // saying so now would be a warning about something that did not
+            // happen. 001 reports it, once it is final.
+            return@on
         }
+
         session.emit("irc:error", buildJsonObject {
             put("serverId", state.serverId)
-            put("message", "Nickname ${message.param(1)} is already in use")
+            put("message", state.nickRefusedReason ?: "Nickname ${message.param(1)} is already in use")
         })
     }
 
@@ -419,7 +446,25 @@ internal object Sasl {
                 put("message", reason ?: "SASL authentication failed")
             })
         }
+
+        // Take the name we actually asked for, now that there is an account
+        // behind the request. A server that protects registered nicks refuses
+        // one to a connection that has not authenticated yet, and NICK goes
+        // out before SASL can even begin — so for anyone with an account that
+        // is the ordinary case, not a corner of one.
+        if (succeeded) reclaimDesiredNick(session)
+
         if (!session.state.registered) session.sendRaw("CAP END")
+    }
+
+    /** Ask again for the nick we wanted, if we settled for another one */
+    private fun reclaimDesiredNick(session: IrcSession) {
+        val state = session.state
+        if (state.desiredNick.isBlank()) return
+        if (state.casemap(state.nick) == state.casemap(state.desiredNick)) return
+
+        state.pendingNick = state.desiredNick
+        session.send("NICK", state.desiredNick)
     }
 
     /**

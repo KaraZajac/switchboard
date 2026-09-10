@@ -66,10 +66,32 @@ registerHandler('900', (client, msg) => {
  * RPL_SASLSUCCESS (903) — SASL authentication succeeded
  */
 registerHandler('903', (client, _msg) => {
+  // Take the name we actually asked for, now that there is an account behind
+  // the request.
+  //
+  // A server that protects registered nicks refuses one to a connection that
+  // has not authenticated yet — rIRCd answers 433 "Nickname is registered to
+  // another account" — and since NICK goes out before SASL can even begin,
+  // that is the ordinary case for anyone with an account, not a corner of one.
+  // The recovery loop would get there in the end, but twenty seconds later and
+  // after auto-join has already joined everything under the wrong name.
+  reclaimDesiredNick(client)
+
   // End CAP negotiation now that SASL is done
   client.connection.send('CAP', 'END')
   client.state.capNegotiating = false
 })
+
+/** Ask again for the nick we wanted, if we settled for another one */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function reclaimDesiredNick(client: any): void {
+  const { state } = client
+  if (!state.desiredNick) return
+  if (state.casemap(state.nick) === state.casemap(state.desiredNick)) return
+
+  state.pendingNick = state.desiredNick
+  client.connection.send('NICK', state.desiredNick)
+}
 
 /**
  * ERR_SASLFAIL (904) — SASL authentication failed
