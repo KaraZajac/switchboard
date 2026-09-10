@@ -55,6 +55,11 @@ class IrcConnection(
     private var output: OutputStream? = null
     private var readJob: Job? = null
     private var writeJob: Job? = null
+    private var pingJob: Job? = null
+
+    /** When the server last said anything at all */
+    @Volatile
+    private var lastHeard = 0L
 
     /**
      * Lines waiting to go out, oldest first.
@@ -93,8 +98,10 @@ class IrcConnection(
         closeSocket()
         readJob?.cancel()
         writeJob?.cancel()
+        pingJob?.cancel()
         readJob = null
         writeJob = null
+        pingJob = null
     }
 
     // ── IrcSession ────────────────────────────────────────────────────
@@ -132,12 +139,15 @@ class IrcConnection(
             try {
                 connectOnce()
                 attempt = 0
+                pingJob = scope.launch(Dispatchers.IO) { keepalive() }
                 readLoop()
             } catch (e: Exception) {
                 android.util.Log.w("SwitchboardIrc", "${config.host}:${config.port} failed", e)
                 emitError(e.message ?: "Connection failed")
             }
 
+            pingJob?.cancel()
+            pingJob = null
             closeSocket()
             if (state.registered) {
                 state.registered = false
@@ -193,6 +203,7 @@ class IrcConnection(
         val reader = BufferedReader(InputStreamReader(socket!!.getInputStream(), Charsets.UTF_8))
         while (!stopping) {
             val line = reader.readLine() ?: break
+            lastHeard = System.currentTimeMillis()
             if (line.isBlank()) continue
 
             val message = try {
@@ -215,6 +226,44 @@ class IrcConnection(
             if (consumedByBatch(state, message)) continue
 
             Handlers.dispatch(this@IrcConnection, message)
+        }
+    }
+
+    /**
+     * Notice when the connection has stopped existing.
+     *
+     * A phone loses the network by walking into a lift, not by being told. No
+     * FIN arrives, nothing fails, and a blocking read on a socket with no
+     * timeout waits for a line that is never coming — so the client went on
+     * saying LIVE, with a member list and a topic, for as long as you cared to
+     * leave it. Three minutes into a test with the radio off it was still
+     * claiming to be connected.
+     *
+     * So: say something every minute, and if nothing at all has come back
+     * within [PING_TIMEOUT_MS] of that, close the socket. Closing it is what
+     * unblocks the read, which is what starts the reconnect. The same numbers
+     * the desktop has always used.
+     */
+    private suspend fun keepalive() {
+        lastHeard = System.currentTimeMillis()
+        while (!stopping) {
+            delay(PING_INTERVAL_MS)
+            if (stopping || socket == null) return
+
+            val silent = System.currentTimeMillis() - lastHeard
+            if (silent > PING_INTERVAL_MS + PING_TIMEOUT_MS) {
+                android.util.Log.i(
+                    "SwitchboardIrc",
+                    "${config.host}: nothing heard for ${silent}ms, reconnecting"
+                )
+                emitError("Connection timed out")
+                closeSocket()
+                return
+            }
+
+            // Straight out rather than through the queue: a keepalive that
+            // waits behind a backlog is not measuring the connection.
+            writeDirect(Irc.serialise("PING", listOf(System.currentTimeMillis().toString())))
         }
     }
 
@@ -556,6 +605,12 @@ class IrcConnection(
 
         /** Sustained rate once the burst is spent */
         const val SEND_RATE_PER_SECOND = 1.0
+
+        /** How often we say something, to find out whether anyone is there */
+        const val PING_INTERVAL_MS = 60_000L
+
+        /** How long after that we wait before calling the connection dead */
+        const val PING_TIMEOUT_MS = 30_000L
 
         /** Keepalive is answered out of band and belongs to no sequence */
         private val ALWAYS_IMMEDIATE = setOf("PING", "PONG")
