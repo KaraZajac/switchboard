@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import fs from 'node:fs'
 import path from 'node:path'
-import { accountAbilities, bestSaslMechanism } from '@shared/accounts'
+import { accountAbilities, bestSaslMechanism, canShareConnection } from '@shared/accounts'
 
 /**
  * What a network will let you do about an account.
@@ -20,7 +20,13 @@ interface Case {
   bestMechanism: string | null
 }
 
-const corpus: { cases: Case[] } = JSON.parse(
+interface SharingCase {
+  name: string
+  config: { saslMechanism: string | null; saslPassword: string | null }
+  canShare: boolean
+}
+
+const corpus: { cases: Case[]; sharing: SharingCase[] } = JSON.parse(
   fs.readFileSync(path.join(__dirname, '../fixtures/accounts.json'), 'utf8')
 )
 
@@ -36,5 +42,19 @@ describe('reading what a network can do about accounts', () => {
       expect(abilities.saslMechanisms).toEqual(c.saslMechanisms)
       expect(bestSaslMechanism(abilities.saslMechanisms)).toBe(c.bestMechanism)
     })
+  }
+})
+
+/**
+ * Whether both devices can be on one network at the same time.
+ *
+ * The precondition, not the permission: the network gives its answer by
+ * letting the second connection keep the nick or not. Shared with the Android
+ * suite, because a device that decides differently either sits out a network it
+ * could have joined or turns up in the channel twice under two names.
+ */
+describe('sharing a network between two devices', () => {
+  for (const c of corpus.sharing) {
+    it(c.name, () => expect(canShareConnection(c.config)).toBe(c.canShare))
   }
 })

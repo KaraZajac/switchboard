@@ -94,5 +94,45 @@
       "saslMechanisms": ["PLAIN", "SCRAM-SHA-256"],
       "bestMechanism": "SCRAM-SHA-256"
     }
+  ],
+
+  "$sharing": "Whether both devices can be on this network at once. The precondition is always the same: both connections must authenticate to the same account, because the account is the only thing that makes the second one you rather than an impostor. A saved identify command is not enough — NickServ logs you in after registration, by which time the nick has already been refused.",
+  "sharing": [
+    {
+      "name": "SASL credentials, so both can arrive as the same account",
+      "config": { "saslMechanism": "SCRAM-SHA-256", "saslPassword": "hunter2pass" },
+      "canShare": true
+    },
+    {
+      "name": "PLAIN counts too",
+      "config": { "saslMechanism": "PLAIN", "saslPassword": "hunter2pass" },
+      "canShare": true
+    },
+    {
+      "name": "a mechanism with no password gets nowhere",
+      "config": { "saslMechanism": "PLAIN", "saslPassword": null },
+      "canShare": false
+    },
+    {
+      "name": "a password with no mechanism is never sent",
+      "config": { "saslMechanism": null, "saslPassword": "hunter2pass" },
+      "canShare": false
+    },
+    {
+      "name": "nothing saved at all",
+      "config": { "saslMechanism": null, "saslPassword": null },
+      "canShare": false
+    },
+    {
+      "$comment": "The nick is refused during registration, and NickServ only answers afterwards",
+      "name": "an identify command is too late to help",
+      "config": { "saslMechanism": null, "saslPassword": null, "identifyCommand": "PRIVMSG NickServ :IDENTIFY kara hunter2pass" },
+      "canShare": false
+    },
+    {
+      "name": "an empty mechanism is no mechanism",
+      "config": { "saslMechanism": "", "saslPassword": "hunter2pass" },
+      "canShare": false
+    }
   ]
 }

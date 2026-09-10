@@ -25,6 +25,7 @@ import org.switchboard.android.irc.ConnectionState
 import org.switchboard.android.irc.Irc
 import org.switchboard.android.vault.VaultPayload
 import org.switchboard.android.irc.Isupport
+import org.switchboard.android.irc.ServerConfig
 import org.switchboard.android.irc.Services
 import org.switchboard.android.irc.LineLength
 import org.switchboard.android.irc.IrcMessage
@@ -579,6 +580,38 @@ class SharedCorpusTest {
                 name,
                 (c["bestMechanism"] as? JsonPrimitive)?.contentOrNull,
                 bestSaslMechanism(abilities.saslMechanisms)
+            )
+        }
+    }
+
+    /**
+     * Whether both devices can be on one network at once.
+     *
+     * The precondition, not the permission: the network gives its answer by
+     * letting the second connection keep the nick or not. A device that decides
+     * this differently from the other either sits out a network it could have
+     * joined, or turns up in the channel twice under two names.
+     */
+    @Test
+    fun `agrees with the desktop about which networks can be shared`() {
+        for (case in load("accounts.json")["sharing"]!!.jsonArray) {
+            val c = case.jsonObject
+            val config = c["config"]!!.jsonObject
+
+            val server = ServerConfig(
+                id = "s",
+                name = "Test",
+                host = "irc.example.org",
+                nick = "kara",
+                saslMechanism = (config["saslMechanism"] as? JsonPrimitive)?.contentOrNull,
+                saslPassword = (config["saslPassword"] as? JsonPrimitive)?.contentOrNull,
+                identifyCommand = (config["identifyCommand"] as? JsonPrimitive)?.contentOrNull
+            )
+
+            assertEquals(
+                c["name"]!!.jsonPrimitive.content,
+                c["canShare"]!!.jsonPrimitive.content == "true",
+                canShareConnection(server)
             )
         }
     }

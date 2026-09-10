@@ -157,7 +157,9 @@ class SwitchboardEngine(
             }
 
             override fun release() {
-                runCatching { releaseConnections() }
+                // The desktop is back. Only the networks it has to hold alone
+                // go with it — see [releaseConnections].
+                runCatching { releaseConnections(includingShared = false) }
                     .onFailure { Log.e(TAG, "could not hand back", it) }
             }
             override fun vaultVersion(): Int = vault.version
@@ -174,9 +176,14 @@ class SwitchboardEngine(
 
         remote.onPeerFrame = { frame -> handlePeerFrame(frame) }
         remote.onEvent = { channel, data ->
-            // Only trust the desktop's events while it is the one connected;
-            // otherwise our own engine is the source of truth.
-            if (mode != EngineMode.HOLDING) {
+            // Per network, not per device. On a server that lets both of us on
+            // at once we have our own socket and our own copy of everything the
+            // desktop is relaying; applying both would show every message
+            // twice. On the servers we are not on, the desktop is still the
+            // only source there is.
+            val about = (data as? JsonObject)?.get("serverId")?.jsonPrimitive?.contentOrNull()
+
+            if (about == null || !connections.containsKey(about)) {
                 store.handleEvent(channel, data)
                 if (channel == "irc:message") notifyIfWorthIt(data)
 
@@ -193,7 +200,12 @@ class SwitchboardEngine(
             recomputeMode()
         }
 
-        coordinator.onChange { recomputeMode() }
+        coordinator.onChange {
+            // A follower is not a spectator any more: on the networks that
+            // allow two of us, this phone is on them too.
+            joinSharedConnections()
+            recomputeMode()
+        }
     }
 
     fun start() = coordinator.start()
@@ -251,6 +263,36 @@ class SwitchboardEngine(
             colour = notificationColour(serverId, nick),
             mentioned = mentioned
         )
+    }
+
+    /**
+     * Did the network really let us on beside the desktop?
+     *
+     * It answers by what it calls us. A server that allows two sessions of one
+     * account gives the second one the same nick; a server that does not hands
+     * out `kara_` and leaves the user standing in the channel twice under two
+     * names, which is worse than not being there at all.
+     *
+     * Only while somebody else is primary. When this phone is the connection,
+     * arriving as `kara_` is the ordinary nick-collision case and the recovery
+     * loop is already working on it.
+     *
+     * Returns false when the connection was given back, so the caller stops.
+     */
+    private fun keptOurNameAlongside(serverId: String): Boolean {
+        if (coordinator.state().role == SessionRole.PRIMARY) return true
+
+        val config = vault.servers().find { it.id == serverId } ?: return true
+        val connection = connections[serverId] ?: return true
+        if (connection.currentNick.equals(config.nick, ignoreCase = true)) return true
+
+        Log.i(
+            TAG,
+            "${config.host} would not have us as ${config.nick} " +
+                "(we are ${connection.currentNick}); following the desktop instead"
+        )
+        closeConnection(serverId, "The desktop is holding this one")
+        return false
     }
 
     /**
@@ -332,6 +374,17 @@ class SwitchboardEngine(
      * case none of those sentences were written for.
      */
     var pairedWithDesktop by mutableStateOf(false)
+        private set
+
+    /**
+     * Whether the desktop is on these networks too, right now.
+     *
+     * Not a fallback and not a takeover: both devices are simply on, the way
+     * two phones are both signed in to the same chat app. Worth saying, because
+     * the alternative sentence — "this phone is holding the connections" —
+     * promises something about the desktop that is no longer true.
+     */
+    var sharingWithDesktop by mutableStateOf(false)
         private set
 
     /** Whether Doze is currently holding this phone back, for the UI to say so */
@@ -433,8 +486,11 @@ class SwitchboardEngine(
             vaultVersion = vault.version
             applySharedState()
             // If we already won the election but had nothing to connect to,
-            // this is the moment we can actually do it.
-            if (coordinator.state().role == SessionRole.PRIMARY) takeConnections() else recomputeMode()
+            // this is the moment we can actually do it — and either way the
+            // networks that let both devices on are ours to join now.
+            if (coordinator.state().role == SessionRole.PRIMARY) takeConnections()
+            joinSharedConnections()
+            recomputeMode()
         }
         return opened
     }
@@ -676,6 +732,32 @@ class SwitchboardEngine(
     }
 
     /**
+     * Join the desktop on the networks that allow it.
+     *
+     * The old rule was that exactly one device may be on a network at a time,
+     * and the whole election exists to decide which. That rule is the server's
+     * to make, not ours: given an account both connections can authenticate to,
+     * a server that allows it treats the second one as another session of the
+     * same person — the same messages, the same channels, the same nick.
+     *
+     * So on those networks there is nothing to take turns over, and taking
+     * turns is what made switching devices a thing you had to wait for. Where
+     * the server refuses, [sharesConnection] notices we did not get our own
+     * nick and the connection goes back to the desktop.
+     */
+    private fun joinSharedConnections() {
+        if (!vault.isUnlocked) return
+
+        for (config in vault.servers()) {
+            if (!config.autoConnect || !canShareConnection(config)) continue
+            if (connections.containsKey(config.id)) continue
+
+            Log.i(TAG, "joining ${config.host} alongside the desktop as ${config.nick}")
+            openConnection(config)
+        }
+    }
+
+    /**
      * Bring up one network.
      *
      * Separate from [takeConnections] because a server can be added, or
@@ -703,6 +785,7 @@ class SwitchboardEngine(
             // saying "Connecting…" until something unrelated recomputed it.
             if (channel == "irc:connected") {
                 rearmMonitor(config.id)
+                if (!keptOurNameAlongside(config.id)) return@IrcConnection
                 recomputeMode()
             }
             if (channel == "irc:disconnected") recomputeMode()
@@ -747,10 +830,45 @@ class SwitchboardEngine(
     }
 
     /** Hand back: disconnect cleanly so the desktop can take our place */
-    private fun releaseConnections() {
-        for (connection in connections.values) connection.stop("Handing over to desktop")
-        connections.clear()
+    /**
+     * Give the connections back to the desktop.
+     *
+     * All but the shared ones. On a network that lets both devices on at once
+     * there is nothing to hand over: the desktop has its own socket and this
+     * phone has its own, and dropping ours would mean going quiet and losing
+     * everything said while the app was closed — which is precisely the thing
+     * being on both devices was for.
+     */
+    private fun releaseConnections(includingShared: Boolean = true) {
+        val handing = connections.filterKeys { serverId ->
+            includingShared || !sharesConnection(serverId)
+        }
+
+        for ((serverId, connection) in handing) {
+            connection.stop("Handing over to desktop")
+            connections.remove(serverId)
+            store.servers[serverId]?.let { store.servers[serverId] = it.copy(connected = false) }
+        }
         recomputeMode()
+    }
+
+    /**
+     * Whether we and the desktop can both be on this network.
+     *
+     * Two conditions, and the second is the one that took a while to see: the
+     * config must carry credentials to arrive as, *and* the connection must
+     * actually have got the nick it asked for. A network that does not allow
+     * this answers by handing out `kara_` instead, and a phone that stayed on
+     * under a name nobody recognises is worse than one that quietly follows.
+     */
+    private fun sharesConnection(serverId: String): Boolean {
+        val config = vault.servers().find { it.id == serverId } ?: return false
+        if (!canShareConnection(config)) return false
+
+        val connection = connections[serverId] ?: return false
+        if (!connection.isConnected) return true
+
+        return connection.currentNick.equals(config.nick, ignoreCase = true)
     }
 
     /**
@@ -789,6 +907,11 @@ class SwitchboardEngine(
             else -> EngineMode.OFFLINE
         }
 
+        // Both of us on the same networks at once, which is the ordinary case
+        // wherever the server allows it: nobody is standing in for anybody, and
+        // there is nothing to wait for when you pick up the other device.
+        sharingWithDesktop = live && !primary && remote.isLinked
+
         // Whether there is another device in the picture at all. Most of what
         // follows reads completely differently depending on it, and for a
         // phone used on its own the answer is no — which used to be the case
@@ -804,6 +927,7 @@ class SwitchboardEngine(
 
         modeDetail = when {
             state.claiming -> "Asking the desktop to hand over…"
+            sharingWithDesktop -> "On the same networks as your desktop"
             live && pairedWithDesktop -> "This phone is holding the connections"
             live -> "Connected"
             dialling && pairedWithDesktop ->

@@ -1,5 +1,6 @@
 import { BrowserWindow } from 'electron'
 import { hasMetadata } from '@shared/metadata'
+import { canShareConnection } from '@shared/accounts'
 import { foldCase } from '@shared/casemap'
 import type { ServerConfig } from '@shared/types/server'
 import type { IRCMessage } from '@shared/types/irc'
@@ -148,11 +149,27 @@ export class IRCManager {
    * anything when their desktop wakes up.
    */
   releaseConnections(): void {
-    this.released = [...this.clients.keys()]
+    // All but the shared ones. On a network that lets both devices on at once
+    // there is nothing to hand over: the other device has its own socket beside
+    // ours, and dropping ours would take this desktop off a network it is
+    // perfectly able to stay on — which is the whole thing being on both
+    // devices was for.
+    const shared = new Set(
+      getAllServers()
+        .filter((server) => canShareConnection(server))
+        .map((server) => server.id)
+    )
+
+    this.released = [...this.clients.keys()].filter((serverId) => !shared.has(serverId))
     for (const serverId of this.released) {
       this.disconnect(serverId)
     }
-    console.info(`Released ${this.released.length} connection(s) to another device`)
+
+    const kept = this.clients.size
+    console.info(
+      `Released ${this.released.length} connection(s) to another device` +
+        (kept > 0 ? `; kept ${kept} the other device can share` : '')
+    )
   }
 
   /**

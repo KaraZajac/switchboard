@@ -340,6 +340,25 @@ fun bestSaslMechanism(mechanisms: List<String>): String? = when {
 }
 
 /**
+ * Whether both devices can be on this network at the same time.
+ *
+ * IRC lets two connections share one nick when the server says so, and the
+ * server's condition is always the same: both must have authenticated to the
+ * same account. rIRCd states it plainly — `same_account && multiclient` —
+ * because the account is the only thing that makes the second connection *you*
+ * rather than an impostor.
+ *
+ * So this is the precondition, not the permission: do we have credentials to
+ * arrive as? Whether the network then allows it is the network's answer, and it
+ * gives that answer by letting us keep the nick or not.
+ *
+ * A saved identify command is not enough. NickServ logs you in *after*
+ * registration, by which time the nick has already been refused.
+ */
+fun canShareConnection(config: ServerConfig): Boolean =
+    !config.saslMechanism.isNullOrBlank() && !config.saslPassword.isNullOrBlank()
+
+/**
  * Whether this network already logs us in without being asked.
  *
  * Either SASL credentials or an identify command counts: both mean the next

@@ -311,6 +311,12 @@ private fun Conversation(
                 onClick = onOpenSettings
             )
 
+            // Both devices on at once, which is the ordinary case wherever the
+            // server allows it — so there is nothing to announce. A banner
+            // saying everything is normal is a banner people learn to skip,
+            // and then miss when it stops being true.
+            engine.sharingWithDesktop -> {}
+
             pairedWithDesktop && engine.mode == EngineMode.HOLDING -> Banner(
                 text = "This phone is holding the connections",
                 color = Green
