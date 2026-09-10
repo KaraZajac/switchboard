@@ -188,6 +188,10 @@ class SwitchboardEngine(
                 store.handleEvent(channel, data)
                 if (channel == "irc:message") notifyIfWorthIt(data)
 
+                // The desktop read it. Whatever this phone was showing about
+                // that conversation is answered.
+                if (channel == "irc:read-marker") clearNotificationFor(data)
+
                 // The desktop has just (re)joined a network, so what we are
                 // holding is from before that and is now wrong — channels,
                 // members and our own nick all changed. Refilling on the link
@@ -370,6 +374,20 @@ class SwitchboardEngine(
         // the shade as in the channel — including after a theme change, which a
         // second copy of the palette here would have quietly ignored.
         return nickColor(nick).toArgb()
+    }
+
+    /**
+     * Put away what was waiting in a conversation somebody read elsewhere.
+     *
+     * With both devices on a network, both of them see every message and both
+     * were about to say so. `draft/read-marker` is the network telling us the
+     * other one got there first.
+     */
+    private fun clearNotificationFor(data: JsonElement) {
+        val payload = data as? JsonObject ?: return
+        val serverId = payload["serverId"]?.jsonPrimitive?.contentOrNull() ?: return
+        val channel = payload["channel"]?.jsonPrimitive?.contentOrNull() ?: return
+        notifier.clear("$serverId:${channel.lowercase()}")
     }
 
     /** Reading a conversation clears what was waiting in it */
@@ -846,6 +864,12 @@ class SwitchboardEngine(
                 askWhatWeMissed(config.id)
                 recomputeMode()
             }
+
+            // Read on the other device. Both of us are on the network now, so
+            // both of us were about to tell the user about it — and a phone
+            // that buzzes about something already read at the desk is the
+            // reason people turn notifications off.
+            if (channel == "irc:read-marker") clearNotificationFor(data)
 
             // A conversation somebody started while this phone was closed.
             // Opening it is the store's job; fetching what was said is ours.
