@@ -155,6 +155,25 @@ class IrcHandlersTest {
     }
 
     @Test
+    fun `a server notice goes to the console, not to a conversation with the server`() {
+        register()
+
+        // Rizon's shape: the connection banner, addressed to us, from the
+        // server's own name. Filed the ordinary way it became a person called
+        // irc.rizon.life sitting in Direct Messages with an unread badge.
+        feed(":irc.rizon.life NOTICE kara :*** Your host is masked")
+        feed(":NickServ!services@rizon.net NOTICE kara :This nick is registered.")
+
+        val conversations = session.eventsOn("irc:message").map { it.str("channel") }
+        assertTrue("the server's notice belongs in the console", conversations.contains("*"))
+        assertFalse(
+            "and not in a conversation named after the server",
+            conversations.contains("irc.rizon.life")
+        )
+        assertTrue("a service is still someone", conversations.contains("NickServ"))
+    }
+
+    @Test
     fun `331 clears a topic that has since been removed`() {
         register()
         feed(":kara!u@h JOIN #chan")

@@ -5,6 +5,7 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
@@ -1075,6 +1076,20 @@ class SharedCorpusTest {
             .flatMap { it.removePrefix("WATCH ").split(" ") }
             .map { it.removePrefix("+") }
         assertEquals(many, sent)
+    }
+
+    // ── who a line came from ──────────────────────────────────────────
+
+    @Test
+    fun `tells a server apart from a person`() {
+        for (entry in load("source.json")["cases"]!!.jsonArray) {
+            val case = entry.jsonObject
+            assertEquals(
+                case["name"]!!.jsonPrimitive.content,
+                case["server"]!!.jsonPrimitive.boolean,
+                Irc.isServerSource(case["prefix"]!!.jsonPrimitive.contentOrNull)
+            )
+        }
     }
 
 }

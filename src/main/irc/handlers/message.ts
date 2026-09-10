@@ -1,5 +1,6 @@
 import { registerHandler } from './registry'
 import { operFrom } from '@shared/tags'
+import { isServerSource } from '@shared/source'
 
 /** App name and version for CTCP VERSION replies */
 const APP_VERSION = 'Switchboard IRC Client 1.0'
@@ -94,7 +95,10 @@ registerHandler('NOTICE', (client, msg) => {
 
   const isPrivate =
     client.state.casemap(target) === client.state.casemap(client.state.nick) || target === '*'
-  const channel = isPrivate ? nick : target
+  // A server's notice belongs in the console, not in a conversation named
+  // after the server. Rizon sends its connection banner from irc.rizon.life,
+  // which used to sit in Direct Messages between two real people.
+  const channel = isPrivate ? (isServerSource(msg.prefix) ? '*' : nick) : target
 
   const msgid = typeof msg.tags['msgid'] === 'string' ? msg.tags['msgid'] : undefined
   const time = typeof msg.tags['time'] === 'string' ? msg.tags['time'] : new Date().toISOString()

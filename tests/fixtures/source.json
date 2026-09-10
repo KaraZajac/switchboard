@@ -1,0 +1,51 @@
+{
+  "$comment": "Whether a line came from a server or from a person, shared by tests/shared/source.test.ts and the Android SharedCorpusTest. A private message is filed under whoever sent it, which is right until the sender is not a who: Rizon's notices arrive from irc.rizon.life, and both clients opened a conversation with a person of that name and gave it an unread badge.",
+  "$cases": "`prefix` is the message's source. `server` is whether it belongs in the console rather than in a conversation.",
+  "cases": [
+    {
+      "name": "a person, with a full mask",
+      "prefix": "kara!~kara@example.net",
+      "server": false
+    },
+    {
+      "name": "a service, which is someone you talk to",
+      "prefix": "NickServ!services@services.libera.chat",
+      "server": false
+    },
+    {
+      "name": "a service with no mask is still someone",
+      "prefix": "Global",
+      "server": false
+    },
+    {
+      "name": "the server, by name",
+      "prefix": "irc.rizon.life",
+      "server": true
+    },
+    {
+      "name": "another server on the same network",
+      "prefix": "weber.oftc.net",
+      "server": true
+    },
+    {
+      "name": "a server before it has told us its name",
+      "prefix": "*",
+      "server": true
+    },
+    {
+      "name": "no prefix at all is the server we are talking to",
+      "prefix": null,
+      "server": true
+    },
+    {
+      "name": "a nick that merely contains a dot in the host part",
+      "prefix": "dotted!u@irc.example.org",
+      "server": false
+    },
+    {
+      "name": "an empty prefix",
+      "prefix": "",
+      "server": true
+    }
+  ]
+}

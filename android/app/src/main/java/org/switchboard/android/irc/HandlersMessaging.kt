@@ -6,6 +6,7 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import java.time.Instant
 import java.util.concurrent.atomic.AtomicLong
+import org.switchboard.android.SERVER_CONSOLE
 
 /**
  * What people say, and the tags they hang on it.
@@ -33,8 +34,15 @@ internal fun registerMessagingHandlers() {
             val from = message.nick ?: message.prefix ?: return@on
 
             // A private message belongs in a conversation named for the other
-            // person, not for our own nick.
-            val conversation = if (state.isMe(target)) from else target
+            // person, not for our own nick — and a server's notice belongs in
+            // the console rather than in a conversation named after the server.
+            // Rizon sends its connection banner from irc.rizon.life, which used
+            // to sit in Direct Messages between two real people.
+            val conversation = when {
+                !state.isMe(target) -> target
+                Irc.isServerSource(message.prefix) -> SERVER_CONSOLE
+                else -> from
+            }
 
             // CTCP: text wrapped in \u0001. ACTION is the one people see —
             // it is `/me` — and every other one is a question asked of the

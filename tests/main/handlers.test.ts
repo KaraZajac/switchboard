@@ -258,6 +258,27 @@ describe('Channel Handlers', () => {
     })
   })
 
+  it('puts a server notice in the console, not in a conversation with the server', () => {
+    const { client, events, state } = createMockClient()
+    state.nick = 'kara'
+
+    const seen: { channel: string; nick: string }[] = []
+    events.on('notice', (data) => seen.push({ channel: data.channel, nick: data.nick }))
+
+    // Rizon's shape: the connection banner, addressed to us, from the server's
+    // own name. Filed the ordinary way it became a person called
+    // irc.rizon.life sitting in Direct Messages with an unread badge.
+    dispatchMessage(client, parseMessage(':irc.rizon.life NOTICE kara :*** Your host is masked'))
+    dispatchMessage(
+      client,
+      parseMessage(':NickServ!services@rizon.net NOTICE kara :This nick is registered.')
+    )
+
+    expect(seen[0].channel).toBe('*')
+    // A service is still someone you hold a conversation with
+    expect(seen[1].channel).toBe('NickServ')
+  })
+
   it('clears the topic on RPL_NOTOPIC (331)', () => {
     const { client, events, state } = createMockClient()
     const ch = state.getChannel('#test')

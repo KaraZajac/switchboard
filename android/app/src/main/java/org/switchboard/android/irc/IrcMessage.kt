@@ -143,6 +143,27 @@ object Irc {
     fun oneLine(line: String): String = line.replace("\r", "").replace("\n", "")
 
     /**
+     * Whether a line came from a server or from a person.
+     *
+     * The Kotlin half of `src/shared/source.ts`, checked against
+     * `tests/fixtures/source.json`. A private message is filed under whoever
+     * sent it, which is right until the sender is not a who: Rizon sends its
+     * notices from `irc.rizon.life`, and that opened a conversation with a
+     * person of that name, sitting in Direct Messages between two real ones.
+     *
+     * A person arrives as `nick!user@host`; a server has nothing but a name,
+     * and a nick cannot contain a dot on any ircd. Services are people by this
+     * rule, which is right: NickServ is someone you hold a conversation with.
+     */
+    fun isServerSource(prefix: String?): Boolean {
+        if (prefix.isNullOrEmpty()) return true
+        // Before registration a server has not been told its own name yet
+        if (prefix == "*") return true
+        if (prefix.contains('!') || prefix.contains('@')) return false
+        return prefix.contains('.')
+    }
+
+    /**
      * Commands whose last parameter is a piece of human text.
      *
      * These always take the trailing form, single word or not — it is what every
