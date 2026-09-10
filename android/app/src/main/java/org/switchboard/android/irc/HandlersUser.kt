@@ -147,8 +147,25 @@ internal fun registerUserHandlers() {
     }
 
     // RPL_UNAWAY / RPL_NOWAWAY — our own away state
-    Handlers.on("305") { session, _ -> session.state.away = false }
-    Handlers.on("306") { session, _ -> session.state.away = true }
+    // Our own away state. Recorded and never announced, so nothing above the
+    // connection could show whether you had marked yourself away.
+    Handlers.on("305") { session, _ ->
+        session.state.away = false
+        session.emit("irc:away", buildJsonObject {
+            put("serverId", session.state.serverId)
+            put("nick", session.state.nick)
+            put("away", false)
+        })
+    }
+    Handlers.on("306") { session, message ->
+        session.state.away = true
+        session.emit("irc:away", buildJsonObject {
+            put("serverId", session.state.serverId)
+            put("nick", session.state.nick)
+            put("away", true)
+            put("message", message.params.lastOrNull())
+        })
+    }
 
     // RPL_ENDOFWHOIS
     Handlers.on("318") { session, message ->

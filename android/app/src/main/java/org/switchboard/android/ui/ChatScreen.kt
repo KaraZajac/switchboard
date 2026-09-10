@@ -3,6 +3,8 @@
 package org.switchboard.android.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -23,6 +25,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
@@ -77,6 +81,7 @@ import org.switchboard.android.react
 import org.switchboard.android.redact
 import org.switchboard.android.reply
 import org.switchboard.android.say
+import org.switchboard.android.setAway
 import org.switchboard.android.setTyping
 
 /**
@@ -191,6 +196,9 @@ fun ChatScreen(
                                 onEditProfile = {
                                     editingProfile = true
                                     scope.launch { channelDrawer.close() }
+                                },
+                                onToggleAway = { serverId, away ->
+                                    engine.setAway(serverId, if (away) "Away" else null)
                                 },
                                 onBrowse = {
                                     scope.launch { channelDrawer.close() }
@@ -396,6 +404,9 @@ private fun Conversation(
             enabled = store.activeServerId != null && store.activeChannel != null,
             seedKey = editingMessage?.id,
             seedText = editingMessage?.content,
+            people = store.activeServerId?.let { serverId ->
+                store.activeChannel?.let { channel -> store.membersFor(serverId, channel) }
+            }.orEmpty().map { it.nick },
             onTyping = { typing ->
                 val serverId = store.activeServerId ?: return@Composer
                 val channel = store.activeChannel ?: return@Composer
@@ -729,13 +740,32 @@ private fun Composer(
     enabled: Boolean,
     seedKey: String? = null,
     seedText: String? = null,
+    /** Who is in this conversation, for completing a half-typed name */
+    people: List<String> = emptyList(),
     onTyping: (Boolean) -> Unit,
     onSend: (String) -> Unit
 ) {
     // Editing puts the old text in the box to be changed. Keyed on the message
     // id rather than the text, so editing two messages that happen to say the
     // same thing still refills the box the second time.
-    var draft by remember(seedKey) { mutableStateOf(seedText.orEmpty()) }
+    //
+    // A TextFieldValue rather than a String, because the cursor has to be moved
+    // as well as the text: replacing the string alone leaves the caret where it
+    // was, so completing "rob" to "robin: " and typing on produced
+    // "robhow did the migration goin: ".
+    var field by remember(seedKey) {
+        val text = seedText.orEmpty()
+        mutableStateOf(TextFieldValue(text, TextRange(text.length)))
+    }
+    val draft = field.text
+
+    val partial = draft.substringAfterLast(' ')
+    val suggestions = remember(partial, people) { completionsFor(partial, people) }
+
+    fun complete(nick: String) {
+        val next = completedDraft(draft, nick)
+        field = TextFieldValue(next, TextRange(next.length))
+    }
 
     // Say we are typing when there is something to type, and stop when the box
     // empties or a few seconds pass without a keystroke.
@@ -754,16 +784,45 @@ private fun Composer(
         val text = draft.trim()
         if (text.isEmpty()) return
         onSend(text)
-        draft = ""
+        field = TextFieldValue("")
         onTyping(false)
     }
 
-    Row(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .background(Base)
             .navigationBarsPadding()
             .imePadding()
+    ) {
+
+    if (suggestions.isNotEmpty()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .padding(start = 12.dp, end = 12.dp, top = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            for (nick in suggestions) {
+                Text(
+                    nick,
+                    color = Crust,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(nickColor(nick))
+                        .clickable { complete(nick) }
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                )
+            }
+        }
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.Bottom,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -787,8 +846,8 @@ private fun Composer(
                 )
             }
             BasicTextField(
-                value = draft,
-                onValueChange = { draft = it },
+                value = field,
+                onValueChange = { field = it },
                 enabled = enabled,
                 textStyle = TextStyle(color = Text0, fontSize = 15.sp, lineHeight = 20.sp),
                 cursorBrush = SolidColor(Blue),
@@ -822,4 +881,36 @@ private fun Composer(
             )
         }
     }
+
+    }
+}
+
+/**
+ * Whoever matches the word being typed.
+ *
+ * Tab completion is how people address each other on IRC, and a phone has no
+ * tab — but it does have somewhere to put the answers, and typing a nick
+ * exactly on a touchscreen is harder than on a keyboard, not easier. Two
+ * characters before offering anything, so the row does not appear over the
+ * whole roster the moment somebody types a letter.
+ */
+internal fun completionsFor(partial: String, people: List<String>): List<String> {
+    if (partial.length < 2) return emptyList()
+    return people
+        .filter { it.startsWith(partial, ignoreCase = true) && !it.equals(partial, true) }
+        .sortedBy { it.lowercase() }
+        .take(6)
+}
+
+/**
+ * The draft with the half-typed name finished.
+ *
+ * "robin: " when it is the first word and "robin " otherwise — the convention
+ * every IRC client follows, and what makes the highlight land on the right
+ * person rather than reading as a passing mention.
+ */
+internal fun completedDraft(draft: String, nick: String): String {
+    val partial = draft.substringAfterLast(' ')
+    val head = draft.dropLast(partial.length)
+    return head + nick + if (head.isEmpty()) ": " else " "
 }

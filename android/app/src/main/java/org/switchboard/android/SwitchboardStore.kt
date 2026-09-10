@@ -42,7 +42,15 @@ data class Server(
      * answer "am I actually logged in?", which is the question behind most of
      * what people ask NickServ.
      */
-    var account: String? = null
+    var account: String? = null,
+    /**
+     * Whether we have marked ourselves away here.
+     *
+     * A phone is the device most likely to be away from its person, and the
+     * only way to say so was to type `/away` — a command the app had no way of
+     * running until recently.
+     */
+    var away: Boolean = false
 )
 
 data class Channel(
@@ -515,11 +523,22 @@ class SwitchboardStore {
             }
 
             // away-notify: one person's presence changed, so update just them
-            // rather than asking the server for the whole roster again
+            // rather than asking the server for the whole roster again.
+            //
+            // Two shapes, because the two clients send two: ours says so with a
+            // flag, the desktop says so by whether there is a message. Reading
+            // only the flag meant that following a desktop, nobody was ever
+            // away — the event arrived and was dropped on its first line.
             "irc:away" -> {
                 val nick = data["nick"]?.str() ?: return
-                val away = data["away"]?.jsonPrimitive?.booleanOrNull ?: return
+                val away = data["away"]?.jsonPrimitive?.booleanOrNull
+                    ?: (data["message"]?.str() != null)
                 updateMember(serverId, nick) { it.copy(away = away) }
+
+                val server = servers[serverId]
+                if (server != null && nick.equals(server.nick, ignoreCase = true)) {
+                    servers[serverId] = server.copy(away = away)
+                }
             }
 
             "irc:setname", "irc:account" -> {
@@ -554,6 +573,12 @@ class SwitchboardStore {
             "irc:typing" -> {
                 val channel = data["channel"]?.str() ?: return
                 val nick = data["nick"]?.str() ?: return
+
+                // Not our own. A server with echo-message sends our TAGMSG back
+                // to us, so the phone sat there telling itself that we were
+                // typing — which we could see, having been the one doing it.
+                if (nick.equals(servers[serverId]?.nick, ignoreCase = true)) return
+
                 val conversation = key(serverId, channel)
                 val who = typing[conversation] ?: mutableMapOf()
 

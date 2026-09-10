@@ -86,6 +86,7 @@ fun Navigator(
     onToggleChannelMute: (serverId: String, channel: String) -> Unit,
     onOpenSettings: () -> Unit,
     onEditProfile: () -> Unit,
+    onToggleAway: (serverId: String, away: Boolean) -> Unit,
     onBrowse: () -> Unit,
     onManageServers: () -> Unit
 ) {
@@ -114,7 +115,7 @@ fun Navigator(
             )
             UserPanel(
                 store, mode, modeDetail, takingOver, pairedWithDesktop, vaultUnlocked,
-                onOpenSettings, onEditProfile
+                onOpenSettings, onEditProfile, onToggleAway
             )
         }
     }
@@ -688,7 +689,8 @@ private fun UserPanel(
     pairedWithDesktop: Boolean,
     vaultUnlocked: Boolean,
     onOpenSettings: () -> Unit,
-    onEditProfile: () -> Unit
+    onEditProfile: () -> Unit,
+    onToggleAway: (serverId: String, away: Boolean) -> Unit
 ) {
     val server = store.activeServerId?.let { store.servers[it] }
     val nick = server?.nick.orEmpty().ifBlank { "you" }
@@ -702,8 +704,20 @@ private fun UserPanel(
         verticalAlignment = Alignment.CenterVertically
     ) {
         // Your own avatar is where a profile lives in every app of this shape
-        Box(modifier = Modifier.clip(CircleShape).clickable(onClick = onEditProfile)) {
+        Box(
+            modifier = Modifier.clip(CircleShape).clickable(onClick = onEditProfile),
+            contentAlignment = Alignment.BottomEnd
+        ) {
             Avatar(nick, 34.dp, metadataColor(profile?.color) ?: nickColor(nick))
+            if (server?.away == true) {
+                Box(
+                    modifier = Modifier
+                        .size(12.dp)
+                        .background(Crust, CircleShape)
+                        .padding(2.dp)
+                        .background(Yellow, CircleShape)
+                )
+            }
         }
         Spacer(Modifier.width(9.dp))
 
@@ -727,6 +741,22 @@ private fun UserPanel(
                 fontSize = 11.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
+            )
+        }
+
+        // Away, which is the state a phone is in more than any other device and
+        // which you could only reach by typing `/away` — a command this client
+        // could not even run until recently.
+        server?.let {
+            Text(
+                if (it.away) "Back" else "Away",
+                color = if (it.away) Yellow else Overlay,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(12.dp))
+                    .clickable { onToggleAway(it.id, !it.away) }
+                    .padding(horizontal = 10.dp, vertical = 6.dp)
             )
         }
 

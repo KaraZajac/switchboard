@@ -399,3 +399,130 @@ class WatchTest {
         assertEquals(listOf("robin", "mara", "vic"), store.watchedFor(server))
     }
 }
+
+/**
+ * Being away.
+ *
+ * A phone is the device most likely to be away from its person, and the two
+ * clients describe it differently: ours says so with a flag, the desktop says
+ * so by whether there is a message. Reading only the flag meant that following
+ * a desktop, nobody was ever away — the event arrived and was dropped on its
+ * first line.
+ */
+class AwayTest {
+
+    private lateinit var store: SwitchboardStore
+    private val server = "s1"
+
+    @Before
+    fun setUp() {
+        store = SwitchboardStore()
+        store.servers[server] = Server(id = server, name = "Test", host = "h", nick = "kara")
+        store.channels[server] = mutableListOf(Channel("#lounge"))
+        store.handleEvent("irc:names", buildJsonObject {
+            put("serverId", server)
+            put("channel", "#lounge")
+            put("users", kotlinx.serialization.json.buildJsonArray {
+                add(buildJsonObject { put("nick", "robin") })
+                add(buildJsonObject { put("nick", "kara") })
+            })
+        })
+    }
+
+    @Test
+    fun `our own flag is understood`() {
+        store.handleEvent("irc:away", buildJsonObject {
+            put("serverId", server)
+            put("nick", "robin")
+            put("away", true)
+        })
+
+        assertTrue(store.membersFor(server, "#lounge").first { it.nick == "robin" }.away)
+    }
+
+    @Test
+    fun `the desktop's shape is understood too`() {
+        store.handleEvent("irc:away", buildJsonObject {
+            put("serverId", server)
+            put("nick", "robin")
+            put("message", "back in ten")
+        })
+        assertTrue(store.membersFor(server, "#lounge").first { it.nick == "robin" }.away)
+
+        // The desktop says "back" by sending no message at all
+        store.handleEvent("irc:away", buildJsonObject {
+            put("serverId", server)
+            put("nick", "robin")
+        })
+        assertFalse(store.membersFor(server, "#lounge").first { it.nick == "robin" }.away)
+    }
+
+    @Test
+    fun `our own away state is followed, so the panel can offer to undo it`() {
+        store.handleEvent("irc:away", buildJsonObject {
+            put("serverId", server)
+            put("nick", "kara")
+            put("away", true)
+        })
+        assertTrue(store.servers[server]?.away == true)
+
+        store.handleEvent("irc:away", buildJsonObject {
+            put("serverId", server)
+            put("nick", "kara")
+            put("away", false)
+        })
+        assertFalse(store.servers[server]?.away == true)
+    }
+}
+
+/**
+ * Typing indicators.
+ *
+ * A server with echo-message sends our own TAGMSG back to us, so the phone
+ * announced that we were typing — to us, while we were doing it.
+ */
+class TypingTest {
+
+    private lateinit var store: SwitchboardStore
+    private val server = "s1"
+
+    @Before
+    fun setUp() {
+        store = SwitchboardStore()
+        store.servers[server] = Server(id = server, name = "Test", host = "h", nick = "kara")
+        store.channels[server] = mutableListOf(Channel("#lounge"))
+    }
+
+    private fun typing(nick: String, state: String) {
+        store.handleEvent("irc:typing", buildJsonObject {
+            put("serverId", server)
+            put("channel", "#lounge")
+            put("nick", nick)
+            put("state", state)
+        })
+    }
+
+    @Test
+    fun `somebody else typing is worth showing`() {
+        typing("robin", "active")
+        assertEquals(listOf("robin"), store.typingIn(server, "#lounge"))
+    }
+
+    @Test
+    fun `we are not told that we are typing`() {
+        typing("kara", "active")
+        typing("KARA", "active")
+        assertTrue(store.typingIn(server, "#lounge").isEmpty())
+    }
+
+    @Test
+    fun `done and paused both stop it`() {
+        typing("robin", "active")
+        typing("robin", "done")
+        assertTrue(store.typingIn(server, "#lounge").isEmpty())
+
+        typing("robin", "active")
+        typing("robin", "paused")
+        assertTrue(store.typingIn(server, "#lounge").isEmpty())
+    }
+}
