@@ -431,10 +431,10 @@ internal object Sasl {
 
             "EXTERNAL" -> if (payload == "+") sendPayload(session, "")
 
-            "SCRAM-SHA-256" -> {
+            "SCRAM-SHA-256", "SCRAM-SHA-512" -> {
                 val key = session.state.serverId
                 if (payload == "+") {
-                    val exchange = Scram(account, password)
+                    val exchange = Scram(account, password, mechanism)
                     scram[key] = exchange
                     sendPayload(session, encoder.encodeToString(exchange.first().toByteArray()))
                     return
@@ -444,9 +444,25 @@ internal object Sasl {
                 val decoded = String(Base64.getDecoder().decode(payload))
                 val reply = exchange.next(decoded)
                 if (reply == null) {
-                    // The server's final signature did not verify, or the
-                    // exchange is over. Either way we say nothing more.
                     scram.remove(key)
+
+                    // SCRAM proves both sides knew the password, and the
+                    // server's half was computed here and thrown away — so a
+                    // server that could not prove it was treated exactly like
+                    // one that could, which is the whole point of the exchange
+                    // given up at the last step. Abort rather than let the 903
+                    // that follows count as a login.
+                    if (!exchange.serverVerified) {
+                        session.send("AUTHENTICATE", "*")
+                        session.emit("irc:error", buildJsonObject {
+                            put("serverId", session.state.serverId)
+                            put("command", "SASL")
+                            put(
+                                "message",
+                                "This server could not prove it knew your password."
+                            )
+                        })
+                    }
                     return
                 }
                 sendPayload(session, encoder.encodeToString(reply.toByteArray()))

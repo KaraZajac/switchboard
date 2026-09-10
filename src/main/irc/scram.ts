@@ -2,7 +2,13 @@ import * as crypto from 'crypto'
 import { SASL_CHUNK_SIZE } from '@shared/constants'
 
 /**
- * SASL SCRAM-SHA-256 authentication.
+ * SASL SCRAM authentication, in whichever hash the network offers.
+ *
+ * SHA-256 is what the IRCv3 examples use and what most servers advertise.
+ * Libera advertises SHA-512 and not SHA-256, so a client that only knew the
+ * one fell back to PLAIN there — which works, and sends the password to a
+ * server that never needed to see it. The exchange is identical either way;
+ * only the digest and the key length change.
  *
  * Flow:
  * 1. Client sends AUTHENTICATE SCRAM-SHA-256
@@ -18,6 +24,9 @@ import { SASL_CHUNK_SIZE } from '@shared/constants'
 interface ScramState {
   username: string
   password: string
+  /** The digest this mechanism names, and the length of a key made with it */
+  digest: 'sha256' | 'sha512'
+  keyLength: number
   clientNonce: string
   clientFirstMessageBare: string
   serverNonce?: string
@@ -30,13 +39,22 @@ interface ScramState {
 // Per-client SCRAM state (keyed by a simple counter since we handle one at a time)
 let currentScram: ScramState | null = null
 
+/** The digest a mechanism name asks for, or null when it is not one of ours */
+export function scramDigest(mechanism: string): { digest: 'sha256' | 'sha512'; keyLength: number } | null {
+  if (mechanism === 'SCRAM-SHA-256') return { digest: 'sha256', keyLength: 32 }
+  if (mechanism === 'SCRAM-SHA-512') return { digest: 'sha512', keyLength: 64 }
+  return null
+}
+
 /**
- * Begin SCRAM-SHA-256 authentication.
- * Called when the server responds AUTHENTICATE + after we sent AUTHENTICATE SCRAM-SHA-256.
+ * Begin SCRAM authentication.
+ * Called when the server responds AUTHENTICATE + after we sent AUTHENTICATE SCRAM-SHA-*.
  */
 export function beginScramAuth(
-  client: { config: { saslUsername: string | null; saslPassword: string | null; nick: string }; connection: { sendRaw: (line: string) => void } }
+  client: { config: { saslUsername: string | null; saslPassword: string | null; nick: string }; connection: { sendRaw: (line: string) => void } },
+  mechanism = 'SCRAM-SHA-256'
 ): void {
+  const chosen = scramDigest(mechanism) ?? { digest: 'sha256' as const, keyLength: 32 }
   const username = client.config.saslUsername || client.config.nick
   const password = client.config.saslPassword || ''
 
@@ -48,6 +66,8 @@ export function beginScramAuth(
   currentScram = {
     username,
     password,
+    digest: chosen.digest,
+    keyLength: chosen.keyLength,
     clientNonce,
     clientFirstMessageBare,
     step: 'client-first'
@@ -94,11 +114,7 @@ export function handleScramChallenge(
     const authMessage = `${currentScram.clientFirstMessageBare},${decoded},${clientFinalMessageWithoutProof}`
     currentScram.authMessage = authMessage
 
-    const saltedPassword = hi(currentScram.password, parsed.salt, parsed.iterations)
-    const clientKey = hmac(saltedPassword, 'Client Key')
-    const storedKey = hash(clientKey)
-    const clientSignature = hmac(storedKey, authMessage)
-    const clientProof = xorBuffers(clientKey, clientSignature)
+    const clientProof = proofFor(currentScram, parsed.salt, parsed.iterations, authMessage)
 
     const clientFinalMessage = `${clientFinalMessageWithoutProof},p=${clientProof.toString('base64')}`
     const encoded = Buffer.from(clientFinalMessage, 'utf8').toString('base64')
@@ -115,12 +131,26 @@ export function handleScramChallenge(
 
     // Verify server signature
     const serverSignature = Buffer.from(match[1], 'base64')
-    const saltedPassword = hi(currentScram.password, currentScram.salt!, currentScram.iterations!)
-    const serverKey = hmac(saltedPassword, 'Server Key')
-    const expectedSignature = hmac(serverKey, currentScram.authMessage!)
+    const expectedSignature = serverSignatureFor(
+      currentScram,
+      currentScram.salt!,
+      currentScram.iterations!,
+      currentScram.authMessage!
+    )
 
-    if (!crypto.timingSafeEqual(serverSignature, expectedSignature)) {
-      client.events.emit('error', { code: 'SCRAM', command: 'SASL', message: 'Server signature verification failed' })
+    if (
+      serverSignature.length !== expectedSignature.length ||
+      !crypto.timingSafeEqual(serverSignature, expectedSignature)
+    ) {
+      // SCRAM proves both sides knew the password. Abort rather than let the
+      // 903 that follows count as a login: a server that cannot prove it is
+      // not one to be logged in to.
+      client.connection.sendRaw('AUTHENTICATE *')
+      client.events.emit('error', {
+        code: 'SCRAM',
+        command: 'SASL',
+        message: 'This server could not prove it knew your password.'
+      })
       currentScram = null
       return
     }
@@ -143,19 +173,50 @@ export function isScramInProgress(): boolean {
 
 // ── SCRAM Crypto Primitives ────────────────────────────────────────
 
+/** What the two sides prove to each other, in whichever digest was chosen */
+interface Chosen {
+  password: string
+  digest: 'sha256' | 'sha512'
+  keyLength: number
+}
+
+/** The client's proof: exported so the RFC's own test vector can check it */
+export function proofFor(
+  chosen: Chosen,
+  salt: Buffer,
+  iterations: number,
+  authMessage: string
+): Buffer {
+  const saltedPassword = hi(chosen, salt, iterations)
+  const clientKey = hmac(chosen.digest, saltedPassword, 'Client Key')
+  const storedKey = hash(chosen.digest, clientKey)
+  const clientSignature = hmac(chosen.digest, storedKey, authMessage)
+  return xorBuffers(clientKey, clientSignature)
+}
+
+/** What the server has to send back to prove it knew the password too */
+export function serverSignatureFor(
+  chosen: Chosen,
+  salt: Buffer,
+  iterations: number,
+  authMessage: string
+): Buffer {
+  const saltedPassword = hi(chosen, salt, iterations)
+  const serverKey = hmac(chosen.digest, saltedPassword, 'Server Key')
+  return hmac(chosen.digest, serverKey, authMessage)
+}
+
 /** PBKDF2 (Hi) — salted password derivation */
-function hi(password: string, salt: Buffer, iterations: number): Buffer {
-  return crypto.pbkdf2Sync(password, salt, iterations, 32, 'sha256')
+function hi(chosen: Chosen, salt: Buffer, iterations: number): Buffer {
+  return crypto.pbkdf2Sync(chosen.password, salt, iterations, chosen.keyLength, chosen.digest)
 }
 
-/** HMAC-SHA-256 */
-function hmac(key: Buffer, data: string): Buffer {
-  return crypto.createHmac('sha256', key).update(data, 'utf8').digest()
+function hmac(digest: string, key: Buffer, data: string): Buffer {
+  return crypto.createHmac(digest, key).update(data, 'utf8').digest()
 }
 
-/** SHA-256 hash */
-function hash(data: Buffer): Buffer {
-  return crypto.createHash('sha256').update(data).digest()
+function hash(digest: string, data: Buffer): Buffer {
+  return crypto.createHash(digest).update(data).digest()
 }
 
 /** XOR two buffers */

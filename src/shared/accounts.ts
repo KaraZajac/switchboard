@@ -62,6 +62,10 @@ export function accountAbilities(values: Record<string, string>): AccountAbiliti
  * password has to go to NickServ as a message instead.
  */
 export function bestSaslMechanism(mechanisms: string[]): SASLMechanism | null {
+  // Strongest first. Libera offers SHA-512 and not SHA-256, so a client that
+  // only knew the one fell back to PLAIN there — which works, and sends the
+  // password to a server that never needed to see it.
+  if (mechanisms.includes('SCRAM-SHA-512')) return 'SCRAM-SHA-512'
   if (mechanisms.includes('SCRAM-SHA-256')) return 'SCRAM-SHA-256'
   if (mechanisms.includes('PLAIN')) return 'PLAIN'
   return null

@@ -1,6 +1,6 @@
 import { registerHandler } from './handlers/registry'
 import { SASL_CHUNK_SIZE } from '@shared/constants'
-import { beginScramAuth, handleScramChallenge, isScramInProgress } from './scram'
+import { beginScramAuth, handleScramChallenge, isScramInProgress, scramDigest } from './scram'
 
 /**
  * SASL Authentication (IRCv3 3.1/3.2)
@@ -40,8 +40,8 @@ registerHandler('AUTHENTICATE', (client, msg) => {
       // EXTERNAL uses the TLS client certificate — send empty auth
       client.connection.sendRaw('AUTHENTICATE +')
 
-    } else if (mechanism === 'SCRAM-SHA-256') {
-      beginScramAuth(client)
+    } else if (mechanism && scramDigest(mechanism)) {
+      beginScramAuth(client, mechanism)
     }
   } else if (isScramInProgress()) {
     // Server challenge during SCRAM exchange

@@ -26,7 +26,7 @@ export interface IRCSource {
 export type CapState = 'negotiating' | 'done'
 
 /** SASL mechanism types */
-export type SASLMechanism = 'PLAIN' | 'EXTERNAL' | 'SCRAM-SHA-256'
+export type SASLMechanism = 'PLAIN' | 'EXTERNAL' | 'SCRAM-SHA-256' | 'SCRAM-SHA-512'
 
 /** SASL authentication state */
 export type SASLState = 'idle' | 'authenticating' | 'success' | 'failed'

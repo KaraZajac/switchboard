@@ -7,17 +7,39 @@ import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 
 /**
- * SASL SCRAM-SHA-256, as RFC 5802 defines it and IRCv3 uses it.
+ * SASL SCRAM, as RFC 5802 defines it and IRCv3 uses it.
  *
  * A port of `src/main/irc/scram.ts`. The point of SCRAM over PLAIN is that the
  * password never crosses the wire and the client can check that the server also
  * knew it — so the server signature really is verified here rather than
  * accepted, which is the step it is tempting to skip.
+ *
+ * SHA-256 is what the IRCv3 examples use and what most servers advertise.
+ * Libera advertises SHA-512 and not SHA-256, so a client that only knew the one
+ * fell back to PLAIN there. The exchange is identical either way; only the
+ * digest and the key length change.
  */
-class Scram(username: String, private val password: String) {
+class Scram(
+    username: String,
+    private val password: String,
+    mechanism: String = "SCRAM-SHA-256",
+    /**
+     * The client nonce, which is random except when a test needs to know it.
+     * RFC 7677 prints one exchange in full, and checking against it is the
+     * only way to know four HMACs and an XOR are in the right order — the
+     * failure mode otherwise is a server saying 904 and a user being told
+     * their password is wrong.
+     */
+    nonce: String? = null
+) {
 
-    private val clientNonce: String =
-        Base64.getEncoder().encodeToString(ByteArray(24).also { SecureRandom().nextBytes(it) })
+    /** The digest this mechanism names, and the MAC built on it */
+    private val sha512 = mechanism == "SCRAM-SHA-512"
+    private val digest = if (sha512) "SHA-512" else "SHA-256"
+    private val macName = if (sha512) "HmacSHA512" else "HmacSHA256"
+
+    private val clientNonce: String = nonce
+        ?: Base64.getEncoder().encodeToString(ByteArray(24).also { SecureRandom().nextBytes(it) })
 
     // The username is escaped because ',' and '=' separate the attributes
     private val clientFirstBare =
@@ -63,7 +85,7 @@ class Scram(username: String, private val password: String) {
 
         val salted = hi(password, salt, iterations)
         val clientKey = hmac(salted, "Client Key")
-        val storedKey = MessageDigest.getInstance("SHA-256").digest(clientKey)
+        val storedKey = MessageDigest.getInstance(digest).digest(clientKey)
         val clientSignature = hmac(storedKey, message)
         val proof = ByteArray(clientKey.size) { (clientKey[it].toInt() xor clientSignature[it].toInt()).toByte() }
 
@@ -100,15 +122,15 @@ class Scram(username: String, private val password: String) {
         }.toMap()
 
     private fun hmac(key: ByteArray, data: String): ByteArray {
-        val mac = Mac.getInstance("HmacSHA256")
-        mac.init(SecretKeySpec(key, "HmacSHA256"))
+        val mac = Mac.getInstance(macName)
+        mac.init(SecretKeySpec(key, macName))
         return mac.doFinal(data.toByteArray())
     }
 
     /** PBKDF2 as RFC 5802 spells it out: Hi(str, salt, i) */
     private fun hi(password: String, salt: ByteArray, iterations: Int): ByteArray {
-        val mac = Mac.getInstance("HmacSHA256")
-        mac.init(SecretKeySpec(password.toByteArray(), "HmacSHA256"))
+        val mac = Mac.getInstance(macName)
+        mac.init(SecretKeySpec(password.toByteArray(), macName))
 
         mac.update(salt)
         mac.update(byteArrayOf(0, 0, 0, 1))

@@ -340,6 +340,10 @@ fun accountAbilitiesOf(available: Map<String, String>): AccountAbilities {
  * has to go to NickServ as a message instead.
  */
 fun bestSaslMechanism(mechanisms: List<String>): String? = when {
+    // Strongest first. Libera offers SHA-512 and not SHA-256, so a client that
+    // only knew the one fell back to PLAIN there — which works, and sends the
+    // password to a server that never needed to see it.
+    mechanisms.contains("SCRAM-SHA-512") -> "SCRAM-SHA-512"
     mechanisms.contains("SCRAM-SHA-256") -> "SCRAM-SHA-256"
     mechanisms.contains("PLAIN") -> "PLAIN"
     else -> null
