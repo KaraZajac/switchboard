@@ -5,6 +5,8 @@
  * of plain text and link objects for rendering.
  */
 
+import { findLinks } from '@shared/links'
+
 export interface TextSegment {
   type: 'text'
   content: string
@@ -29,20 +31,6 @@ export interface MarkdownSegment {
 }
 
 export type MessageSegment = TextSegment | LinkSegment | CodeSegment | MarkdownSegment
-
-/**
- * URL regex that matches common URL patterns.
- * Handles http(s), ftp, and bare domain patterns.
- *
- * Control bytes end a URL as surely as a space does. Bots colour their links
- * — `\x0312https://example.com\x0f` is the ordinary shape of a feed line — and
- * without this the reset byte was part of the href, so the link opened a
- * mangled address and the formatting after it never closed.
- */
-/* eslint-disable no-control-regex */
-const URL_REGEX =
-  /https?:\/\/[^\s<>"\])}\x00-\x1f]+|ftp:\/\/[^\s<>"\])}\x00-\x1f]+/gi
-/* eslint-enable no-control-regex */
 
 /**
  * Parse message text into segments (text, links, code blocks).
@@ -131,25 +119,18 @@ function linkifyText(text: string): MessageSegment[] {
   // First pass: find all markdown matches and URLs
   const tokens: { start: number; end: number; segment: MessageSegment }[] = []
 
-  // Find URLs
-  const urlRegex = new RegExp(URL_REGEX.source, 'gi')
+  // Find URLs, by the same rule the phone uses — the two had their own
+  // patterns and disagreed about where a link ends
   let match: RegExpExecArray | null
-  while ((match = urlRegex.exec(text)) !== null) {
-    let url = match[0]
-    const trailingPunct = /[.,;:!?)]+$/
-    const trailingMatch = url.match(trailingPunct)
-    if (trailingMatch) {
-      const cleaned = url.replace(trailingPunct, '')
-      const openParens = (cleaned.match(/\(/g) || []).length
-      const closeParens = (cleaned.match(/\)/g) || []).length
-      if (openParens <= closeParens) {
-        url = cleaned
-      }
-    }
+  for (const link of findLinks(text)) {
     tokens.push({
-      start: match.index,
-      end: match.index + url.length,
-      segment: { type: 'link', url, display: url.length > 80 ? url.slice(0, 77) + '...' : url }
+      start: link.start,
+      end: link.end,
+      segment: {
+        type: 'link',
+        url: link.url,
+        display: link.url.length > 80 ? link.url.slice(0, 77) + '...' : link.url
+      }
     })
   }
 

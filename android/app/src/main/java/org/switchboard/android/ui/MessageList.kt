@@ -65,6 +65,7 @@ import org.switchboard.android.LinkPreview
 import org.switchboard.android.UserMetadata
 import org.switchboard.android.isChannel
 import org.switchboard.android.irc.Formatting
+import org.switchboard.android.irc.Links
 import org.switchboard.android.namesYou
 
 /**
@@ -494,7 +495,7 @@ private fun MessageRow(
             // What a link points at, on the same accent bar the desktop uses.
             // Only the first: a message full of URLs should not become a wall
             // of cards on a phone screen.
-            LINK.find(body)?.value?.let { url -> LinkCard(url, onPreview) }
+            Links.find(body).firstOrNull()?.url?.let { url -> LinkCard(url, onPreview) }
 
             if (message.reactions.isNotEmpty()) {
                 Spacer(Modifier.height(5.dp))
@@ -685,13 +686,13 @@ private fun Linkified(text: String, edited: Boolean, onLongPress: () -> Unit) {
 
     val annotated = buildAnnotatedString {
         append(styled)
-        for (match in LINK.findAll(styled.text)) {
+        for (link in Links.find(styled.text)) {
             addStyle(
                 SpanStyle(color = Blue, textDecoration = TextDecoration.Underline),
-                match.range.first,
-                match.range.last + 1
+                link.start,
+                link.end
             )
-            addStringAnnotation("url", match.value, match.range.first, match.range.last + 1)
+            addStringAnnotation("url", link.url, link.start, link.end)
         }
         // Quiet, and attached to the text rather than floating beside it, so a
         // corrected message still reads as one thing
@@ -723,12 +724,5 @@ private fun Linkified(text: String, edited: Boolean, onLongPress: () -> Unit) {
     )
 }
 
-/**
- * What counts as a link.
- *
- * Deliberately conservative: a scheme and a host, stopping before trailing
- * punctuation, because a URL at the end of a sentence should not swallow the
- * full stop.
- */
-private val LINK = Regex("""https?://[^\s<>\"]+[^\s<>\".,!?;:)\]}]""")
+
 

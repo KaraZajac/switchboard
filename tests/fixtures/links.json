@@ -1,0 +1,136 @@
+{
+  "$comment": "Finding the links in a line, shared by tests/shared/links.test.ts and the Android LinksTest. The two clients each had their own pattern and they disagreed: the desktop kept the full stop at the end of a sentence inside the URL and the phone dropped it, and both stopped dead at the first closing bracket \u2014 so every Wikipedia link with a disambiguation in it arrived truncated, on both.",
+  "$cases": "`text` is the line; `links` are the URLs found in it, in order.",
+  "cases": [
+    {
+      "name": "a bare link",
+      "text": "https://example.com/a",
+      "links": [
+        "https://example.com/a"
+      ]
+    },
+    {
+      "name": "a link in a sentence keeps the sentence's full stop out of it",
+      "text": "look at https://example.com/a.",
+      "links": [
+        "https://example.com/a"
+      ]
+    },
+    {
+      "name": "and its comma",
+      "text": "https://example.com/a, and more",
+      "links": [
+        "https://example.com/a"
+      ]
+    },
+    {
+      "name": "and its question mark",
+      "text": "have you seen https://example.com/a?",
+      "links": [
+        "https://example.com/a"
+      ]
+    },
+    {
+      "name": "a query string is not a question mark",
+      "text": "https://example.com/a?v=2 next",
+      "links": [
+        "https://example.com/a?v=2"
+      ]
+    },
+    {
+      "name": "a bracket the URL opened belongs to the URL",
+      "text": "https://en.wikipedia.org/wiki/Mercury_(planet)",
+      "links": [
+        "https://en.wikipedia.org/wiki/Mercury_(planet)"
+      ]
+    },
+    {
+      "name": "a bracket the sentence opened does not",
+      "text": "(see https://example.com/a)",
+      "links": [
+        "https://example.com/a"
+      ]
+    },
+    {
+      "name": "both at once",
+      "text": "(see https://en.wikipedia.org/wiki/Mercury_(planet)).",
+      "links": [
+        "https://en.wikipedia.org/wiki/Mercury_(planet)"
+      ]
+    },
+    {
+      "name": "two links in one line",
+      "text": "https://one.example/a and https://two.example/b",
+      "links": [
+        "https://one.example/a",
+        "https://two.example/b"
+      ]
+    },
+    {
+      "name": "http as well as https",
+      "text": "http://example.com/a",
+      "links": [
+        "http://example.com/a"
+      ]
+    },
+    {
+      "name": "ftp too",
+      "text": "ftp://files.example.net/pub",
+      "links": [
+        "ftp://files.example.net/pub"
+      ]
+    },
+    {
+      "name": "a scheme with nothing after it is not a link",
+      "text": "https://",
+      "links": []
+    },
+    {
+      "name": "no link at all",
+      "text": "just talking about http things",
+      "links": []
+    },
+    {
+      "name": "a link in quotes",
+      "text": "he said \"https://example.com/a\" then left",
+      "links": [
+        "https://example.com/a"
+      ]
+    },
+    {
+      "name": "a colour code ends the address",
+      "text": "\u000312https://example.com/a and after",
+      "links": [
+        "https://example.com/a"
+      ]
+    },
+    {
+      "name": "a link followed by a colon",
+      "text": "https://example.com/a: see",
+      "links": [
+        "https://example.com/a"
+      ]
+    },
+    {
+      "name": "a trailing slash is part of it",
+      "text": "https://example.com/",
+      "links": [
+        "https://example.com/"
+      ]
+    },
+    {
+      "name": "a fragment is part of it",
+      "text": "https://example.com/a#section here",
+      "links": [
+        "https://example.com/a#section"
+      ]
+    },
+    {
+      "name": "an apostrophe ends it, because a possessive is not an address",
+      "text": "https://example.com/a's page",
+      "links": [
+        "https://example.com/a"
+      ]
+    }
+  ]
+}
