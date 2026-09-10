@@ -330,7 +330,11 @@ export class IRCManager {
   private bindClientEvents(serverId: string, client: IRCClient): void {
     // Connection events
     client.events.on('registered', (data) => {
-      this.send('irc:connected', { serverId, nick: data.nick })
+      // The account too. SASL finishes before registration does, so by now we
+      // know it — and a phone following this desktop reads its own account
+      // from here. Leaving it out meant the 900 that had just told it who it
+      // was got overwritten with nothing a moment later.
+      this.send('irc:connected', { serverId, nick: data.nick, account: client.state.account })
 
       // After 001, not at the end of capability negotiation. With SASL in play
       // the two are seconds apart, and anything sent in between comes back as

@@ -112,7 +112,7 @@ export interface MainToRendererEvents {
   'monitor:changed': { serverId: string }
   /** A stored setting changed somewhere other than here — the theme, most visibly */
   'settings:changed': { key: string }
-  'irc:connected': { serverId: string; nick: string }
+  'irc:connected': { serverId: string; nick: string; account: string | null }
   'irc:disconnected': { serverId: string; reason: string }
   'irc:message': { serverId: string; channel: string; message: ChatMessage }
   'irc:join': { serverId: string; channel: string; user: ChannelUser; isMe: boolean }

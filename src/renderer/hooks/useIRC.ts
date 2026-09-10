@@ -471,7 +471,9 @@ export function useIRCEvents(): void {
 
     // On connect, load read markers from DB and monitor list
     cleanups.push(
-      api.on('irc:connected', ({ serverId: sid }) => {
+      api.on('irc:connected', ({ serverId: sid, account }) => {
+        useServerStore.getState().setAccount(sid, account)
+
         // What happened while we were shut. A fortnight is long enough to
         // cover a weekend away and short enough that the list stays readable;
         // the server caps it anyway.
