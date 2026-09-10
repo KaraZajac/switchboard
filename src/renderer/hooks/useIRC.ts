@@ -69,32 +69,35 @@ export function useIRCEvents(): void {
 
         // Load local history first
         const channelKey = `${serverId}:${channel.toLowerCase()}`
-        api.invoke('history:fetch', serverId, channel, undefined, 50).then((messages) => {
-          if (messages && messages.length > 0) {
-            useMessageStore.getState().setMessages(serverId, channel, messages)
+        api
+          .invoke('history:fetch', serverId, channel, undefined, 50)
+          .then((messages) => {
+            if (messages && messages.length > 0) {
+              useMessageStore.getState().setMessages(serverId, channel, messages)
+              chathistoryFetched.add(channelKey)
 
-            // And then ask the network what happened after it. Local history is
-            // what *this machine* saw, and the whole point of the other device
-            // is that things happen while this one is closed — so stopping here
-            // meant an evening spent on the phone was simply missing when you
-            // sat back down, and nothing ever asked for it again.
-            const newest = messages[messages.length - 1]?.timestamp
-            if (newest) {
-              chathistoryFetched.add(channelKey)
-              api.invoke('chathistory:catchup', serverId, channel, newest, 100)
-            }
-          } else {
-            // No local history — only fetch from server if this is the active channel
-            const activeChannel = useChannelStore.getState().activeChannel[serverId]
-            if (activeChannel?.toLowerCase() === channel.toLowerCase()) {
-              chathistoryFetched.add(channelKey)
-              api.invoke('chathistory:request', serverId, channel, undefined, 50)
+              // And then ask the network what happened after it. Local history is
+              // what *this machine* saw, and the whole point of the other device
+              // is that things happen while this one is closed — so stopping here
+              // meant an evening spent on the phone was simply missing when you
+              // sat back down, and nothing ever asked for it again.
+              const newest = messages[messages.length - 1]?.timestamp
+              if (newest) {
+                void api.invoke('chathistory:catchup', serverId, channel, newest, 100)
+              }
             } else {
-              // Defer until the user switches to this channel
-              pendingChathistory.add(channelKey)
+              // No local history — only fetch from server if this is the active channel
+              const activeChannel = useChannelStore.getState().activeChannel[serverId]
+              if (activeChannel?.toLowerCase() === channel.toLowerCase()) {
+                chathistoryFetched.add(channelKey)
+                api.invoke('chathistory:request', serverId, channel, undefined, 50)
+              } else {
+                // Defer until the user switches to this channel
+                pendingChathistory.add(channelKey)
+              }
             }
-          }
-        })
+          })
+          .catch((err) => console.warn('Could not load history for', channel, err))
       })
     )
 
@@ -190,7 +193,12 @@ export function useIRCEvents(): void {
       api.on('irc:message', ({ serverId, channel, message }) => {
         // Auto-create channel entry for incoming DMs (only for real user messages, not services)
         const isService = isServiceNick(channel)
-        if (!isChannelName(channel) && channel !== '*' && !isService && (message.type === 'privmsg' || message.type === 'action')) {
+        if (
+          !isChannelName(channel) &&
+          channel !== '*' &&
+          !isService &&
+          (message.type === 'privmsg' || message.type === 'action')
+        ) {
           useChannelStore.getState().addChannel(serverId, channel)
         }
 
@@ -232,7 +240,9 @@ export function useIRCEvents(): void {
 
         if (!isActiveChannel) {
           // Service messages get unread but not mention badges
-          useChannelStore.getState().incrementUnread(serverId, effectiveChannel, !isService && (isMention || isPrivate))
+          useChannelStore
+            .getState()
+            .incrementUnread(serverId, effectiveChannel, !isService && (isMention || isPrivate))
         }
 
         // Desktop notification for mentions and PMs (not for services or muted servers)
@@ -240,9 +250,7 @@ export function useIRCEvents(): void {
         if ((isMention || isPrivate) && !isActiveChannel && !isService && !isServerMuted) {
           const uiState = useUIStore.getState()
           if (uiState.notificationsEnabled) {
-            const title = isPrivate
-              ? `PM from ${message.nick}`
-              : `${message.nick} in ${channel}`
+            const title = isPrivate ? `PM from ${message.nick}` : `${message.nick} in ${channel}`
             api.invoke('notification:send', title, message.content.slice(0, 200))
           }
 
@@ -339,10 +347,13 @@ export function useIRCEvents(): void {
 
         if (isTyping) {
           // Auto-clear after 6 seconds if no update
-          typingTimers.set(timerKey, setTimeout(() => {
-            useMessageStore.getState().setTyping(serverId, channel, nick, false)
-            typingTimers.delete(timerKey)
-          }, 6000))
+          typingTimers.set(
+            timerKey,
+            setTimeout(() => {
+              useMessageStore.getState().setTyping(serverId, channel, nick, false)
+              typingTimers.delete(timerKey)
+            }, 6000)
+          )
         } else {
           typingTimers.delete(timerKey)
         }
@@ -496,7 +507,11 @@ export function useIRCEvents(): void {
         // Desktop notification
         const isServerMuted = useServerStore.getState().isServerMuted(serverId)
         if (useUIStore.getState().notificationsEnabled && !isServerMuted) {
-          api.invoke('notification:send', `Invited to ${channel}`, `${by} invited you to ${channel}`)
+          api.invoke(
+            'notification:send',
+            `Invited to ${channel}`,
+            `${by} invited you to ${channel}`
+          )
         }
       })
     )
@@ -547,9 +562,10 @@ export function useIRCEvents(): void {
     // Netsplit/netjoin collapsed events
     cleanups.push(
       api.on('irc:netsplit', ({ serverId, server1, server2, nicks }) => {
-        const content = nicks.length === 1
-          ? `${nicks[0]} quit (netsplit: ${server1} \u2194 ${server2})`
-          : `${nicks.length} users quit (netsplit: ${server1} \u2194 ${server2}): ${nicks.slice(0, 5).join(', ')}${nicks.length > 5 ? `, and ${nicks.length - 5} more` : ''}`
+        const content =
+          nicks.length === 1
+            ? `${nicks[0]} quit (netsplit: ${server1} \u2194 ${server2})`
+            : `${nicks.length} users quit (netsplit: ${server1} \u2194 ${server2}): ${nicks.slice(0, 5).join(', ')}${nicks.length > 5 ? `, and ${nicks.length - 5} more` : ''}`
 
         // Get all channels for this server and add the system message to each
         const channels = useChannelStore.getState().channels[serverId] || []
@@ -581,9 +597,10 @@ export function useIRCEvents(): void {
 
     cleanups.push(
       api.on('irc:netjoin', ({ serverId, server1, server2, nicks }) => {
-        const content = nicks.length === 1
-          ? `${nicks[0]} rejoined (netjoin: ${server1} \u2194 ${server2})`
-          : `${nicks.length} users rejoined (netjoin: ${server1} \u2194 ${server2}): ${nicks.slice(0, 5).join(', ')}${nicks.length > 5 ? `, and ${nicks.length - 5} more` : ''}`
+        const content =
+          nicks.length === 1
+            ? `${nicks[0]} rejoined (netjoin: ${server1} \u2194 ${server2})`
+            : `${nicks.length} users rejoined (netjoin: ${server1} \u2194 ${server2}): ${nicks.slice(0, 5).join(', ')}${nicks.length > 5 ? `, and ${nicks.length - 5} more` : ''}`
 
         const channels = useChannelStore.getState().channels[serverId] || []
         for (const ch of channels) {

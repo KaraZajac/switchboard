@@ -599,29 +599,31 @@ class SwitchboardEngine(
         // whether *this phone* is holding anything would send everything down
         // whichever path the first network happened to take.
         val connection = connections[serverId]
-        if (connection != null || !remote.isLinked) {
-            if (connection == null) {
-                Log.w(TAG, "$channel: not connected to $serverId")
-                if (!quiet) store.noteRefusal("Not connected — that was not sent")
+
+        if (connection == null) {
+            if (remote.isLinked) {
+                scope.launch {
+                    runCatching { remote.call(channel, JsonPrimitive(serverId), *args) }
+                        .onFailure { Log.w(TAG, "$channel failed: ${it.message}") }
+                }
                 return
             }
 
-            // A socket that has gone away still takes writes: the queue is
-            // unbounded and `writeDirect` swallows the failure, so a message
-            // typed while the connection was down disappeared without a word.
-            // The reconnect will be along shortly; the message will not.
-            if (!connection.isConnected) {
-                if (!quiet) store.noteRefusal("Not connected — that was not sent")
-                return
-            }
-
-            local(connection)
-        } else {
-            scope.launch {
-                runCatching { remote.call(channel, JsonPrimitive(serverId), *args) }
-                    .onFailure { Log.w(TAG, "$channel failed: ${it.message}") }
-            }
+            Log.w(TAG, "$channel: not connected to $serverId")
+            if (!quiet) store.noteRefusal("Not connected — that was not sent")
+            return
         }
+
+        // A socket that has gone away still takes writes: the queue is
+        // unbounded and `writeDirect` swallows the failure, so a message typed
+        // while the connection was down disappeared without a word. The
+        // reconnect will be along shortly; the message will not.
+        if (!connection.isConnected) {
+            if (!quiet) store.noteRefusal("Not connected — that was not sent")
+            return
+        }
+
+        local(connection)
     }
 
     /**
