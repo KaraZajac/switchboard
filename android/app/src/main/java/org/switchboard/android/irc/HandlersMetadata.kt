@@ -4,7 +4,7 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
 /**
- * draft/metadata-2 — the profile behind a nick.
+ * draft/metadata-2 and -3 — the profile behind a nick.
  *
  * Avatar, display name, pronouns, status, colour. Subscribing is what makes it
  * live: without a SUB the server answers a direct GET and never tells you when
@@ -12,10 +12,31 @@ import kotlinx.serialization.json.put
  */
 internal object Metadata {
 
+    /**
+     * The two live versions of the draft, newest first.
+     *
+     * `draft/metadata-3` pushes changes as numerics — 761 and 766 — where
+     * `draft/metadata-2` pushes a METADATA command, and it allows a client to
+     * set its own keys during registration. Both numerics were already handled
+     * as live updates, so accepting either costs nothing.
+     *
+     * Only metadata-2 is in the IRCv3 registry; metadata-3 is the name rIRCd
+     * uses for the updated spec. Kept alongside `src/shared/metadata.ts`.
+     */
+    val CAPS = listOf("draft/metadata-3", "draft/metadata-2")
+
+    /** Whether this connection can do metadata at all, by either version */
+    fun supported(session: IrcSession): Boolean =
+        CAPS.any { session.state.capabilities.contains(it) }
+
+    /** The version actually in force, for reading its limits off */
+    private fun capInForce(session: IrcSession): String =
+        CAPS.firstOrNull { session.state.capabilities.contains(it) } ?: CAPS.last()
+
     /** The keys we render, matching `src/shared/types/metadata.ts` */
     val KEYS = listOf("avatar", "display-name", "homepage", "pronouns", "status", "color")
 
-    /** What the server said it will hold, from `draft/metadata-2=…` */
+    /** What the server said it will hold, from the metadata capability's value */
     data class Limits(
         val maxSubs: Int? = null,
         val maxKeys: Int? = null,
@@ -56,7 +77,7 @@ internal object Metadata {
     }
 
     private fun limitsOf(session: IrcSession): Limits =
-        limitsFrom(session.state.available["draft/metadata-2"])
+        limitsFrom(session.state.available[capInForce(session)])
 
     /**
      * Whether a value is short enough for this server to keep.
@@ -77,7 +98,7 @@ internal object Metadata {
      * key past the limit.
      */
     fun subscribe(session: IrcSession) {
-        if (!session.state.capabilities.contains("draft/metadata-2")) return
+        if (!supported(session)) return
 
         val maxSubs = limitsOf(session).maxSubs
         val keys = if (maxSubs == null) KEYS else KEYS.take(maxSubs)
@@ -87,7 +108,7 @@ internal object Metadata {
     }
 
     fun sync(session: IrcSession, target: String) {
-        if (!session.state.capabilities.contains("draft/metadata-2")) return
+        if (!supported(session)) return
         session.send("METADATA", target, "SYNC")
     }
 
@@ -100,7 +121,7 @@ internal object Metadata {
      * are seconds apart and anything in between comes back as 451.
      */
     fun publishProfile(session: IrcSession) {
-        if (!session.state.capabilities.contains("draft/metadata-2")) return
+        if (!supported(session)) return
 
         subscribe(session)
 

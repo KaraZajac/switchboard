@@ -1,4 +1,5 @@
 import { BrowserWindow } from 'electron'
+import { hasMetadata } from '@shared/metadata'
 import { foldCase } from '@shared/casemap'
 import type { ServerConfig } from '@shared/types/server'
 import type { IRCMessage } from '@shared/types/irc'
@@ -253,7 +254,7 @@ export class IRCManager {
     }
     if (Object.keys(seeded).length > 0) client.state.metadata.set(own, seeded)
 
-    if (!client.state.capabilities.has('draft/metadata-2')) return
+    if (!hasMetadata(client.state.capabilities)) return
 
     subscribeToMetadata(client)
 

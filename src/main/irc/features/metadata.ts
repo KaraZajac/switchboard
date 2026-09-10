@@ -1,9 +1,10 @@
 import { registerHandler } from '../handlers/registry'
+import { metadataCapOf } from '@shared/metadata'
 
 import { METADATA_KEYS } from '@shared/types/metadata'
 
 /**
- * draft/metadata-2 — user metadata (avatar, display name, pronouns, …)
+ * draft/metadata-2 and -3 — user metadata (avatar, display name, pronouns, …)
  *
  * Numerics:
  *   761 RPL_KEYVALUE        — <target> <key> <visibility> :<value>
@@ -24,7 +25,7 @@ import { METADATA_KEYS } from '@shared/types/metadata'
  * rather than us asking per nick.
  */
 
-/** What the server said it will hold, from `draft/metadata-2=…` */
+/** What the server said it will hold, from the metadata capability's value */
 export interface MetadataLimits {
   maxSubs: number | null
   maxKeys: number | null
@@ -61,9 +62,15 @@ export function parseMetadataLimits(value: string | null | undefined): MetadataL
 
 /** The limits this connection is under, or none if the server named none */
 export function metadataLimitsOf(client: {
-  state: { availableCapabilities: Map<string, string | null> }
+  state: {
+    availableCapabilities: Map<string, string | null>
+    capabilities: Set<string>
+  }
 }): MetadataLimits {
-  return parseMetadataLimits(client.state.availableCapabilities.get('draft/metadata-2'))
+  // Off whichever version is in force: the two advertise separately and a
+  // server may state different numbers for each.
+  const cap = metadataCapOf(client.state.capabilities) ?? 'draft/metadata-2'
+  return parseMetadataLimits(client.state.availableCapabilities.get(cap))
 }
 
 /**
@@ -75,7 +82,7 @@ export function metadataLimitsOf(client: {
  */
 export function subscribeToMetadata(client: {
   connection: { send: (...args: string[]) => void }
-  state: { availableCapabilities: Map<string, string | null> }
+  state: { availableCapabilities: Map<string, string | null>; capabilities: Set<string> }
 }): void {
   const limits = metadataLimitsOf(client)
   const keys =
@@ -92,7 +99,9 @@ export function subscribeToMetadata(client: {
  * hits it at a third of the characters an English one does.
  */
 export function metadataValueFits(
-  client: { state: { availableCapabilities: Map<string, string | null> } },
+  client: {
+    state: { availableCapabilities: Map<string, string | null>; capabilities: Set<string> }
+  },
   value: string
 ): boolean {
   const limit = metadataLimitsOf(client).maxValueBytes

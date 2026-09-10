@@ -59,6 +59,10 @@ export const REQUESTED_CAPS = [
   'draft/multiline',
   'draft/channel-rename',
   'draft/account-registration',
+  // Two live versions of the same draft; a server may offer either or both.
+  // The newer one pushes changes as numerics and allows setting keys during
+  // registration. See src/shared/metadata.ts.
+  'draft/metadata-3',
   'draft/metadata-2',
   'draft/event-playback',
   'draft/pre-away',

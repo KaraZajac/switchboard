@@ -1,4 +1,5 @@
 import { BrowserWindow, Notification, app, net, dialog, type IpcMainInvokeEvent } from 'electron'
+import { hasMetadata } from '@shared/metadata'
 import { handle } from './registry'
 import { readFile } from 'fs/promises'
 import { userInfo } from 'os'
@@ -353,7 +354,7 @@ export function registerIPCHandlers(): void {
   handle('metadata:get', async (_event, serverId: string, target: string, key: string) => {
     const client = ircManager.getClient(serverId)
     if (!client) throw new Error('Not connected')
-    if (!client.state.capabilities.has('draft/metadata-2')) {
+    if (!hasMetadata(client.state.capabilities)) {
       throw new Error('Server does not support metadata')
     }
     // METADATA before 001 comes back as 451 and is lost. Say so rather than
@@ -412,7 +413,7 @@ export function registerIPCHandlers(): void {
     }
 
     if (!client) return { saved: true, published: false, reason: 'Not connected' }
-    if (!client.state.capabilities.has('draft/metadata-2')) {
+    if (!hasMetadata(client.state.capabilities)) {
       return {
         saved: true,
         published: false,

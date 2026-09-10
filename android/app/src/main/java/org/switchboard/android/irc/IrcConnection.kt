@@ -364,11 +364,11 @@ class IrcConnection(
     }
 
     /** Whether this network can carry a profile at all */
-    val supportsMetadata: Boolean get() = state.capabilities.contains("draft/metadata-2")
+    val supportsMetadata: Boolean get() = Metadata.supported(this)
 
     /** Publish one of our own metadata keys */
     fun setMetadata(key: String, value: String) {
-        if (!state.capabilities.contains("draft/metadata-2")) return
+        if (!Metadata.supported(this)) return
         if (value.isEmpty()) send("METADATA", "*", "SET", key)
         else send("METADATA", "*", "SET", key, value)
     }
@@ -552,6 +552,7 @@ class IrcConnection(
             "draft/multiline",
             "draft/channel-rename",
             "draft/account-registration",
+            "draft/metadata-3",
             "draft/metadata-2",
             "draft/event-playback",
             "draft/pre-away",

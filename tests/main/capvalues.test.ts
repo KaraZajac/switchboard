@@ -20,7 +20,13 @@ const corpus = JSON.parse(
 
 /** A connection carrying one capability value, which is all these read */
 const withValue = (capability: string, value: string) =>
-  ({ state: { availableCapabilities: new Map([[capability, value]]) } }) as never
+  ({
+    state: {
+      availableCapabilities: new Map([[capability, value]]),
+      // Which version is in force decides which value the limits come from
+      capabilities: new Set([capability])
+    }
+  }) as never
 
 describe('which SASL mechanisms a server will take', () => {
   for (const c of corpus.sasl) {

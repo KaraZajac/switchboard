@@ -1,4 +1,5 @@
 import { registerHandler } from './registry'
+import { hasMetadata } from '@shared/metadata'
 import type { ChannelUser } from '@shared/types/channel'
 import { sendWHOX } from '../features/whox'
 import { syncMetadata } from '../features/metadata'
@@ -27,7 +28,7 @@ registerHandler('JOIN', (client, msg) => {
     client.state.getChannel(channel)
 
     // Everyone's avatars, display names and colours for this channel in one go
-    if (client.state.capabilities.has('draft/metadata-2')) {
+    if (hasMetadata(client.state.capabilities)) {
       syncMetadata(client, channel)
     }
 
@@ -44,7 +45,7 @@ registerHandler('JOIN', (client, msg) => {
 
   // Someone else arriving: the server pushed everyone's metadata when *we*
   // joined, but not for people who show up afterwards, so ask for theirs.
-  if (!isMe && nick && client.state.capabilities.has('draft/metadata-2')) {
+  if (!isMe && nick && hasMetadata(client.state.capabilities)) {
     syncMetadata(client, nick)
   }
 
