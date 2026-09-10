@@ -1,0 +1,92 @@
+{
+  "$comment": "Uploading a file to the network's own filehost, shared by tests/shared/filehost.test.ts and the Android SharedCorpusTest. The desktop has had this since there was a file picker; the phone had no attach button at all, which is the wrong way round \u2014 a photograph is on the phone.",
+  "$where": "`isupport` is what the network advertised; `url` is where uploads go, or null.",
+  "where": [
+    {
+      "name": "the current token",
+      "isupport": {
+        "FILEHOST": "https://files.example.net/"
+      },
+      "url": "https://files.example.net/"
+    },
+    {
+      "name": "the draft spelling, which plenty of servers still send",
+      "isupport": {
+        "draft/FILEHOST": "https://files.example.net/"
+      },
+      "url": "https://files.example.net/"
+    },
+    {
+      "name": "a network with no filehost",
+      "isupport": {
+        "CHANTYPES": "#"
+      },
+      "url": null
+    },
+    {
+      "name": "a token with nothing in it",
+      "isupport": {
+        "FILEHOST": ""
+      },
+      "url": null
+    },
+    {
+      "name": "something that is not a URL",
+      "isupport": {
+        "FILEHOST": "files.example.net"
+      },
+      "url": null
+    },
+    {
+      "name": "a scheme that is not http",
+      "isupport": {
+        "FILEHOST": "ftp://files.example.net/"
+      },
+      "url": null
+    }
+  ],
+  "$auth": "Whether the account password may be sent. The upload authenticates with Basic, which over plain http hands the password to anyone on the path \u2014 and unlike the IRC connection, this URL is whatever the server said.",
+  "auth": [
+    {
+      "url": "https://files.example.net/",
+      "mayAuthenticate": true
+    },
+    {
+      "url": "http://files.example.net/",
+      "mayAuthenticate": false
+    }
+  ],
+  "$resolved": "What the filehost answered with, and the link that goes in the channel. The draft allows a relative Location, and a relative one pasted into a channel is a link to nothing.",
+  "resolved": [
+    {
+      "name": "an absolute URL is used as it is",
+      "location": "https://files.example.net/abc123/cat.png",
+      "base": "https://files.example.net/upload",
+      "url": "https://files.example.net/abc123/cat.png"
+    },
+    {
+      "name": "a relative one is resolved against the filehost",
+      "location": "/abc123/cat.png",
+      "base": "https://files.example.net/upload",
+      "url": "https://files.example.net/abc123/cat.png"
+    },
+    {
+      "name": "a bare name is resolved too",
+      "location": "cat.png",
+      "base": "https://files.example.net/upload/",
+      "url": "https://files.example.net/upload/cat.png"
+    },
+    {
+      "name": "surrounding space is not part of it",
+      "location": "  https://files.example.net/a.png  ",
+      "base": "https://files.example.net/",
+      "url": "https://files.example.net/a.png"
+    },
+    {
+      "name": "no location is no link",
+      "location": "",
+      "base": "https://files.example.net/",
+      "url": null
+    }
+  ]
+}

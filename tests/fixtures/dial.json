@@ -1,0 +1,117 @@
+{
+  "$comment": "Whether a change to a network means dialling it again, shared by tests/shared/dial.test.ts and the Android SharedCorpusTest. Editing a server wrote the new settings down and left the running connection alone, so changing the address and pressing save left you connected to the old one \u2014 with the list showing the new address and a green dot beside it.",
+  "$cases": "`before` is the running connection's settings, `after` the edit. `redial` is whether the connection has to be made again.",
+  "cases": [
+    {
+      "name": "a different server",
+      "before": {
+        "host": "irc.libera.chat",
+        "port": 6697,
+        "tls": true
+      },
+      "after": {
+        "host": "irc.oftc.net"
+      },
+      "redial": true
+    },
+    {
+      "name": "a different port",
+      "before": {
+        "host": "irc.libera.chat",
+        "port": 6697,
+        "tls": true
+      },
+      "after": {
+        "port": 6667
+      },
+      "redial": true
+    },
+    {
+      "name": "turning encryption off",
+      "before": {
+        "host": "irc.libera.chat",
+        "port": 6697,
+        "tls": true
+      },
+      "after": {
+        "tls": false
+      },
+      "redial": true
+    },
+    {
+      "name": "moving to a websocket",
+      "before": {
+        "host": "irc.libera.chat",
+        "port": 6697,
+        "tls": true,
+        "websocketUrl": null
+      },
+      "after": {
+        "websocketUrl": "wss://irc.example.net/"
+      },
+      "redial": true
+    },
+    {
+      "name": "renaming it changes nothing on the wire",
+      "before": {
+        "host": "irc.libera.chat",
+        "port": 6697,
+        "tls": true
+      },
+      "after": {
+        "name": "Libera"
+      },
+      "redial": false
+    },
+    {
+      "name": "editing the join list does not drop the connection",
+      "before": {
+        "host": "irc.libera.chat",
+        "port": 6697,
+        "tls": true
+      },
+      "after": {
+        "autoJoin": [
+          "#one"
+        ]
+      },
+      "redial": false
+    },
+    {
+      "name": "a nick is changed with NICK, not by reconnecting",
+      "before": {
+        "host": "irc.libera.chat",
+        "port": 6697,
+        "tls": true
+      },
+      "after": {
+        "nick": "kara2"
+      },
+      "redial": false
+    },
+    {
+      "name": "saving the same settings is not a change",
+      "before": {
+        "host": "irc.libera.chat",
+        "port": 6697,
+        "tls": true
+      },
+      "after": {
+        "host": "irc.libera.chat",
+        "port": 6697,
+        "tls": true
+      },
+      "redial": false
+    },
+    {
+      "name": "an empty edit",
+      "before": {
+        "host": "irc.libera.chat",
+        "port": 6697,
+        "tls": true
+      },
+      "after": {},
+      "redial": false
+    }
+  ]
+}

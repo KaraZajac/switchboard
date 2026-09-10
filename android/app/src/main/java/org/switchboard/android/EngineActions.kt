@@ -19,6 +19,14 @@ import kotlinx.serialization.json.put
 import org.switchboard.android.irc.Commands
 import org.switchboard.android.irc.ServerConfig
 import java.time.Instant
+import android.content.ContentResolver
+import android.content.Context
+import android.net.Uri
+import android.provider.OpenableColumns
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import org.switchboard.android.irc.Filehost
+import org.switchboard.android.irc.dialChanged
 
 /**
  * Everything the app can be asked to do.
@@ -768,7 +776,21 @@ suspend fun SwitchboardEngine.addServer(config: ServerConfig): String? {
 suspend fun SwitchboardEngine.updateServer(serverId: String, changes: ServerConfig) {
     if (isHolding || !remote.isLinked) {
         if (!vault.isUnlocked) return
+
+        // Where the connection goes is part of what was edited: changing the
+        // address and pressing save used to leave the socket on the old server,
+        // with the list showing the new address and a green dot beside it.
+        // Nothing else reconnects — dropping somebody out of a conversation to
+        // apply a renamed network would be worse than the bug.
+        val before = connections[serverId]?.config
+        val redial = before != null && dialChanged(before, changes)
+
         resealWith(vault.servers().map { if (it.id == serverId) changes.copy(id = serverId) else it })
+
+        if (redial) {
+            disconnectServer(serverId)
+            connectServer(serverId)
+        }
         return
     }
     ask("server:update", JsonPrimitive(serverId), changes.toJson(omitBlankSecrets = true))
@@ -932,3 +954,103 @@ private fun ServerConfig.toJson(omitBlankSecrets: Boolean = false): JsonObject =
         put(key, value?.let { JsonPrimitive(it) } ?: JsonNull)
     }
 }
+
+// ── sending a file ────────────────────────────────────────────────────
+
+/**
+ * Whether this network takes uploads.
+ *
+ * `draft/filehost` is an ISUPPORT token, so the answer is per network and only
+ * known once connected. A button that cannot work is worse than no button.
+ */
+fun SwitchboardEngine.canAttach(serverId: String): Boolean {
+    val connection = connections[serverId] ?: return false
+    return Filehost.url(connection.state.isupport) != null
+}
+
+/**
+ * Send a file to the network's filehost and return the link.
+ *
+ * Null when it could not be done, having already said why — the refusal is
+ * worth more than the absence, since "nothing happened" is what an upload that
+ * silently failed looks like too.
+ *
+ * Only ever this phone's own connection: an upload authenticates as the
+ * account and streams the bytes, and neither is something to ask the desktop
+ * to do on our behalf over the link.
+ */
+suspend fun SwitchboardEngine.attach(serverId: String, uri: Uri, context: Context): String? =
+    withContext(Dispatchers.IO) {
+        val connection = connections[serverId]
+        if (connection == null) {
+            store.noteRefusal("Not connected — that was not sent")
+            return@withContext null
+        }
+
+        val endpoint = Filehost.url(connection.state.isupport)
+        if (endpoint == null) {
+            store.noteRefusal("This network does not take file uploads.")
+            return@withContext null
+        }
+
+        // Android refuses cleartext HTTP, and it is right to: the upload
+        // carries the file and, on a filehost that wants one, the account
+        // password. Said plainly here rather than letting the platform's own
+        // exception through, because the fix belongs to the network and not to
+        // whoever is holding the phone.
+        if (!Filehost.mayAuthenticate(endpoint)) {
+            store.noteRefusal(
+                "This network's filehost is not encrypted, so nothing can be sent to it."
+            )
+            return@withContext null
+        }
+
+        val resolver = context.contentResolver
+        val contentType = resolver.getType(uri) ?: "application/octet-stream"
+        val name = displayName(resolver, uri) ?: "file"
+        val size = sizeOf(resolver, uri)
+
+        try {
+            val stream = resolver.openInputStream(uri)
+            if (stream == null) {
+                store.noteRefusal("That file could not be read.")
+                return@withContext null
+            }
+
+            stream.use {
+                Filehost.upload(
+                    endpoint = endpoint,
+                    bytes = it,
+                    length = size,
+                    fileName = name,
+                    contentType = contentType,
+                    account = connection.config.saslUsername ?: connection.config.nick,
+                    password = connection.config.saslPassword
+                )
+            }
+        } catch (e: Exception) {
+            store.noteRefusal(e.message ?: "That file could not be sent.")
+            null
+        }
+    }
+
+/** What the file is called, as the picker knows it */
+private fun displayName(resolver: ContentResolver, uri: Uri): String? =
+    runCatching {
+        resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { row ->
+            if (row.moveToFirst()) row.getString(0) else null
+        }
+    }.getOrNull()
+
+/**
+ * How large it is, or 0 when the provider will not say.
+ *
+ * 0 means "stream it without a Content-Length", which is what chunked encoding
+ * is for — some providers genuinely do not know until they have read it.
+ */
+private fun sizeOf(resolver: ContentResolver, uri: Uri): Long =
+    runCatching {
+        resolver.query(uri, arrayOf(OpenableColumns.SIZE), null, null, null)?.use { row ->
+            if (row.moveToFirst() && !row.isNull(0)) row.getLong(0) else 0L
+        } ?: 0L
+    }.getOrDefault(0L)

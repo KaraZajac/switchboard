@@ -55,6 +55,8 @@ import { friendListKind, friendListLines, friendListStatusLine } from '@shared/f
 import { tagToUse, TAG_NAMES } from '@shared/clienttags'
 import { readCertificate, certificateBody } from '@shared/certfp'
 import { createHash } from 'crypto'
+import { filehostUrl as filehostOf, mayAuthenticate, uploadedUrl } from '@shared/filehost'
+import { dialChanged } from '@shared/dial'
 
 /**
  * Register all IPC handlers.
@@ -158,9 +160,21 @@ export function registerIPCHandlers(): void {
   })
 
   handle('server:update', async (_event, serverId: string, updates) => {
+    const before = getServer(serverId)
     updateServer(serverId, updates)
     resealVault()
     serversChanged()
+
+    // Where the connection goes is part of what was edited: changing the
+    // address and pressing save used to leave the socket on the old server,
+    // with the list showing the new address and a green dot beside it.
+    // Nothing else reconnects — dropping somebody out of a conversation to
+    // apply a renamed network would be worse than the bug.
+    const after = getServer(serverId)
+    if (before && after && dialChanged(before, after) && ircManager.getClient(serverId)) {
+      ircManager.disconnect(serverId)
+      ircManager.connect(after)
+    }
   })
 
   handle('server:remove', async (_event, serverId: string) => {
@@ -738,9 +752,8 @@ export function registerIPCHandlers(): void {
     const client = ircManager.getClient(serverId)
     if (!client) throw new Error('Not connected')
 
-    const filehostUrl = client.state.isupport['FILEHOST'] || client.state.isupport['draft/FILEHOST']
-    if (typeof filehostUrl !== 'string') throw new Error('Server does not support file uploads')
-    if (!/^https?:\/\//i.test(filehostUrl)) throw new Error('Invalid filehost URL')
+    const filehostUrl = filehostOf(client.state.isupport)
+    if (!filehostUrl) throw new Error('Server does not support file uploads')
 
     const result = await dialog.showOpenDialog({
       properties: ['openFile'],
@@ -775,8 +788,12 @@ export function registerIPCHandlers(): void {
       'Content-Length': fileData.length.toString()
     }
 
+    // The account password, but only where the connection to the filehost is
+    // itself encrypted. The upload authenticates with Basic, and over plain
+    // http that hands the password to anyone on the path — and unlike the IRC
+    // connection, this URL is whatever the server said it was.
     const config = getServer(serverId)
-    if (config?.saslUsername && config?.saslPassword) {
+    if (config?.saslUsername && config?.saslPassword && mayAuthenticate(filehostUrl)) {
       const credentials = Buffer.from(`${config.saslUsername}:${config.saslPassword}`).toString('base64')
       headers['Authorization'] = `Basic ${credentials}`
     }
@@ -803,8 +820,14 @@ export function registerIPCHandlers(): void {
             reject(new Error('Server did not return a file URL'))
             return
           }
-          // Resolve relative URLs
-          resolve(loc.startsWith('http') ? loc : new URL(loc, filehostUrl).href)
+          // The draft allows a relative Location, and a relative one pasted
+          // into a channel is a link to nothing
+          const resolved = uploadedUrl(typeof loc === 'string' ? loc : null, filehostUrl)
+          if (!resolved) {
+            reject(new Error('Server did not return a usable file URL'))
+            return
+          }
+          resolve(resolved)
         })
       })
 

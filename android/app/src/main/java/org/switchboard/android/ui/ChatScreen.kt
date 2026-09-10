@@ -71,6 +71,8 @@ import org.switchboard.android.SwitchboardStore
 import org.switchboard.android.isChannel
 import org.switchboard.android.isConsole
 import org.switchboard.android.SwitchboardEngine
+import org.switchboard.android.attach
+import org.switchboard.android.canAttach
 import org.switchboard.android.connectServer
 import org.switchboard.android.disconnectServer
 import org.switchboard.android.editMessage
@@ -85,6 +87,11 @@ import org.switchboard.android.say
 import org.switchboard.android.setAway
 import org.switchboard.android.setTyping
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.ui.platform.LocalContext
 
 /**
  * The whole client, once it is running.
@@ -364,6 +371,32 @@ private fun Conversation(
         var editingMessage by remember(store.activeChannel) { mutableStateOf<Message?>(null) }
         val clipboard = LocalClipboardManager.current
 
+        // Sharing a photograph is most of what a phone is for, and until now
+        // the desktop was the only half of this client that could send a file
+        // at all. Only offered where the network runs a filehost.
+        val context = LocalContext.current
+        val scope = rememberCoroutineScope()
+        var attaching by remember { mutableStateOf(false) }
+        val canAttach = store.activeServerId?.let { engine.canAttach(it) } == true
+
+        val picker = rememberLauncherForActivityResult(
+            ActivityResultContracts.GetContent()
+        ) { uri ->
+            val serverId = store.activeServerId
+            val channel = store.activeChannel
+            if (uri == null || serverId == null || channel == null) return@rememberLauncherForActivityResult
+
+            attaching = true
+            scope.launch {
+                val link = engine.attach(serverId, uri, context)
+                attaching = false
+                // The link goes to the channel as an ordinary message, which is
+                // what a filehost URL is — the receiving client makes it a
+                // picture, and one that cannot still has something to click.
+                if (link != null) engine.say(serverId, channel, link)
+            }
+        }
+
         MessageList(
             store,
             modifier = Modifier.weight(1f),
@@ -412,6 +445,8 @@ private fun Conversation(
             enabled = store.activeServerId != null &&
                 store.activeChannel != null &&
                 !isConsole(store.activeChannel.orEmpty()),
+            onAttach = if (canAttach) ({ picker.launch("*/*") }) else null,
+            attaching = attaching,
             seedKey = editingMessage?.id,
             seedText = editingMessage?.content,
             people = store.activeServerId?.let { serverId ->
@@ -769,6 +804,9 @@ private fun Composer(
     seedText: String? = null,
     /** Who is in this conversation, for completing a half-typed name */
     people: List<String> = emptyList(),
+    /** Null where the network has no filehost, so no button is offered */
+    onAttach: (() -> Unit)? = null,
+    attaching: Boolean = false,
     onTyping: (Boolean) -> Unit,
     onSend: (String) -> Unit
 ) {
@@ -854,6 +892,33 @@ private fun Composer(
         verticalAlignment = Alignment.Bottom,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
+        // Only where the network takes uploads. A button that cannot work is
+        // worse than no button, and most networks have no filehost at all.
+        if (onAttach != null) {
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .background(Surface0, RoundedCornerShape(COMPOSER_RADIUS))
+                    .clickable(enabled = enabled && !attaching) { onAttach() },
+                contentAlignment = Alignment.Center
+            ) {
+                if (attaching) {
+                    CircularProgressIndicator(
+                        color = Blue,
+                        strokeWidth = 2.dp,
+                        modifier = Modifier.size(18.dp)
+                    )
+                } else {
+                    Icon(
+                        Icons.Filled.Add,
+                        contentDescription = "Attach a file",
+                        tint = Subtext,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+            }
+        }
+
         Box(
             modifier = Modifier
                 .weight(1f)

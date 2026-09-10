@@ -30,6 +30,8 @@ import org.switchboard.android.vault.VaultPayload
 import org.switchboard.android.vault.shouldAdoptVault
 import org.switchboard.android.irc.ClientTags
 import org.switchboard.android.irc.Decoding
+import org.switchboard.android.irc.Filehost
+import org.switchboard.android.irc.dialChanged
 import org.switchboard.android.irc.Formatting
 import org.switchboard.android.irc.avatarUrl
 import org.switchboard.android.irc.Friends
@@ -1199,6 +1201,69 @@ class SharedCorpusTest {
             val decoded = Decoding.line(byteArrayOf(byte.toByte()))
             assertEquals(1, decoded.length)
             assertTrue("0x%02x became a replacement character".format(byte), decoded != "\uFFFD")
+        }
+    }
+
+    // ── uploading a file ──────────────────────────────────────────────
+
+    @Test
+    fun `agrees with the desktop about where a file goes`() {
+        val corpus = load("filehost.json")
+
+        for (entry in corpus["where"]!!.jsonArray) {
+            val case = entry.jsonObject
+            val isupport = case["isupport"]!!.jsonObject.mapValues { (_, v) ->
+                v.jsonPrimitive.contentOrNull ?: ""
+            }
+            assertEquals(
+                case["name"]!!.jsonPrimitive.content,
+                case["url"]!!.jsonPrimitive.contentOrNull,
+                Filehost.url(isupport)
+            )
+        }
+
+        for (entry in corpus["auth"]!!.jsonArray) {
+            val case = entry.jsonObject
+            assertEquals(
+                "the password goes over https and nowhere else",
+                case["mayAuthenticate"]!!.jsonPrimitive.boolean,
+                Filehost.mayAuthenticate(case["url"]!!.jsonPrimitive.content)
+            )
+        }
+
+        for (entry in corpus["resolved"]!!.jsonArray) {
+            val case = entry.jsonObject
+            assertEquals(
+                case["name"]!!.jsonPrimitive.content,
+                case["url"]!!.jsonPrimitive.contentOrNull,
+                Filehost.uploaded(
+                    case["location"]!!.jsonPrimitive.content,
+                    case["base"]!!.jsonPrimitive.content
+                )
+            )
+        }
+    }
+
+    @Test
+    fun `knows when an edit means dialling again`() {
+        fun config(from: JsonObject, base: ServerConfig) = base.copy(
+            host = from["host"]?.jsonPrimitive?.contentOrNull ?: base.host,
+            port = from["port"]?.jsonPrimitive?.intOrNull ?: base.port,
+            tls = from["tls"]?.jsonPrimitive?.booleanOrNull ?: base.tls,
+            websocketUrl = if (from.containsKey("websocketUrl"))
+                from["websocketUrl"]?.jsonPrimitive?.contentOrNull
+            else base.websocketUrl
+        )
+
+        for (entry in load("dial.json")["cases"]!!.jsonArray) {
+            val case = entry.jsonObject
+            val name = case["name"]!!.jsonPrimitive.content
+            val blank = ServerConfig(id = "srv", name = "Test", host = "x", nick = "kara")
+
+            val before = config(case["before"]!!.jsonObject, blank)
+            val after = config(case["after"]!!.jsonObject, before)
+
+            assertEquals(name, case["redial"]!!.jsonPrimitive.boolean, dialChanged(before, after))
         }
     }
 
