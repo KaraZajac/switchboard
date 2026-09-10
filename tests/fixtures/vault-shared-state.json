@@ -5,12 +5,13 @@
   "payload": {
     "version": 7,
     "servers": [
-      { "id": "srv-1", "name": "Doll", "host": "irc.d0ll.link", "port": 6697, "tls": true, "nick": "kara" },
+      { "id": "srv-1", "name": "Doll", "host": "irc.d0ll.link", "port": 6697, "tls": true, "nick": "kara", "autoJoin": ["#lobby", "#help"] },
       { "id": "srv-2", "name": "Libera", "host": "irc.libera.chat", "port": 6697, "tls": true, "nick": "kara" }
     ],
     "settings": {
       "theme": "nord",
-      "mutes": { "srv-1:#noisy": 0 }
+      "mutes": { "srv-1:#noisy": 0 },
+      "profile": { "display-name": "Kara", "pronouns": "she/her" }
     },
     "monitor": {
       "srv-1": ["robin", "mara"],
@@ -21,6 +22,10 @@
   "$expected": "What both clients must make of it.",
   "expected": {
     "theme": "nord",
+    "$profile": "A display name and a set of pronouns are facts about the person, not about the machine they were typed on or the network they happened to be on. The phone writes this; a desktop that dropped it on the next reseal took the profile with it.",
+    "profile": { "display-name": "Kara", "pronouns": "she/her" },
+    "$autoJoin": "Joining a channel is how you say you want to be in it — there is no other signal — so the join is the setting, and it belongs to the config both clients read rather than to one device's local list.",
+    "autoJoin": { "srv-1": ["#lobby", "#help"], "srv-2": [] },
     "watched": {
       "srv-1": ["robin", "mara"],
       "srv-2": ["jules"]

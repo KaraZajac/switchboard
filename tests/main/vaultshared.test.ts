@@ -37,6 +37,28 @@ describe('the shared state a vault carries', () => {
   })
 
   /**
+   * A display name and a set of pronouns are facts about the person, not about
+   * the machine they were typed on. The phone writes this one, and a desktop
+   * that did not know about it dropped it on the next reseal.
+   */
+  it('carries the profile that belongs to the person', () => {
+    expect(payload.settings?.profile).toEqual(corpus.expected.profile)
+  })
+
+  /**
+   * Joining a channel is how you say you want to be in it — there is no other
+   * signal — so the join is the setting, and it belongs to the config both
+   * clients read rather than to one device's local list.
+   */
+  it('carries each server’s join-on-connect list', () => {
+    for (const server of payload.servers) {
+      expect(server.autoJoin ?? []).toEqual(
+        (corpus.expected.autoJoin as Record<string, string[]>)[server.id]
+      )
+    }
+  })
+
+  /**
    * Upgrading one device must not lock the other out of its own config, in
    * either direction.
    */

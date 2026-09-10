@@ -837,6 +837,27 @@ class SharedCorpusTest {
             expected["serverIds"]!!.jsonArray.map { it.jsonPrimitive.content },
             payload.servers.map { it.id }
         )
+
+        // A display name and a set of pronouns are facts about the person, not
+        // about the machine they were typed on. This phone writes it; a desktop
+        // that did not know about it dropped it on the next reseal.
+        val profile = expected["profile"]!!.jsonObject
+        val sealed = payload.settings["profile"]!!.jsonObject
+        for ((key, value) in profile) {
+            assertEquals("profile.$key", value.jsonPrimitive.content, sealed[key]?.jsonPrimitive?.content)
+        }
+
+        // Joining a channel is how you say you want to be in it, and there is
+        // no other signal — so the join is the setting, and it belongs to the
+        // config both clients read rather than to one device's local list.
+        val autoJoin = expected["autoJoin"]!!.jsonObject
+        for (server in payload.servers) {
+            assertEquals(
+                "join-on-connect for ${server.id}",
+                autoJoin[server.id]!!.jsonArray.map { it.jsonPrimitive.content },
+                server.autoJoin
+            )
+        }
     }
 
     /**
