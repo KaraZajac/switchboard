@@ -104,9 +104,7 @@ class IrcConnection(
     }
 
     override fun sendRaw(line: String) {
-        // Prevent injection: a newline would end the command and start another
-        val sanitized = line.replace("\r", "").replace("\n", "")
-        outbound.trySend(sanitized)
+        outbound.trySend(line)
     }
 
     override fun emit(channel: String, data: JsonElement) = emitEvent(channel, data)
@@ -270,11 +268,24 @@ class IrcConnection(
         }
     }
 
-    /** Straight to the socket, for PONG and QUIT */
+    /**
+     * Straight to the socket, for PONG and QUIT.
+     *
+     * The one place every byte we send passes through, and so the place the
+     * newlines come out. A newline inside a command ends it and starts
+     * another, which turns anything built from typed text into a way to send
+     * commands nobody typed — and the composer here treats Enter as a line
+     * break, so typing one is the easy thing to do rather than the hard one.
+     *
+     * This lived a layer up, on the queue, and `/quit <message>` did not go
+     * through the queue: a QUIT is written immediately so that leaving is not
+     * held up behind whatever else was waiting.
+     */
     private fun writeDirect(line: String) {
         val stream = output ?: return
+        val safe = Irc.oneLine(line)
         runCatching {
-            stream.write((line + "\r\n").toByteArray(Charsets.UTF_8))
+            stream.write((safe + "\r\n").toByteArray(Charsets.UTF_8))
             stream.flush()
         }
     }

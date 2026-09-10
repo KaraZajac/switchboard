@@ -133,6 +133,16 @@ object Irc {
     fun serialise(command: String, vararg params: String): String = serialise(command, params.toList())
 
     /**
+     * One line, whatever was in it.
+     *
+     * A newline inside a command ends it and starts another, so anything built
+     * from typed text becomes a way to send commands nobody typed. The
+     * composer treats Enter as a line break, which makes typing one the easy
+     * thing to do rather than the hard one.
+     */
+    fun oneLine(line: String): String = line.replace("\r", "").replace("\n", "")
+
+    /**
      * Commands whose last parameter is a piece of human text.
      *
      * These always take the trailing form, single word or not — it is what every

@@ -80,6 +80,11 @@ function commandOf(line: string): string {
   return rest.split(' ', 1)[0].toUpperCase()
 }
 
+/** No line we send may contain a newline: it would end the command early */
+function stripNewlines(line: string): string {
+  return line.replace(/[\r\n]/g, '')
+}
+
 // eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging
 export class IRCConnection extends EventEmitter {
   readonly config: ServerConfig
@@ -229,8 +234,10 @@ export class IRCConnection extends EventEmitter {
    * delaying a PONG would get us pinged out.
    */
   sendRaw(line: string): void {
-    // Prevent injection: strip any embedded newlines
-    const sanitized = line.replace(/[\r\n]/g, '')
+    // Newlines come out at the socket, in writeLine. Stripped here too so that
+    // what the flood queue counts and what the server receives are the same
+    // line.
+    const sanitized = stripNewlines(line)
 
     const command = commandOf(sanitized)
 
@@ -288,7 +295,16 @@ export class IRCConnection extends EventEmitter {
     this.lastRefill = Date.now()
   }
 
-  private writeLine(line: string): void {
+  /**
+   * The one place every byte we send passes through.
+   *
+   * A newline inside a command ends it and starts another, which turns
+   * anything built from typed text into a way to send commands nobody typed.
+   * Stripping them here rather than only at the queue means a caller that
+   * writes straight to the socket cannot miss it.
+   */
+  private writeLine(raw: string): void {
+    const line = stripNewlines(raw)
     if (this.useWebSocket) {
       if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return
       this.ws.send(line)

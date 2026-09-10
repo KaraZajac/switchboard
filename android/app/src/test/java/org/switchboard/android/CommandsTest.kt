@@ -8,6 +8,7 @@ import org.junit.Before
 import org.junit.Test
 import org.switchboard.android.irc.Commands
 import org.switchboard.android.irc.ConnectionState
+import org.switchboard.android.irc.Irc
 import org.switchboard.android.irc.IrcCommandTarget
 
 /**
@@ -266,5 +267,26 @@ class CommandsTest {
     fun `commands are recognised whatever case they are typed in`() {
         run("/JOIN #lobby")
         assertEquals(listOf("join #lobby"), target.calls)
+    }
+
+    /**
+     * Nothing we send may carry a newline.
+     *
+     * `/quit <message>` is the one command whose text reaches the socket
+     * without passing the send queue — a QUIT is written immediately so that
+     * leaving is not held up behind whatever else was waiting — which is
+     * exactly why the check belongs at the socket rather than on the queue.
+     */
+    @Test
+    fun `a newline in what was typed cannot become a second command`() {
+        assertEquals(
+            "QUIT :byeJOIN #elsewhere",
+            Irc.oneLine(Irc.serialise("QUIT", listOf("bye\r\nJOIN #elsewhere")))
+        )
+        assertEquals(
+            "TOPIC #chan :helloJOIN #elsewhere",
+            Irc.oneLine(Irc.serialise("TOPIC", listOf("#chan", "hello\nJOIN #elsewhere")))
+        )
+        assertEquals("nothing to strip", Irc.oneLine("nothing to strip"))
     }
 }

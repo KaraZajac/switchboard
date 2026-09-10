@@ -194,3 +194,33 @@ describe('the websocket transport', () => {
     expect(WEBSOCKET_SUBPROTOCOLS).not.toContain('irc')
   })
 })
+
+/**
+ * Nothing we send may carry a newline.
+ *
+ * A newline inside a command ends it and starts another, so anything built
+ * from typed text becomes a way to send commands nobody typed. The phone's
+ * composer treats Enter as a line break, which makes typing one the easy
+ * thing to do rather than the hard one.
+ */
+describe('newlines never reach the wire', () => {
+  it('strips them from a queued line', () => {
+    const { connection, written } = connectionOnPaper()
+
+    connection.send('TOPIC', '#chan', 'hello\r\nJOIN #elsewhere')
+
+    expect(written).toEqual(['TOPIC #chan :helloJOIN #elsewhere'])
+  })
+
+  it('strips them from a line written straight to the socket', () => {
+    const { connection, written } = connectionOnPaper()
+
+    // QUIT does not wait behind the queue — leaving should not be held up by
+    // whatever else was pending — so it has to be safe on its own.
+    ;(connection as unknown as { _connected: boolean })._connected = true
+    connection.disconnect('bye\nJOIN #elsewhere')
+
+    expect(written.some((line) => line.startsWith('JOIN'))).toBe(false)
+    expect(written).toEqual(['QUIT :byeJOIN #elsewhere'])
+  })
+})
