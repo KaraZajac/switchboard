@@ -34,6 +34,7 @@ export const REMOTE_ALLOWED = new Set([
   'app:renderer-ready',
   'history:fetch',
   'chathistory:request',
+  'chathistory:catchup',
   'message:search',
   'message:search-server',
   'read-marker:get',

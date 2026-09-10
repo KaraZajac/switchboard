@@ -480,6 +480,26 @@ export function registerIPCHandlers(): void {
     return getMessages(serverId, channel, { before, limit })
   })
 
+  /**
+   * What was said after the newest thing we have.
+   *
+   * The other half of `chathistory:request`, and the half that makes two
+   * devices work: local history is what this machine saw, and the whole point
+   * of the second device is that things happen while this one is closed. Asking
+   * BEFORE only ever reaches further back into what we already missed nothing
+   * of.
+   */
+  handle('chathistory:catchup', async (_event, serverId: string, channel: string, after: string, limit?: number) => {
+    const client = ircManager.getClient(serverId)
+    if (!client) return
+    const { requestChathistory } = await import('../irc/features/chathistory')
+    requestChathistory(client, channel, {
+      direction: 'AFTER',
+      reference: `timestamp=${after}`,
+      limit: limit || 100
+    })
+  })
+
   handle('chathistory:request', async (_event, serverId: string, channel: string, before?: string, limit?: number) => {
     const client = ircManager.getClient(serverId)
     if (!client) return

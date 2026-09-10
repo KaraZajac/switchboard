@@ -115,7 +115,7 @@ export interface MainToRendererEvents {
   'irc:connected': { serverId: string; nick: string }
   'irc:disconnected': { serverId: string; reason: string }
   'irc:message': { serverId: string; channel: string; message: ChatMessage }
-  'irc:join': { serverId: string; channel: string; user: ChannelUser }
+  'irc:join': { serverId: string; channel: string; user: ChannelUser; isMe: boolean }
   'irc:part': { serverId: string; channel: string; nick: string; reason: string | null; isMe: boolean }
   'irc:quit': { serverId: string; nick: string; reason: string | null }
   'irc:nick': { serverId: string; oldNick: string; newNick: string }
@@ -246,6 +246,8 @@ export interface RendererToMainInvocations {
   'account:verify': (serverId: string, account: string, code: string) => Promise<boolean>
   'history:fetch': (serverId: string, channel: string, before?: string, limit?: number) => Promise<ChatMessage[]>
   'chathistory:request': (serverId: string, channel: string, before?: string, limit?: number) => Promise<void>
+  /** What was said after `after`, for catching up on another device's evening */
+  'chathistory:catchup': (serverId: string, channel: string, after: string, limit?: number) => Promise<void>
   'notification:send': (title: string, body: string) => Promise<void>
   'tray:set-badge': (count: number) => Promise<void>
   'settings:get': (key: string) => Promise<unknown>

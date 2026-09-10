@@ -59,16 +59,30 @@ export function useIRCEvents(): void {
 
     // Channel events
     cleanups.push(
-      api.on('irc:join', ({ serverId, channel, user }) => {
+      api.on('irc:join', ({ serverId, channel, user, isMe }) => {
         useChannelStore.getState().addChannel(serverId, channel)
         useUserStore.getState().addUser(serverId, channel, user)
+
+        // Only our own arrival is a reason to go looking for history. This ran
+        // on everybody's, so a busy channel hit the database once per join.
+        if (!isMe) return
 
         // Load local history first
         const channelKey = `${serverId}:${channel.toLowerCase()}`
         api.invoke('history:fetch', serverId, channel, undefined, 50).then((messages) => {
           if (messages && messages.length > 0) {
             useMessageStore.getState().setMessages(serverId, channel, messages)
-            chathistoryFetched.add(channelKey)
+
+            // And then ask the network what happened after it. Local history is
+            // what *this machine* saw, and the whole point of the other device
+            // is that things happen while this one is closed — so stopping here
+            // meant an evening spent on the phone was simply missing when you
+            // sat back down, and nothing ever asked for it again.
+            const newest = messages[messages.length - 1]?.timestamp
+            if (newest) {
+              chathistoryFetched.add(channelKey)
+              api.invoke('chathistory:catchup', serverId, channel, newest, 100)
+            }
           } else {
             // No local history — only fetch from server if this is the active channel
             const activeChannel = useChannelStore.getState().activeChannel[serverId]

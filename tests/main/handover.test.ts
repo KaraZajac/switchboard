@@ -10,7 +10,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
  */
 
 const servers = vi.hoisted(() => ({
-  list: [] as Array<{ id: string; autoConnect: boolean }>
+  list: [] as Array<{
+    id: string
+    autoConnect: boolean
+    saslMechanism?: string | null
+    saslPassword?: string | null
+  }>
 }))
 
 vi.mock('../../src/main/storage/models/server', () => ({
@@ -93,5 +98,54 @@ describe('taking the connections back', () => {
 
     manager.resumeConnections()
     expect(connected).toEqual(afterFirst)
+  })
+})
+
+/**
+ * Networks both devices can be on at once.
+ *
+ * Handing over is for networks that allow only one of us. Where the server lets
+ * two sessions of one account in — and the config carries credentials for both
+ * to arrive as — there is nothing to hand over: the other device has its own
+ * socket beside ours, and dropping ours would take this desktop off a network
+ * it is perfectly able to stay on.
+ */
+describe('handing over a network both devices can share', () => {
+  beforeEach(() => {
+    servers.list = [
+      { id: 'a', autoConnect: true },
+      { id: 'shared', autoConnect: true, saslMechanism: 'PLAIN', saslPassword: 'hunter2pass' }
+    ]
+  })
+
+  it('keeps the shared one and gives up the rest', () => {
+    const { manager, clients } = managerWithFakeClients(['a', 'shared'])
+
+    manager.releaseConnections()
+
+    expect([...clients.keys()]).toEqual(['shared'])
+  })
+
+  it('brings back only what it actually released', () => {
+    const { manager, connected } = managerWithFakeClients(['a', 'shared'])
+
+    manager.releaseConnections()
+    manager.resumeConnections()
+
+    // 'shared' was never released, so reconnecting it would drop a live
+    // connection and bring the user back under a nick the server hands out
+    // because their real one is still in a ping timeout.
+    expect(connected).toEqual(['a'])
+  })
+
+  it('a mechanism with no password is not something to share', () => {
+    servers.list = [
+      { id: 'half', autoConnect: true, saslMechanism: 'PLAIN', saslPassword: null }
+    ]
+    const { manager, clients } = managerWithFakeClients(['half'])
+
+    manager.releaseConnections()
+
+    expect(clients.size).toBe(0)
   })
 })
