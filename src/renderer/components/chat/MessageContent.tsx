@@ -1,6 +1,12 @@
 import { useState, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
-import { parseFormatting, isPlain, readableOnDark } from '@shared/formatting'
+import {
+  parseFormatting,
+  formattingAfter,
+  isPlain,
+  readableOnDark,
+  type FormattingState
+} from '@shared/formatting'
 import { parseMessageContent, isImageUrl, isKlipyMediaUrl, isVideoUrl, isAudioUrl, getYouTubeVideoId, getFilenameFromUrl, getFileTypeInfo, type MessageSegment } from '../../utils/linkify'
 import { useServerStore } from '../../stores/serverStore'
 import type { LinkPreviewData } from '@shared/types/ipc'
@@ -16,19 +22,56 @@ interface MessageContentProps {
 export function MessageContent({ text, highlightNick }: MessageContentProps) {
   const segments = parseMessageContent(text)
 
+  // Formatting runs the length of a message, and the pieces it is cut into
+  // here — links, code, markdown — are not where it stops. `\x02bold
+  // https://example.com more` is bold to the end of the line, and parsing each
+  // piece from nothing lost it at the link and never got it back. The phone,
+  // which parses the whole line and finds links inside it, always kept it.
+  let carried: FormattingState | undefined
+  const opening: (FormattingState | undefined)[] = []
+  for (const segment of segments) {
+    opening.push(carried)
+    const raw =
+      segment.type === 'link'
+        ? segment.url
+        : segment.type === 'text' || segment.type === 'code' || segment.type === 'markdown'
+          ? segment.content
+          : ''
+    carried = formattingAfter(raw, carried)
+  }
+
   return (
     <span>
       {segments.map((segment, i) => (
-        <Segment key={i} segment={segment} highlightNick={highlightNick} />
+        <Segment
+          key={i}
+          segment={segment}
+          highlightNick={highlightNick}
+          carried={opening[i]}
+        />
       ))}
     </span>
   )
 }
 
-function Segment({ segment, highlightNick }: { segment: MessageSegment; highlightNick?: string }) {
+function Segment({
+  segment,
+  highlightNick,
+  carried
+}: {
+  segment: MessageSegment
+  highlightNick?: string
+  carried?: FormattingState
+}) {
   switch (segment.type) {
     case 'text':
-      return <FormattedText text={segment.content} highlightNick={highlightNick} />
+      return (
+        <FormattedText
+          text={segment.content}
+          highlightNick={highlightNick}
+          carried={carried}
+        />
+      )
 
     case 'link': {
       // Klipy media: render inline without URL text
@@ -134,12 +177,15 @@ function MarkdownSpan({ style, content }: { style: string; content: string }) {
 
 export function FormattedText({
   text,
-  highlightNick
+  highlightNick,
+  carried
 }: {
   text: string
   highlightNick?: string
+  /** Formatting still open from earlier in the same message */
+  carried?: FormattingState
 }) {
-  const spans = parseFormatting(text)
+  const spans = parseFormatting(text, carried)
 
   // If no formatting, just return plain text (with possible highlighting)
   if (spans.length === 1 && isPlain(spans[0])) {

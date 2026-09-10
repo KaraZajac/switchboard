@@ -384,5 +384,54 @@
       "bg": null,
       "out": null
     }
+  ],
+  "$carried": "Formatting carried in from earlier in the same message. Only the desktop needs this: it pulls links, code and markdown out of a line and formats what is left between them, so each piece has to be told what was still open when it began. The phone parses the whole line and finds links inside it, so it never lost the state to begin with \u2014 this is how the two were made to agree.",
+  "carried": [
+    {
+      "name": "bold from before carries into the next piece",
+      "before": "\u0002bold ",
+      "text": " more",
+      "plain": " more",
+      "spans": [
+        {
+          "text": " more",
+          "bold": true
+        }
+      ]
+    },
+    {
+      "name": "a colour from before carries too",
+      "before": "\u000304red ",
+      "text": "still red",
+      "plain": "still red",
+      "spans": [
+        {
+          "text": "still red",
+          "fg": "#ff0000"
+        }
+      ]
+    },
+    {
+      "name": "a reset in an earlier piece is still a reset",
+      "before": "\u0002bold\u000f",
+      "text": "plain",
+      "plain": "plain",
+      "spans": [
+        {
+          "text": "plain"
+        }
+      ]
+    },
+    {
+      "name": "nothing carried is nothing applied",
+      "before": "just words",
+      "text": "more words",
+      "plain": "more words",
+      "spans": [
+        {
+          "text": "more words"
+        }
+      ]
+    }
   ]
 }

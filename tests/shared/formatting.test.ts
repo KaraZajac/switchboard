@@ -3,6 +3,7 @@ import { readFileSync } from 'fs'
 import { join } from 'path'
 import {
   parseFormatting,
+  formattingAfter,
   stripFormatting,
   readableOnDark,
   IRC_PALETTE,
@@ -25,7 +26,11 @@ interface Readable {
 
 const corpus = JSON.parse(
   readFileSync(join(__dirname, '../fixtures/formatting.json'), 'utf8')
-) as { cases: Case[]; readable: Readable[] }
+) as {
+  cases: Case[]
+  readable: Readable[]
+  carried: { name: string; before: string; text: string; plain: string; spans: Partial<FormattedSpan>[] }[]
+}
 
 /** The fixture leaves defaults out, so fill them in before comparing */
 function expand(span: Partial<FormattedSpan>): FormattedSpan {
@@ -67,6 +72,13 @@ describe('shared formatting corpus', () => {
   for (const r of corpus.readable) {
     it(`draws readably: ${r.name}`, () => {
       expect(readableOnDark(r.fg, r.bg)).toBe(r.out)
+    })
+  }
+
+  for (const c of corpus.carried) {
+    it(`carries formatting across a cut: ${c.name}`, () => {
+      const carried = formattingAfter(c.before)
+      expect(parseFormatting(c.text, carried)).toEqual(c.spans.map(expand))
     })
   }
 

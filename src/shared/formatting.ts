@@ -79,7 +79,10 @@ export interface FormattedSpan {
   bg: string | null
 }
 
-const BLANK: Omit<FormattedSpan, 'text'> = {
+/** Everything a span carries except the text itself */
+export type FormattingState = Omit<FormattedSpan, 'text'>
+
+const BLANK: FormattingState = {
   bold: false,
   italic: false,
   underline: false,
@@ -100,9 +103,30 @@ const HEX = /[0-9a-fA-F]/
  * every span is exactly what the reader sees — which is what makes it safe to
  * measure offsets against, for links and for mention highlighting.
  */
-export function parseFormatting(text: string): FormattedSpan[] {
+export function parseFormatting(text: string, initial?: FormattingState): FormattedSpan[] {
+  return scan(text, initial).spans
+}
+
+/**
+ * The style still open at the end of this text.
+ *
+ * A message is not always parsed in one piece: the desktop pulls links, code
+ * blocks and markdown out first and formats what is left between them. Each of
+ * those was parsed from nothing, so `\x02bold https://example.com more` lost
+ * the bold at the link and never got it back — while the phone, which parses
+ * the whole line and finds links inside it, kept it. The same message, two
+ * devices, two answers.
+ */
+export function formattingAfter(text: string, initial?: FormattingState): FormattingState {
+  return scan(text, initial).style
+}
+
+function scan(
+  text: string,
+  initial?: FormattingState
+): { spans: FormattedSpan[]; style: FormattingState } {
   const spans: FormattedSpan[] = []
-  let style = { ...BLANK }
+  let style = { ...(initial ?? BLANK) }
   let run = ''
   let i = 0
 
@@ -204,7 +228,7 @@ export function parseFormatting(text: string): FormattedSpan[] {
   }
 
   flush()
-  return spans
+  return { spans, style }
 }
 
 /**
