@@ -27,6 +27,7 @@ import org.switchboard.android.vault.VaultEnvelope
 import org.switchboard.android.vault.VaultKdf
 import org.switchboard.android.vault.VaultPayload
 import org.switchboard.android.vault.shouldAdoptVault
+import org.switchboard.android.irc.Formatting
 import org.switchboard.android.irc.Isupport
 import org.switchboard.android.irc.ServerConfig
 import org.switchboard.android.irc.Services
@@ -947,5 +948,76 @@ class SharedCorpusTest {
         assertTrue(payload.servers.isEmpty())
     }
 
-}
+    // ── mIRC formatting ───────────────────────────────────────────────
 
+    @Test
+    fun `draws every formatting case the way the desktop draws it`() {
+        val corpus = load("formatting.json")
+        val cases = corpus["cases"]!!.jsonArray
+        assertTrue("corpus should not be empty", cases.size > 20)
+
+        for (entry in cases) {
+            val case = entry.jsonObject
+            val name = case["name"]!!.jsonPrimitive.content
+            val text = case["text"]!!.jsonPrimitive.content
+            val spans = Formatting.parse(text)
+            val expected = case["spans"]!!.jsonArray
+
+            assertEquals("$name: span count", expected.size, spans.size)
+            for ((i, want) in expected.withIndex()) {
+                val w = want.jsonObject
+                val got = spans[i]
+                fun flag(key: String) = w[key]?.jsonPrimitive?.booleanOrNull ?: false
+                fun colour(key: String) = w[key]?.jsonPrimitive?.contentOrNull
+
+                assertEquals("$name: span $i text", w["text"]!!.jsonPrimitive.content, got.text)
+                assertEquals("$name: span $i bold", flag("bold"), got.bold)
+                assertEquals("$name: span $i italic", flag("italic"), got.italic)
+                assertEquals("$name: span $i underline", flag("underline"), got.underline)
+                assertEquals("$name: span $i strikethrough", flag("strikethrough"), got.strikethrough)
+                assertEquals("$name: span $i monospace", flag("monospace"), got.monospace)
+                assertEquals("$name: span $i reverse", flag("reverse"), got.reverse)
+                assertEquals("$name: span $i fg", colour("fg"), got.fg)
+                assertEquals("$name: span $i bg", colour("bg"), got.bg)
+            }
+
+            val plain = case["plain"]!!.jsonPrimitive.content
+            assertEquals("$name: stripped", plain, Formatting.strip(text))
+
+            // Everything that measures into a message — links, mention
+            // highlights — measures into the stripped text, so the spans have
+            // to add up to it exactly. This is the invariant the phone broke:
+            // link ranges were taken from the wire form and landed early.
+            assertEquals(
+                "$name: spans add up to what the reader sees",
+                plain,
+                spans.joinToString("") { it.text }
+            )
+        }
+    }
+
+    @Test
+    fun `lifts the colours that would vanish into a dark window`() {
+        for (entry in load("formatting.json")["readable"]!!.jsonArray) {
+            val case = entry.jsonObject
+            assertEquals(
+                case["name"]!!.jsonPrimitive.content,
+                case["out"]!!.jsonPrimitive.contentOrNull,
+                Formatting.readableOnDark(
+                    case["fg"]!!.jsonPrimitive.contentOrNull,
+                    case["bg"]!!.jsonPrimitive.contentOrNull
+                )
+            )
+        }
+    }
+
+    @Test
+    fun `knows the whole palette`() {
+        assertEquals(99, Formatting.PALETTE.size)
+        assertEquals("#ffffff", Formatting.PALETTE[0])
+        assertEquals("#d2d2d2", Formatting.PALETTE[15])
+        assertEquals("#ffffff", Formatting.PALETTE[98])
+        assertNull("99 means the client's own colour", Formatting.paletteColour(99))
+    }
+
+}

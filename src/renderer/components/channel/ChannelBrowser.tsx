@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useServerStore } from '../../stores/serverStore'
 import { useChannelStore } from '../../stores/channelStore'
+import { FormattedText } from '../chat/MessageContent'
+import { stripFormatting } from '@shared/formatting'
 
 interface ChannelEntry {
   name: string
@@ -51,11 +53,13 @@ export function ChannelBrowser({ onClose }: ChannelBrowserProps) {
       })
   }, [activeServerId])
 
+  // Matched against the topic as it reads, not as it arrived: a topic full of
+  // colour codes would otherwise match on "4" and never on the word beside it.
   const filtered = query.trim()
     ? channels.filter(
         (ch) =>
           ch.name.toLowerCase().includes(query.toLowerCase()) ||
-          ch.topic.toLowerCase().includes(query.toLowerCase())
+          stripFormatting(ch.topic).toLowerCase().includes(query.toLowerCase())
       )
     : channels
 
@@ -181,7 +185,9 @@ export function ChannelBrowser({ onClose }: ChannelBrowserProps) {
                       )}
                     </div>
                     {ch.topic && (
-                      <p className="truncate text-xs text-gray-500">{ch.topic}</p>
+                      <p className="truncate text-xs text-gray-500">
+                        <FormattedText text={ch.topic} />
+                      </p>
                     )}
                   </div>
                   <span className="mt-0.5 shrink-0 text-xs text-gray-500">

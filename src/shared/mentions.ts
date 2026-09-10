@@ -10,6 +10,8 @@
  * against `tests/fixtures/mentions.json`.
  */
 
+import { stripFormatting } from './formatting'
+
 /**
  * Characters that count as part of a nick.
  *
@@ -25,5 +27,10 @@ const literal = (nick: string): string => nick.replace(/[.*+?^${}()|[\]\\]/g, '\
 
 export function namesYou(text: string, nick: string): boolean {
   if (!nick) return false
-  return new RegExp(`(?<![${NICK_CHAR}])${literal(nick)}(?![${NICK_CHAR}])`, 'i').test(text)
+  // Against the line as it reads. A nick written in colour arrives as
+  // `\x0304kara`, and the digit the colour code leaves in front of the name is
+  // a word character — so the boundary check failed and being highlighted in
+  // red was the one way to not be highlighted at all.
+  const said = stripFormatting(text)
+  return new RegExp(`(?<![${NICK_CHAR}])${literal(nick)}(?![${NICK_CHAR}])`, 'i').test(said)
 }

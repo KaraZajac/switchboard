@@ -84,6 +84,7 @@ import org.switchboard.android.reply
 import org.switchboard.android.say
 import org.switchboard.android.setAway
 import org.switchboard.android.setTyping
+import androidx.compose.ui.text.buildAnnotatedString
 
 /**
  * The whole client, once it is running.
@@ -652,9 +653,16 @@ private fun ChannelHeader(
             Text(
                 // The banner already carries the mode when there is one to
                 // carry, so the subtitle spends its line on the topic instead.
-                topic?.takeIf { it.isNotBlank() }
-                    ?: serverId?.let { store.servers[it]?.name }
-                    ?: engine.modeDetail,
+                // Drawn the way the channel set it, the same as the desktop
+                // draws it. Showing it raw was not an option: a topic in colour
+                // arrives with the colour codes' digits loose in the text, so
+                // #news read as "13#4N7E8W3S 2- 13|" in the header.
+                topic?.takeIf { it.isNotBlank() }?.let { formatted(it) }
+                    ?: buildAnnotatedString {
+                        append(
+                            serverId?.let { store.servers[it]?.name } ?: engine.modeDetail
+                        )
+                    },
                 color = Overlay,
                 fontSize = 11.sp,
                 maxLines = 1,

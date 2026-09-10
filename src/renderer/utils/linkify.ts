@@ -33,9 +33,16 @@ export type MessageSegment = TextSegment | LinkSegment | CodeSegment | MarkdownS
 /**
  * URL regex that matches common URL patterns.
  * Handles http(s), ftp, and bare domain patterns.
+ *
+ * Control bytes end a URL as surely as a space does. Bots colour their links
+ * — `\x0312https://example.com\x0f` is the ordinary shape of a feed line — and
+ * without this the reset byte was part of the href, so the link opened a
+ * mangled address and the formatting after it never closed.
  */
+/* eslint-disable no-control-regex */
 const URL_REGEX =
-  /https?:\/\/[^\s<>"\])}]+|ftp:\/\/[^\s<>"\])}]+/gi
+  /https?:\/\/[^\s<>"\])}\x00-\x1f]+|ftp:\/\/[^\s<>"\])}\x00-\x1f]+/gi
+/* eslint-enable no-control-regex */
 
 /**
  * Parse message text into segments (text, links, code blocks).

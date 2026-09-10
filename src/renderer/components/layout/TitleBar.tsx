@@ -2,6 +2,8 @@ import { useServerStore } from '../../stores/serverStore'
 import { useChannelStore } from '../../stores/channelStore'
 import { useUIStore } from '../../stores/uiStore'
 import { isChannelName, isServiceNick } from '@shared/constants'
+import { FormattedText } from '../chat/MessageContent'
+import { stripFormatting } from '@shared/formatting'
 
 const EMPTY_CHANNELS: { name: string; topic: string | null }[] = []
 
@@ -73,7 +75,9 @@ export function TitleBar() {
             {channelInfo?.topic && (
               <>
                 <span className="shrink-0 mx-2 text-gray-600">|</span>
-                <span className="truncate text-sm text-gray-400">{channelInfo.topic}</span>
+                <span className="truncate text-sm text-gray-400" title={stripFormatting(channelInfo.topic)}>
+                  <FormattedText text={channelInfo.topic} />
+                </span>
               </>
             )}
           </>

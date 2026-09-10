@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
-import { parseIRCFormatting, type FormattedSpan } from '../../utils/formatting'
+import { parseFormatting, isPlain, readableOnDark } from '@shared/formatting'
 import { parseMessageContent, isImageUrl, isKlipyMediaUrl, isVideoUrl, isAudioUrl, getYouTubeVideoId, getFilenameFromUrl, getFileTypeInfo, type MessageSegment } from '../../utils/linkify'
 import { useServerStore } from '../../stores/serverStore'
 import type { LinkPreviewData } from '@shared/types/ipc'
@@ -132,18 +132,24 @@ function MarkdownSpan({ style, content }: { style: string; content: string }) {
   }
 }
 
-function FormattedText({ text, highlightNick }: { text: string; highlightNick?: string }) {
-  const spans = parseIRCFormatting(text)
+export function FormattedText({
+  text,
+  highlightNick
+}: {
+  text: string
+  highlightNick?: string
+}) {
+  const spans = parseFormatting(text)
 
   // If no formatting, just return plain text (with possible highlighting)
-  if (spans.length === 1 && !hasFormatting(spans[0])) {
+  if (spans.length === 1 && isPlain(spans[0])) {
     return <>{highlightNick ? highlightMentions(spans[0].text, highlightNick) : spans[0].text}</>
   }
 
   return (
     <>
       {spans.map((span, i) => {
-        if (!hasFormatting(span)) {
+        if (isPlain(span)) {
           return <span key={i}>{span.text}</span>
         }
 
@@ -155,9 +161,17 @@ function FormattedText({ text, highlightNick }: { text: string; highlightNick?: 
         if (span.underline) classes.push('underline')
         if (span.strikethrough) classes.push('line-through')
         if (span.monospace) classes.push('font-mono text-sm')
-        if (span.fg) style.color = span.fg
-        if (span.bg) {
-          style.backgroundColor = span.bg
+
+        // Reverse video swaps the two, and has to mean something even when the
+        // sender never named a colour — that is the whole point of it. Standing
+        // in for the unset side with the window's own colours is what makes a
+        // bare \x16 visible instead of a no-op.
+        const fg = span.reverse ? (span.bg ?? '#111827') : readableOnDark(span.fg, span.bg)
+        const bg = span.reverse ? (span.fg ?? '#d1d5db') : span.bg
+
+        if (fg) style.color = fg
+        if (bg) {
+          style.backgroundColor = bg
           classes.push('px-0.5 rounded')
         }
 
@@ -188,18 +202,6 @@ function highlightMentions(text: string, nick: string): React.ReactNode {
     ) : (
       part
     )
-  )
-}
-
-function hasFormatting(span: FormattedSpan): boolean {
-  return (
-    span.bold ||
-    span.italic ||
-    span.underline ||
-    span.strikethrough ||
-    span.monospace ||
-    span.fg !== null ||
-    span.bg !== null
   )
 }
 

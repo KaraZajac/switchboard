@@ -1,0 +1,388 @@
+{
+  "$comment": "mIRC formatting codes, shared by tests/shared/formatting.test.ts and the Android SharedCorpusTest. The desktop drew nine codes and the phone drew four, so the same line from the same channel looked like two different lines depending on which device you picked up. These cases are the agreement.",
+  "$cases": "`text` is the wire form. `plain` is what a reader sees once the control bytes are gone \u2014 the notifier, the search index and every offset measured into the message use it. `spans` is the run breakdown; absent keys mean false or null.",
+  "cases": [
+    {
+      "name": "text with nothing in it stays one span",
+      "text": "just talking",
+      "plain": "just talking",
+      "spans": [
+        {
+          "text": "just talking"
+        }
+      ]
+    },
+    {
+      "name": "bold, opened and closed",
+      "text": "\u0002loud\u0002 quiet",
+      "plain": "loud quiet",
+      "spans": [
+        {
+          "text": "loud",
+          "bold": true
+        },
+        {
+          "text": " quiet"
+        }
+      ]
+    },
+    {
+      "name": "bold left open runs to the end of the line",
+      "text": "and then \u0002everything",
+      "plain": "and then everything",
+      "spans": [
+        {
+          "text": "and then "
+        },
+        {
+          "text": "everything",
+          "bold": true
+        }
+      ]
+    },
+    {
+      "name": "italic inside underline",
+      "text": "\u001fpath \u001dname\u001d here\u001f",
+      "plain": "path name here",
+      "spans": [
+        {
+          "text": "path ",
+          "underline": true
+        },
+        {
+          "text": "name",
+          "underline": true,
+          "italic": true
+        },
+        {
+          "text": " here",
+          "underline": true
+        }
+      ]
+    },
+    {
+      "name": "strikethrough, which the phone used to print as nothing at all",
+      "text": "\u001egone\u001e now",
+      "plain": "gone now",
+      "spans": [
+        {
+          "text": "gone",
+          "strikethrough": true
+        },
+        {
+          "text": " now"
+        }
+      ]
+    },
+    {
+      "name": "monospace",
+      "text": "run \u0011make test\u0011 first",
+      "plain": "run make test first",
+      "spans": [
+        {
+          "text": "run "
+        },
+        {
+          "text": "make test",
+          "monospace": true
+        },
+        {
+          "text": " first"
+        }
+      ]
+    },
+    {
+      "name": "reverse video is a style, not a colour swap that does nothing when there are no colours",
+      "text": "\u0016flipped\u0016 back",
+      "plain": "flipped back",
+      "spans": [
+        {
+          "text": "flipped",
+          "reverse": true
+        },
+        {
+          "text": " back"
+        }
+      ]
+    },
+    {
+      "name": "reset closes everything at once",
+      "text": "\u0002\u001f\u000304shouting\u000fcalm",
+      "plain": "shoutingcalm",
+      "spans": [
+        {
+          "text": "shouting",
+          "bold": true,
+          "underline": true,
+          "fg": "#ff0000"
+        },
+        {
+          "text": "calm"
+        }
+      ]
+    },
+    {
+      "name": "foreground colour only",
+      "text": "\u000304red",
+      "plain": "red",
+      "spans": [
+        {
+          "text": "red",
+          "fg": "#ff0000"
+        }
+      ]
+    },
+    {
+      "name": "foreground and background",
+      "text": "\u000304,08warning",
+      "plain": "warning",
+      "spans": [
+        {
+          "text": "warning",
+          "fg": "#ff0000",
+          "bg": "#ffff00"
+        }
+      ]
+    },
+    {
+      "name": "a single digit is a whole colour code",
+      "text": "\u00034red\u0003 plain",
+      "plain": "red plain",
+      "spans": [
+        {
+          "text": "red",
+          "fg": "#ff0000"
+        },
+        {
+          "text": " plain"
+        }
+      ]
+    },
+    {
+      "name": "a bare colour byte closes the colour and nothing else",
+      "text": "\u0002\u000304loud red\u0003still loud",
+      "plain": "loud redstill loud",
+      "spans": [
+        {
+          "text": "loud red",
+          "bold": true,
+          "fg": "#ff0000"
+        },
+        {
+          "text": "still loud",
+          "bold": true
+        }
+      ]
+    },
+    {
+      "name": "a comma with no digit after it is a comma, not half a colour code",
+      "text": "\u00034,dogs",
+      "plain": ",dogs",
+      "spans": [
+        {
+          "text": ",dogs",
+          "fg": "#ff0000"
+        }
+      ]
+    },
+    {
+      "name": "a comma with digits after it is a background, even mid-number",
+      "text": "\u000304,000 received",
+      "plain": "0 received",
+      "spans": [
+        {
+          "text": "0 received",
+          "fg": "#ff0000",
+          "bg": "#ffffff"
+        }
+      ]
+    },
+    {
+      "name": "only two digits belong to the colour",
+      "text": "\u0003123 blue",
+      "plain": "3 blue",
+      "spans": [
+        {
+          "text": "3 blue",
+          "fg": "#0000fc"
+        }
+      ]
+    },
+    {
+      "name": "the extended palette, which the desktop left uncoloured and the phone threw away",
+      "text": "\u000352bright red\u0003 and \u000371pale blue",
+      "plain": "bright red and pale blue",
+      "spans": [
+        {
+          "text": "bright red",
+          "fg": "#ff0000"
+        },
+        {
+          "text": " and "
+        },
+        {
+          "text": "pale blue",
+          "fg": "#59b4ff"
+        }
+      ]
+    },
+    {
+      "name": "99 means whatever the client normally uses",
+      "text": "\u000399default",
+      "plain": "default",
+      "spans": [
+        {
+          "text": "default"
+        }
+      ]
+    },
+    {
+      "name": "hex colour",
+      "text": "\u0004FF8800orange",
+      "plain": "orange",
+      "spans": [
+        {
+          "text": "orange",
+          "fg": "#ff8800"
+        }
+      ]
+    },
+    {
+      "name": "hex foreground and background",
+      "text": "\u0004ff8800,101010orange on grey",
+      "plain": "orange on grey",
+      "spans": [
+        {
+          "text": "orange on grey",
+          "fg": "#ff8800",
+          "bg": "#101010"
+        }
+      ]
+    },
+    {
+      "name": "a hex code too short to be one is text",
+      "text": "\u0004abcnot a colour",
+      "plain": "abcnot a colour",
+      "spans": [
+        {
+          "text": "abcnot a colour"
+        }
+      ]
+    },
+    {
+      "name": "a hex background too short to be one leaves the comma alone",
+      "text": "\u0004ff0000,zz stays",
+      "plain": ",zz stays",
+      "spans": [
+        {
+          "text": ",zz stays",
+          "fg": "#ff0000"
+        }
+      ]
+    },
+    {
+      "name": "codes with no text between them produce no empty spans",
+      "text": "\u000304\u0002\u000312text",
+      "plain": "text",
+      "spans": [
+        {
+          "text": "text",
+          "bold": true,
+          "fg": "#0000fc"
+        }
+      ]
+    },
+    {
+      "name": "codes with nothing after them produce nothing",
+      "text": "trailing\u0002\u000304",
+      "plain": "trailing",
+      "spans": [
+        {
+          "text": "trailing"
+        }
+      ]
+    },
+    {
+      "name": "a line that is only codes",
+      "text": "\u0002\u001d\u001f\u000f",
+      "plain": "",
+      "spans": []
+    },
+    {
+      "name": "the shape a feed bot actually sends, tag then headline then a coloured link",
+      "text": "\u000304[news]\u0003 headline here \u000312https://example.com/a\u000f",
+      "plain": "[news] headline here https://example.com/a",
+      "spans": [
+        {
+          "text": "[news]",
+          "fg": "#ff0000"
+        },
+        {
+          "text": " headline here "
+        },
+        {
+          "text": "https://example.com/a",
+          "fg": "#0000fc"
+        }
+      ]
+    },
+    {
+      "name": "bold carried across a colour change",
+      "text": "\u0002bold \u000304red bold\u000f done",
+      "plain": "bold red bold done",
+      "spans": [
+        {
+          "text": "bold ",
+          "bold": true
+        },
+        {
+          "text": "red bold",
+          "bold": true,
+          "fg": "#ff0000"
+        },
+        {
+          "text": " done"
+        }
+      ]
+    }
+  ],
+  "$readable": "mIRC's palette was chosen against white, and both clients are dark. A colour too dark to see is worse than no colour, because nothing tells the reader anything was meant. `out` is the colour actually drawn when the sender named a foreground but no background; when they named both, we draw the pair they chose.",
+  "readable": [
+    {
+      "name": "black would vanish",
+      "fg": "#000000",
+      "bg": null,
+      "out": "#737373"
+    },
+    {
+      "name": "navy would vanish",
+      "fg": "#00007f",
+      "bg": null,
+      "out": "#7373b9"
+    },
+    {
+      "name": "maroon would vanish",
+      "fg": "#7f0000",
+      "bg": null,
+      "out": "#b97373"
+    },
+    {
+      "name": "red is already legible",
+      "fg": "#ff0000",
+      "bg": null,
+      "out": "#ff0000"
+    },
+    {
+      "name": "a chosen pair is left alone",
+      "fg": "#000000",
+      "bg": "#ffffff",
+      "out": "#000000"
+    },
+    {
+      "name": "no colour stays no colour",
+      "fg": null,
+      "bg": null,
+      "out": null
+    }
+  ]
+}

@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.sp
 import org.switchboard.android.ChannelListing
 import org.switchboard.android.SwitchboardEngine
 import org.switchboard.android.listChannels
+import org.switchboard.android.irc.Formatting
 
 /**
  * What is on this network.
@@ -80,7 +81,12 @@ fun BrowseScreen(
     }.orEmpty()
 
     val shown = store.channelListing
-        .filter { filter.isBlank() || it.name.contains(filter, true) || it.topic.contains(filter, true) }
+        // Matched against the topic as it reads: a topic full of colour codes
+        // would otherwise match on "4" and never on the word beside it.
+        .filter {
+            filter.isBlank() || it.name.contains(filter, true) ||
+                Formatting.strip(it.topic).contains(filter, true)
+        }
         // Busiest first, which is what someone looking for somewhere to talk
         // wants. Ties by name, so a network where every channel has the same
         // count does not come back in a different order every time it is asked.
@@ -211,7 +217,7 @@ private fun Listing(entry: ChannelListing, alreadyIn: Boolean, onJoin: () -> Uni
         if (entry.topic.isNotBlank()) {
             Spacer(Modifier.height(3.dp))
             Text(
-                entry.topic,
+                formatted(entry.topic),
                 color = Subtext,
                 fontSize = 13.sp,
                 maxLines = 2,

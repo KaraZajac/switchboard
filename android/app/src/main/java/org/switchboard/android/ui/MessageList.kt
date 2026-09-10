@@ -64,6 +64,7 @@ import org.switchboard.android.SwitchboardStore
 import org.switchboard.android.LinkPreview
 import org.switchboard.android.UserMetadata
 import org.switchboard.android.isChannel
+import org.switchboard.android.irc.Formatting
 import org.switchboard.android.namesYou
 
 /**
@@ -625,76 +626,47 @@ private fun NoticeBody(text: String) {
 /**
  * IRC formatting codes, rendered rather than shown.
  *
- * Bold, italic, underline and monospace are the four that people actually use
- * in conversation; colour codes are stripped rather than drawn, since a palette
- * chosen against a white mIRC background is unreadable here.
+ * All nine of them now, through the same parser the desktop uses, so a line
+ * from a channel reads the same on both devices. Colours used to be thrown
+ * away here on the grounds that a palette chosen against mIRC's white
+ * background is unreadable on a dark one — true, but the answer is to lift the
+ * few colours that need it rather than to discard what the sender meant.
  */
 private const val CTCP = '\u0001'
-private const val BOLD = '\u0002'
-private const val ITALIC = '\u001D'
-private const val UNDERLINE = '\u001F'
-private const val MONOSPACE = '\u0011'
-private const val RESET = '\u000F'
-private const val COLOUR = '\u0003'
 
-private fun formatted(text: String) = buildAnnotatedString {
-    var bold = false
-    var italic = false
-    var underline = false
-    var mono = false
-    var index = 0
+/** A `#rrggbb` from the palette as a Compose colour */
+private fun ink(hex: String) = Color(("ff" + hex.removePrefix("#")).toLong(16))
 
-    fun style() = SpanStyle(
-        fontWeight = if (bold) FontWeight.Bold else null,
-        fontStyle = if (italic) FontStyle.Italic else null,
-        textDecoration = if (underline) {
-            androidx.compose.ui.text.style.TextDecoration.Underline
-        } else {
-            null
-        },
-        fontFamily = if (mono) FontFamily.Monospace else null
-    )
+private fun decorations(span: Formatting.Span): TextDecoration? = when {
+    span.underline && span.strikethrough ->
+        TextDecoration.combine(listOf(TextDecoration.Underline, TextDecoration.LineThrough))
+    span.underline -> TextDecoration.Underline
+    span.strikethrough -> TextDecoration.LineThrough
+    else -> null
+}
 
-    val run = StringBuilder()
-    fun flush() {
-        if (run.isEmpty()) return
-        withStyle(style()) { append(run.toString()) }
-        run.clear()
-    }
+internal fun formatted(text: String) = buildAnnotatedString {
+    for (span in Formatting.parse(text)) {
+        // Reverse video swaps the two, and has to mean something even when the
+        // sender never named a colour — that is the whole point of it. Standing
+        // in for the unset side with the window's own colours is what makes a
+        // bare reverse byte visible instead of a no-op.
+        val fg = if (span.reverse) span.bg ?: "#1e1e2e" else Formatting.readableOnDark(span.fg, span.bg)
+        val bg = if (span.reverse) span.fg ?: "#cdd6f4" else span.bg
 
-    while (index < text.length) {
-        when (text[index]) {
-            BOLD -> { flush(); bold = !bold; index++ }
-            ITALIC -> { flush(); italic = !italic; index++ }
-            UNDERLINE -> { flush(); underline = !underline; index++ }
-            MONOSPACE -> { flush(); mono = !mono; index++ }
-            RESET -> {
-                flush()
-                bold = false; italic = false; underline = false; mono = false
-                index++
-            }
-            COLOUR -> {
-                // Colour: skip "NN" or "NN,NN" rather than printing digits
-                flush()
-                index++
-                var digits = 0
-                while (index < text.length && text[index].isDigit() && digits < 2) {
-                    index++; digits++
-                }
-                if (index < text.length && text[index] == ',' &&
-                    index + 1 < text.length && text[index + 1].isDigit()
-                ) {
-                    index++
-                    digits = 0
-                    while (index < text.length && text[index].isDigit() && digits < 2) {
-                        index++; digits++
-                    }
-                }
-            }
-            else -> { run.append(text[index]); index++ }
+        withStyle(
+            SpanStyle(
+                fontWeight = if (span.bold) FontWeight.Bold else null,
+                fontStyle = if (span.italic) FontStyle.Italic else null,
+                textDecoration = decorations(span),
+                fontFamily = if (span.monospace) FontFamily.Monospace else null,
+                color = fg?.let(::ink) ?: Color.Unspecified,
+                background = bg?.let(::ink) ?: Color.Unspecified
+            )
+        ) {
+            append(span.text)
         }
     }
-    flush()
 }
 
 /**
@@ -710,7 +682,7 @@ private fun Linkified(text: String, edited: Boolean, onLongPress: () -> Unit) {
 
     val annotated = buildAnnotatedString {
         append(styled)
-        for (match in LINK.findAll(text)) {
+        for (match in LINK.findAll(styled.text)) {
             addStyle(
                 SpanStyle(color = Blue, textDecoration = TextDecoration.Underline),
                 match.range.first,

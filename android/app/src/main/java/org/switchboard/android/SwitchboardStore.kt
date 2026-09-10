@@ -17,6 +17,7 @@ import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import org.switchboard.android.irc.Formatting
 import org.switchboard.android.irc.Services
 
 /**
@@ -1027,10 +1028,15 @@ fun isConsole(name: String): Boolean = name == SERVER_CONSOLE
  */
 fun namesYou(text: String, nick: String): Boolean {
     if (nick.isEmpty()) return false
+    // Against the line as it reads. A nick written in colour arrives with the
+    // colour's digits in front of it, and a digit is a word character — so the
+    // boundary check failed and being highlighted in red was the one way to not
+    // be highlighted at all.
+    val said = Formatting.strip(text)
     return Regex(
         "(?<![\\w\\[\\]{}\\\\`|^-])" + Regex.escape(nick) + "(?![\\w\\[\\]{}\\\\`|^-])",
         RegexOption.IGNORE_CASE
-    ).containsMatchIn(text)
+    ).containsMatchIn(said)
 }
 
 /** How long someone stays "typing" without saying so again */

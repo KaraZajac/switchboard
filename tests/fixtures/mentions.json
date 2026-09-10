@@ -1,31 +1,145 @@
 {
-  "$comment": "Whether a line says your name, shared by tests/main/mentions.test.ts and the Android SharedCorpusTest. Three parts of each client ask this — the notifier, the unread badge and the conversation highlight — and the two clients have to answer identically, or picking up the other device changes what happened while you were away.",
-
+  "$comment": "Whether a line says your name, shared by tests/main/mentions.test.ts and the Android SharedCorpusTest. Three parts of each client ask this \u2014 the notifier, the unread badge and the conversation highlight \u2014 and the two clients have to answer identically, or picking up the other device changes what happened while you were away.",
   "$cases": "`text` is what somebody said, `nick` is yours, `mentions` is whether it was about you.",
   "cases": [
-    { "name": "your name with a colon, the usual way", "text": "kara: are you there?", "nick": "kara", "mentions": true },
-    { "name": "at the end of a sentence", "text": "that was thanks to kara", "nick": "kara", "mentions": true },
-    { "name": "in the middle", "text": "ask kara about it", "nick": "kara", "mentions": true },
-    { "name": "in brackets", "text": "(kara said so)", "nick": "kara", "mentions": true },
-    { "name": "case does not matter", "text": "KARA are you about", "nick": "kara", "mentions": true },
-    { "name": "with an at sign, as people type on other apps", "text": "@kara look at this", "nick": "kara", "mentions": true },
-    { "name": "followed by a comma", "text": "kara, one moment", "nick": "kara", "mentions": true },
-
-    { "name": "inside a longer word is not you", "text": "we went to karaoke", "nick": "kara", "mentions": false },
-    { "name": "at the end of a longer word is not you", "text": "okara is a soy product", "nick": "kara", "mentions": false },
-
-    { "$comment": "IRC nicks may contain []{}\\`|^- , so a nick that starts with yours is somebody else",
-      "name": "another nick that extends yours", "text": "kara[work]: ping", "nick": "kara", "mentions": false },
-    { "name": "and their own name does reach them", "text": "kara[work]: ping", "nick": "kara[work]", "mentions": true },
-    { "name": "a hyphenated bot is not you", "text": "kara-bot said no", "nick": "kara", "mentions": false },
-    { "name": "an underscore is part of the name too", "text": "kara_ is idle", "nick": "kara", "mentions": false },
-    { "name": "a backtick likewise", "text": "kara`away is here", "nick": "kara", "mentions": false },
-
-    { "name": "a nick made of regex characters is matched literally", "text": "hello {kara}", "nick": "{kara}", "mentions": true },
-    { "name": "and does not match something merely similar", "text": "hello xkarax", "nick": "{kara}", "mentions": false },
-    { "name": "a nick with a pipe in it", "text": "thanks vic|afk", "nick": "vic|afk", "mentions": true },
-
-    { "name": "nobody is mentioned when there is no nick", "text": "anything at all", "nick": "", "mentions": false },
-    { "name": "an empty line mentions nobody", "text": "", "nick": "kara", "mentions": false }
+    {
+      "name": "your name with a colon, the usual way",
+      "text": "kara: are you there?",
+      "nick": "kara",
+      "mentions": true
+    },
+    {
+      "name": "at the end of a sentence",
+      "text": "that was thanks to kara",
+      "nick": "kara",
+      "mentions": true
+    },
+    {
+      "name": "in the middle",
+      "text": "ask kara about it",
+      "nick": "kara",
+      "mentions": true
+    },
+    {
+      "name": "in brackets",
+      "text": "(kara said so)",
+      "nick": "kara",
+      "mentions": true
+    },
+    {
+      "name": "case does not matter",
+      "text": "KARA are you about",
+      "nick": "kara",
+      "mentions": true
+    },
+    {
+      "name": "with an at sign, as people type on other apps",
+      "text": "@kara look at this",
+      "nick": "kara",
+      "mentions": true
+    },
+    {
+      "name": "followed by a comma",
+      "text": "kara, one moment",
+      "nick": "kara",
+      "mentions": true
+    },
+    {
+      "name": "inside a longer word is not you",
+      "text": "we went to karaoke",
+      "nick": "kara",
+      "mentions": false
+    },
+    {
+      "name": "at the end of a longer word is not you",
+      "text": "okara is a soy product",
+      "nick": "kara",
+      "mentions": false
+    },
+    {
+      "$comment": "IRC nicks may contain []{}\\`|^- , so a nick that starts with yours is somebody else",
+      "name": "another nick that extends yours",
+      "text": "kara[work]: ping",
+      "nick": "kara",
+      "mentions": false
+    },
+    {
+      "name": "and their own name does reach them",
+      "text": "kara[work]: ping",
+      "nick": "kara[work]",
+      "mentions": true
+    },
+    {
+      "name": "a hyphenated bot is not you",
+      "text": "kara-bot said no",
+      "nick": "kara",
+      "mentions": false
+    },
+    {
+      "name": "an underscore is part of the name too",
+      "text": "kara_ is idle",
+      "nick": "kara",
+      "mentions": false
+    },
+    {
+      "name": "a backtick likewise",
+      "text": "kara`away is here",
+      "nick": "kara",
+      "mentions": false
+    },
+    {
+      "name": "a nick made of regex characters is matched literally",
+      "text": "hello {kara}",
+      "nick": "{kara}",
+      "mentions": true
+    },
+    {
+      "name": "and does not match something merely similar",
+      "text": "hello xkarax",
+      "nick": "{kara}",
+      "mentions": false
+    },
+    {
+      "name": "a nick with a pipe in it",
+      "text": "thanks vic|afk",
+      "nick": "vic|afk",
+      "mentions": true
+    },
+    {
+      "name": "nobody is mentioned when there is no nick",
+      "text": "anything at all",
+      "nick": "",
+      "mentions": false
+    },
+    {
+      "name": "an empty line mentions nobody",
+      "text": "",
+      "nick": "kara",
+      "mentions": false
+    },
+    {
+      "name": "your name in colour still says your name",
+      "text": "\u000304kara\u0003: are you there?",
+      "nick": "kara",
+      "mentions": true
+    },
+    {
+      "name": "your name in bold still says your name",
+      "text": "\u0002kara\u0002 look at this",
+      "nick": "kara",
+      "mentions": true
+    },
+    {
+      "name": "a colour code before someone else's name is still not you",
+      "text": "\u000304karaoke\u0003 tonight",
+      "nick": "kara",
+      "mentions": false
+    },
+    {
+      "name": "digits that are really a colour code do not join onto the nick",
+      "text": "\u000313kara",
+      "nick": "kara",
+      "mentions": true
+    }
   ]
 }
