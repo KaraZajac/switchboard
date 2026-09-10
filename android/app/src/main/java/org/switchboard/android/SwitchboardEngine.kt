@@ -311,6 +311,7 @@ class SwitchboardEngine(
             "${config.host} would not have us as ${config.nick} " +
                 "(we are ${connection.currentNick}); following the desktop instead"
         )
+        refusedToShare.add(serverId)
         closeConnection(serverId, "The desktop is holding this one")
         return false
     }
@@ -524,6 +525,10 @@ class SwitchboardEngine(
      * right on a phone that is on its own.
      */
     private fun applySharedState() {
+        // A config from the other device may carry credentials this phone did
+        // not have, which is exactly what turns a network's "no" into a "yes".
+        refusedToShare.clear()
+
         (vault.setting("theme") as? JsonPrimitive)?.contentOrNull()?.takeIf { it.isNotBlank() }
             ?.let { shared ->
                 if (shared != themeId) {
@@ -788,11 +793,26 @@ class SwitchboardEngine(
         for (config in vault.servers()) {
             if (!config.autoConnect || !canShareConnection(config)) continue
             if (connections.containsKey(config.id)) continue
+            if (refusedToShare.contains(config.id)) continue
 
             Log.i(TAG, "joining ${config.host} alongside the desktop as ${config.nick}")
             openConnection(config)
         }
     }
+
+    /**
+     * Networks that would not have both of us, so far.
+     *
+     * Asking is cheap but not free: a network that refuses hands out `kara_`
+     * for the few seconds before we notice and give the connection back, and
+     * the user is in the channel twice for those seconds. Doing that again on
+     * every heartbeat would make it a flicker rather than a moment.
+     *
+     * Held for the session only, and cleared whenever the config changes —
+     * credentials the network will accept are exactly the sort of thing that
+     * turns a no into a yes.
+     */
+    private val refusedToShare = mutableSetOf<String>()
 
     /**
      * Bring up one network.
@@ -862,6 +882,9 @@ class SwitchboardEngine(
      */
     internal fun noteVaultChanged() {
         vaultVersion = vault.version
+        // Credentials a network will accept are exactly the sort of thing that
+        // turns its "no" into a "yes", so a config change is worth another try.
+        refusedToShare.clear()
         for (config in vault.servers()) {
             if (store.servers.containsKey(config.id)) continue
             seedServer(config)

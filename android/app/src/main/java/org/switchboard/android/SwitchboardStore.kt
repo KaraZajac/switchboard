@@ -325,7 +325,16 @@ class SwitchboardStore {
         snapshot.jsonArray.forEach { entry ->
             val live = entry.jsonObject
             val id = live["serverId"]?.str() ?: return@forEach
-            servers[id]?.let { servers[id] = it.copy(connected = true, nick = live["nick"]?.str() ?: it.nick) }
+            servers[id]?.let {
+                servers[id] = it.copy(
+                    connected = true,
+                    nick = live["nick"]?.str() ?: it.nick,
+                    // Whose account the desktop is on that network as. The
+                    // account screen is built on this, and following a desktop
+                    // there is no connection here to ask.
+                    account = live["account"]?.str()
+                )
+            }
 
             // What the network offered, and what each offer said about itself.
             // Following a desktop this is the only way to know: there is no
