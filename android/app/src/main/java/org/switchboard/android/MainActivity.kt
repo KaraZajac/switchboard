@@ -126,12 +126,11 @@ fun App(
         mutableStateOf(
             // A phone that has paired before opens straight into the conversation,
             // and one that holds an unlocked vault can work with no desktop at all.
-            // Setup is needed only when this phone has neither a desktop to
-            // follow nor a config of its own. Having either is enough to use
-            // it: the two are separate clients that can share a config, not a
-            // client and its terminal.
-            if (engine.identity.ticket() == null && !engine.hasOwnConfig) Screen.PAIRING
-            else Screen.CHAT
+            // Never the pairing screen. This phone is a client on its own and
+            // has a config from the moment it starts; pairing a desktop is
+            // something you go and do, from Settings, if you want the two to
+            // share one.
+            Screen.CHAT
         )
     }
     val store = engine.store
@@ -244,11 +243,7 @@ fun App(
                     status = store.status,
                     onScan = { screen = Screen.SCANNING },
                     onPair = { ticket, code -> scope.launch { connect(ticket, code) } },
-                    onGoItAlone = { passphrase ->
-                        scope.launch {
-                            if (engine.startOwnConfig(passphrase)) screen = Screen.SERVERS
-                        }
-                    }
+                    onBack = { screen = Screen.SETTINGS }
                 )
 
                 Screen.SCANNING -> ScannerScreen(
@@ -303,6 +298,7 @@ fun App(
                     engine = engine,
                     onBack = { screen = Screen.CHAT },
                     onManageServers = { screen = Screen.SERVERS },
+                    onPairDesktop = { screen = Screen.PAIRING },
                     onUnpair = {
                         engine.identity.forgetTicket()
                         scope.launch { engine.remote.close() }

@@ -177,7 +177,8 @@ fun ChatScreen(
                         onOpenChannels = { scope.launch { channelDrawer.open() } },
                         onOpenMembers = { scope.launch { memberDrawer.open() } },
                         onOpenSettings = onOpenSettings,
-                        onOpenSearch = onOpenSearch
+                        onOpenSearch = onOpenSearch,
+                        onOpenServers = onOpenServers
                     )
                 }
             }
@@ -228,7 +229,8 @@ private fun Conversation(
     onOpenChannels: () -> Unit,
     onOpenMembers: () -> Unit,
     onOpenSettings: () -> Unit,
-    onOpenSearch: () -> Unit
+    onOpenSearch: () -> Unit,
+    onOpenServers: () -> Unit
 ) {
     val store = engine.store
 
@@ -237,32 +239,37 @@ private fun Conversation(
 
         // A banner only when something has changed or needs doing. Repeating
         // the header's own subtitle back at the reader is noise.
+        val pairedWithDesktop = engine.identity.ticket() != null
+
         when {
-            engine.needsPairing -> Banner(
-                text = "Not connected. Pair with your desktop to get started",
+            // Nothing to connect to yet. The way out is a network, not a
+            // desktop — this phone does not need one.
+            engine.knownServers == 0 -> Banner(
+                text = "No networks yet — add one and this phone will connect",
                 color = Overlay,
-                action = "Settings",
-                onClick = onOpenSettings
+                action = "Add",
+                onClick = onOpenServers
             )
 
             engine.needsPassphrase -> Banner(
-                text = "Unlock the shared config so this phone can take over",
+                text = "Unlock the shared config so this phone can connect",
                 color = Yellow,
                 action = "Unlock",
                 onClick = onOpenSettings
             )
 
-            // Not an error, and not urgent — but it is the difference between
-            // a standby phone and a second screen, and nothing else says so
-            // until the desktop is already gone.
-            engine.needsSharedConfig -> Banner(
+            // Only meaningful with a desktop in the picture. Telling someone
+            // using this phone by itself that it cannot take over from a
+            // desktop they do not have is noise about a feature they are not
+            // using.
+            pairedWithDesktop && engine.needsSharedConfig -> Banner(
                 text = "No shared config — this phone cannot take over if the desktop stops",
                 color = Yellow,
                 action = "How",
                 onClick = onOpenSettings
             )
 
-            engine.mode == EngineMode.HOLDING -> Banner(
+            pairedWithDesktop && engine.mode == EngineMode.HOLDING -> Banner(
                 text = "This phone is holding the connections",
                 color = Green
             )

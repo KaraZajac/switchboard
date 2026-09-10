@@ -420,20 +420,26 @@ class SwitchboardEngine(
     /** Whether this phone has a config of its own, desktop or no desktop */
     val hasOwnConfig: Boolean get() = vault.exists
 
+    /** How many networks this phone knows about, its own or a desktop's */
+    val knownServers: Int get() = if (vault.isUnlocked) vault.servers().size else store.servers.size
+
+    /** Whether the config carries a passphrase, which is what sharing it needs */
+    val configHasPassphrase: Boolean get() = vault.hasPassphrase
+
     /**
-     * Begin a config on this phone alone.
+     * Put a passphrase on this phone's config so a desktop can share it.
      *
-     * The way in for someone who has no desktop and does not want one. What it
-     * makes is the same shared config a desktop would have handed over, so
-     * pairing one later is a merge rather than a fresh start.
+     * Not needed to use the app — the config exists and is unlocked from the
+     * first launch. This is the step that makes it shareable.
      */
-    suspend fun startOwnConfig(passphrase: String, keepOpen: Boolean = true): Boolean {
-        val made = withContext(Dispatchers.Default) { vault.create(passphrase, keepOpen) }
-        if (made) {
+    suspend fun setConfigPassphrase(passphrase: String, keepOpen: Boolean = true): Boolean {
+        val set = withContext(Dispatchers.Default) { vault.setPassphrase(passphrase, keepOpen) }
+        if (set) {
             vaultVersion = vault.version
+            noteVaultChanged()
             recomputeMode()
         }
-        return made
+        return set
     }
 
     val vaultFingerprint: String? get() = vault.fingerprint
@@ -645,30 +651,43 @@ class SwitchboardEngine(
             else -> EngineMode.OFFLINE
         }
 
-        // Only when there is actually something to unlock. A phone with no
-        // vault at all has a different problem, and a different answer.
-        isTakingOver = dialling
-        needsPassphrase = primary && vault.exists && !vault.isUnlocked && !remote.isLinked
+        // Whether there is another device in the picture at all. Most of what
+        // follows reads completely differently depending on it, and for a
+        // phone used on its own the answer is no — which used to be the case
+        // none of these messages were written for.
+        val pairedWithDesktop = hasPairedDesktop() || remote.isLinked
 
-        // Being paired and having a shared config are separate things, and
-        // telling someone who is already paired to go and pair is no help at
-        // all. The second is what failover actually needs.
-        needsPairing = !hasPairedDesktop() && !vault.exists
-        needsSharedConfig = hasPairedDesktop() && !vault.exists
+        isTakingOver = dialling
+        // A config that arrived from a desktop and has not been opened. A
+        // config made here is open already, so this is never about that.
+        needsPassphrase = primary && !vault.isUnlocked && !remote.isLinked
+        needsPairing = false
+        needsSharedConfig = pairedWithDesktop && !vault.isUnlocked
 
         modeDetail = when {
             state.claiming -> "Asking the desktop to hand over…"
-            live -> "This phone is holding the connections"
-            dialling -> lastConnectionError?.let { "Taking over — $it" } ?: "Taking over — connecting…"
-            primary && vault.exists && !vault.isUnlocked ->
+            live && pairedWithDesktop -> "This phone is holding the connections"
+            live -> "Connected"
+            dialling && pairedWithDesktop ->
+                lastConnectionError?.let { "Taking over — $it" } ?: "Taking over — connecting…"
+            dialling -> lastConnectionError?.let { "Connecting — $it" } ?: "Connecting…"
+
+            // On its own, and that is an ordinary way to use this. What is
+            // wrong, if anything, is about this phone — not about a desktop
+            // that was never part of it.
+            // The banner below says this, with a tap that gets you there.
+            // Repeating it in the subtitle is the noise that rule exists for.
+            !pairedWithDesktop && vault.servers().isEmpty() -> "Not connected"
+            !pairedWithDesktop && !vault.isUnlocked ->
+                "Unlock your config to connect"
+            !pairedWithDesktop -> "Not connected — open Networks to connect"
+
+            primary && !vault.isUnlocked ->
                 "The desktop is offline. Unlock the shared config to take over."
-            primary && !vault.exists && hasPairedDesktop() ->
-                "The desktop is offline, and never shared its config — so there is " +
-                    "nothing here to take over with."
-            primary && !vault.exists ->
-                "No desktop, and no shared config yet. Pair to get one."
+            primary && vault.servers().isEmpty() ->
+                "The desktop is offline, and the shared config has no servers in it."
             primary && vault.servers().none { it.autoConnect } ->
-                "The desktop is offline, and the shared config has no servers to connect to."
+                "The desktop is offline, and no network here is set to connect on its own."
             primary -> "Taking over from the desktop…"
             remote.isLinked -> "Following the desktop"
             else -> "Looking for the desktop…"

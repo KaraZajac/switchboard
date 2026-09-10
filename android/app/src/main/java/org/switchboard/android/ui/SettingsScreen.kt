@@ -66,7 +66,8 @@ fun SettingsScreen(
     engine: SwitchboardEngine,
     onBack: () -> Unit,
     onManageServers: () -> Unit,
-    onUnpair: () -> Unit
+    onUnpair: () -> Unit,
+    onPairDesktop: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -103,8 +104,10 @@ fun SettingsScreen(
         )
         Card {
             Text(
-                "The servers this phone and your desktop share. Anything changed here is " +
-                    "changed on both.",
+                if (engine.identity.ticket() != null)
+                    "The servers this phone and your desktop share. Anything changed here is changed on both."
+                else
+                    "The networks this phone connects to.",
                 color = Subtext,
                 fontSize = 13.sp,
                 lineHeight = 18.sp
@@ -128,9 +131,15 @@ fun SettingsScreen(
             modifier = Modifier.padding(start = 20.dp, bottom = 6.dp)
         )
         Card {
+            val paired = engine.identity.ticket() != null
             Text(
-                "Forget this desktop and pair again from scratch. The shared config stays on " +
-                    "this phone, so it can still connect on its own.",
+                if (paired)
+                    "Forget this desktop and pair again from scratch. Your config stays on " +
+                        "this phone, so it goes on working on its own."
+                else
+                    "Pair a desktop and the two share one set of networks and settings, and " +
+                        "either can be the one that is actually connected. This phone does " +
+                        "not need one — pairing is only for using both.",
                 color = Subtext,
                 fontSize = 13.sp,
                 lineHeight = 18.sp
@@ -138,24 +147,45 @@ fun SettingsScreen(
             Spacer(Modifier.height(10.dp))
             // What this phone proves itself with. Worth saying plainly, because
             // a copy of it is a working second phone.
-            Text(
-                if (engine.identity.isSealed())
-                    "This phone's identity is sealed by the Android keystore, so a copy of it " +
-                        "taken off the device or out of a backup is useless."
-                else
-                    "This device has no usable keystore, so its identity is stored as-is. " +
-                        "Anything that can read the app's files could pair as this phone.",
-                color = Subtext,
-                fontSize = 12.sp,
-                lineHeight = 17.sp
-            )
+            // Only once there is an identity to describe. A phone that has
+            // never paired has not made one yet, and saying the keystore is
+            // unusable because nothing has been sealed is simply untrue.
+            if (paired) {
+                Text(
+                    if (engine.identity.isSealed())
+                        "This phone's identity is sealed by the Android keystore, so a copy " +
+                            "of it taken off the device or out of a backup is useless."
+                    else
+                        "This device has no usable keystore, so its identity is stored as-is. " +
+                            "Anything that can read the app's files could pair as this phone.",
+                    color = Subtext,
+                    fontSize = 12.sp,
+                    lineHeight = 17.sp
+                )
+            }
             Spacer(Modifier.height(12.dp))
-            Button(
-                onClick = onUnpair,
-                colors = ButtonDefaults.buttonColors(containerColor = Surface0, contentColor = Red),
-                shape = RoundedCornerShape(8.dp)
-            ) {
-                Text("Unpair", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+            if (paired) {
+                Button(
+                    onClick = onUnpair,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Surface0,
+                        contentColor = Red
+                    ),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text("Unpair", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                }
+            } else {
+                Button(
+                    onClick = onPairDesktop,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Surface0,
+                        contentColor = Blue
+                    ),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text("Pair a desktop", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                }
             }
         }
 
@@ -300,18 +330,18 @@ private fun VaultCard(engine: SwitchboardEngine) {
         }
     }
 
-    fun startOwn() {
+    fun setPassphrase() {
         if (working) return
         if (passphrase.length < 8) {
-            error = "Use at least eight characters — this is what protects your passwords"
+            error = "Use at least eight characters — a desktop will need this to open it"
             return
         }
         working = true
         error = null
         scope.launch {
-            val made = engine.startOwnConfig(passphrase, keepOpen)
-            error = if (made) null else "There is already a config on this phone"
-            if (made) passphrase = ""
+            val set = engine.setConfigPassphrase(passphrase, keepOpen)
+            error = if (set) null else "Could not set that"
+            if (set) passphrase = ""
             working = false
         }
     }
@@ -328,13 +358,14 @@ private fun VaultCard(engine: SwitchboardEngine) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(
                 modifier = Modifier.size(8.dp).background(
-                    if (engine.isVaultUnlocked) Green else if (engine.vault.exists) Yellow else Overlay,
+                    if (engine.isVaultUnlocked) Green else Yellow,
                     CircleShape
                 )
             )
             Spacer(Modifier.width(9.dp))
             Text(
-                if (engine.isVaultUnlocked) "Unlocked" else if (engine.vault.exists) "Locked" else "Not received yet",
+                if (!engine.configHasPassphrase) "On this phone only"
+                else if (engine.isVaultUnlocked) "Unlocked" else "Locked",
                 color = Text0,
                 fontSize = 15.sp,
                 fontWeight = FontWeight.SemiBold
@@ -346,7 +377,7 @@ private fun VaultCard(engine: SwitchboardEngine) {
         Spacer(Modifier.height(8.dp))
 
         when {
-            engine.isVaultUnlocked -> {
+            engine.configHasPassphrase && engine.isVaultUnlocked -> {
                 Text(
                     if (engine.isVaultKeptOpen) {
                         "This phone can take over from the desktop on its own, including " +
@@ -394,14 +425,13 @@ private fun VaultCard(engine: SwitchboardEngine) {
             // The consequence first, then both ways out of it. Telling someone
             // to go and do it on a desktop is no help to someone who does not
             // have one, and this phone does not need one.
-            !engine.vault.exists -> {
+            !engine.configHasPassphrase -> {
                 Text(
-                    "Without a config this phone has no server list and no logins of its " +
-                        "own, so it can watch a desktop but cannot connect by itself.\n\n" +
-                        "Start one here and use this phone on its own. Or set a passphrase " +
-                        "on a desktop, under Settings → Devices, and it reaches this phone " +
-                        "over the pairing link, sealed — the passphrase itself never travels. " +
-                        "Either way it is the same config, so a desktop can join later.",
+                    "Your servers and logins live on this phone, encrypted with a key its " +
+                        "hardware keystore holds. Nothing is needed to use them.\n\n" +
+                        "Choose a passphrase to share this config with a desktop. It is what " +
+                        "the two devices use to open the same config; the passphrase itself " +
+                        "never travels between them. Nothing here is lost by adding one.",
                     color = Subtext,
                     fontSize = 13.sp,
                     lineHeight = 18.sp
@@ -415,7 +445,7 @@ private fun VaultCard(engine: SwitchboardEngine) {
                     singleLine = true,
                     visualTransformation = PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
-                    keyboardActions = KeyboardActions(onGo = { startOwn() }),
+                    keyboardActions = KeyboardActions(onGo = { setPassphrase() }),
                     enabled = !working,
                     shape = RoundedCornerShape(8.dp),
                     colors = TextFieldDefaults.colors(
@@ -469,7 +499,7 @@ private fun VaultCard(engine: SwitchboardEngine) {
 
                 Spacer(Modifier.height(12.dp))
                 Button(
-                    onClick = { startOwn() },
+                    onClick = { setPassphrase() },
                     enabled = !working && passphrase.isNotBlank(),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = Surface0,
@@ -478,7 +508,7 @@ private fun VaultCard(engine: SwitchboardEngine) {
                     shape = RoundedCornerShape(8.dp)
                 ) {
                     Text(
-                        if (working) "Starting…" else "Start a config on this phone",
+                        if (working) "Setting…" else "Set a passphrase for sharing",
                         fontWeight = FontWeight.SemiBold,
                         fontSize = 14.sp
                     )

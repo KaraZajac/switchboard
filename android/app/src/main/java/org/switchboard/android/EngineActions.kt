@@ -441,7 +441,16 @@ suspend fun SwitchboardEngine.storedProfile(serverId: String): Map<String, Strin
     listServers().firstOrNull { it.id == serverId }?.profile.orEmpty()
 
 /** Whether the shared config can be changed from here at all */
-val SwitchboardEngine.canEditServers: Boolean get() = vault.isUnlocked || remote.isLinked
+/**
+ * Whether the networks can be edited here.
+ *
+ * Always, now. This used to be `vault.isUnlocked || remote.isLinked`, from
+ * when the phone had no config of its own and a desktop was the only way to
+ * get one — so a phone by itself could not add a server, and the screen said
+ * so and offered nothing. The config is made on first launch and opens itself
+ * from the keystore, so there is nothing to wait for.
+ */
+val SwitchboardEngine.canEditServers: Boolean get() = true
 
 /**
  * Add a network.

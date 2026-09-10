@@ -28,6 +28,7 @@ import java.time.Instant
 class VaultStore(context: Context) {
 
     private val file = File(context.filesDir, "vault.json")
+    private val prefs = context.getSharedPreferences("switchboard-vault", Context.MODE_PRIVATE)
     private val keeper = KeyKeeper(context)
 
     private var key: ByteArray? = null
@@ -65,6 +66,11 @@ class VaultStore(context: Context) {
 
         // If the user asked us to stay open, this is what makes a standby phone
         // able to take over after the system restarts it in the night.
+        // No config yet means a fresh install, not a locked one. Make one, so
+        // that adding a server is the first thing someone can do rather than
+        // the thing they cannot do.
+        if (envelope == null) createLocal()
+
         val sealed = envelope
         val kept = keeper.recover()
         if (sealed != null && kept != null) {
@@ -90,44 +96,69 @@ class VaultStore(context: Context) {
      * thing for a person to do, not an exceptional one.
      */
     /**
-     * Start a config on this phone, with no desktop involved.
+     * Whether this config is protected by a passphrase someone chose.
      *
-     * Until this existed a vault could only ever *arrive* — from a desktop,
-     * over a pairing — so a phone on its own had nowhere to keep a server and
-     * could not add one. That made the desktop a requirement for using the app
-     * at all, which was never the intent: the two are separate clients that
-     * share a config when they are paired, not a client and its terminal.
-     *
-     * The passphrase is what a second device will need later. It is asked for
-     * up front rather than invented here, because a config that cannot be
-     * shared without being re-sealed under a new key is a worse trade than one
-     * question at setup.
-     *
-     * Returns false only if there is already a vault — replacing one silently
-     * would throw away every server on it.
+     * A config made on the phone is not: it is sealed with a random key the
+     * hardware keystore holds, because a client that demands a passphrase
+     * before it will let you type a server address is not a client. The
+     * passphrase is what a *second* device needs, and it is asked for then.
      */
-    fun create(passphrase: String, keepOpen: Boolean = false): Boolean {
+    val hasPassphrase: Boolean get() = prefs.getBoolean(HAS_PASSPHRASE, false)
+
+    /**
+     * Make a config for this phone, now, with nothing to type.
+     *
+     * The app used to have no way to make one at all — a config could only
+     * arrive from a desktop over a pairing — so a phone on its own could not
+     * add a server, save a profile, or do anything else. Everything was gated
+     * on `vault.isUnlocked`, and there was no way to reach that state alone.
+     *
+     * The key is random and lives in the keystore, so this is encrypted at
+     * rest and opens itself on every launch. Nobody is asked for anything.
+     */
+    fun createLocal(): Boolean {
         if (envelope != null) return false
+
+        val generated = ByteArray(32).also { java.security.SecureRandom().nextBytes(it) }
+        write(VaultPayload(version = 1), generated, VaultCrypto.generateSalt())
+        keeper.keep(generated)
+        prefs.edit().putBoolean(HAS_PASSPHRASE, false).apply()
+        return true
+    }
+
+    /**
+     * Put a passphrase on this config so another device can share it.
+     *
+     * Re-seals what is already here under a key derived from the passphrase,
+     * with a fresh salt. Nothing is lost: the servers, the profile and the
+     * settings carry over, so choosing to share later costs nothing.
+     */
+    fun setPassphrase(passphrase: String, keepOpen: Boolean = true): Boolean {
+        val current = payload ?: return false
 
         val salt = VaultCrypto.generateSalt()
         val derived = VaultCrypto.deriveKey(passphrase, salt)
-        val first = VaultPayload(version = 1)
+        write(current.copy(version = (envelope?.version ?: 0) + 1), derived, salt)
+        if (keepOpen) keeper.keep(derived) else keeper.forget()
+        prefs.edit().putBoolean(HAS_PASSPHRASE, true).apply()
+        return true
+    }
+
+    /** Seal a payload under a key and make it the one we hold */
+    private fun write(next: VaultPayload, underKey: ByteArray, salt: ByteArray) {
         val sealed = VaultCrypto.seal(
-            payloadJson = json.encodeToString(VaultPayload.serializer(), first),
-            key = derived,
+            payloadJson = json.encodeToString(VaultPayload.serializer(), next),
+            key = underKey,
             salt = salt,
-            version = first.version,
+            version = next.version,
             updatedAt = Instant.now().toString(),
             updatedBy = "phone",
             iterations = KDF_ITERATIONS
         )
-
         envelope = sealed
-        payload = first
-        key = derived
+        payload = next
+        key = underKey
         file.writeText(VaultCrypto.encode(sealed))
-        if (keepOpen) keeper.keep(derived) else keeper.forget()
-        return true
     }
 
     fun unlock(passphrase: String, keepOpen: Boolean = false): Boolean {
@@ -241,6 +272,10 @@ class VaultStore(context: Context) {
         return resealed
     }
 
+    private companion object {
+        const val HAS_PASSPHRASE = "hasPassphrase"
+    }
+
     /** The sealed envelope, for handing to another device */
     fun sealedEnvelope(): VaultEnvelope? = envelope
 }
@@ -273,3 +308,4 @@ data class VaultPayload(
      */
     val monitor: Map<String, List<String>> = emptyMap()
 )
+
