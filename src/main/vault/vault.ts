@@ -53,9 +53,18 @@ export interface VaultPayload {
  *
  * The theme is the obvious one — the two clients share it deliberately. Mutes
  * are the same kind of thing: a conversation you have silenced is silenced
- * because of what it is, not because of which device you silenced it on.
+ * because of what it is, not because of which device you silenced it on. And
+ * the profile most of all: a display name and a set of pronouns are facts about
+ * the person, not about the machine they were typed on or the network they
+ * happened to be on at the time.
+ *
+ * This list is also what survives a reseal: `sharedSettings` rebuilds the
+ * settings object from it, so a key the other device wrote and this one has
+ * never heard of is dropped. The phone writes `profile`, so leaving it out
+ * meant the profile someone set on their phone disappeared the next time the
+ * desktop saved anything.
  */
-export const SHARED_SETTINGS = ['theme', 'mutes'] as const
+export const SHARED_SETTINGS = ['theme', 'mutes', 'profile'] as const
 
 export interface VaultStatus {
   /** A vault exists on this device */

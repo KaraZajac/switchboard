@@ -89,6 +89,34 @@ describe('carrying the shared state between two devices', () => {
   })
 
   /**
+   * The profile the phone wrote survives the desktop saving anything.
+   *
+   * `sharedSettings` rebuilds the sealed settings object from the allowlist, so
+   * a key that is not on it is not merely unshared — it is dropped. The phone
+   * writes `profile`, and until it was listed, the display name and pronouns
+   * someone set on their phone vanished the next time the desktop resealed.
+   */
+  it('keeps the profile the other device wrote', async () => {
+    const { settings, vault } = await deviceWithState()
+
+    settings.setSetting('profile', { 'display-name': 'Kara', pronouns: 'she/her' })
+    vault.createVault(PASSPHRASE)
+
+    // The desktop saves something unrelated, which reseals the whole vault
+    settings.setSetting('theme', 'nord')
+    vault.resealVault()
+
+    settings.setSetting('profile', {})
+    vault.lockVault()
+    vault.unlockVault(PASSPHRASE)
+
+    expect(settings.getSetting('profile')).toEqual({
+      'display-name': 'Kara',
+      pronouns: 'she/her'
+    })
+  })
+
+  /**
    * A proxy address and a CA path describe the machine they were typed on.
    * Copying those onto a phone would be wrong rather than merely unhelpful.
    */

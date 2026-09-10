@@ -64,7 +64,10 @@ describe('which settings are shared at all', () => {
   it('shares the ones about the person and no others', async () => {
     const { SHARED_SETTINGS } = await import('../../src/main/vault/vault')
 
-    expect([...SHARED_SETTINGS]).toEqual(['theme', 'mutes'])
+    // The profile most of all: a display name and a set of pronouns are facts
+    // about the person. It is also what the phone writes, and a key missing
+    // from this list is dropped on the next reseal rather than merely unshared.
+    expect([...SHARED_SETTINGS]).toEqual(['theme', 'mutes', 'profile'])
     expect(SHARED_SETTINGS as readonly string[]).not.toContain('proxy')
     expect(SHARED_SETTINGS as readonly string[]).not.toContain('customCaPath')
   })

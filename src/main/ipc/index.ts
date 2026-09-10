@@ -18,6 +18,16 @@ import {
 } from '../storage/models/server'
 import { getMessages, searchMessages, deleteMessage } from '../storage/models/message'
 import { getSetting, setSetting } from '../storage/models/settings'
+import type { ServerConfig } from '@shared/types/server'
+
+/**
+ * Where the person's profile lives, as opposed to any one network's copy.
+ *
+ * The same key the phone writes — `settings.profile` inside the vault — so the
+ * two devices are describing the same person rather than each keeping their
+ * own idea of one.
+ */
+const DEFAULT_PROFILE = 'profile'
 import { secretsProtected, secretsBackendDescription } from '../storage/secrets'
 import { databaseIsEncrypted } from '../storage/database'
 import { serversChanged, monitorChanged, settingChanged, readMarkerChanged } from './notify'
@@ -124,8 +134,17 @@ export function registerIPCHandlers(): void {
     return senderWindow(event)?.isMaximized() ?? false
   })
 
-  handle('server:add', async (_event, config) => {
-    const id = addServer(config)
+  handle('server:add', async (_event, config: ServerConfig) => {
+    // A profile belongs to the person, not to a connection. Adding a network
+    // should not mean typing your name in again, so a new one starts from the
+    // saved default unless the caller brought its own.
+    const stored = getSetting<Record<string, string>>(DEFAULT_PROFILE) ?? {}
+    const seeded =
+      config.profile && Object.keys(config.profile).length > 0
+        ? config
+        : { ...config, profile: stored }
+
+    const id = addServer(seeded)
     // The vault is what the other device would connect with — keep it current
     resealVault()
     // The window keeps its own copy and updates it as it acts. This call may
@@ -388,6 +407,15 @@ export function registerIPCHandlers(): void {
     if (value) profile[key] = value
     else delete profile[key]
     updateServer(serverId, { profile })
+
+    // And as the person's default, which is what a network added later starts
+    // from and what the phone reads when it has no server to ask.
+    const fallback: Record<string, string> = {
+      ...(getSetting<Record<string, string>>(DEFAULT_PROFILE) ?? {})
+    }
+    if (value) fallback[key] = value
+    else delete fallback[key]
+    setSetting(DEFAULT_PROFILE, fallback)
 
     // The avatar has a column of its own, from before profiles were a thing
     if (key === 'avatar') updateServer(serverId, { avatarUrl: value || null })
