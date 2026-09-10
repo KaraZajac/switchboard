@@ -68,8 +68,7 @@ class IrcConnection(
      * happens when each send races for a mutex.
      */
     private val outbound = Channel<String>(capacity = Channel.UNLIMITED)
-    private var tokens = SEND_BURST.toDouble()
-    private var lastRefill = System.currentTimeMillis()
+    private val bucket = TokenBucket(SEND_BURST, SEND_RATE_PER_SECOND)
 
     private var stopping = false
     private var attempt = 0
@@ -230,48 +229,17 @@ class IrcConnection(
     }
 
     private suspend fun readLoop() = withContext(Dispatchers.IO) {
-        // Bytes, not a Reader: an encoding is chosen per line — see
-        // [Decoding.line] — and a Reader would have picked one for the whole
-        // stream before the first line arrived.
         val input = socket!!.getInputStream()
-        val pending = ByteArray(MAX_INCOMING_BYTES)
-        var held = 0
+        val chunk = ByteArray(8192)
+        val lines = LineBuffer()
 
         while (!stopping) {
-            val read = input.read(pending, held, pending.size - held)
+            val read = input.read(chunk)
             if (read <= 0) break
             lastHeard = System.currentTimeMillis()
-            held += read
 
-            var from = 0
-            while (true) {
-                val at = indexOfCrLf(pending, from, held)
-                if (at == -1) break
-                val line = Decoding.line(pending.copyOfRange(from, at))
-                from = at + 2
-                if (line.isBlank()) continue
-                handle(line)
-            }
-
-            // Keep whatever did not end a line. A line longer than the buffer
-            // is not one any server may send, so drop it rather than grow.
-            if (from > 0) {
-                System.arraycopy(pending, from, pending, 0, held - from)
-                held -= from
-            } else if (held == pending.size) {
-                held = 0
-            }
+            for (line in lines.feed(chunk, read)) handle(line)
         }
-    }
-
-    /** Where the next CRLF starts between [from] and [until], or -1 */
-    private fun indexOfCrLf(bytes: ByteArray, from: Int, until: Int): Int {
-        var at = from
-        while (at + 1 < until) {
-            if (bytes[at] == 0x0d.toByte() && bytes[at + 1] == 0x0a.toByte()) return at
-            at++
-        }
-        return -1
     }
 
     /** One line, once it has been decoded */
@@ -371,18 +339,9 @@ class IrcConnection(
      */
     private suspend fun awaitToken() {
         while (true) {
-            val now = System.currentTimeMillis()
-            tokens = minOf(
-                SEND_BURST.toDouble(),
-                tokens + (now - lastRefill) / 1000.0 * SEND_RATE_PER_SECOND
-            )
-            lastRefill = now
-
-            if (tokens >= 1.0) {
-                tokens -= 1.0
-                return
-            }
-            delay(maxOf(10L, ((1.0 - tokens) / SEND_RATE_PER_SECOND * 1000).toLong()))
+            val wait = bucket.take()
+            if (wait == 0L) return
+            delay(wait)
         }
     }
 
@@ -697,16 +656,6 @@ class IrcConnection(
         /** RFC 1459's line limit, in bytes, including the trailing CRLF */
         const val MAX_LINE_BYTES = 512
 
-        /**
-         * The most one incoming line can be.
-         *
-         * Not 512: `message-tags` allows 8191 bytes of tags in front of it, and
-         * a chathistory replay carries most of them — msgid, time, account,
-         * batch, and whatever else the network attaches. Sized for the whole of
-         * that with room over, because a line that will not fit has to be
-         * dropped, and dropping half of one corrupts the next.
-         */
-        const val MAX_INCOMING_BYTES = 16384
 
         /** How many commands may go back to back, matching the desktop */
         const val SEND_BURST = 5
