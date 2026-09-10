@@ -1,0 +1,58 @@
+{
+  "$comment": "Which of two sealed configs to keep, read by tests/main/vaultorder.test.ts and the Android SharedCorpusTest. Both devices have to answer this identically or they trade vaults forever, or worse, one of them quietly rolls the other back.",
+
+  "$cases": "`current` is what this device holds — null for a device with no vault yet. `adopt` is whether the incoming one replaces it.",
+  "cases": [
+    {
+      "name": "a device with no config takes whatever it is offered",
+      "incoming": { "version": 1, "updatedAt": "2026-09-10T05:00:00.000Z" },
+      "current": null,
+      "adopt": true
+    },
+    {
+      "name": "a newer version wins",
+      "incoming": { "version": 8, "updatedAt": "2026-09-10T05:00:00.000Z" },
+      "current": { "version": 7, "updatedAt": "2026-09-10T06:00:00.000Z" },
+      "adopt": true
+    },
+    {
+      "$comment": "Rollback protection: an older vault may carry a password somebody already has, and a later timestamp on it proves nothing.",
+      "name": "an older version loses however recently it was sealed",
+      "incoming": { "version": 6, "updatedAt": "2026-09-10T23:00:00.000Z" },
+      "current": { "version": 7, "updatedAt": "2026-09-10T05:00:00.000Z" },
+      "adopt": false
+    },
+    {
+      "$comment": "Both devices edited while unable to see each other. Without this they each refuse the other as 'not newer' and stay apart until somebody edits again.",
+      "name": "at the same version, the later edit wins",
+      "incoming": { "version": 7, "updatedAt": "2026-09-10T06:00:00.000Z" },
+      "current": { "version": 7, "updatedAt": "2026-09-10T05:00:00.000Z" },
+      "adopt": true
+    },
+    {
+      "name": "and the earlier one does not",
+      "incoming": { "version": 7, "updatedAt": "2026-09-10T05:00:00.000Z" },
+      "current": { "version": 7, "updatedAt": "2026-09-10T06:00:00.000Z" },
+      "adopt": false
+    },
+    {
+      "$comment": "As far as anything here can tell this is the same config. Adopting would have two devices swapping identical vaults for as long as both were running.",
+      "name": "a tie on both is not a reason to do anything",
+      "incoming": { "version": 7, "updatedAt": "2026-09-10T05:00:00.000Z" },
+      "current": { "version": 7, "updatedAt": "2026-09-10T05:00:00.000Z" },
+      "adopt": false
+    },
+    {
+      "name": "a timestamp we cannot compare settles nothing",
+      "incoming": { "version": 7, "updatedAt": null },
+      "current": { "version": 7, "updatedAt": "2026-09-10T05:00:00.000Z" },
+      "adopt": false
+    },
+    {
+      "name": "in either direction",
+      "incoming": { "version": 7, "updatedAt": "2026-09-10T06:00:00.000Z" },
+      "current": { "version": 7, "updatedAt": null },
+      "adopt": false
+    }
+  ]
+}

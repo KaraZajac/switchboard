@@ -23,7 +23,10 @@ import org.junit.Test
 import org.switchboard.android.irc.Casemap
 import org.switchboard.android.irc.ConnectionState
 import org.switchboard.android.irc.Irc
+import org.switchboard.android.vault.VaultEnvelope
+import org.switchboard.android.vault.VaultKdf
 import org.switchboard.android.vault.VaultPayload
+import org.switchboard.android.vault.shouldAdoptVault
 import org.switchboard.android.irc.Isupport
 import org.switchboard.android.irc.ServerConfig
 import org.switchboard.android.irc.Services
@@ -37,7 +40,6 @@ import org.switchboard.android.ui.PALETTES
 import org.switchboard.android.ui.paletteFor
 import org.switchboard.android.irc.IrcConnection
 import org.switchboard.android.vault.VaultCrypto
-import org.switchboard.android.vault.VaultEnvelope
 import org.switchboard.android.vault.VaultLockedException
 import java.io.File
 
@@ -525,6 +527,41 @@ class SharedCorpusTest {
                 c["name"]!!.jsonPrimitive.content,
                 c["view"]!!.jsonPrimitive.content,
                 chosen.name.lowercase()
+            )
+        }
+    }
+
+    /**
+     * Which of two sealed configs to keep.
+     *
+     * Both devices have to answer this identically or they trade vaults
+     * forever, or worse, one quietly rolls the other back.
+     */
+    @Test
+    fun `decides which config to keep the way the desktop decides`() {
+        fun envelope(from: JsonObject?): VaultEnvelope? {
+            if (from == null) return null
+            return VaultEnvelope(
+                format = 1,
+                kdf = VaultKdf(name = "pbkdf2", iterations = 1, salt = ""),
+                iv = "",
+                ciphertext = "",
+                tag = "",
+                version = from["version"]!!.jsonPrimitive.int,
+                updatedAt = (from["updatedAt"] as? JsonPrimitive)?.contentOrNull.orEmpty(),
+                updatedBy = "test"
+            )
+        }
+
+        for (case in load("vault-order.json")["cases"]!!.jsonArray) {
+            val c = case.jsonObject
+            val incoming = envelope(c["incoming"]!!.jsonObject)!!
+            val current = envelope(c["current"] as? JsonObject)
+
+            assertEquals(
+                c["name"]!!.jsonPrimitive.content,
+                c["adopt"]!!.jsonPrimitive.content == "true",
+                shouldAdoptVault(incoming, current)
             )
         }
     }

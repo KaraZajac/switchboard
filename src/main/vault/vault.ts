@@ -1,4 +1,5 @@
 import { getSetting, setSetting } from '../storage/models/settings'
+import { shouldAdoptVault } from '@shared/vaultorder'
 import { serversChanged, settingChanged, monitorChanged } from '../ipc/notify'
 import { getAllServers, removeServer, upsertServer } from '../storage/models/server'
 import {
@@ -190,10 +191,10 @@ export function importVault(envelope: VaultEnvelope): {
 } {
   const current = readEnvelope()
 
-  if (current && envelope.version <= current.version) {
+  if (!shouldAdoptVault(envelope, current)) {
     return {
       accepted: false,
-      reason: `Ignored vault v${envelope.version}; this device has v${current.version}`,
+      reason: `Ignored vault v${envelope.version}; this device has v${current?.version}`,
       status: vaultStatus()
     }
   }

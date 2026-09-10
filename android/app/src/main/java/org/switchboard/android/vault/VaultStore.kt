@@ -248,12 +248,11 @@ class VaultStore(context: Context) {
     /**
      * Take a vault offered by the desktop.
      *
-     * Only a strictly newer version is taken: an older one is either a stale
-     * peer or an attempt to roll config back to a version whose password
-     * somebody already has. An equal version is already what we hold.
+     * Which one to keep is [shouldAdoptVault]'s decision, and it has to be the
+     * same decision the desktop makes or the two trade vaults forever.
      */
     fun accept(incoming: VaultEnvelope): Import {
-        if (exists && incoming.version <= version) {
+        if (!shouldAdoptVault(incoming, envelope)) {
             return Import(false, "Ignored vault v${incoming.version}; this phone has v$version")
         }
 
@@ -357,3 +356,30 @@ data class VaultPayload(
     val monitor: Map<String, List<String>> = emptyMap()
 )
 
+/**
+ * Which of two sealed configs is the one to keep.
+ *
+ * Version first, because that is what stops a rollback: an older vault may
+ * carry a password somebody already has, and adopting it would put it back.
+ *
+ * Then the timestamp, for the case version alone cannot settle — both devices
+ * edit while unable to see each other, both seal the next version, and each
+ * refuses the other's as "not newer". Without a tiebreak they stay that way
+ * until somebody edits again, which is a strange thing to ask of a user who has
+ * no idea anything is wrong. The later edit wins.
+ *
+ * Kept alongside `src/shared/vaultorder.ts` and held to the same cases.
+ */
+fun shouldAdoptVault(incoming: VaultEnvelope, current: VaultEnvelope?): Boolean {
+    if (current == null) return true
+    if (incoming.version > current.version) return true
+    if (incoming.version < current.version) return false
+
+    // ISO-8601 in UTC sorts correctly as text, which is what both clients
+    // write. A missing timestamp cannot be compared, and guessing is worse than
+    // leaving the two devices to settle it with the next real edit.
+    val theirs = incoming.updatedAt.takeIf { it.isNotBlank() } ?: return false
+    val ours = current.updatedAt.takeIf { it.isNotBlank() } ?: return false
+
+    return theirs > ours
+}
