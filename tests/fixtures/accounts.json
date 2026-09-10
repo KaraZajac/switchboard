@@ -1,0 +1,98 @@
+{
+  "$comment": "What a network will let you do about an account, read from its capability values. Shared by tests/main/accounts.test.ts and the Android SharedCorpusTest. Both clients offer the same form, so both have to read the same answer out of the same string — a client that offers to register on a network that will not is offering a dead end.",
+
+  "$cases": "`values` is the capability name to its value, exactly as CAP LS gave it. An absent capability is absent from the object; one advertised with no value is the empty string.",
+  "cases": [
+    {
+      "name": "rIRCd, which wants an email and a six-character password",
+      "values": {
+        "draft/account-registration": "before-connect,email-required,min-password-length=6",
+        "sasl": "PLAIN,SCRAM-SHA-256"
+      },
+      "canRegister": true,
+      "emailRequired": true,
+      "minPasswordLength": 6,
+      "beforeConnect": true,
+      "saslMechanisms": ["PLAIN", "SCRAM-SHA-256"],
+      "bestMechanism": "SCRAM-SHA-256"
+    },
+    {
+      "name": "registration with nothing said about it",
+      "values": { "draft/account-registration": "" },
+      "canRegister": true,
+      "emailRequired": false,
+      "minPasswordLength": null,
+      "beforeConnect": false,
+      "saslMechanisms": [],
+      "bestMechanism": null
+    },
+    {
+      "name": "no email needed, and only after connecting",
+      "values": {
+        "draft/account-registration": "min-password-length=10",
+        "sasl": "PLAIN"
+      },
+      "canRegister": true,
+      "emailRequired": false,
+      "minPasswordLength": 10,
+      "beforeConnect": false,
+      "saslMechanisms": ["PLAIN"],
+      "bestMechanism": "PLAIN"
+    },
+    {
+      "$comment": "Most of IRC: SASL but no registration, so the account is made by talking to NickServ",
+      "name": "a network with services and no registration capability",
+      "values": { "sasl": "PLAIN,EXTERNAL" },
+      "canRegister": false,
+      "emailRequired": false,
+      "minPasswordLength": null,
+      "beforeConnect": false,
+      "saslMechanisms": ["PLAIN", "EXTERNAL"],
+      "bestMechanism": "PLAIN"
+    },
+    {
+      "name": "a network with neither, where the password goes to NickServ as a message",
+      "values": {},
+      "canRegister": false,
+      "emailRequired": false,
+      "minPasswordLength": null,
+      "beforeConnect": false,
+      "saslMechanisms": [],
+      "bestMechanism": null
+    },
+    {
+      "name": "case is not significant in a mechanism name",
+      "values": { "sasl": "plain,scram-sha-256" },
+      "canRegister": false,
+      "emailRequired": false,
+      "minPasswordLength": null,
+      "beforeConnect": false,
+      "saslMechanisms": ["PLAIN", "SCRAM-SHA-256"],
+      "bestMechanism": "SCRAM-SHA-256"
+    },
+    {
+      "$comment": "A length nobody can satisfy is not a length. Reading it as zero would disable the check that exists to stop a refusal.",
+      "name": "a minimum that is not a number is no minimum",
+      "values": { "draft/account-registration": "min-password-length=lots" },
+      "canRegister": true,
+      "emailRequired": false,
+      "minPasswordLength": null,
+      "beforeConnect": false,
+      "saslMechanisms": [],
+      "bestMechanism": null
+    },
+    {
+      "name": "spaces around the values are ignored",
+      "values": {
+        "draft/account-registration": " email-required , min-password-length=8 ",
+        "sasl": " PLAIN , SCRAM-SHA-256 "
+      },
+      "canRegister": true,
+      "emailRequired": true,
+      "minPasswordLength": 8,
+      "beforeConnect": false,
+      "saslMechanisms": ["PLAIN", "SCRAM-SHA-256"],
+      "bestMechanism": "SCRAM-SHA-256"
+    }
+  ]
+}

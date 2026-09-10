@@ -8,6 +8,7 @@ import { useChannelStore } from '../../stores/channelStore'
 import { useUserStore, type MonitoredNick } from '../../stores/userStore'
 import { nickColor } from '../../utils/nickColor'
 import { displayNameFor, metadataColor } from '@shared/types/metadata'
+import { namesYou } from '@shared/mentions'
 
 interface MessageItemProps {
   message: ChatMessage
@@ -32,9 +33,10 @@ export function MessageItem({ message, prevMessage, onReply }: MessageItemProps)
   const isEdited = !!message.editedAt
 
 
-  // Detect if this message mentions our nick
-  const isMention = !isOwn && currentNick && message.type === 'privmsg' &&
-    new RegExp(`(?:^|[\\s@])${currentNick.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(message.content)
+  // The same rule the notifier and the badge use, and the same rule the phone
+  // uses — a line that lights up one of them has to light up all three.
+  const isMention =
+    !isOwn && message.type === 'privmsg' && namesYou(message.content, currentNick)
   const mentionBg = isMention ? 'bg-amber-500/8 border-l-2 border-amber-500/50' : ''
 
   const handleEditStart = () => {

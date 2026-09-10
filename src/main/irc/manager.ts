@@ -211,6 +211,7 @@ export class IRCManager {
       snapshot.push({
         serverId,
         nick: client.state.nick,
+        account: client.state.account,
         capabilities: Array.from(client.state.capabilities),
         capabilityValues: Object.fromEntries(
           Array.from(client.state.availableCapabilities).map(([name, value]) => [name, value ?? ''])
@@ -691,7 +692,20 @@ export class IRCManager {
     })
 
     client.events.on('capNegotiated', (caps) => {
-      this.send('irc:cap', { serverId, capabilities: caps })
+      // The values as well as the names. The names answer "is this supported";
+      // the values answer everything else — whether registering an account
+      // needs an email, how short a password may be, which SASL mechanisms
+      // exist. A screen that guesses those offers a form the network refuses.
+      this.send('irc:cap', {
+        serverId,
+        capabilities: caps,
+        values: Object.fromEntries(
+          Array.from(client.state.availableCapabilities).map(([name, value]) => [
+            name,
+            value ?? ''
+          ])
+        )
+      })
 
       // A capability that turned up mid-session (CAP NEW) after we were already
       // registered still needs setting up.

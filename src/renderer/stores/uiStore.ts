@@ -15,7 +15,15 @@ export type Theme =
   | 'kanagawa'
   | 'discord'
 
-type Modal = 'settings' | 'add-server' | 'edit-server' | 'whois' | 'search' | 'quick-switcher' | null
+type Modal =
+  | 'settings'
+  | 'add-server'
+  | 'edit-server'
+  | 'whois'
+  | 'search'
+  | 'quick-switcher'
+  | 'account'
+  | null
 
 export interface WhoisData {
   nick: string
@@ -35,17 +43,39 @@ export interface WhoisData {
 
 type TimeFormat = '12h' | '24h'
 
+/**
+ * What a toast's button does.
+ *
+ * `join` is an invitation; `account` is a network asking you to log in — the
+ * one thing NickServ says that is worth interrupting for, and the only way a
+ * user who has never heard of NickServ finds out that they should.
+ */
+export type ToastAction =
+  | { kind: 'join'; label: string; serverId: string; channel: string }
+  | { kind: 'account'; label: string; serverId: string }
+
 export interface Toast {
   id: string
   title: string
   body: string
-  action?: { label: string; serverId: string; channel: string }
+  action?: ToastAction
+  /**
+   * Whether it goes away on its own.
+   *
+   * A refusal is about something you just tried and can be let go of. Being
+   * asked to log in is about something still undone, and a message that
+   * disappears after eight seconds is one the user will not have finished
+   * reading, let alone acted on.
+   */
+  sticky?: boolean
 }
 
 interface UIState {
   theme: Theme
   settingsOpen: boolean
   activeModal: Modal
+  /** Which network the account panel is about */
+  accountServerId: string | null
   showUserList: boolean
   compactMode: boolean
   fontSize: number
@@ -63,6 +93,7 @@ interface UIState {
   // Actions
   setTheme: (theme: Theme) => void
   openModal: (modal: Modal) => void
+  showAccount: (serverId: string) => void
   closeModal: () => void
   toggleUserList: () => void
   setDmMode: (dm: boolean) => void
@@ -76,6 +107,7 @@ interface UIState {
   setPopupWhoisNick: (nick: string | null) => void
   setPopupWhoisData: (data: WhoisData | null) => void
   addToast: (toast: Omit<Toast, 'id'>) => void
+  removeToastsFor: (serverId: string) => void
   removeToast: (id: string) => void
 }
 
@@ -96,6 +128,7 @@ export const useUIStore = create<UIState>((set) => ({
   theme: savedTheme,
   settingsOpen: false,
   activeModal: null,
+  accountServerId: null,
   showUserList: true,
   compactMode: savedCompactMode,
   fontSize: savedFontSize,
@@ -120,7 +153,11 @@ export const useUIStore = create<UIState>((set) => ({
   },
 
   openModal: (modal) => set({ activeModal: modal }),
-  closeModal: () => set({ activeModal: null, whoisData: null, editServerId: null }),
+  closeModal: () =>
+    set({ activeModal: null, whoisData: null, editServerId: null, accountServerId: null }),
+
+  /** Open the account panel for one network */
+  showAccount: (serverId) => set({ activeModal: 'account', accountServerId: serverId }),
   toggleUserList: () => set((state) => ({ showUserList: !state.showUserList })),
   setCompactMode: (compact) => {
     localStorage.setItem('switchboard-compact-mode', String(compact))
@@ -145,12 +182,27 @@ export const useUIStore = create<UIState>((set) => ({
   addToast: (toast) => {
     const id = `toast-${Date.now()}-${Math.random().toString(36).slice(2)}`
     set((state) => ({ toasts: [...state.toasts, { ...toast, id }] }))
+    if (toast.sticky) return
+
     // Auto-dismiss after 8 seconds
     setTimeout(() => {
       useUIStore.getState().removeToast(id)
     }, 8000)
   },
-  removeToast: (id) => set((state) => ({ toasts: state.toasts.filter((t) => t.id !== id) }))
+  removeToast: (id) => set((state) => ({ toasts: state.toasts.filter((t) => t.id !== id) })),
+
+  /**
+   * Put away whatever this network was asking for.
+   *
+   * Logging in answers the question the sticky toast was asking, and a client
+   * that goes on asking after you have done it is not paying attention.
+   */
+  removeToastsFor: (serverId) =>
+    set((state) => ({
+      toasts: state.toasts.filter(
+        (t) => !(t.action?.kind === 'account' && t.action.serverId === serverId)
+      )
+    }))
 }))
 
 /**

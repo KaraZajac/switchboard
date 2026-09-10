@@ -10,6 +10,7 @@ import { useUIStore } from '../../stores/uiStore'
 import { useServerStore } from '../../stores/serverStore'
 import { SettingsModal } from '../settings/SettingsModal'
 import { AddServerModal } from '../server/AddServerModal'
+import { AccountModal } from '../user/AccountModal'
 import { WhoisModal } from '../user/WhoisModal'
 import { SearchModal } from '../chat/SearchModal'
 import { QuickSwitcher } from '../common/QuickSwitcher'
@@ -64,6 +65,7 @@ export function AppLayout() {
       {activeModal === 'add-server' && <AddServerModal />}
       {activeModal === 'edit-server' && <EditServerModal />}
       {activeModal === 'whois' && <WhoisModal />}
+      {activeModal === 'account' && <AccountModal />}
       {activeModal === 'search' && <SearchModal />}
       {activeModal === 'quick-switcher' && <QuickSwitcher />}
     </div>

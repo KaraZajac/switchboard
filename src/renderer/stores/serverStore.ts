@@ -11,6 +11,13 @@ interface ServerState {
   connectionStatus: Record<string, 'disconnected' | 'connecting' | 'connected'>
   /** Server capabilities */
   capabilities: Record<string, string[]>
+  /**
+   * What each capability said about itself, by server then by name.
+   *
+   * `draft/account-registration=email-required,min-password-length=6` is the
+   * difference between a form that works and a form the server refuses.
+   */
+  capabilityValues: Record<string, Record<string, string>>
   /** Our current nick per server */
   currentNick: Record<string, string>
   /** User avatars from metadata: `${serverId}:${nick}` -> URL */
@@ -24,6 +31,13 @@ interface ServerState {
   filehostUrls: Record<string, string>
   /** Away status per server: serverId -> away message (null = not away) */
   awayMessage: Record<string, string | null>
+  /**
+   * The account we are logged in to on each network.
+   *
+   * The question behind most of what people ask NickServ, and the thing two
+   * devices must share before a server will let both of them in at once.
+   */
+  account: Record<string, string | null>
 
   // Actions
   setServers: (servers: ServerConfig[]) => void
@@ -32,12 +46,13 @@ interface ServerState {
   removeServer: (id: string) => void
   setActiveServer: (id: string | null) => void
   setConnectionStatus: (id: string, status: 'disconnected' | 'connecting' | 'connected') => void
-  setCapabilities: (id: string, caps: string[]) => void
+  setCapabilities: (id: string, caps: string[], values?: Record<string, string>) => void
   setCurrentNick: (id: string, nick: string) => void
   setUserMetadata: (serverId: string, nick: string, key: string, value: string) => void
   setNetworkIcon: (serverId: string, url: string) => void
   setFilehostUrl: (serverId: string, url: string) => void
   setAwayMessage: (serverId: string, message: string | null) => void
+  setAccount: (serverId: string, account: string | null) => void
   muteServer: (serverId: string, durationMs?: number) => void
   unmuteServer: (serverId: string) => void
   /** Apply saved server mutes at startup */
@@ -50,12 +65,14 @@ export const useServerStore = create<ServerState>((set, get) => ({
   activeServerId: null,
   connectionStatus: {},
   capabilities: {},
+  capabilityValues: {},
   currentNick: {},
   userMetadata: {},
   mutedServers: {},
   networkIcons: {},
   filehostUrls: {},
   awayMessage: {},
+  account: {},
 
   setServers: (servers) => set({ servers }),
 
@@ -85,9 +102,17 @@ export const useServerStore = create<ServerState>((set, get) => ({
       connectionStatus: { ...state.connectionStatus, [id]: status }
     })),
 
-  setCapabilities: (id, caps) =>
+  setCapabilities: (id, caps, values) =>
     set((state) => ({
-      capabilities: { ...state.capabilities, [id]: caps }
+      capabilities: { ...state.capabilities, [id]: caps },
+      capabilityValues: values
+        ? { ...state.capabilityValues, [id]: values }
+        : state.capabilityValues
+    })),
+
+  setAccount: (serverId, account) =>
+    set((state) => ({
+      account: { ...state.account, [serverId]: account }
     })),
 
   setCurrentNick: (id, nick) =>

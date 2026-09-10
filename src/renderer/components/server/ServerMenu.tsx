@@ -34,6 +34,10 @@ export function ServerMenu({ serverId, x, y, onClose, extraItems = [] }: ServerM
             window.switchboard.invoke('server:connect', serverId)
           }
         },
+    {
+      label: 'Account…',
+      onClick: () => useUIStore.getState().showAccount(serverId)
+    },
     { label: 'Server Settings', onClick: () => useUIStore.getState().setEditServerId(serverId) },
     { label: '', onClick: () => {}, separator: true },
     ...(isMuted

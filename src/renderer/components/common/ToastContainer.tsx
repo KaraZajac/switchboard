@@ -21,10 +21,14 @@ export function ToastContainer() {
             {toast.action && (
               <button
                 onClick={() => {
-                  const { serverId, channel } = toast.action!
-                  window.switchboard.invoke('channel:join', serverId, channel)
-                  useChannelStore.getState().addChannel(serverId, channel)
-                  useChannelStore.getState().setActiveChannel(serverId, channel)
+                  const action = toast.action!
+                  if (action.kind === 'join') {
+                    window.switchboard.invoke('channel:join', action.serverId, action.channel)
+                    useChannelStore.getState().addChannel(action.serverId, action.channel)
+                    useChannelStore.getState().setActiveChannel(action.serverId, action.channel)
+                  } else {
+                    useUIStore.getState().showAccount(action.serverId)
+                  }
                   removeToast(toast.id)
                 }}
                 className="mt-2 rounded bg-indigo-500 px-3 py-1 text-xs font-medium text-white hover:bg-indigo-400"

@@ -58,6 +58,16 @@ export class ConnectionState {
   /** Whether we are currently marked as away */
   away = false
 
+  /**
+   * The account this connection is logged in to, if any.
+   *
+   * Not the same as the nick, and the difference is the whole of how IRC
+   * identity works: the nick is what you are called right now, the account is
+   * what the network agrees you own. It is also what a server needs both
+   * connections to share before it will let two of them in under one nick.
+   */
+  account: string | null = null
+
   /** Server name (from 001 or prefix) */
   serverName = ''
 
@@ -108,6 +118,7 @@ export class ConnectionState {
 
   /** Reset all state for a new connection */
   reset(): void {
+    this.account = null
     this.registrationState = 'disconnected'
     this.nick = ''
     this.pendingNick = null

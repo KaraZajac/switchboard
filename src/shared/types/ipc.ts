@@ -18,6 +18,8 @@ import type { UserMetadata } from './metadata'
 export interface ConnectionSnapshot {
   serverId: string
   nick: string
+  /** The account this connection is logged in to, if any */
+  account: string | null
   capabilities: string[]
   /**
    * What each capability the server offered said about itself, by name.
@@ -124,7 +126,13 @@ export interface MainToRendererEvents {
   'irc:away': { serverId: string; nick: string; message: string | null }
   'irc:account': { serverId: string; nick: string; account: string | null }
   'irc:typing': { serverId: string; channel: string; nick: string; status: 'active' | 'paused' | 'done' }
-  'irc:error': { serverId: string; code: string; message: string }
+  'irc:error': {
+    serverId: string
+    code: string
+    /** The command that was refused, where the server named one */
+    command?: string
+    message: string
+  }
   'irc:motd': { serverId: string; lines: string[] }
   'irc:whois': { serverId: string; data: Record<string, string> }
   'irc:react': {
@@ -139,13 +147,24 @@ export interface MainToRendererEvents {
   'irc:redact': { serverId: string; channel: string; msgid: string }
   'irc:edit': { serverId: string; channel: string; originalId: string; newContent: string; editedAt: string }
   'irc:read-marker': { serverId: string; channel: string; timestamp: string }
-  'irc:cap': { serverId: string; capabilities: string[] }
+  'irc:cap': {
+    serverId: string
+    capabilities: string[]
+    /** What each capability the server offered said about itself, by name */
+    values: Record<string, string>
+  }
   'irc:raw': { serverId: string; direction: 'in' | 'out'; line: string }
-  'irc:verify': { serverId: string; account: string; message: string }
+  'irc:verify': { serverId: string; status: string; account: string; message: string }
   'irc:webpush': { serverId: string; subcommand: string; endpoint: string }
   'irc:setname': { serverId: string; nick: string; realname: string }
   'irc:metadata': { serverId: string; target: string; key: string; value: string }
-  'irc:account-registered': { serverId: string; account: string; message: string }
+  'irc:account-registered': {
+    serverId: string
+    /** SUCCESS, or VERIFICATION_REQUIRED when a code has been emailed */
+    status: string
+    account: string
+    message: string
+  }
   'irc:channel-rename': { serverId: string; oldName: string; newName: string; reason: string | null }
   'irc:network-icon': { serverId: string; url: string }
   'irc:filehost': { serverId: string; url: string }

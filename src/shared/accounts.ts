@@ -1,0 +1,68 @@
+import type { SASLMechanism } from './types/irc'
+
+/**
+ * What a network will let you do about an account.
+ *
+ * IRC has two answers and they need different screens. A modern server
+ * advertises `draft/account-registration` and the whole thing can happen in the
+ * client. Everywhere else there is a bot called NickServ that you talk to in
+ * English, and the client's job is to know the phrases and save the password.
+ *
+ * Nothing here is guessed: a client that offers to register on a network that
+ * will not is offering a dead end. The Kotlin half is `accountAbilities` in
+ * `EngineActions.kt`, and both are checked against `tests/fixtures/accounts.json`.
+ */
+
+export interface AccountAbilities {
+  /** The server will create an account for us over the protocol */
+  canRegister: boolean
+  /** It insists on an email address it can send a code to */
+  emailRequired: boolean
+  /** Shortest password it will take, when it said */
+  minPasswordLength: number | null
+  /** It will let us register before we are even on the network */
+  beforeConnect: boolean
+  /** SASL mechanisms it offers, so a saved password can be used at connect */
+  saslMechanisms: string[]
+}
+
+/**
+ * Read the capability values, which is where all of this is stated.
+ *
+ * `draft/account-registration=before-connect,email-required,min-password-length=10`
+ * and `sasl=PLAIN,SCRAM-SHA-256`. A capability present with no value still means
+ * the feature is there — it simply said nothing about its limits.
+ */
+export function accountAbilities(values: Record<string, string>): AccountAbilities {
+  const registration = values['draft/account-registration']
+  const parts =
+    registration === undefined ? [] : registration.split(',').map((p) => p.trim())
+
+  const minimum = parts
+    .find((p) => p.startsWith('min-password-length='))
+    ?.split('=')[1]
+
+  return {
+    canRegister: registration !== undefined,
+    emailRequired: parts.includes('email-required'),
+    minPasswordLength: minimum ? Number(minimum) || null : null,
+    beforeConnect: parts.includes('before-connect'),
+    saslMechanisms: (values['sasl'] ?? '')
+      .split(',')
+      .map((m) => m.trim().toUpperCase())
+      .filter((m) => m.length > 0)
+  }
+}
+
+/**
+ * The mechanism to save a password under.
+ *
+ * SCRAM by preference, because the password never crosses the wire; PLAIN
+ * where that is all there is. Null means the network offers neither, and the
+ * password has to go to NickServ as a message instead.
+ */
+export function bestSaslMechanism(mechanisms: string[]): SASLMechanism | null {
+  if (mechanisms.includes('SCRAM-SHA-256')) return 'SCRAM-SHA-256'
+  if (mechanisms.includes('PLAIN')) return 'PLAIN'
+  return null
+}

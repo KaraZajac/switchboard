@@ -1,0 +1,73 @@
+{
+  "$comment": "What NickServ is asking for, shared by tests/main/services.test.ts and the Android SharedCorpusTest. Both clients offer the login screen at the same moment, so both have to recognise the same sentences — a prompt one device acts on and the other ignores is two clients.",
+
+  "$nicks": "Which nicks speak for the network rather than for a person.",
+  "nicks": [
+    { "name": "NickServ", "nick": "NickServ", "isServices": true },
+    { "name": "lowercase", "nick": "nickserv", "isServices": true },
+    { "name": "ChanServ", "nick": "ChanServ", "isServices": true },
+    { "name": "SaslServ", "nick": "SaslServ", "isServices": true },
+    { "name": "an ordinary person", "nick": "robin", "isServices": false },
+    { "name": "somebody whose name merely starts the same way", "nick": "nickservant", "isServices": false },
+    { "name": "and one that merely contains it", "nick": "servicedesk", "isServices": false }
+  ],
+
+  "$prompts": "`asks` is whether this is the moment to offer the login screen; `confirms` is whether it says we already got in.",
+  "prompts": [
+    {
+      "name": "atheme",
+      "text": "This nickname is registered. Please choose a different nickname, or identify via /msg NickServ IDENTIFY <password>.",
+      "asks": true,
+      "confirms": false
+    },
+    {
+      "name": "anope",
+      "text": "This nick is registered. Please choose a different nick or identify via /msg NickServ IDENTIFY <password>",
+      "asks": true,
+      "confirms": false
+    },
+    {
+      "name": "phrased as an instruction",
+      "text": "You must identify to services with your password before you can use this nick.",
+      "asks": true,
+      "confirms": false
+    },
+    {
+      "name": "phrased as ownership",
+      "text": "This nickname is owned by someone else. Please choose another.",
+      "asks": true,
+      "confirms": false
+    },
+    {
+      "name": "an answer is not a prompt",
+      "text": "You are now identified for kara.",
+      "asks": false,
+      "confirms": true
+    },
+    {
+      "name": "anope's wording for the same",
+      "text": "Password accepted - you are now recognized.",
+      "asks": false,
+      "confirms": true
+    },
+    {
+      "name": "logged in",
+      "text": "You are now logged in as kara.",
+      "asks": false,
+      "confirms": true
+    },
+    {
+      "name": "an ordinary memo",
+      "text": "Your memo has been sent.",
+      "asks": false,
+      "confirms": false
+    },
+    {
+      "$comment": "About a channel, not about you — offering a login here would be nonsense",
+      "name": "ChanServ talking about a channel",
+      "text": "Channel #lobby is registered to robin.",
+      "asks": false,
+      "confirms": false
+    }
+  ]
+}

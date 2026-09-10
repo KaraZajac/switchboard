@@ -5,6 +5,8 @@ import { useMessageStore } from '../stores/messageStore'
 import { useUserStore } from '../stores/userStore'
 import { useUIStore, syncThemeFromSettings } from '../stores/uiStore'
 import { isChannelName, isServiceNick } from '@shared/constants'
+import { namesYou } from '@shared/mentions'
+import { asksForIdentification, confirmsIdentification } from '@shared/services'
 
 /**
  * Hook that sets up all IPC event listeners from the main process.
@@ -45,8 +47,8 @@ export function useIRCEvents(): void {
     )
 
     cleanups.push(
-      api.on('irc:cap', ({ serverId, capabilities }) => {
-        useServerStore.getState().setCapabilities(serverId, capabilities)
+      api.on('irc:cap', ({ serverId, capabilities, values }) => {
+        useServerStore.getState().setCapabilities(serverId, capabilities, values)
       })
     )
 
@@ -131,8 +133,23 @@ export function useIRCEvents(): void {
 
     // Server errors and bad commands were being dropped silently
     cleanups.push(
-      api.on('irc:error', ({ serverId, code, message }) => {
+      api.on('irc:error', ({ serverId, code, command, message }) => {
         const server = useServerStore.getState().servers.find((s) => s.id === serverId)
+
+        // A login that failed is not one refusal among many. The connection
+        // carries on regardless, and the user spends the evening on their own
+        // network as a stranger without being told why — so it stays up, and
+        // offers the way in.
+        if (command === 'SASL') {
+          useUIStore.getState().addToast({
+            title: 'Logging in failed',
+            body: message,
+            action: { kind: 'account', label: 'Log in', serverId },
+            sticky: true
+          })
+          return
+        }
+
         useUIStore.getState().addToast({
           title: code === 'COMMAND' ? 'Command' : server?.name || 'Server error',
           body: message
@@ -167,17 +184,36 @@ export function useIRCEvents(): void {
         const effectiveChannel = isService ? '*' : channel
         useMessageStore.getState().addMessage(serverId, effectiveChannel, message)
 
+        // NickServ, asking us to log in. On most of IRC this notice is the
+        // first thing that happens after connecting, and it arrives as a
+        // message from a stranger in a conversation nobody was looking at —
+        // which is why people who have never heard of NickServ never find out
+        // that they were supposed to do something about it.
+        // Replayed history arrives on `irc:chathistory`, never here, so
+        // anything reaching this point is something being said now.
+        if (isService) {
+          const store = useServerStore.getState()
+          if (confirmsIdentification(message.content)) {
+            useUIStore.getState().removeToastsFor(serverId)
+          } else if (asksForIdentification(message.content) && !store.account[serverId]) {
+            useUIStore.getState().addToast({
+              title: 'This nick is registered',
+              body: 'Log in to use it, and this network will do it for you from now on.',
+              action: { kind: 'account', label: 'Log in', serverId },
+              sticky: true
+            })
+          }
+        }
+
         // Check if this channel is currently active
         const activeServerId = useServerStore.getState().activeServerId
         const activeChannel = useChannelStore.getState().activeChannel[serverId]
         const isActiveChannel = serverId === activeServerId && effectiveChannel === activeChannel
 
-        // Detect mentions (both "nick" and "@nick")
+        // One rule, shared with the phone and checked against the same corpus:
+        // a mention that rings one device and not the other is two clients.
         const myNick = currentNicks[serverId] || ''
-        const escaped = myNick.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-        const isMention = myNick
-          ? new RegExp(`(?:^|[\\s@])${escaped}\\b`, 'i').test(message.content)
-          : false
+        const isMention = namesYou(message.content, myNick)
         const isPrivate = !isChannelName(channel) && channel !== '*' && !isService
 
         if (!isActiveChannel) {
@@ -253,6 +289,13 @@ export function useIRCEvents(): void {
     // Account change notifications
     cleanups.push(
       api.on('irc:account', ({ serverId, nick, account }) => {
+        // Our own login state, which the account panel is built on. Everyone
+        // else's belongs on their roster entry, which is what follows.
+        if (useServerStore.getState().currentNick[serverId]?.toLowerCase() === nick.toLowerCase()) {
+          useServerStore.getState().setAccount(serverId, account)
+          if (account) useUIStore.getState().removeToastsFor(serverId)
+        }
+
         const userStore = useUserStore.getState()
         for (const key of Object.keys(userStore.users)) {
           if (key.startsWith(serverId + ':')) {
@@ -391,7 +434,7 @@ export function useIRCEvents(): void {
         useUIStore.getState().addToast({
           title: `Channel Invite`,
           body: `${by} invited you to ${channel}`,
-          action: { label: 'Join', serverId, channel }
+          action: { kind: 'join', label: 'Join', serverId, channel }
         })
 
         // Desktop notification
@@ -606,7 +649,10 @@ export function useIRCEvents(): void {
           const { serverId } = server
           useServerStore.getState().setConnectionStatus(serverId, 'connected')
           useServerStore.getState().setCurrentNick(serverId, server.nick)
-          useServerStore.getState().setCapabilities(serverId, server.capabilities)
+          useServerStore
+            .getState()
+            .setCapabilities(serverId, server.capabilities, server.capabilityValues)
+          useServerStore.getState().setAccount(serverId, server.account)
           currentNicks[serverId] = server.nick
 
           // Display names, colours and avatars the core already knows about

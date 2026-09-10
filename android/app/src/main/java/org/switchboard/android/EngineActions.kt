@@ -292,12 +292,23 @@ data class AccountAbilities(
  * and `sasl=PLAIN,SCRAM-SHA-256`. Nothing here is guessed: a client that offers
  * to register on a network that will not is offering a dead end.
  */
-fun SwitchboardEngine.accountAbilities(serverId: String): AccountAbilities {
+fun SwitchboardEngine.accountAbilities(serverId: String): AccountAbilities =
     // Our own connection knows first-hand; following a desktop, the snapshot
     // carried them across.
-    val available = connections[serverId]?.state?.available
-        ?: store.capabilityValues[serverId]
-        ?: emptyMap()
+    accountAbilitiesOf(
+        connections[serverId]?.state?.available
+            ?: store.capabilityValues[serverId]
+            ?: emptyMap()
+    )
+
+/**
+ * The same reading the desktop makes of the same string.
+ *
+ * Split out from the lookup so it can be held to `tests/fixtures/accounts.json`
+ * alongside `src/shared/accounts.ts` — both clients put the same form in front
+ * of the user, so both have to fill it in from the same values.
+ */
+fun accountAbilitiesOf(available: Map<String, String>): AccountAbilities {
     val registration = available["draft/account-registration"]
 
     val values = registration?.split(",")?.map { it.trim() }.orEmpty()
@@ -313,6 +324,19 @@ fun SwitchboardEngine.accountAbilities(serverId: String): AccountAbilities {
             ?.filter { it.isNotEmpty() }
             .orEmpty()
     )
+}
+
+/**
+ * The mechanism to save a password under.
+ *
+ * SCRAM by preference, because the password never crosses the wire; PLAIN where
+ * that is all there is. Null means the network offers neither, and the password
+ * has to go to NickServ as a message instead.
+ */
+fun bestSaslMechanism(mechanisms: List<String>): String? = when {
+    mechanisms.contains("SCRAM-SHA-256") -> "SCRAM-SHA-256"
+    mechanisms.contains("PLAIN") -> "PLAIN"
+    else -> null
 }
 
 /**
@@ -367,13 +391,7 @@ suspend fun SwitchboardEngine.rememberAccount(
     password: String
 ) {
     val server = vaultServers().find { it.id == serverId } ?: return
-    val mechanisms = accountAbilities(serverId).saslMechanisms
-
-    val mechanism = when {
-        mechanisms.contains("SCRAM-SHA-256") -> "SCRAM-SHA-256"
-        mechanisms.contains("PLAIN") -> "PLAIN"
-        else -> null
-    }
+    val mechanism = bestSaslMechanism(accountAbilities(serverId).saslMechanisms)
 
     if (mechanism == null) {
         identifyWithServices(serverId, account, password)

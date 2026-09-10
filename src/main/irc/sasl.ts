@@ -55,11 +55,26 @@ registerHandler('AUTHENTICATE', (client, msg) => {
 registerHandler('900', (client, msg) => {
   // params: <nick> <nick!user@host> <account> :You are now logged in as <account>
   const account = msg.params[2]
+  client.state.account = account ?? null
+
+  // Announced as well as recorded. Nothing above the connection could say whose
+  // account this was, which is the one fact an account screen exists for — and
+  // the one thing a second device has to match before a server will let it in
+  // under the same nick.
+  client.events.emit('account', { nick: client.state.nick, account: account ?? null })
   client.events.emit('note', {
     code: '900',
     command: 'SASL',
     message: `Logged in as ${account}`
   })
+})
+
+/**
+ * RPL_LOGGEDOUT (901) — no longer authenticated
+ */
+registerHandler('901', (client, _msg) => {
+  client.state.account = null
+  client.events.emit('account', { nick: client.state.nick, account: null })
 })
 
 /**

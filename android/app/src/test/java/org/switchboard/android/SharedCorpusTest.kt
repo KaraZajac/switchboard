@@ -25,6 +25,7 @@ import org.switchboard.android.irc.ConnectionState
 import org.switchboard.android.irc.Irc
 import org.switchboard.android.vault.VaultPayload
 import org.switchboard.android.irc.Isupport
+import org.switchboard.android.irc.Services
 import org.switchboard.android.irc.LineLength
 import org.switchboard.android.irc.IrcMessage
 import org.switchboard.android.irc.Metadata
@@ -501,6 +502,111 @@ class SharedCorpusTest {
 
             val fits = limit == null || text.toByteArray(Charsets.UTF_8).size <= limit
             assertEquals(name, c["fits"]!!.jsonPrimitive.content == "true", fits)
+        }
+    }
+
+    // ── knowing NickServ when you see it ─────────────────────────────
+
+    /**
+     * Both clients offer the login screen at the same moment, or they are two
+     * clients. The lines are real ones, from the three services packages most
+     * of IRC runs.
+     */
+    @Test
+    fun `recognises the services bots the desktop recognises`() {
+        for (case in load("services.json")["nicks"]!!.jsonArray) {
+            val c = case.jsonObject
+            assertEquals(
+                c["name"]!!.jsonPrimitive.content,
+                c["isServices"]!!.jsonPrimitive.content == "true",
+                Services.isServices(c["nick"]!!.jsonPrimitive.content)
+            )
+        }
+    }
+
+    @Test
+    fun `reads the same meaning out of what services said`() {
+        for (case in load("services.json")["prompts"]!!.jsonArray) {
+            val c = case.jsonObject
+            val name = c["name"]!!.jsonPrimitive.content
+            val text = c["text"]!!.jsonPrimitive.content
+
+            assertEquals(
+                name,
+                c["asks"]!!.jsonPrimitive.content == "true",
+                Services.asksForIdentification(text)
+            )
+            assertEquals(
+                name,
+                c["confirms"]!!.jsonPrimitive.content == "true",
+                Services.confirmsIdentification(text)
+            )
+        }
+    }
+
+    // ── what a network can do about accounts ─────────────────────────
+
+    /**
+     * Both clients put the same form in front of the user — register here,
+     * or talk to NickServ — so both have to reach the same conclusion from
+     * the same capability values. Offering to register on a network that
+     * will not is offering a dead end.
+     */
+    @Test
+    fun `reads the account capabilities the way the desktop does`() {
+        for (case in load("accounts.json")["cases"]!!.jsonArray) {
+            val c = case.jsonObject
+            val name = c["name"]!!.jsonPrimitive.content
+
+            val values = c["values"]!!.jsonObject
+                .mapValues { (_, v) -> v.jsonPrimitive.content }
+            val abilities = accountAbilitiesOf(values)
+
+            assertEquals(name, c["canRegister"]!!.jsonPrimitive.content == "true", abilities.canRegister)
+            assertEquals(name, c["emailRequired"]!!.jsonPrimitive.content == "true", abilities.emailRequired)
+            assertEquals(
+                name,
+                (c["minPasswordLength"] as? JsonPrimitive)?.contentOrNull?.toIntOrNull(),
+                abilities.minPasswordLength
+            )
+            assertEquals(name, c["beforeConnect"]!!.jsonPrimitive.content == "true", abilities.beforeConnect)
+            assertEquals(
+                name,
+                c["saslMechanisms"]!!.jsonArray.map { it.jsonPrimitive.content },
+                abilities.saslMechanisms
+            )
+            assertEquals(
+                name,
+                (c["bestMechanism"] as? JsonPrimitive)?.contentOrNull,
+                bestSaslMechanism(abilities.saslMechanisms)
+            )
+        }
+    }
+
+    // ── being named ──────────────────────────────────────────────────
+
+    /**
+     * Whether a line is about you.
+     *
+     * Three parts of each client ask this — the notifier, the unread badge and
+     * the conversation highlight — and the two clients have to answer
+     * identically. A mention that rings the phone and does not colour the
+     * desktop is two clients, not one.
+     */
+    @Test
+    fun `agrees with the desktop about who was named`() {
+        for (case in load("mentions.json")["cases"]!!.jsonArray) {
+            val c = case.jsonObject
+            val name = c["name"]!!.jsonPrimitive.content
+
+            assertEquals(
+                name,
+                c["mentions"]!!.jsonPrimitive.content == "true",
+                namesYou(
+                    c["text"]!!.jsonPrimitive.content,
+                    c["nick"]!!.jsonPrimitive.content
+                )
+            )
         }
     }
 
