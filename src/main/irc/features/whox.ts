@@ -107,3 +107,41 @@ registerHandler('315', (client, msg) => {
   const users: ChannelUser[] = Array.from(ch.users.values())
   client.events.emit('names', { channel: ch.name, users })
 })
+
+/**
+ * RPL_WHOREPLY (352) — the plain WHO, for networks without WHOX.
+ *
+ * `sendWHOX` falls back to an ordinary `WHO` where the ISUPPORT token is
+ * absent — OFTC and EFnet among them — and nothing read the answer, so the
+ * question was asked and the reply thrown away. Away state, and the bot flag,
+ * on every network that predates the extension. The phone has always read it.
+ *
+ * `<client> <channel> <user> <host> <server> <nick> <flags> :<hops> <realname>`
+ */
+registerHandler('352', (client, msg) => {
+  const channel = msg.params[1]
+  const nick = msg.params[5]
+  const flags = msg.params[6] || ''
+  if (!channel || !nick) return
+
+  const ch = client.state.channels.get(client.state.casemap(channel))
+  if (!ch) return
+
+  const botMode = typeof client.state.isupport['BOT'] === 'string'
+    ? (client.state.isupport['BOT'] as string)
+    : 'B'
+
+  const existing = ch.users.get(client.state.casemap(nick))
+  ch.setUser(nick, {
+    nick,
+    user: msg.params[2] || null,
+    host: msg.params[3] || null,
+    // The plain form carries neither, so keep whatever NAMES or a previous
+    // WHOX established rather than blanking it
+    account: existing?.account ?? null,
+    realname: existing?.realname ?? null,
+    prefixes: existing?.prefixes ?? [],
+    away: flags.startsWith('G'),
+    isBot: botMode.length > 0 && flags.includes(botMode)
+  })
+})

@@ -1,5 +1,5 @@
 // Re-export registry functions
-export { registerHandler, getHandler, dispatchMessage } from './registry'
+export { registerHandler, getHandler, dispatchMessage, registeredCommands } from './registry'
 export type { HandlerFn } from './registry'
 
 // Side-effect imports — register all handlers

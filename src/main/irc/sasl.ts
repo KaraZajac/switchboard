@@ -111,6 +111,21 @@ function reclaimDesiredNick(client: any): void {
 /**
  * ERR_SASLFAIL (904) — SASL authentication failed
  */
+/**
+ * ERR_NICKLOCKED (902) — the account is there, and this nick is not yours.
+ *
+ * A distinct failure from a wrong password, and one with a different fix: the
+ * nick belongs to somebody else's account, so no amount of retyping helps.
+ * The phone has always said so.
+ */
+registerHandler('902', (client, msg) => {
+  client.events.emit('error', {
+    code: '902',
+    command: 'SASL',
+    message: msg.params[msg.params.length - 1] || 'That nick belongs to another account'
+  })
+})
+
 registerHandler('904', (client, msg) => {
   client.events.emit('error', {
     code: '904',

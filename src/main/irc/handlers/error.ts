@@ -69,6 +69,36 @@ registerHandler('401', (client, msg) => {
   })
 })
 
+/**
+ * ERR_UNKNOWNCOMMAND (421)
+ *
+ * The server does not know that command. Worth saying: it is the answer to a
+ * `/raw` with a typo in it, and to a feature the network turns out not to
+ * have. Ignored, it looks exactly like the command having worked.
+ */
+registerHandler('421', (client, msg) => {
+  client.events.emit('error', {
+    code: '421',
+    command: msg.params[1] || '',
+    message: msg.params[2] || 'Unknown command'
+  })
+})
+
+/**
+ * ERR_NOTREGISTERED (451)
+ *
+ * Sent too early — before 001. Anything we say between CAP END and the welcome
+ * comes back as this, which is exactly when a client with a long list of
+ * things to do is saying the most.
+ */
+registerHandler('451', (client, msg) => {
+  client.events.emit('error', {
+    code: '451',
+    command: msg.params[1] || '',
+    message: msg.params[2] || 'You have not registered'
+  })
+})
+
 /** ERR_NOSUCHCHANNEL (403) */
 registerHandler('403', (client, msg) => {
   client.events.emit('error', {

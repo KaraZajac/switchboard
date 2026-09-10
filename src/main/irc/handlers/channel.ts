@@ -145,6 +145,22 @@ registerHandler('332', (client, msg) => {
 })
 
 /**
+ * RPL_CHANNELMODEIS (324) — the modes a channel has, when asked
+ *
+ * `/mode #channel` sends the query and this is the answer. Nothing read it, so
+ * the command did nothing anyone could see — while the phone applied it. The
+ * MODE *command* handler covers the modes a server volunteers on join; this is
+ * the one you get for asking.
+ */
+registerHandler('324', (client, msg) => {
+  // params: <nick> <channel> <modes> [params...]
+  const ch = client.state.channels.get(client.state.casemap(msg.params[1]))
+  if (!ch) return
+
+  applyChannelModes(ch, msg.params[2] || '', msg.params.slice(3), client)
+})
+
+/**
  * RPL_NOTOPIC (331) — This channel has no topic
  *
  * The answer to joining a channel nobody has ever set a topic on, and to
