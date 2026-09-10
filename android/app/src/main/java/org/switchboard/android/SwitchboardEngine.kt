@@ -595,10 +595,13 @@ class SwitchboardEngine(
         quiet: Boolean = false,
         local: (IrcConnection) -> Unit
     ) {
-        if (mode == EngineMode.HOLDING) {
-            val connection = connections[serverId]
+        // Our own socket where we have one; the desktop's for the rest. Asking
+        // whether *this phone* is holding anything would send everything down
+        // whichever path the first network happened to take.
+        val connection = connections[serverId]
+        if (connection != null || !remote.isLinked) {
             if (connection == null) {
-                Log.w(TAG, "$channel: holding, but not connected to $serverId")
+                Log.w(TAG, "$channel: not connected to $serverId")
                 if (!quiet) store.noteRefusal("Not connected — that was not sent")
                 return
             }
@@ -642,8 +645,20 @@ class SwitchboardEngine(
             null
         }
 
-    /** True when this phone is the one talking to IRC */
+    /** True when this phone is talking to IRC at all */
     internal val isHolding: Boolean get() = mode == EngineMode.HOLDING
+
+    /**
+     * Whether we hold this particular network ourselves.
+     *
+     * The question used to be about the device — either this phone was the
+     * connection or it was not. Sharing makes it about the network: we can have
+     * our own socket to one server and be reading the desktop's relay for
+     * another, in the same second. Anything that has a server in hand should
+     * ask this rather than [isHolding], or a phone that shares one network
+     * refuses to do anything on the others.
+     */
+    internal fun holds(serverId: String): Boolean = connections.containsKey(serverId)
 
     // ── how it looks ──────────────────────────────────────────────────
 

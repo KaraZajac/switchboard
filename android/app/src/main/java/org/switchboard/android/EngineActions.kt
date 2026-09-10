@@ -129,7 +129,7 @@ suspend fun SwitchboardEngine.listChannels(serverId: String): List<ChannelListin
     // must too or the screen shows nothing while this returns a full list.
     store.beginChannelList(serverId)
 
-    if (isHolding) {
+    if (holds(serverId)) {
         val connection = connections[serverId] ?: run {
             store.endChannelList()
             return emptyList()
@@ -488,7 +488,7 @@ private fun SwitchboardEngine.rememberWatched(serverId: String, nicks: List<Stri
  * asynchronously — the store collects the reply and this returns what it has.
  */
 suspend fun SwitchboardEngine.watchedNicks(serverId: String): List<String> {
-    if (isHolding) {
+    if (holds(serverId)) {
         connections[serverId]?.monitorList()
         return store.watchedFor(serverId)
     }
@@ -513,7 +513,7 @@ suspend fun SwitchboardEngine.loadOlder(serverId: String, channel: String): Int 
     val oldest = store.messagesFor(serverId, channel).firstOrNull()?.timestamp
         ?: return NOT_YET
 
-    if (isHolding) {
+    if (holds(serverId)) {
         val connection = connections[serverId] ?: return 0
         connection.requestHistoryBefore(channel, oldest)
         // The answer arrives as a batch, not as a return value
@@ -564,7 +564,7 @@ suspend fun SwitchboardEngine.searchMessages(
     val term = query.trim()
     if (term.isEmpty()) return emptyList()
 
-    if (isHolding) {
+    if (holds(serverId)) {
         // Ask the network, where it can answer: the phone's own memory starts
         // at whenever it took over, which is a thin thing to call a search.
         val connection = connections[serverId]
@@ -607,7 +607,8 @@ suspend fun SwitchboardEngine.searchMessages(
  * read is not one.
  */
 suspend fun SwitchboardEngine.readMarkerFor(serverId: String, channel: String): String? {
-    if (isHolding) return null
+    // Our own connection has no stored markers to read; the desktop does.
+    if (holds(serverId)) return null
     return ask("read-marker:get", JsonPrimitive(serverId), JsonPrimitive(channel)).text()
 }
 
@@ -738,15 +739,22 @@ suspend fun SwitchboardEngine.removeServer(serverId: String) {
  * there is no connection object yet — it has to be built out of the vault.
  */
 fun SwitchboardEngine.connectServer(serverId: String) {
-    if (isHolding || !remote.isLinked) {
-        vaultServers().find { it.id == serverId }?.let { openConnection(it) }
+    val config = vaultServers().find { it.id == serverId }
+
+    // Our own socket wherever we can have one: with no desktop there is no
+    // choice, and with a desktop that shares the network there is no reason to
+    // ask it for something we can do ourselves.
+    if (config != null && (!remote.isLinked || canShareConnection(config))) {
+        openConnection(config)
         return
     }
     scope.launch { ask("server:connect", JsonPrimitive(serverId)) }
 }
 
 fun SwitchboardEngine.disconnectServer(serverId: String) {
-    if (isHolding || !remote.isLinked) {
+    // Ours if it is ours. Asking the desktop to drop its connection because
+    // this phone wants to leave a network would take both of us off it.
+    if (holds(serverId) || !remote.isLinked) {
         closeConnection(serverId)
         return
     }
