@@ -245,9 +245,31 @@ private fun ServerForm(
     var autoJoin by remember { mutableStateOf(existing?.autoJoin?.joinToString(", ").orEmpty()) }
     var autoConnect by remember { mutableStateOf(existing?.autoConnect ?: true) }
     var confirmingRemoval by remember { mutableStateOf(false) }
+    // A new network starts at the list; editing one never does.
+    var picking by remember { mutableStateOf(existing == null) }
     val scope = rememberCoroutineScope()
 
     val valid = host.isNotBlank() && nick.isNotBlank() && port.toIntOrNull() != null
+
+    if (picking) {
+        NetworkPicker(
+            onPick = { network ->
+                // Auto-connect, because somebody who has just chosen a network
+                // from a list means to go there — a server that sits
+                // disconnected waiting to be told is a puzzle, not a client.
+                name = network.name
+                host = network.host
+                port = network.port.toString()
+                tls = network.tls
+                autoConnect = true
+                autoJoin = network.channels.joinToString(", ")
+                picking = false
+            },
+            onByHand = { picking = false },
+            onBack = onDone
+        )
+        return
+    }
 
     Column(modifier = Modifier.fillMaxSize().background(Base)) {
         Header(if (existing == null) "Add a network" else "Edit network", onDone)

@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Modal } from '../common/Modal'
+import { NetworkPicker } from './NetworkPicker'
+import type { KnownNetwork } from '@shared/networks'
 import { useUIStore } from '../../stores/uiStore'
 import { useServerStore } from '../../stores/serverStore'
 import type { ServerConfig } from '@shared/types/server'
@@ -40,6 +42,8 @@ export function AddServerModal({ editServer }: AddServerModalProps = {}) {
   const [identifyCommand, setIdentifyCommand] = useState(editServer?.identifyCommand ?? '')
   const [websocketUrl, setWebsocketUrl] = useState(editServer?.websocketUrl ?? '')
   const [showAdvanced, setShowAdvanced] = useState(isEdit)
+  // A new server starts at the list of networks; editing one never does.
+  const [picking, setPicking] = useState(!isEdit)
 
   // Seed a new server with the OS account name — "Switchboard" as everyone's
   // nickname is a poor first impression, and it collides on busy networks.
@@ -108,6 +112,31 @@ export function AddServerModal({ editServer }: AddServerModalProps = {}) {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save server')
     }
+  }
+
+  /**
+   * Pick a network, and the form is already filled in.
+   *
+   * Auto-connect is on because somebody who has just chosen a network from a
+   * list means to go there, and a server that sits disconnected waiting to be
+   * told to connect is a puzzle rather than a client.
+   */
+  const choose = (network: KnownNetwork): void => {
+    setName(network.name)
+    setHost(network.host)
+    setPort(network.port.toString())
+    setTls(network.tls)
+    setAutoConnect(true)
+    setAutoJoin((network.channels ?? []).join(', '))
+    setPicking(false)
+  }
+
+  if (picking) {
+    return (
+      <Modal title="Add a network" onClose={closeModal}>
+        <NetworkPicker onPick={choose} onByHand={() => setPicking(false)} />
+      </Modal>
+    )
   }
 
   return (

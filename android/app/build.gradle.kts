@@ -53,6 +53,18 @@ android {
         resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
     }
 
+    /**
+     * The network list is the desktop's file, copied rather than duplicated.
+     *
+     * One list, two clients: a second copy in Kotlin would be one edit away
+     * from the two apps disagreeing about where Libera is.
+     */
+    val shareNetworks by tasks.registering(Copy::class) {
+        from(rootProject.file("../src/shared/networks.json"))
+        into(layout.projectDirectory.dir("src/main/assets"))
+    }
+    tasks.named("preBuild") { dependsOn(shareNetworks) }
+
     testOptions {
         // android.util.Log is the only Android API the protocol layer touches,
         // which is what lets the engine be exercised against a real server from

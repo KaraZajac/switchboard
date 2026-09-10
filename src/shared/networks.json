@@ -1,0 +1,150 @@
+{
+  "$comment": "Networks offered to someone who has none. One file, read by both clients — the desktop imports it, the Android build copies it into assets. Everything here was confirmed by connecting on 2026-09-10; `checked` on each entry says what came back. Sizes move, so treat the counts as the order of magnitude they were, not as a promise.",
+  "checkedAt": "2026-09-10",
+
+  "networks": [
+    {
+      "id": "libera",
+      "name": "Libera.Chat",
+      "host": "irc.libera.chat",
+      "port": 6697,
+      "tls": true,
+      "description": "Free and open-source projects. Started in 2021 by the people who had been running freenode, and where most of those communities moved.",
+      "region": "Worldwide",
+      "homepage": "https://libera.chat",
+      "channels": ["#libera"],
+      "checked": "solanum, 30 servers, about 31,600 people, SASL (PLAIN, EXTERNAL, SCRAM-SHA-512, ECDSA)"
+    },
+    {
+      "id": "ircnet",
+      "name": "IRCnet",
+      "host": "ircnet.tngnet.nl",
+      "port": 6697,
+      "tls": true,
+      "description": "One half of the 1990 split that made IRC two networks. Still large, still mostly European, and still without network-wide nick registration.",
+      "region": "Europe",
+      "channels": ["#ircnet"],
+      "checked": "ircd 2.12, 34 servers, about 15,800 people. The round-robin open.ircnet.net cannot be verified over TLS — each server presents a certificate for its own name — so this points at one that can."
+    },
+    {
+      "id": "undernet",
+      "name": "Undernet",
+      "host": "irc.undernet.org",
+      "port": 6697,
+      "tls": true,
+      "description": "Running since 1992. Channels are looked after by a bot called X rather than by ChanServ.",
+      "region": "Worldwide",
+      "homepage": "https://www.undernet.org",
+      "channels": ["#undernet"],
+      "checked": "ircu 2.10.12, 33 servers, about 16,400 people. Port 6697 could not be reached from the machine this was checked on; 6667 answered."
+    },
+    {
+      "id": "oftc",
+      "name": "OFTC",
+      "host": "irc.oftc.net",
+      "port": 6697,
+      "tls": true,
+      "description": "The Open and Free Technology Community — Debian, Tor, and the projects around them.",
+      "region": "Worldwide",
+      "homepage": "https://www.oftc.net",
+      "channels": ["#oftc"],
+      "checked": "hybrid 7.2, 17 servers, about 14,200 people. No SASL: log in to NickServ instead."
+    },
+    {
+      "id": "rizon",
+      "name": "Rizon",
+      "host": "irc.rizon.net",
+      "port": 6697,
+      "tls": true,
+      "description": "Anime, manga and general chat. Large, social, and busy at all hours.",
+      "region": "Worldwide",
+      "homepage": "https://www.rizon.net",
+      "channels": ["#rizon"],
+      "checked": "plexus 4, 17 servers, about 9,100 people, SASL"
+    },
+    {
+      "id": "efnet",
+      "name": "EFnet",
+      "host": "irc.efnet.nl",
+      "port": 6697,
+      "tls": true,
+      "description": "The other half of the 1990 split, and the oldest network still running. Nothing is registered here: no NickServ, no ChanServ, no account.",
+      "region": "North America and Europe",
+      "homepage": "http://www.efnet.org",
+      "channels": ["#efnet"],
+      "checked": "ircd-ratbox 3.0, 20 servers, about 8,400 people. The round-robin irc.efnet.org cannot be verified over TLS, so this points at one server that can."
+    },
+    {
+      "id": "dalnet",
+      "name": "DALnet",
+      "host": "irc.dal.net",
+      "port": 6697,
+      "tls": true,
+      "description": "Running since 1994, and where NickServ and ChanServ were invented.",
+      "region": "Worldwide",
+      "homepage": "https://www.dal.net",
+      "channels": ["#dalnet"],
+      "checked": "bahamut 2.2, 35 servers, about 6,500 people. No SASL: log in to NickServ instead."
+    },
+    {
+      "id": "quakenet",
+      "name": "QuakeNet",
+      "host": "irc.quakenet.org",
+      "port": 6697,
+      "tls": true,
+      "description": "Gaming, and the largest network in Europe for much of the 2000s. Channels are looked after by a bot called Q.",
+      "region": "Europe",
+      "homepage": "https://www.quakenet.org",
+      "channels": ["#quakenet"],
+      "checked": "snircd 1.3, 25 servers, about 5,400 people. Port 6697 could not be reached from the machine this was checked on; 6667 answered."
+    },
+    {
+      "id": "hackint",
+      "name": "hackint",
+      "host": "irc.hackint.org",
+      "port": 6697,
+      "tls": true,
+      "description": "The hacker community around the Chaos Computer Club and the European hackerspaces.",
+      "region": "Europe",
+      "homepage": "https://hackint.org",
+      "channels": ["#hackint"],
+      "checked": "9 servers, about 4,200 people, SASL"
+    },
+    {
+      "id": "espernet",
+      "name": "EsperNet",
+      "host": "irc.esper.net",
+      "port": 6697,
+      "tls": true,
+      "description": "Game development and Minecraft modding projects.",
+      "region": "North America and Europe",
+      "homepage": "https://esper.net",
+      "channels": ["#esper"],
+      "checked": "charybdis 3.5, 5 servers, about 1,400 people, SASL"
+    },
+    {
+      "id": "snoonet",
+      "name": "Snoonet",
+      "host": "irc.snoonet.org",
+      "port": 6697,
+      "tls": true,
+      "description": "Communities that grew out of Reddit, and a general-purpose network besides.",
+      "region": "North America and Europe",
+      "homepage": "https://snoonet.org",
+      "channels": ["#snoonet"],
+      "checked": "InspIRCd 3, 11 servers, about 1,200 people, SASL (PLAIN, EXTERNAL)"
+    },
+    {
+      "id": "tilde",
+      "name": "tilde.chat",
+      "host": "irc.tilde.chat",
+      "port": 6697,
+      "tls": true,
+      "description": "The tilde community: shared public-access Unix servers, and the people who run them.",
+      "region": "Worldwide",
+      "homepage": "https://tilde.chat",
+      "channels": ["#meta"],
+      "checked": "InspIRCd 3, 6 servers, about 720 people, SASL"
+    }
+  ]
+}

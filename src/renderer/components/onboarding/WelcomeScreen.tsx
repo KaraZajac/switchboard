@@ -10,21 +10,21 @@ export function WelcomeScreen() {
 
       <h1 className="mb-2 text-3xl font-bold text-white">Welcome to Switchboard</h1>
       <p className="mb-8 max-w-md text-center text-gray-400">
-        A modern IRC client with full IRCv3 support. Connect to your favorite
-        networks and start chatting.
+        A modern IRC client with full IRCv3 support. Pick a network to start
+        on, or put in the address of one you already know.
       </p>
 
       <button
         onClick={() => openModal('add-server')}
         className="rounded-lg bg-indigo-600 px-6 py-3 text-sm font-medium text-white transition-colors hover:bg-indigo-500"
       >
-        Add Your First Server
+        Choose a network
       </button>
 
       <div className="mt-12 max-w-sm space-y-4 text-sm text-gray-500">
         <div className="flex items-start gap-3">
           <span className="mt-0.5 text-indigo-400">1</span>
-          <span>Add a server (e.g. <code className="text-gray-400">irc.libera.chat</code>)</span>
+          <span>Pick a network, or add one by its address</span>
         </div>
         <div className="flex items-start gap-3">
           <span className="mt-0.5 text-indigo-400">2</span>
