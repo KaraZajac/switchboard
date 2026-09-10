@@ -498,14 +498,20 @@ class IrcConnection(
         send("MARKREAD", target, "timestamp=$timestamp")
     }
 
+    /**
+     * Watch these nicks, in whichever command this network takes.
+     *
+     * Nothing goes out on a network that offers neither: the names stay saved,
+     * and reach the server the moment we are on one that does.
+     */
     fun monitorAdd(nicks: List<String>) {
-        if (nicks.isEmpty() || !state.isupport.containsKey("MONITOR")) return
-        send("MONITOR", "+", nicks.joinToString(","))
+        val kind = Friends.kind(state.isupport) ?: return
+        for (line in Friends.lines(kind, nicks, add = true)) sendRaw(line)
     }
 
     fun monitorRemove(nicks: List<String>) {
-        if (nicks.isEmpty() || !state.isupport.containsKey("MONITOR")) return
-        send("MONITOR", "-", nicks.joinToString(","))
+        val kind = Friends.kind(state.isupport) ?: return
+        for (line in Friends.lines(kind, nicks, add = false)) sendRaw(line)
     }
 
     /** Whether this network can search its own history for us */
@@ -524,8 +530,8 @@ class IrcConnection(
     }
 
     fun monitorList() {
-        if (!state.isupport.containsKey("MONITOR")) return
-        send("MONITOR", "L")
+        val kind = Friends.kind(state.isupport) ?: return
+        sendRaw(Friends.listLine(kind))
     }
 
     private var multilineCounter = 0

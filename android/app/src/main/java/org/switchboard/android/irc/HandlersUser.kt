@@ -186,10 +186,13 @@ private fun whoisDetail(session: IrcSession, message: IrcMessage, field: String,
 }
 
 /**
- * MONITOR — being told when someone arrives or leaves the network.
+ * Being told when someone arrives or leaves the network.
  *
  * Cheaper than polling ISON, and the only way to know about someone you do not
- * share a channel with.
+ * share a channel with. Two commands do it: MONITOR, which IRCv3 specified,
+ * and WATCH, which bahamut and plexus have had for far longer and which is all
+ * DALnet and Rizon offer. The replies are shaped differently and mean the same
+ * things, so both land on the same two events.
  */
 internal fun registerMonitorHandlers() {
 
@@ -213,6 +216,33 @@ internal fun registerMonitorHandlers() {
             put("message", "Monitor list is full: ${message.params.lastOrNull()}")
         })
     }
+
+    // RPL_LOGON / RPL_NOWON — WATCH's way of saying the same thing. The nick,
+    // user and host arrive as separate parameters rather than packed together.
+    for (here in listOf("600", "604")) {
+        Handlers.on(here) { session, message -> watchStatus(session, message, online = true) }
+    }
+    // RPL_LOGOFF / RPL_NOWOFF
+    for (gone in listOf("601", "605")) {
+        Handlers.on(gone) { session, message -> watchStatus(session, message, online = false) }
+    }
+
+    // RPL_WATCHLIST / RPL_ENDOFWATCHLIST
+    Handlers.on("606") { session, message ->
+        session.emit("irc:monitor-list", buildJsonObject {
+            put("serverId", session.state.serverId)
+            put("targets", message.params.lastOrNull())
+        })
+    }
+    Handlers.on("607") { _, _ -> }
+
+    // ERR_TOOMANYWATCH
+    Handlers.on("512") { session, message ->
+        session.emit("irc:error", buildJsonObject {
+            put("serverId", session.state.serverId)
+            put("message", "Watch list is full: ${message.params.lastOrNull()}")
+        })
+    }
 }
 
 private fun monitorStatus(session: IrcSession, message: IrcMessage, online: Boolean) {
@@ -231,4 +261,16 @@ private fun monitorStatus(session: IrcSession, message: IrcMessage, online: Bool
             }
         )
     }
+}
+
+private fun watchStatus(session: IrcSession, message: IrcMessage, online: Boolean) {
+    // <client> <nick> <user> <host> <when> :<text>
+    val nick = message.params.getOrNull(1)?.takeIf { it.isNotBlank() } ?: return
+    session.emit(
+        if (online) "irc:monitor-online" else "irc:monitor-offline",
+        buildJsonObject {
+            put("serverId", session.state.serverId)
+            put("nick", nick)
+        }
+    )
 }

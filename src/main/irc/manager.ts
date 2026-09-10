@@ -16,6 +16,7 @@ import { subscribeToMetadata, metadataValueFits } from './features/metadata'
 import { serversChanged } from '../ipc/notify'
 import type { UserMetadata } from '@shared/types/metadata'
 import { v4 as uuid } from 'uuid'
+import { friendListKind, friendListLines, friendListStatusLine } from '@shared/friends'
 
 /**
  * Manages all IRC client connections and bridges events to the renderer.
@@ -342,12 +343,16 @@ export class IRCManager {
       // for exactly the users who have an account.
       this.publishProfile(client)
 
-      // Re-send monitor list on connect
+      // Re-send the friend list on connect, in whichever of the two commands
+      // this network takes. It lives on the connection and dies with it.
       const monitorNicks = getMonitorList(serverId)
-      if (monitorNicks.length > 0) {
-        client.connection.send('MONITOR', '+', monitorNicks.join(','))
+      const kind = friendListKind(client.state.isupport)
+      if (monitorNicks.length > 0 && kind) {
+        for (const line of friendListLines(kind, monitorNicks, 'add')) {
+          client.connection.sendRaw(line)
+        }
         // Request current status
-        client.connection.send('MONITOR', 'S')
+        client.connection.sendRaw(friendListStatusLine(kind))
       }
     })
 

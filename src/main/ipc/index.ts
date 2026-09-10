@@ -51,6 +51,7 @@ import {
 import { DEFAULT_NICK } from '@shared/constants'
 import { getReadMarker, setReadMarker, getAllReadMarkers } from '../storage/models/readmarker'
 import { expectCleared, metadataValueFits, metadataLimitsOf } from '../irc/features/metadata'
+import { friendListKind, friendListLines, friendListStatusLine } from '@shared/friends'
 
 /**
  * Register all IPC handlers.
@@ -640,7 +641,12 @@ export function registerIPCHandlers(): void {
     addToMonitorList(serverId, nicks)
     const client = ircManager.getClient(serverId)
     if (client) {
-      client.connection.send('MONITOR', '+', nicks.join(','))
+      const kind = friendListKind(client.state.isupport)
+      // Nothing to send on a network that offers neither command. The name is
+      // still saved: it goes to the server the moment we are on one that does.
+      if (kind) {
+        for (const line of friendListLines(kind, nicks, 'add')) client.connection.sendRaw(line)
+      }
     }
     // The server echoes who is online, never who is on the list
     monitorChanged(serverId)
@@ -654,7 +660,10 @@ export function registerIPCHandlers(): void {
     removeFromMonitorList(serverId, nicks)
     const client = ircManager.getClient(serverId)
     if (client) {
-      client.connection.send('MONITOR', '-', nicks.join(','))
+      const kind = friendListKind(client.state.isupport)
+      if (kind) {
+        for (const line of friendListLines(kind, nicks, 'remove')) client.connection.sendRaw(line)
+      }
     }
     monitorChanged(serverId)
     resealVault()
@@ -668,7 +677,8 @@ export function registerIPCHandlers(): void {
   handle('monitor:status', async (_event, serverId: string) => {
     const client = ircManager.getClient(serverId)
     if (client) {
-      client.connection.send('MONITOR', 'S')
+      const kind = friendListKind(client.state.isupport)
+      if (kind) client.connection.sendRaw(friendListStatusLine(kind))
     }
   })
 

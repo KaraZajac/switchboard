@@ -18,6 +18,7 @@ import '../features/away'
 import '../features/chghost'
 import '../features/setname'
 import '../features/monitor'
+import '../features/watch'
 import '../features/whox'
 
 // Phase 5: Message features

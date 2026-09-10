@@ -1,0 +1,220 @@
+{
+  "$comment": "Which 'tell me when they turn up' command a network takes, shared by tests/shared/friends.test.ts and the Android SharedCorpusTest. Switchboard only ever spoke MONITOR, so on every bahamut and plexus network \u2014 DALnet and Rizon among them \u2014 the friend list was a screen you could add names to that would never tell you anything.",
+  "$kinds": "`isupport` is what the network advertised; `kind` is what we should send, and `limit` how many names it will hold.",
+  "kinds": [
+    {
+      "name": "solanum offers MONITOR",
+      "isupport": {
+        "MONITOR": "100"
+      },
+      "kind": "MONITOR",
+      "limit": 100
+    },
+    {
+      "name": "bahamut offers WATCH",
+      "isupport": {
+        "WATCH": "128"
+      },
+      "kind": "WATCH",
+      "limit": 128
+    },
+    {
+      "name": "UnrealIRCd offers both, and MONITOR is the better specified",
+      "isupport": {
+        "MONITOR": "128",
+        "WATCH": "128"
+      },
+      "kind": "MONITOR",
+      "limit": 128
+    },
+    {
+      "name": "a bare MONITOR with no limit is still MONITOR",
+      "isupport": {
+        "MONITOR": true
+      },
+      "kind": "MONITOR",
+      "limit": null
+    },
+    {
+      "name": "hybrid on OFTC offers neither",
+      "isupport": {
+        "CALLERID": "g"
+      },
+      "kind": null,
+      "limit": null
+    }
+  ],
+  "$lines": "The lines to send. A friend list long enough to be useful is long enough to need more than one, and the names past a 512-byte cut were never watched at all.",
+  "lines": [
+    {
+      "name": "MONITOR takes a comma-separated list",
+      "kind": "MONITOR",
+      "action": "add",
+      "nicks": [
+        "alice",
+        "bob"
+      ],
+      "lines": [
+        "MONITOR + alice,bob"
+      ]
+    },
+    {
+      "name": "MONITOR drops them the same way",
+      "kind": "MONITOR",
+      "action": "remove",
+      "nicks": [
+        "alice",
+        "bob"
+      ],
+      "lines": [
+        "MONITOR - alice,bob"
+      ]
+    },
+    {
+      "name": "WATCH repeats the sign on every name",
+      "kind": "WATCH",
+      "action": "add",
+      "nicks": [
+        "alice",
+        "bob"
+      ],
+      "lines": [
+        "WATCH +alice +bob"
+      ]
+    },
+    {
+      "name": "WATCH drops them with a minus",
+      "kind": "WATCH",
+      "action": "remove",
+      "nicks": [
+        "alice",
+        "bob"
+      ],
+      "lines": [
+        "WATCH -alice -bob"
+      ]
+    },
+    {
+      "name": "nobody to watch is no line at all",
+      "kind": "MONITOR",
+      "action": "add",
+      "nicks": [],
+      "lines": []
+    },
+    {
+      "name": "a long list is split rather than truncated",
+      "kind": "MONITOR",
+      "action": "add",
+      "nicks": [
+        "nickname00",
+        "nickname01",
+        "nickname02",
+        "nickname03",
+        "nickname04",
+        "nickname05",
+        "nickname06",
+        "nickname07",
+        "nickname08",
+        "nickname09",
+        "nickname10",
+        "nickname11",
+        "nickname12",
+        "nickname13",
+        "nickname14",
+        "nickname15",
+        "nickname16",
+        "nickname17",
+        "nickname18",
+        "nickname19",
+        "nickname20",
+        "nickname21",
+        "nickname22",
+        "nickname23",
+        "nickname24",
+        "nickname25",
+        "nickname26",
+        "nickname27",
+        "nickname28",
+        "nickname29",
+        "nickname30",
+        "nickname31",
+        "nickname32",
+        "nickname33",
+        "nickname34",
+        "nickname35",
+        "nickname36",
+        "nickname37",
+        "nickname38",
+        "nickname39"
+      ],
+      "lines": [
+        "MONITOR + nickname00,nickname01,nickname02,nickname03,nickname04,nickname05,nickname06,nickname07,nickname08,nickname09,nickname10,nickname11,nickname12,nickname13,nickname14,nickname15,nickname16,nickname17,nickname18,nickname19,nickname20,nickname21,nickname22,nickname23,nickname24,nickname25,nickname26,nickname27,nickname28,nickname29,nickname30,nickname31,nickname32,nickname33,nickname34,nickname35",
+        "MONITOR + nickname36,nickname37,nickname38,nickname39"
+      ]
+    },
+    {
+      "name": "WATCH splits sooner, because every name carries its own sign",
+      "kind": "WATCH",
+      "action": "add",
+      "nicks": [
+        "nickname00",
+        "nickname01",
+        "nickname02",
+        "nickname03",
+        "nickname04",
+        "nickname05",
+        "nickname06",
+        "nickname07",
+        "nickname08",
+        "nickname09",
+        "nickname10",
+        "nickname11",
+        "nickname12",
+        "nickname13",
+        "nickname14",
+        "nickname15",
+        "nickname16",
+        "nickname17",
+        "nickname18",
+        "nickname19",
+        "nickname20",
+        "nickname21",
+        "nickname22",
+        "nickname23",
+        "nickname24",
+        "nickname25",
+        "nickname26",
+        "nickname27",
+        "nickname28",
+        "nickname29",
+        "nickname30",
+        "nickname31",
+        "nickname32",
+        "nickname33",
+        "nickname34",
+        "nickname35",
+        "nickname36",
+        "nickname37",
+        "nickname38",
+        "nickname39"
+      ],
+      "lines": [
+        "WATCH +nickname00 +nickname01 +nickname02 +nickname03 +nickname04 +nickname05 +nickname06 +nickname07 +nickname08 +nickname09 +nickname10 +nickname11 +nickname12 +nickname13 +nickname14 +nickname15 +nickname16 +nickname17 +nickname18 +nickname19 +nickname20 +nickname21 +nickname22 +nickname23 +nickname24 +nickname25 +nickname26 +nickname27 +nickname28 +nickname29 +nickname30 +nickname31 +nickname32",
+        "WATCH +nickname33 +nickname34 +nickname35 +nickname36 +nickname37 +nickname38 +nickname39"
+      ]
+    }
+  ],
+  "$status": "Asking who on the list is here right now, and asking what is on the list at all. The two commands swap letters between the two questions, which is the sort of thing that makes a fallback look like it works until you read the replies.",
+  "status": [
+    {
+      "kind": "MONITOR",
+      "here": "MONITOR S",
+      "list": "MONITOR L"
+    },
+    {
+      "kind": "WATCH",
+      "here": "WATCH L",
+      "list": "WATCH S"
+    }
+  ]
+}

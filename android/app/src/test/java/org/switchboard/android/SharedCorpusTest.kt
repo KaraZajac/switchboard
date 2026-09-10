@@ -28,6 +28,7 @@ import org.switchboard.android.vault.VaultKdf
 import org.switchboard.android.vault.VaultPayload
 import org.switchboard.android.vault.shouldAdoptVault
 import org.switchboard.android.irc.Formatting
+import org.switchboard.android.irc.Friends
 import org.switchboard.android.irc.Isupport
 import org.switchboard.android.irc.ServerConfig
 import org.switchboard.android.irc.Services
@@ -1018,6 +1019,62 @@ class SharedCorpusTest {
         assertEquals("#d2d2d2", Formatting.PALETTE[15])
         assertEquals("#ffffff", Formatting.PALETTE[98])
         assertNull("99 means the client's own colour", Formatting.paletteColour(99))
+    }
+
+    // ── the friend list ───────────────────────────────────────────────
+
+    @Test
+    fun `speaks whichever watch command the network takes`() {
+        val corpus = load("friends.json")
+
+        for (entry in corpus["kinds"]!!.jsonArray) {
+            val case = entry.jsonObject
+            val name = case["name"]!!.jsonPrimitive.content
+            val isupport = case["isupport"]!!.jsonObject.mapValues { (_, v) ->
+                v.jsonPrimitive.contentOrNull ?: ""
+            }
+            val expected = case["kind"]!!.jsonPrimitive.contentOrNull
+            assertEquals("$name: kind", expected, Friends.kind(isupport)?.name)
+            assertEquals(
+                "$name: limit",
+                case["limit"]!!.jsonPrimitive.intOrNull,
+                Friends.limit(isupport)
+            )
+        }
+
+        for (entry in corpus["lines"]!!.jsonArray) {
+            val case = entry.jsonObject
+            val name = case["name"]!!.jsonPrimitive.content
+            val kind = Friends.Kind.valueOf(case["kind"]!!.jsonPrimitive.content)
+            val nicks = case["nicks"]!!.jsonArray.map { it.jsonPrimitive.content }
+            val add = case["action"]!!.jsonPrimitive.content == "add"
+            val expected = case["lines"]!!.jsonArray.map { it.jsonPrimitive.content }
+            assertEquals(name, expected, Friends.lines(kind, nicks, add))
+        }
+
+        for (entry in corpus["status"]!!.jsonArray) {
+            val case = entry.jsonObject
+            val kind = Friends.Kind.valueOf(case["kind"]!!.jsonPrimitive.content)
+            assertEquals(case["here"]!!.jsonPrimitive.content, Friends.statusLine(kind))
+            assertEquals(case["list"]!!.jsonPrimitive.content, Friends.listLine(kind))
+        }
+    }
+
+    @Test
+    fun `keeps a long friend list inside one line each and loses nobody`() {
+        val many = (0 until 200).map { "someverylongnickname$it" }
+        for (kind in Friends.Kind.entries) {
+            for (line in Friends.lines(kind, many, add = true)) {
+                assertTrue(
+                    "a watch line has to fit in one IRC message",
+                    line.toByteArray().size + 2 < 512
+                )
+            }
+        }
+        val sent = Friends.lines(Friends.Kind.WATCH, many, add = true)
+            .flatMap { it.removePrefix("WATCH ").split(" ") }
+            .map { it.removePrefix("+") }
+        assertEquals(many, sent)
     }
 
 }
