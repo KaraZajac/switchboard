@@ -4,6 +4,9 @@ import android.content.Context
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.JsonObject
 import org.switchboard.android.irc.ServerConfig
 import java.io.File
 import java.time.Instant
@@ -52,6 +55,35 @@ class VaultStore(context: Context) {
 
     /** A setting the two devices share, as the desktop last sealed it */
     fun setting(key: String): JsonElement? = payload?.settings?.get(key)
+
+    /**
+     * Your profile, as it stands, independent of any one network.
+     *
+     * A profile belongs to the person, not to a connection: it has to be
+     * writable with nothing connected, and with no networks configured at all.
+     * Each server keeps its own copy to publish, and takes it from here.
+     */
+    fun defaultProfile(): Map<String, String> =
+        (payload?.settings?.get(PROFILE_KEY) as? JsonObject)
+            ?.mapNotNull { (key, value) ->
+                (value as? JsonPrimitive)?.contentOrNull?.let { key to it }
+            }
+            ?.toMap()
+            .orEmpty()
+
+    /** Write one key of the profile, and seal it */
+    fun setDefaultProfileKey(key: String, value: String): Boolean {
+        val current = payload ?: return false
+
+        val profile = defaultProfile().toMutableMap()
+        if (value.isEmpty()) profile.remove(key) else profile[key] = value
+
+        val settings = current.settings.toMutableMap()
+        if (profile.isEmpty()) settings.remove(PROFILE_KEY)
+        else settings[PROFILE_KEY] = JsonObject(profile.mapValues { JsonPrimitive(it.value) })
+
+        return resealPayload(current.copy(settings = settings)) != null
+    }
 
     /** The nicks this account watches on a server, shared from the other device */
     fun watched(serverId: String): List<String> = payload?.monitor?.get(serverId).orEmpty()
@@ -241,30 +273,28 @@ class VaultStore(context: Context) {
      * unlocked can open the result without being asked again.
      */
     fun reseal(servers: List<ServerConfig>, deviceName: String = "phone"): VaultEnvelope? {
+        val current = payload ?: return null
+        return resealPayload(current.copy(servers = servers), deviceName)
+    }
+
+    /** Seal a whole payload as the next version of this config */
+    fun resealPayload(next: VaultPayload, deviceName: String = "phone"): VaultEnvelope? {
         val currentKey = key ?: return null
         val sealed = envelope ?: return null
 
-        // Carry the rest of the payload forward. Servers are what this call
-        // changes; the theme, the mutes and the watched nicks belong to the
-        // person and would otherwise be dropped by a phone editing a server.
-        val next = VaultPayload(
-            version = sealed.version + 1,
-            servers = servers,
-            settings = payload?.settings.orEmpty(),
-            monitor = payload?.monitor.orEmpty()
-        )
+        val bumped = next.copy(version = sealed.version + 1)
         val resealed = VaultCrypto.seal(
-            payloadJson = json.encodeToString(VaultPayload.serializer(), next),
+            payloadJson = json.encodeToString(VaultPayload.serializer(), bumped),
             key = currentKey,
             salt = java.util.Base64.getDecoder().decode(sealed.kdf.salt),
-            version = next.version,
+            version = bumped.version,
             updatedAt = Instant.now().toString(),
             updatedBy = deviceName,
             iterations = sealed.kdf.iterations
         )
 
         envelope = resealed
-        payload = next
+        payload = bumped
         file.writeText(VaultCrypto.encode(resealed))
         // The salt is unchanged, so the kept key still opens this — but write
         // it again rather than relying on that staying true.
@@ -274,6 +304,7 @@ class VaultStore(context: Context) {
 
     private companion object {
         const val HAS_PASSPHRASE = "hasPassphrase"
+        const val PROFILE_KEY = "profile"
     }
 
     /** The sealed envelope, for handing to another device */

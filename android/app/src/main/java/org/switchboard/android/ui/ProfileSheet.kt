@@ -48,6 +48,7 @@ import org.switchboard.android.UserMetadata
 import org.switchboard.android.kick
 import org.switchboard.android.unwatchNicks
 import org.switchboard.android.watchNicks
+import org.switchboard.android.savedProfile
 import org.switchboard.android.setProfile
 import org.switchboard.android.storedProfile
 import org.switchboard.android.whois
@@ -211,7 +212,8 @@ fun EditProfileSheet(engine: SwitchboardEngine, onDismiss: () -> Unit) {
     // cleared key back as its own name. Received metadata is still worth
     // having — it is all we have for everyone else — so it fills the blanks.
     LaunchedEffect(serverId) {
-        val stored = serverId?.let { engine.storedProfile(it) } ?: return@LaunchedEffect
+        val stored = serverId?.let { engine.storedProfile(it) }.orEmpty()
+            .ifEmpty { engine.savedProfile() }
         for ((key, value) in stored) {
             if (value.isNotBlank()) fields[key] = value
         }
@@ -233,8 +235,13 @@ fun EditProfileSheet(engine: SwitchboardEngine, onDismiss: () -> Unit) {
                 Text("Your profile", color = Text0, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    "Shown to everyone on this network. Each of these is a separate " +
-                        "thing the server stores, so you can leave any of them blank.",
+                    if (serverId == null)
+                        "Kept on this phone and shown on every network that carries " +
+                            "profiles. Each of these is a separate thing, so you can leave " +
+                            "any of them blank."
+                    else
+                        "Shown to everyone on this network. Each of these is a separate " +
+                            "thing the server stores, so you can leave any of them blank.",
                     color = Overlay,
                     fontSize = 12.sp,
                     lineHeight = 17.sp
@@ -271,7 +278,6 @@ fun EditProfileSheet(engine: SwitchboardEngine, onDismiss: () -> Unit) {
             Spacer(Modifier.height(12.dp))
             Button(
                 onClick = {
-                    if (serverId == null) return@Button
                     saving = true
                     problem = null
                     note = null
@@ -296,7 +302,10 @@ fun EditProfileSheet(engine: SwitchboardEngine, onDismiss: () -> Unit) {
                         }
                     }
                 },
-                enabled = serverId != null && !saving,
+                // Always. Saving your own profile does not need a network,
+                // and a form that will not take what you typed is worse than
+                // one that says it cannot send it yet.
+                enabled = !saving,
                 colors = ButtonDefaults.buttonColors(containerColor = Blue, contentColor = Crust),
                 shape = RoundedCornerShape(10.dp),
                 modifier = Modifier

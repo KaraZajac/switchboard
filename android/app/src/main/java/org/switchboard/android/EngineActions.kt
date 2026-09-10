@@ -172,16 +172,18 @@ data class ProfileSaved(val saved: Boolean, val published: Boolean, val reason: 
  * every word of it.
  */
 suspend fun SwitchboardEngine.setProfile(
-    serverId: String,
+    serverId: String?,
     key: String,
     value: String
 ): ProfileSaved {
-    if (isHolding || !remote.isLinked) {
-        // Keep it in the shared config first, so it survives and reaches the
-        // desktop, then publish if this network can carry it.
+    if (isHolding || !remote.isLinked || serverId == null) {
+        // Your profile is yours, not one network's: it is written down first
+        // and always, with no server selected and none configured. Publishing
+        // is a separate question, and its answer is per network.
         val stored = rememberProfileKey(serverId, key, value)
-        val connection = connections[serverId]
-            ?: return ProfileSaved(stored, false, "Not connected to this network")
+
+        val connection = serverId?.let { connections[it] }
+            ?: return ProfileSaved(stored, false, if (serverId == null) null else "Not connected to this network")
 
         if (!connection.supportsMetadata) {
             return ProfileSaved(stored, false, NO_METADATA)
@@ -205,14 +207,29 @@ private const val NO_METADATA =
     "This network does not support profiles, so nobody here will see it"
 
 /** Put one key into the vault's copy of this server, so it outlives the session */
+/**
+ * Write one profile key down.
+ *
+ * The config's own copy always, so that saving works with nothing connected
+ * and no networks added — a profile is a thing about you, and refusing to
+ * remember it until you have somewhere to send it is the wrong way round.
+ * The named server, if there is one, gets it too, because that is the copy it
+ * publishes on connect.
+ */
 private fun SwitchboardEngine.rememberProfileKey(
-    serverId: String,
+    serverId: String?,
     key: String,
     value: String
 ): Boolean {
     if (!vault.isUnlocked) return false
+
+    val kept = vault.setDefaultProfileKey(key, value)
+    if (kept) noteVaultChanged()
+
+    if (serverId == null) return kept
+
     val servers = vaultServers()
-    if (servers.none { it.id == serverId }) return false
+    if (servers.none { it.id == serverId }) return kept
 
     resealWith(servers.map { server ->
         if (server.id != serverId) return@map server
@@ -222,6 +239,9 @@ private fun SwitchboardEngine.rememberProfileKey(
     })
     return true
 }
+
+/** Your profile as the config holds it, whatever networks exist */
+fun SwitchboardEngine.savedProfile(): Map<String, String> = vault.defaultProfile()
 
 // ── accounts ─────────────────────────────────────────────────────────
 
@@ -464,7 +484,12 @@ suspend fun SwitchboardEngine.addServer(config: ServerConfig): String? {
     if (isHolding || !remote.isLinked) {
         if (!vault.isUnlocked) return null
         val id = config.id.ifBlank { java.util.UUID.randomUUID().toString() }
-        val stored = config.copy(id = id, sortOrder = vault.servers().size)
+        // A profile set before this network existed still belongs to you on it
+        val stored = config.copy(
+            id = id,
+            sortOrder = vault.servers().size,
+            profile = if (config.profile.isEmpty()) vault.defaultProfile() else config.profile
+        )
         resealWith(vault.servers() + stored)
         if (stored.autoConnect) connectServer(stored.id)
         return id
