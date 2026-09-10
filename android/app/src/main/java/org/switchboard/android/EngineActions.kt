@@ -297,6 +297,13 @@ data class AccountAbilities(
  * `draft/account-registration=before-connect,email-required,min-password-length=10`
  * and `sasl=PLAIN,SCRAM-SHA-256`. Nothing here is guessed: a client that offers
  * to register on a network that will not is offering a dead end.
+ *
+ * SASL is the one exception, and it has to be. Listing the mechanisms arrived
+ * with SASL 3.2; before that the capability was bare, and Ergo still advertises
+ * it that way. Reading a bare `sasl` as "no mechanisms" meant no password could
+ * be saved for those networks — and, because sharing a connection between two
+ * devices requires SASL, it quietly turned off the one feature this client is
+ * for. PLAIN is mandatory to implement, so a bare `sasl` means at least PLAIN.
  */
 fun SwitchboardEngine.accountAbilities(serverId: String): AccountAbilities =
     // Our own connection knows first-hand; following a desktop, the snapshot
@@ -326,9 +333,10 @@ fun accountAbilitiesOf(available: Map<String, String>): AccountAbilities {
         emailRequired = values.contains("email-required"),
         minPasswordLength = minimum,
         beforeConnect = values.contains("before-connect"),
-        saslMechanisms = available["sasl"]?.split(",")?.map { it.trim().uppercase() }
-            ?.filter { it.isNotEmpty() }
-            .orEmpty()
+        saslMechanisms = available["sasl"]?.let { value ->
+            val named = value.split(",").map { it.trim().uppercase() }.filter { it.isNotEmpty() }
+            named.ifEmpty { listOf("PLAIN") }
+        }.orEmpty()
     )
 }
 

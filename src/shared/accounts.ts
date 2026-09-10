@@ -26,12 +26,32 @@ export interface AccountAbilities {
   saslMechanisms: string[]
 }
 
+/** The mechanisms a `sasl` capability value names, or PLAIN when it names none */
+function saslMechanismsFrom(value: string | undefined): string[] {
+  if (value === undefined) return []
+
+  const named = value
+    .split(',')
+    .map((m) => m.trim().toUpperCase())
+    .filter((m) => m.length > 0)
+
+  return named.length > 0 ? named : ['PLAIN']
+}
+
 /**
  * Read the capability values, which is where all of this is stated.
  *
  * `draft/account-registration=before-connect,email-required,min-password-length=10`
  * and `sasl=PLAIN,SCRAM-SHA-256`. A capability present with no value still means
  * the feature is there — it simply said nothing about its limits.
+ *
+ * SASL is the one where that matters. Listing the mechanisms arrived with SASL
+ * 3.2; before that the capability was bare, and Ergo still advertises it that
+ * way. Reading a bare `sasl` as "no mechanisms" meant no password could be
+ * saved for those networks, so identification fell back to messaging NickServ
+ * after connecting — and, because sharing a connection between two devices
+ * requires SASL, it quietly turned off the one feature this client is for.
+ * PLAIN is mandatory to implement, so a bare `sasl` means at least PLAIN.
  */
 export function accountAbilities(values: Record<string, string>): AccountAbilities {
   const registration = values['draft/account-registration']
@@ -47,10 +67,7 @@ export function accountAbilities(values: Record<string, string>): AccountAbiliti
     emailRequired: parts.includes('email-required'),
     minPasswordLength: minimum ? Number(minimum) || null : null,
     beforeConnect: parts.includes('before-connect'),
-    saslMechanisms: (values['sasl'] ?? '')
-      .split(',')
-      .map((m) => m.trim().toUpperCase())
-      .filter((m) => m.length > 0)
+    saslMechanisms: saslMechanismsFrom(values['sasl'])
   }
 }
 

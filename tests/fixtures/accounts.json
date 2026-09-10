@@ -148,6 +148,31 @@
         "SCRAM-SHA-512"
       ],
       "bestMechanism": "SCRAM-SHA-512"
+    },
+    {
+      "$comment": "Listing the mechanisms arrived with SASL 3.2. Before that the capability was bare, and Ergo still advertises it that way — read as 'no mechanisms' it meant no password could be saved, and no shared connection between two devices, on every server of that vintage.",
+      "name": "a bare sasl capability, which means at least PLAIN",
+      "values": {
+        "sasl": ""
+      },
+      "canRegister": false,
+      "emailRequired": false,
+      "minPasswordLength": null,
+      "beforeConnect": false,
+      "saslMechanisms": [
+        "PLAIN"
+      ],
+      "bestMechanism": "PLAIN"
+    },
+    {
+      "name": "no sasl capability at all is no SASL",
+      "values": {},
+      "canRegister": false,
+      "emailRequired": false,
+      "minPasswordLength": null,
+      "beforeConnect": false,
+      "saslMechanisms": [],
+      "bestMechanism": null
     }
   ],
   "$sharing": "Whether both devices can be on this network at once. The precondition is always the same: both connections must authenticate to the same account, because the account is the only thing that makes the second one you rather than an impostor. A saved identify command is not enough — NickServ logs you in after registration, by which time the nick has already been refused.",
