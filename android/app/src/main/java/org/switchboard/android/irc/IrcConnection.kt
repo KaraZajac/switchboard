@@ -205,8 +205,13 @@ class IrcConnection(
         raw.soTimeout = 0
 
         val connected = if (config.tls) {
-            (SSLSocketFactory.getDefault() as SSLSocketFactory)
-                .createSocket(raw, config.host, config.port, true)
+            // A client certificate, where one is set up. SASL EXTERNAL has
+            // nothing to authenticate with unless the handshake presents it,
+            // which is why choosing that mechanism used to end in 904.
+            val factory = CertFp.socketFactory(config.clientCert)
+                ?: SSLSocketFactory.getDefault() as SSLSocketFactory
+
+            factory.createSocket(raw, config.host, config.port, true)
                 .also { (it as javax.net.ssl.SSLSocket).startHandshake() }
         } else {
             raw
@@ -809,7 +814,14 @@ data class ServerConfig(
     val websocketUrl: String? = null,
     val avatarUrl: String? = null,
     val profile: Map<String, String> = emptyMap(),
-    val preAwayMessage: String? = null
+    val preAwayMessage: String? = null,
+    /**
+     * A client certificate and its key, in PEM, for SASL EXTERNAL.
+     *
+     * A credential. It belongs to this phone: the desktop never sends its own,
+     * and this one never goes the other way either.
+     */
+    val clientCert: String? = null
 ) {
     /** Falls back to the nick, the way every client does */
     val ident: String get() = username.ifBlank { nick }

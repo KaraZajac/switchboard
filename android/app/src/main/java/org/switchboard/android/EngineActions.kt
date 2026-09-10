@@ -923,7 +923,9 @@ private fun ServerConfig.toJson(omitBlankSecrets: Boolean = false): JsonObject =
     val secrets = listOf(
         "password" to password,
         "saslPassword" to saslPassword,
-        "identifyCommand" to identifyCommand
+        "identifyCommand" to identifyCommand,
+        // A certificate's private key is a credential like any other
+        "clientCert" to clientCert
     )
     for ((key, value) in secrets) {
         if (omitBlankSecrets && value.isNullOrEmpty()) continue

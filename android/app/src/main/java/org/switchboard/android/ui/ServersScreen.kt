@@ -60,6 +60,8 @@ import org.switchboard.android.irc.ServerConfig
 import org.switchboard.android.listServers
 import org.switchboard.android.removeServer
 import org.switchboard.android.updateServer
+import androidx.compose.ui.text.font.FontFamily
+import org.switchboard.android.irc.CertFp
 
 /**
  * The networks.
@@ -242,6 +244,7 @@ private fun ServerForm(
     var nick by remember { mutableStateOf(existing?.nick.orEmpty()) }
     var saslUser by remember { mutableStateOf(existing?.saslUsername.orEmpty()) }
     var saslPass by remember { mutableStateOf("") }
+    var clientCert by remember { mutableStateOf(existing?.clientCert.orEmpty()) }
     var autoJoin by remember { mutableStateOf(existing?.autoJoin?.joinToString(", ").orEmpty()) }
     var autoConnect by remember { mutableStateOf(existing?.autoConnect ?: true) }
     var confirmingRemoval by remember { mutableStateOf(false) }
@@ -299,6 +302,9 @@ private fun ServerForm(
                 saslPass,
                 secret = true
             ) { saslPass = it }
+
+            ClientCertificate(clientCert) { clientCert = it }
+
             Field("Join on connect", "#one, #two", autoJoin) { autoJoin = it }
 
             Toggle("Connect automatically", "Bring this network up on its own.", autoConnect) {
@@ -319,6 +325,9 @@ private fun ServerForm(
                             username = existing?.username.orEmpty(),
                             realname = existing?.realname.orEmpty(),
                             saslMechanism = when {
+                                // A certificate is the credential, and EXTERNAL
+                                // is the only mechanism that uses one
+                                clientCert.isNotBlank() -> "EXTERNAL"
                                 saslUser.isBlank() -> null
                                 existing?.saslMechanism != null -> existing.saslMechanism
                                 else -> "PLAIN"
@@ -326,6 +335,7 @@ private fun ServerForm(
                             saslUsername = saslUser.trim().ifBlank { null },
                             // Blank means "leave it alone"; the engine drops it
                             saslPassword = saslPass.ifBlank { existing?.saslPassword },
+                            clientCert = clientCert.trim().ifBlank { null },
                             password = existing?.password,
                             identifyCommand = existing?.identifyCommand,
                             autoConnect = autoConnect,
@@ -463,5 +473,83 @@ private fun Toggle(label: String, detail: String, on: Boolean, onChange: (Boolea
                 uncheckedBorderColor = Surface1
             )
         )
+    }
+}
+
+/**
+ * Somewhere to put a client certificate.
+ *
+ * SASL EXTERNAL proves who you are with the certificate the TLS handshake
+ * already presented, so there is no password anywhere — which is why the
+ * networks that offer it call it the strongest thing they have. It needs the
+ * certificate and its key, and the fingerprint of the certificate registered
+ * with the network's services.
+ *
+ * The fingerprint is shown here because working it out is most of why nobody
+ * uses CertFP: every guide ends with an openssl incantation whose output you
+ * are then meant to carry somewhere else.
+ */
+@Composable
+private fun ClientCertificate(value: String, onChange: (String) -> Unit) {
+    var open by remember { mutableStateOf(value.isNotBlank()) }
+    val problem = remember(value) { CertFp.problem(value) }
+    val fingerprint = remember(value) { CertFp.fingerprint(value) }
+
+    Column(modifier = Modifier.padding(top = 14.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth().clickable { open = !open },
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                "CERTIFICATE (SASL EXTERNAL)",
+                color = Subtext,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.weight(1f)
+            )
+            Text(if (open) "Hide" else "Set up", color = Blue, fontSize = 13.sp)
+        }
+
+        if (open) {
+        Spacer(Modifier.height(8.dp))
+        Field(
+            "",
+            "-----BEGIN CERTIFICATE-----  …  -----BEGIN PRIVATE KEY-----  …",
+            value
+        ) { onChange(it) }
+
+        when {
+            problem != null -> Text(
+                problem,
+                color = Yellow,
+                fontSize = 12.sp,
+                modifier = Modifier.padding(top = 6.dp)
+            )
+
+            fingerprint != null -> Column(modifier = Modifier.padding(top = 8.dp)) {
+                Text(
+                    "Tell the network this is you, once you are connected and logged in:",
+                    color = Subtext,
+                    fontSize = 12.sp
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "/msg NickServ CERT ADD $fingerprint",
+                    color = Green,
+                    fontSize = 12.sp,
+                    fontFamily = FontFamily.Monospace
+                )
+            }
+
+            else -> Text(
+                "The certificate and its key, both in one box. Make one with:\n" +
+                    "openssl req -x509 -newkey rsa:4096 -sha256 -days 3650 -nodes " +
+                    "-keyout cert.pem -out cert.pem",
+                color = Overlay,
+                fontSize = 12.sp,
+                modifier = Modifier.padding(top = 6.dp)
+            )
+        }
+        }
     }
 }
