@@ -354,6 +354,17 @@ function runMigrations(): void {
     `)
     db.run("INSERT INTO migrations (name) VALUES ('012_fts_edits')")
   }
+
+  // Migration 013: Somewhere to keep a client certificate
+  //
+  // SASL EXTERNAL was implemented and the server dialog offered it, and there
+  // was nowhere to put the certificate it needs — so choosing it presented none
+  // and ended in 904. Encrypted like the passwords beside it, because that is
+  // what it is.
+  if (!applied.has('013_client_cert')) {
+    db.run('ALTER TABLE servers ADD COLUMN client_cert TEXT DEFAULT NULL')
+    db.run("INSERT INTO migrations (name) VALUES ('013_client_cert')")
+  }
 }
 
 /** Whether the search index exists — it does not on a build without FTS5 */

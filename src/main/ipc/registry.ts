@@ -90,7 +90,7 @@ export const REMOTE_ALLOWED = new Set([
  * undefined as "leave alone" and null as "set to null", and the phone cannot
  * tell those apart across JSON — so null means "leave alone" here.
  */
-const REMOTE_PROTECTED_FIELDS = ['password', 'saslPassword', 'identifyCommand']
+const REMOTE_PROTECTED_FIELDS = ['password', 'saslPassword', 'identifyCommand', 'clientCert']
 
 /** Whether a paired device is allowed to call this channel at all. */
 export function isRemoteAllowed(channel: string): boolean {
@@ -114,9 +114,13 @@ export function sanitizeForRemote(channel: string, value: unknown): unknown {
       password: null,
       saslPassword: null,
       identifyCommand: null,
+      // A certificate's private key is a credential like any other, and the
+      // one that cannot be changed once it has been somewhere it should not be
+      clientCert: null,
       // Enough for the UI to show "SASL is set up" without the secret itself
       hasPassword: Boolean(config.password),
-      hasSaslPassword: Boolean(config.saslPassword)
+      hasSaslPassword: Boolean(config.saslPassword),
+      hasClientCert: Boolean(config.clientCert)
     }
   })
 }
@@ -143,6 +147,7 @@ export function sanitizeIncomingFromRemote(channel: string, args: unknown[]): un
     // Reading a server list hands these back too; they are not columns
     delete config.hasPassword
     delete config.hasSaslPassword
+    delete config.hasClientCert
     return config
   })
 }

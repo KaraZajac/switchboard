@@ -46,8 +46,8 @@ export function addServer(config: Omit<ServerConfig, 'id' | 'sortOrder'>): strin
 
   db.run(
     `INSERT INTO servers (id, name, host, port, tls, password, nick, username, realname,
-     sasl_mechanism, sasl_username, sasl_password, auto_connect, auto_join, sort_order, websocket_url, identify_command, avatar_url, pre_away_message, profile_metadata)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     sasl_mechanism, sasl_username, sasl_password, auto_connect, auto_join, sort_order, websocket_url, identify_command, avatar_url, pre_away_message, profile_metadata, client_cert)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       id,
       config.name,
@@ -68,7 +68,8 @@ export function addServer(config: Omit<ServerConfig, 'id' | 'sortOrder'>): strin
       encryptSecret((config as Record<string, unknown>).identifyCommand as string | null),
       (config as Record<string, unknown>).avatarUrl || null,
       (config as Record<string, unknown>).preAwayMessage || null,
-      JSON.stringify((config as Record<string, unknown>).profile ?? {})
+      JSON.stringify((config as Record<string, unknown>).profile ?? {}),
+      encryptSecret((config as Record<string, unknown>).clientCert as string | null)
     ]
   )
 
@@ -91,6 +92,7 @@ export function updateServer(id: string, updates: Partial<ServerConfig>): void {
   if (updates.saslMechanism !== undefined) { fields.push('sasl_mechanism = ?'); values.push(updates.saslMechanism) }
   if (updates.saslUsername !== undefined) { fields.push('sasl_username = ?'); values.push(updates.saslUsername) }
   if (updates.saslPassword !== undefined) { fields.push('sasl_password = ?'); values.push(encryptSecret(updates.saslPassword)) }
+  if (updates.clientCert !== undefined) { fields.push('client_cert = ?'); values.push(encryptSecret(updates.clientCert)) }
   if (updates.autoConnect !== undefined) { fields.push('auto_connect = ?'); values.push(updates.autoConnect ? 1 : 0) }
   if (updates.autoJoin !== undefined) { fields.push('auto_join = ?'); values.push(JSON.stringify(updates.autoJoin)) }
   if (updates.sortOrder !== undefined) { fields.push('sort_order = ?'); values.push(updates.sortOrder) }
@@ -126,8 +128,8 @@ export function upsertServer(config: ServerConfig): void {
   db.run(
     `INSERT INTO servers (id, name, host, port, tls, password, nick, username, realname,
      sasl_mechanism, sasl_username, sasl_password, auto_connect, auto_join, sort_order,
-     websocket_url, identify_command, avatar_url, pre_away_message, profile_metadata)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     websocket_url, identify_command, avatar_url, pre_away_message, profile_metadata, client_cert)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       config.id,
       config.name,
@@ -192,7 +194,9 @@ function rowToConfig(row: unknown[]): ServerConfig {
     identifyCommand: decryptSecret(row[18] as string | null),
     avatarUrl: (row[19] as string) || null,
     preAwayMessage: (row[20] as string) || null,
-    profile: parseProfile(row[21] as string | null)
+    profile: parseProfile(row[21] as string | null),
+    // Added last, by migration 013, so it is the last column SELECT * returns
+    clientCert: decryptSecret(row[22] as string | null)
   }
 }
 
@@ -217,7 +221,8 @@ function objectToConfig(row: Record<string, unknown>): ServerConfig {
     identifyCommand: decryptSecret(row['identify_command'] as string | null),
     avatarUrl: (row['avatar_url'] as string) || null,
     preAwayMessage: (row['pre_away_message'] as string) || null,
-    profile: parseProfile(row['profile_metadata'] as string | null)
+    profile: parseProfile(row['profile_metadata'] as string | null),
+    clientCert: decryptSecret(row['client_cert'] as string | null)
   }
 }
 

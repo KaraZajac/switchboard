@@ -13,6 +13,7 @@ import {
   DEFAULT_USERNAME,
   DEFAULT_REALNAME
 } from '@shared/constants'
+import { certificateProblem, readCertificate } from '@shared/certfp'
 
 interface AddServerModalProps {
   editServer?: ServerConfig
@@ -40,6 +41,7 @@ export function AddServerModal({ editServer }: AddServerModalProps = {}) {
   const [autoConnect, setAutoConnect] = useState(editServer?.autoConnect ?? false)
   const [autoJoin, setAutoJoin] = useState(editServer?.autoJoin?.join(', ') ?? '')
   const [identifyCommand, setIdentifyCommand] = useState(editServer?.identifyCommand ?? '')
+  const [clientCert, setClientCert] = useState(editServer?.clientCert ?? '')
   const [websocketUrl, setWebsocketUrl] = useState(editServer?.websocketUrl ?? '')
   const [showAdvanced, setShowAdvanced] = useState(isEdit)
   // A new server starts at the list of networks; editing one never does.
@@ -89,6 +91,7 @@ export function AddServerModal({ editServer }: AddServerModalProps = {}) {
         .map((ch) => ch.trim())
         .filter(Boolean),
       identifyCommand: identifyCommand.trim() || null,
+      clientCert: clientCert.trim() || null,
       websocketUrl: websocketUrl.trim() || null
     }
 
@@ -312,8 +315,13 @@ export function AddServerModal({ editServer }: AddServerModalProps = {}) {
                 <option value="PLAIN">PLAIN</option>
                 <option value="EXTERNAL">EXTERNAL (client cert)</option>
                 <option value="SCRAM-SHA-256">SCRAM-SHA-256</option>
+                <option value="SCRAM-SHA-512">SCRAM-SHA-512</option>
               </select>
             </div>
+
+            {saslMechanism === 'EXTERNAL' && (
+              <ClientCertificateField value={clientCert} onChange={setClientCert} />
+            )}
 
             {/* Identify command */}
             <div>
@@ -332,7 +340,9 @@ export function AddServerModal({ editServer }: AddServerModalProps = {}) {
               </p>
             </div>
 
-            {(saslMechanism === 'PLAIN' || saslMechanism === 'SCRAM-SHA-256') && (
+            {(saslMechanism === 'PLAIN' ||
+              saslMechanism === 'SCRAM-SHA-256' ||
+              saslMechanism === 'SCRAM-SHA-512') && (
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="mb-1 block text-sm font-medium text-gray-300">
@@ -384,5 +394,83 @@ export function AddServerModal({ editServer }: AddServerModalProps = {}) {
         </div>
       </form>
     </Modal>
+  )
+}
+
+/**
+ * Somewhere to put a client certificate.
+ *
+ * SASL EXTERNAL proves who you are with the certificate the TLS handshake
+ * already presented, so there is no password anywhere — which is why the
+ * networks that offer it call it the strongest thing they have. It needs the
+ * certificate and its key, and the fingerprint of the certificate registered
+ * with the network's services.
+ *
+ * The fingerprint is shown here because working it out is most of why nobody
+ * uses CertFP: every guide ends with an openssl incantation whose output you
+ * are then meant to paste into NickServ.
+ */
+function ClientCertificateField({
+  value,
+  onChange
+}: {
+  value: string
+  onChange: (next: string) => void
+}) {
+  const [fingerprint, setFingerprint] = useState<string | null>(null)
+  const problem = certificateProblem(value)
+
+  useEffect(() => {
+    let cancelled = false
+    if (!readCertificate(value)) {
+      setFingerprint(null)
+      return
+    }
+    window.switchboard
+      .invoke('server:certificate-fingerprint', value)
+      .then((result) => {
+        if (!cancelled) setFingerprint(result as string | null)
+      })
+      .catch(() => {
+        if (!cancelled) setFingerprint(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [value])
+
+  return (
+    <div>
+      <label className="mb-1 block text-sm font-medium text-gray-300">Client Certificate</label>
+      <textarea
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        rows={4}
+        spellCheck={false}
+        placeholder={'-----BEGIN CERTIFICATE-----\n…\n-----BEGIN PRIVATE KEY-----\n…'}
+        className="w-full rounded bg-gray-900 px-3 py-2 font-mono text-xs text-gray-100 outline-none ring-1 ring-gray-700 focus:ring-indigo-500"
+      />
+
+      {problem ? (
+        <p className="mt-1 text-xs text-amber-400">{problem}</p>
+      ) : fingerprint ? (
+        <div className="mt-2 rounded bg-gray-900/60 p-2">
+          <p className="text-xs text-gray-400">
+            Tell the network this is you, once you are connected and logged in:
+          </p>
+          <code className="mt-1 block break-all font-mono text-xs text-emerald-300">
+            /msg NickServ CERT ADD {fingerprint}
+          </code>
+        </div>
+      ) : (
+        <p className="mt-1 text-xs text-gray-500">
+          The certificate and its key, both in one box. To make one:{' '}
+          <code className="font-mono">
+            openssl req -x509 -newkey rsa:4096 -sha256 -days 3650 -nodes -keyout cert.pem -out
+            cert.pem
+          </code>
+        </p>
+      )}
+    </div>
   )
 }

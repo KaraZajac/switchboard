@@ -484,3 +484,96 @@ describe('migrating an old database', () => {
     expect(second.databaseIsEncrypted()).toBe(true)
   })
 })
+
+/**
+ * A client certificate, kept where the passwords are kept.
+ *
+ * SASL EXTERNAL was implemented in both clients and offered in the desktop's
+ * server dialog, and there was nowhere to put the certificate it needs — so
+ * the handshake presented none and the server had nothing to look up.
+ */
+describe('a client certificate', () => {
+  const pem =
+    '-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n' +
+    '-----BEGIN PRIVATE KEY-----\nMIIE\n-----END PRIVATE KEY-----'
+
+  it('comes back from the column it was written to', async () => {
+    await freshDatabase()
+    const servers = await import('../../src/main/storage/models/server')
+
+    const id = servers.addServer({
+      name: 'Test',
+      host: 'irc.test',
+      port: 6697,
+      tls: true,
+      password: null,
+      nick: 'me',
+      username: 'me',
+      realname: 'me',
+      saslMechanism: 'EXTERNAL',
+      saslUsername: null,
+      saslPassword: null,
+      autoConnect: false,
+      autoJoin: [],
+      clientCert: pem
+    } as never)
+
+    // Both readers: SELECT * is positional, so a column added by migration has
+    // to be at the index the reader expects.
+    expect(servers.getServer(id)?.clientCert).toBe(pem)
+    expect(servers.getAllServers().find((s) => s.id === id)?.clientCert).toBe(pem)
+  })
+
+  it('is stored encrypted, like the passwords beside it', async () => {
+    const db = await freshDatabase()
+    const servers = await import('../../src/main/storage/models/server')
+
+    servers.addServer({
+      name: 'Test',
+      host: 'irc.test',
+      port: 6697,
+      tls: true,
+      password: null,
+      nick: 'me',
+      username: 'me',
+      realname: 'me',
+      saslMechanism: 'EXTERNAL',
+      saslUsername: null,
+      saslPassword: null,
+      autoConnect: false,
+      autoJoin: [],
+      clientCert: pem
+    } as never)
+
+    const rows = db.getDb().exec('SELECT client_cert FROM servers')
+    const stored = rows[0].values[0][0] as string | null
+
+    expect(stored).not.toBeNull()
+    expect(stored).not.toContain('BEGIN PRIVATE KEY')
+  })
+
+  it('never reaches a paired device', async () => {
+    const { sanitizeForRemote } = await import('../../src/main/ipc/registry')
+
+    const [sent] = sanitizeForRemote('server:list', [
+      { id: 'a', clientCert: pem, saslPassword: 'hunter2', password: null }
+    ]) as Record<string, unknown>[]
+
+    expect(sent.clientCert).toBeNull()
+    expect(sent.hasClientCert).toBe(true)
+    expect(JSON.stringify(sent)).not.toContain('PRIVATE KEY')
+  })
+
+  it('cannot be erased by a paired device that was never shown it', async () => {
+    const { sanitizeIncomingFromRemote } = await import('../../src/main/ipc/registry')
+
+    const [, update] = sanitizeIncomingFromRemote('server:update', [
+      'srv',
+      { name: 'Renamed', clientCert: null }
+    ]) as [string, Record<string, unknown>]
+
+    expect('clientCert' in update).toBe(false)
+    expect(update.name).toBe('Renamed')
+  })
+})
+

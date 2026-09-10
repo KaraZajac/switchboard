@@ -28,6 +28,13 @@ export interface ServerConfig {
   profile: UserMetadata
   /** Away message to set before registration (draft/pre-away, bouncer support) */
   preAwayMessage: string | null
+  /**
+   * A client certificate and its key, in PEM, for SASL EXTERNAL.
+   *
+   * A credential, kept encrypted beside the passwords and stripped on the way
+   * to a paired device by the same rule.
+   */
+  clientCert: string | null
 }
 
 /** Runtime server state (not persisted) */

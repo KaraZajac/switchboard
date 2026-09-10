@@ -8,6 +8,7 @@ import type { ServerConfig } from '@shared/types/server'
 import { parseMessage } from './parser'
 import { cmd } from './serializer'
 import { decodeLine } from '@shared/decoding'
+import { readCertificate } from '@shared/certfp'
 
 export interface ConnectionEvents {
   raw: (direction: 'in' | 'out', line: string) => void
@@ -159,10 +160,18 @@ export class IRCConnection extends EventEmitter {
     }
 
     if (this.config.tls) {
+      // A client certificate, where one is set up. SASL EXTERNAL has nothing to
+      // authenticate with unless the handshake presents it, which is why
+      // choosing that mechanism used to end in 904 every time.
+      const identity = readCertificate(this.config.clientCert)
+
       this.socket = tls.connect({
         ...options,
         rejectUnauthorized: true,
-        servername: this.config.host
+        servername: this.config.host,
+        ...(identity
+          ? { cert: identity.certificate, key: identity.privateKey }
+          : {})
       })
     } else {
       this.socket = net.connect(options)

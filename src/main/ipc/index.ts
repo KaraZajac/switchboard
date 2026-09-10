@@ -53,6 +53,8 @@ import { getReadMarker, setReadMarker, getAllReadMarkers } from '../storage/mode
 import { expectCleared, metadataValueFits, metadataLimitsOf } from '../irc/features/metadata'
 import { friendListKind, friendListLines, friendListStatusLine } from '@shared/friends'
 import { tagToUse, TAG_NAMES } from '@shared/clienttags'
+import { readCertificate, certificateBody } from '@shared/certfp'
+import { createHash } from 'crypto'
 
 /**
  * Register all IPC handlers.
@@ -693,6 +695,28 @@ export function registerIPCHandlers(): void {
     }
     monitorChanged(serverId)
     resealVault()
+  })
+
+  /**
+   * The fingerprint a network's services want for this certificate.
+   *
+   * SHA-256 of the certificate in DER, lowercase hex — the string that goes to
+   * `NickServ CERT ADD`. Working it out is most of why nobody uses CertFP:
+   * every guide ends in an openssl incantation whose output you are then meant
+   * to paste somewhere else.
+   */
+  handle('server:certificate-fingerprint', async (_event, pem: string) => {
+    const identity = readCertificate(pem)
+    if (!identity) return null
+
+    const der = Buffer.from(certificateBody(identity.certificate), 'base64')
+    if (der.length === 0) return null
+
+    try {
+      return createHash('sha256').update(der).digest('hex')
+    } catch {
+      return null
+    }
   })
 
   handle('monitor:list', async (_event, serverId: string) => {

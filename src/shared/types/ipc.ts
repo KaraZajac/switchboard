@@ -267,6 +267,8 @@ export interface RendererToMainInvocations {
   'monitor:add': (serverId: string, nicks: string[]) => Promise<void>
   'monitor:remove': (serverId: string, nicks: string[]) => Promise<void>
   'monitor:list': (serverId: string) => Promise<string[]>
+  /** SHA-256 of a client certificate, as NickServ CERT ADD wants it */
+  'server:certificate-fingerprint': (pem: string) => Promise<string | null>
   'monitor:status': (serverId: string) => Promise<void>
 }
 
