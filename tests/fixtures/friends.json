@@ -42,6 +42,14 @@
       },
       "kind": null,
       "limit": null
+    },
+    {
+      "name": "a token advertised with an empty value still counts as advertised",
+      "isupport": {
+        "WATCH": ""
+      },
+      "kind": "WATCH",
+      "limit": null
     }
   ],
   "$lines": "The lines to send. A friend list long enough to be useful is long enough to need more than one, and the names past a 512-byte cut were never watched at all.",

@@ -80,6 +80,28 @@ export function fitsLimit(text: string, limit: number | null): boolean {
 }
 
 /**
+ * Whether the network advertised this token at all.
+ *
+ * A token may arrive three ways: on its own (`WHOX`), with a value
+ * (`MONITOR=100`), or with an equals sign and nothing after it (`WHOX=`),
+ * which the grammar allows and which means the same as the bare form. The
+ * third stores an empty string, and an empty string is falsy, so a client
+ * that tests the token for truth reads it as "not supported".
+ *
+ * The two clients disagreed about how to ask: the phone used a presence
+ * check, the desktop tested for truth. Neither of the networks I connected to
+ * sent the empty form, so nothing was visibly broken — but "does this server
+ * have it" has one answer, and both should get it the same way.
+ */
+export function advertises(
+  isupport: Record<string, string | true | null | undefined>,
+  token: string
+): boolean {
+  const value = isupport[token]
+  return value !== undefined && value !== null
+}
+
+/**
  * The channel a message was really addressed to.
  *
  * Ops and bots talk to half a room at a time: `PRIVMSG @#channel` reaches

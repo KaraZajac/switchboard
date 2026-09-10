@@ -229,7 +229,7 @@ internal object Whox {
     private const val FIELDS = "%tcuhsnfar"
 
     fun request(session: IrcSession, target: String) {
-        if (session.state.isupport.containsKey("WHOX")) {
+        if (Isupport.advertises(session.state.isupport, "WHOX")) {
             session.send("WHO", target, "$FIELDS,$TOKEN")
         } else {
             session.send("WHO", target)

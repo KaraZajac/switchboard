@@ -1106,4 +1106,19 @@ class SharedCorpusTest {
         }
     }
 
+    @Test
+    fun `asks whether a token was advertised, not whether it was true`() {
+        for (entry in load("advertises.json")["cases"]!!.jsonArray) {
+            val case = entry.jsonObject
+            val isupport = case["isupport"]!!.jsonObject.mapValues { (_, v) ->
+                v.jsonPrimitive.contentOrNull ?: ""
+            }
+            assertEquals(
+                case["name"]!!.jsonPrimitive.content,
+                case["advertised"]!!.jsonPrimitive.boolean,
+                Isupport.advertises(isupport, case["token"]!!.jsonPrimitive.content)
+            )
+        }
+    }
+
 }

@@ -210,7 +210,7 @@ internal fun registerChannelHandlers() {
         emitNames(session, channel)
 
         // WHOX fills in accounts, away state and bot flags, which NAMES cannot
-        if (state.isupport.containsKey("WHOX")) Whox.request(session, channel.name)
+        if (Isupport.advertises(state.isupport, "WHOX")) Whox.request(session, channel.name)
     }
 
     Handlers.on("MODE") { session, message ->

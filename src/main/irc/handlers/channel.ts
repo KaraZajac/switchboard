@@ -3,6 +3,7 @@ import { hasMetadata } from '@shared/metadata'
 import type { ChannelUser } from '@shared/types/channel'
 import { sendWHOX } from '../features/whox'
 import { syncMetadata } from '../features/metadata'
+import { advertises } from '@shared/isupport'
 
 /**
  * JOIN — Someone joined a channel
@@ -242,8 +243,10 @@ registerHandler('366', (client, msg) => {
     const users: ChannelUser[] = Array.from(ch.users.values())
     client.events.emit('names', { channel: ch.name, users })
 
-    // Auto-WHOX for richer user data (bot flags, accounts, away status)
-    if (client.state.isupport['WHOX']) {
+    // Auto-WHOX for richer user data (bot flags, accounts, away status).
+    // Asked as a presence question: UnrealIRCd advertises this as `WHOX=`,
+    // with nothing after the equals sign, and an empty string is falsy.
+    if (advertises(client.state.isupport, 'WHOX')) {
       sendWHOX(client, channel)
     }
   }

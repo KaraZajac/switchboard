@@ -21,8 +21,8 @@ object Friends {
      * better-specified of the two.
      */
     fun kind(isupport: Map<String, String>): Kind? = when {
-        isupport.containsKey("MONITOR") -> Kind.MONITOR
-        isupport.containsKey("WATCH") -> Kind.WATCH
+        Isupport.advertises(isupport, "MONITOR") -> Kind.MONITOR
+        Isupport.advertises(isupport, "WATCH") -> Kind.WATCH
         else -> null
     }
 

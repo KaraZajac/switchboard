@@ -84,4 +84,17 @@ object Isupport {
         if (!allowed.contains(target[0])) return Addressed(target, null)
         return Addressed(target.substring(1), target[0].toString())
     }
+
+    /**
+     * Whether the network advertised this token at all.
+     *
+     * The Kotlin half of `advertises` in `src/shared/isupport.ts`. A token may
+     * arrive three ways: on its own (`WHOX`), with a value (`MONITOR=100`), or
+     * with an equals sign and nothing after it (`WHOX=`), which the grammar
+     * allows and which means the same as the bare form. The third stores an
+     * empty string, which is falsy — so this is a presence question rather
+     * than a test for truth, on both sides.
+     */
+    fun advertises(isupport: Map<String, String>, token: String): Boolean =
+        isupport.containsKey(token)
 }

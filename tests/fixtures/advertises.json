@@ -1,0 +1,44 @@
+{
+  "$comment": "Whether the network advertised a token at all, shared by tests/shared/advertises.test.ts and the Android SharedCorpusTest. A token arrives three ways \u2014 on its own, with a value, or with an equals sign and nothing after it \u2014 and all three mean the server has it. The third stores an empty string, which is falsy. The two clients asked the question differently, the phone by presence and the desktop by truth; this is the one answer.",
+  "$cases": "`isupport` is what the network said; `token` is what we are asking about.",
+  "cases": [
+    {
+      "name": "a bare token",
+      "isupport": {
+        "WHOX": true
+      },
+      "token": "WHOX",
+      "advertised": true
+    },
+    {
+      "name": "a token with a value",
+      "isupport": {
+        "MONITOR": "100"
+      },
+      "token": "MONITOR",
+      "advertised": true
+    },
+    {
+      "name": "a token with an equals sign and nothing after it",
+      "isupport": {
+        "WHOX": ""
+      },
+      "token": "WHOX",
+      "advertised": true
+    },
+    {
+      "name": "a token the network never mentioned",
+      "isupport": {
+        "WHOX": ""
+      },
+      "token": "MONITOR",
+      "advertised": false
+    },
+    {
+      "name": "nothing advertised at all",
+      "isupport": {},
+      "token": "WHOX",
+      "advertised": false
+    }
+  ]
+}

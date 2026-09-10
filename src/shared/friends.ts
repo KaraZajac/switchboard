@@ -16,6 +16,8 @@
  * two events and nothing above this has to know which was used.
  */
 
+import { advertises } from './isupport'
+
 export type FriendListKind = 'MONITOR' | 'WATCH'
 
 type Isupport = Record<string, string | true | null | undefined>
@@ -29,8 +31,8 @@ type Isupport = Record<string, string | true | null | undefined>
  * better-specified of the two.
  */
 export function friendListKind(isupport: Isupport): FriendListKind | null {
-  if (isupport['MONITOR'] !== undefined && isupport['MONITOR'] !== null) return 'MONITOR'
-  if (isupport['WATCH'] !== undefined && isupport['WATCH'] !== null) return 'WATCH'
+  if (advertises(isupport, 'MONITOR')) return 'MONITOR'
+  if (advertises(isupport, 'WATCH')) return 'WATCH'
   return null
 }
 

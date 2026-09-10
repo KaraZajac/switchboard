@@ -1,5 +1,6 @@
 import { registerHandler } from '../handlers/registry'
 import type { ChannelUser } from '@shared/types/channel'
+import { advertises } from '@shared/isupport'
 
 /**
  * WHOX — Extended WHO responses.
@@ -27,7 +28,7 @@ export function sendWHOX(
   channel: string
 ): void {
   // Check if WHOX is supported
-  if (client.state.isupport['WHOX'] === true || client.state.isupport['WHOX']) {
+  if (advertises(client.state.isupport, 'WHOX')) {
     client.connection.send('WHO', channel, `%tcuhsnfar,${WHOX_TOKEN}`)
   } else {
     // Fallback to regular WHO
