@@ -672,3 +672,47 @@ class MissedConversationTest {
         assertTrue(store.missedConversations.isEmpty())
     }
 }
+
+/**
+ * Keeping, or giving back, a connection opened beside the other device.
+ *
+ * The network answers by what it calls us: two sessions of one account get the
+ * same nick, and a network that will not have it hands out `kara_`. Staying on
+ * under a name nobody recognises leaves the user standing in the channel twice
+ * under two names, which is worse than not being there at all.
+ */
+class SharedConnectionTest {
+
+    @Test
+    fun `the nick we asked for means the network allowed it`() {
+        assertTrue(keepSharedConnection(primary = false, wanted = "kara", got = "kara"))
+    }
+
+    @Test
+    fun `case is the server's business, not a refusal`() {
+        assertTrue(keepSharedConnection(primary = false, wanted = "kara", got = "KARA"))
+    }
+
+    @Test
+    fun `a nick we did not ask for means it did not`() {
+        assertFalse(keepSharedConnection(primary = false, wanted = "kara", got = "kara_"))
+        assertFalse(keepSharedConnection(primary = false, wanted = "kara", got = "kara1"))
+    }
+
+    /**
+     * When this device is the connection, `kara_` is the ordinary collision
+     * case and the recovery loop is already working on it. Dropping the
+     * connection would take the user off the network over something that fixes
+     * itself.
+     */
+    @Test
+    fun `being the one holding it changes the answer entirely`() {
+        assertTrue(keepSharedConnection(primary = true, wanted = "kara", got = "kara_"))
+    }
+
+    @Test
+    fun `nothing to compare is not evidence of refusal`() {
+        assertTrue(keepSharedConnection(primary = false, wanted = "", got = "kara"))
+        assertTrue(keepSharedConnection(primary = false, wanted = "kara", got = ""))
+    }
+}

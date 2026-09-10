@@ -296,11 +296,15 @@ class SwitchboardEngine(
      * Returns false when the connection was given back, so the caller stops.
      */
     private fun keptOurNameAlongside(serverId: String): Boolean {
-        if (coordinator.state().role == SessionRole.PRIMARY) return true
-
         val config = vault.servers().find { it.id == serverId } ?: return true
         val connection = connections[serverId] ?: return true
-        if (connection.currentNick.equals(config.nick, ignoreCase = true)) return true
+
+        val keep = keepSharedConnection(
+            primary = coordinator.state().role == SessionRole.PRIMARY,
+            wanted = config.nick,
+            got = connection.currentNick
+        )
+        if (keep) return true
 
         Log.i(
             TAG,
@@ -1246,3 +1250,22 @@ data class Mutes(
 
 private fun JsonPrimitive.contentOrNull(): String? =
     if (this is kotlinx.serialization.json.JsonNull) null else content
+
+/**
+ * Should a connection opened beside the other device be kept?
+ *
+ * The network answers by what it calls us. A server that allows two sessions
+ * of one account gives the second one the same nick; a server that does not
+ * hands out `kara_`, and a client that stayed on under a name nobody
+ * recognises leaves the user standing in the channel twice.
+ *
+ * Only while somebody else is primary. When this device *is* the connection,
+ * arriving as `kara_` is the ordinary nick-collision case and the recovery loop
+ * is already working on it — dropping the connection there would take the user
+ * off the network for a reason that fixes itself.
+ */
+internal fun keepSharedConnection(primary: Boolean, wanted: String, got: String): Boolean {
+    if (primary) return true
+    if (wanted.isBlank() || got.isBlank()) return true
+    return got.equals(wanted, ignoreCase = true)
+}
