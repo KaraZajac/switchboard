@@ -1,6 +1,8 @@
 package org.switchboard.android
 
 import android.content.Context
+import android.net.ConnectivityManager
+import android.net.Network
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -213,7 +215,37 @@ class SwitchboardEngine(
         }
     }
 
-    fun start() = coordinator.start()
+    fun start() {
+        watchTheNetwork()
+        coordinator.start()
+    }
+
+    /**
+     * Ask Android to say when the phone has a network again.
+     *
+     * The backoff between connection attempts is right for a server that is
+     * down and wrong for the reason a phone actually loses a connection: it
+     * walked out of range and walked back. Nothing told the client that had
+     * happened, so after a blip it sat in a minute of backoff that the
+     * operating system could have ended the moment the radio reattached.
+     *
+     * Only a nudge — connections that are up stay up, and the keepalive is
+     * what decides whether they are really there.
+     */
+    private fun watchTheNetwork() {
+        if (networkCallback != null) return
+        val manager = context.getSystemService(ConnectivityManager::class.java) ?: return
+
+        val callback = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) {
+                for (connection in connections.values) connection.networkAvailable()
+            }
+        }
+        runCatching { manager.registerDefaultNetworkCallback(callback) }
+            .onSuccess { networkCallback = callback }
+    }
+
+    private var networkCallback: ConnectivityManager.NetworkCallback? = null
 
     /**
      * Something outside thinks the world may have moved on.
@@ -439,6 +471,13 @@ class SwitchboardEngine(
     }
 
     fun stop() {
+        networkCallback?.let { callback ->
+            runCatching {
+                context.getSystemService(ConnectivityManager::class.java)
+                    ?.unregisterNetworkCallback(callback)
+            }
+        }
+        networkCallback = null
         reconnectJob?.cancel()
         reconnectJob = null
         // Say so, so the desktop takes over at once instead of waiting

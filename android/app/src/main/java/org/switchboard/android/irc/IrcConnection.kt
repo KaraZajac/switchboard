@@ -8,6 +8,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.buildJsonObject
@@ -75,6 +76,18 @@ class IrcConnection(
     private var stopping = false
     private var attempt = 0
 
+    /**
+     * Woken when the phone gets a network back.
+     *
+     * The backoff between attempts is there for a server that is down, and it
+     * is right to grow: hammering one helps nobody. It is wrong for the other
+     * reason a connection fails, which on a phone is most of them — the
+     * network went away and has come back. Waiting out a minute of backoff
+     * that the operating system could have ended the moment the radio
+     * reattached is a minute of staring at CONNECTING for no reason.
+     */
+    private val retryNow = Channel<Unit>(capacity = Channel.CONFLATED)
+
     val serverId: String get() = config.id
     val currentNick: String get() = state.nick
     val isConnected: Boolean get() = state.registered
@@ -112,6 +125,18 @@ class IrcConnection(
 
     override fun sendRaw(line: String) {
         outbound.trySend(line)
+    }
+
+    /**
+     * The phone has a network again: try now rather than when the timer says.
+     *
+     * Only nudges a connection that is already waiting to retry. One that is
+     * up stays up — the keepalive is what decides whether it is really there.
+     */
+    fun networkAvailable() {
+        if (stopping) return
+        attempt = 0
+        retryNow.trySend(Unit)
     }
 
     override fun emit(channel: String, data: JsonElement) = emitEvent(channel, data)
@@ -156,9 +181,11 @@ class IrcConnection(
             if (stopping) return
 
             // Back off, but stay reachable: a phone that gives up is a phone
-            // that silently stops being the connection.
+            // that silently stops being the connection. Cut short the moment
+            // the network comes back.
             attempt++
-            delay(minOf(60_000L, 2_000L * (1L shl minOf(attempt - 1, 5))))
+            val backoff = minOf(60_000L, 2_000L * (1L shl minOf(attempt - 1, 5)))
+            withTimeoutOrNull(backoff) { retryNow.receive() }
         }
     }
 
