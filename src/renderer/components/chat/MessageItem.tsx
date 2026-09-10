@@ -312,7 +312,19 @@ function MessageActions({ message, onReply, isOwn, onEdit }: { message: ChatMess
   if (message.type === 'system') return null
 
   const handleReact = (emoji: string) => {
-    window.switchboard.invoke('message:react', message.serverId, message.channel, message.id, emoji)
+    // Through speak, because a network that will not carry reactions says so
+    // and somebody has to hear it. Silently doing nothing is what this
+    // replaces.
+    speak(
+      window.switchboard.invoke(
+        'message:react',
+        message.serverId,
+        message.channel,
+        message.id,
+        emoji
+      ),
+      'That reaction was not sent'
+    )
     setShowEmojiPicker(false)
   }
 
@@ -751,13 +763,16 @@ function Reactions({ message }: { message: ChatMessage }) {
   const currentNick = useServerStore((s) => s.currentNick[message.serverId] ?? '')
 
   const toggle = (emoji: string, mine: boolean) => {
-    window.switchboard.invoke(
-      'message:react',
-      message.serverId,
-      message.channel,
-      message.id,
-      emoji,
-      mine
+    speak(
+      window.switchboard.invoke(
+        'message:react',
+        message.serverId,
+        message.channel,
+        message.id,
+        emoji,
+        mine
+      ),
+      'That reaction was not sent'
     )
   }
 

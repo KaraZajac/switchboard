@@ -28,6 +28,7 @@ import org.switchboard.android.vault.VaultEnvelope
 import org.switchboard.android.vault.VaultKdf
 import org.switchboard.android.vault.VaultPayload
 import org.switchboard.android.vault.shouldAdoptVault
+import org.switchboard.android.irc.ClientTags
 import org.switchboard.android.irc.Formatting
 import org.switchboard.android.irc.avatarUrl
 import org.switchboard.android.irc.Friends
@@ -1139,6 +1140,37 @@ class SharedCorpusTest {
             "a URL long enough to be a denial of service is not an avatar",
             avatarUrl("https://example.net/" + "a".repeat(4000))
         )
+    }
+
+    // ── client tags ───────────────────────────────────────────────────
+
+    @Test
+    fun `knows which client tags a network will carry`() {
+        val corpus = load("clienttags.json")
+
+        for (entry in corpus["carries"]!!.jsonArray) {
+            val case = entry.jsonObject
+            assertEquals(
+                case["name"]!!.jsonPrimitive.content,
+                case["carried"]!!.jsonPrimitive.boolean,
+                ClientTags.carries(
+                    case["deny"]!!.jsonPrimitive.contentOrNull,
+                    case["tag"]!!.jsonPrimitive.content
+                )
+            )
+        }
+
+        for (entry in corpus["choose"]!!.jsonArray) {
+            val case = entry.jsonObject
+            assertEquals(
+                case["name"]!!.jsonPrimitive.content,
+                case["use"]!!.jsonPrimitive.contentOrNull,
+                ClientTags.toUse(
+                    case["deny"]!!.jsonPrimitive.contentOrNull,
+                    case["names"]!!.jsonArray.map { it.jsonPrimitive.content }
+                )
+            )
+        }
     }
 
 }

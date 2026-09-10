@@ -52,6 +52,7 @@ import { DEFAULT_NICK } from '@shared/constants'
 import { getReadMarker, setReadMarker, getAllReadMarkers } from '../storage/models/readmarker'
 import { expectCleared, metadataValueFits, metadataLimitsOf } from '../irc/features/metadata'
 import { friendListKind, friendListLines, friendListStatusLine } from '@shared/friends'
+import { tagToUse, TAG_NAMES } from '@shared/clienttags'
 
 /**
  * Register all IPC handlers.
@@ -267,9 +268,16 @@ export function registerIPCHandlers(): void {
     if (!client) throw new Error('Not connected')
     // Strip newlines to prevent IRC command injection
     const safeText = text.replace(/[\r\n]+/g, ' ')
-    // Send with +reply tag if echo-message is supported
+
+    // Whichever spelling this network carries. FurNet allows draft/reply and
+    // denies reply, which was the one we always sent — so the reply arrived as
+    // an ordinary line, attached to nothing. A network that carries neither
+    // still gets the message; it is the threading that is lost, not the words.
+    const replyTag = tagToUse(client.state.isupport['CLIENTTAGDENY'], TAG_NAMES.reply)
     client.connection.sendRaw(
-      `@+reply=${sanitizeTagValue(replyTo)} PRIVMSG ${channel} :${safeText}`
+      replyTag
+        ? `@+${replyTag}=${sanitizeTagValue(replyTo)} PRIVMSG ${channel} :${safeText}`
+        : `PRIVMSG ${channel} :${safeText}`
     )
   })
 
@@ -291,9 +299,21 @@ export function registerIPCHandlers(): void {
     ) => {
       const client = ircManager.getClient(serverId)
       if (!client) throw new Error('Not connected')
-      const tag = remove ? '+draft/unreact' : '+draft/react'
+
+      const deny = client.state.isupport['CLIENTTAGDENY']
+      const tag = tagToUse(deny, remove ? TAG_NAMES.unreact : TAG_NAMES.react)
+      const replyTag = tagToUse(deny, TAG_NAMES.reply)
+      // A reaction is two client tags and needs both: the emoji, and which
+      // message it is about. Libera carries neither, and the TAGMSG that
+      // arrived there had been stripped of everything that made it a reaction
+      // — so the button appeared to work and nothing happened. Better to say.
+      if (!tag || !replyTag) {
+        throw new Error('This network does not carry reactions.')
+      }
+
       client.connection.sendRaw(
-        `@${tag}=${sanitizeTagValue(emoji)};+reply=${sanitizeTagValue(msgid)} TAGMSG ${channel}`
+        `@+${tag}=${sanitizeTagValue(emoji)};+${replyTag}=${sanitizeTagValue(msgid)} ` +
+          `TAGMSG ${channel}`
       )
     }
   )
@@ -325,7 +345,13 @@ export function registerIPCHandlers(): void {
   handle('message:typing', async (_event, serverId: string, channel: string, status: 'active' | 'done' = 'active') => {
     const client = ircManager.getClient(serverId)
     if (!client) throw new Error('Not connected')
-    client.connection.sendRaw(`@+typing=${sanitizeTagValue(status)} TAGMSG ${channel}`)
+    // Nothing to say if the network drops it: a TAGMSG with its only tag
+    // stripped is a line that means nothing to everyone who receives it.
+    const typingTag = tagToUse(client.state.isupport['CLIENTTAGDENY'], TAG_NAMES.typing)
+    if (!typingTag) return
+    client.connection.sendRaw(
+      `@+${typingTag}=${sanitizeTagValue(status)} TAGMSG ${channel}`
+    )
   })
 
   // ── User operations ──────────────────────────────────────────────

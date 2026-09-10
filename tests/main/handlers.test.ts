@@ -25,6 +25,7 @@ import '../../src/main/irc/features/readmarker'
 import '../../src/main/irc/features/rename'
 import '../../src/main/irc/features/redact'
 import '../../src/main/irc/features/account-registration'
+import { tagToUse, TAG_NAMES } from '@shared/clienttags'
 
 /**
  * Create a mock IRCClient for handler testing.
@@ -256,6 +257,22 @@ describe('Channel Handlers', () => {
       topic: 'New topic here',
       setBy: 'Nick'
     })
+  })
+
+  it('picks the spelling of the reply tag a network will carry', () => {
+    const { client, state } = createMockClient()
+    const sent: string[] = []
+    client.connection.sendRaw = (line: string) => sent.push(line)
+
+    // FurNet allows draft/reply and denies reply, which is the one we sent
+    state.isupport['CLIENTTAGDENY'] =
+      '*,-draft/typing,-typing,-draft/channel-context,-draft/reply'
+    expect(tagToUse(state.isupport['CLIENTTAGDENY'], TAG_NAMES.reply)).toBe('draft/reply')
+
+    // Libera carries neither spelling of a reaction
+    state.isupport['CLIENTTAGDENY'] = '*,-typing'
+    expect(tagToUse(state.isupport['CLIENTTAGDENY'], TAG_NAMES.react)).toBeNull()
+    expect(tagToUse(state.isupport['CLIENTTAGDENY'], TAG_NAMES.typing)).toBe('typing')
   })
 
   it('answers a CTCP asked of us, and ignores one asked of a channel', () => {

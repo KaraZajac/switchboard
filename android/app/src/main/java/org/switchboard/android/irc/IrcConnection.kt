@@ -503,30 +503,58 @@ class IrcConnection(
 
     fun setTyping(target: String, typing: String) {
         if (!state.capabilities.contains("message-tags")) return
-        sendRaw("@+typing=$typing " + Irc.serialise("TAGMSG", listOf(target)))
+        // Nothing to say if the network drops it: a TAGMSG with its only tag
+        // stripped is a line that means nothing to everyone who receives it.
+        val tag = ClientTags.toUse(state.isupport["CLIENTTAGDENY"], ClientTags.TYPING) ?: return
+        sendRaw("@+$tag=$typing " + Irc.serialise("TAGMSG", listOf(target)))
     }
 
-    /** Answer one message in particular, with the reply client tag */
+    /**
+     * Answer one message in particular, with the reply client tag.
+     *
+     * Whichever spelling this network carries. FurNet allows `draft/reply` and
+     * denies `reply`, which was the one we always sent — so the reply arrived
+     * as an ordinary line, attached to nothing. A network that carries neither
+     * still gets the message; it is the threading that is lost, not the words.
+     */
     fun reply(target: String, messageId: String, text: String) {
-        if (!state.capabilities.contains("message-tags")) {
+        val tag = if (state.capabilities.contains("message-tags")) {
+            ClientTags.toUse(state.isupport["CLIENTTAGDENY"], ClientTags.REPLY)
+        } else {
+            null
+        }
+        if (tag == null) {
             say(target, text)
             return
         }
-        sendRaw("@+reply=$messageId " + Irc.serialise("PRIVMSG", listOf(target, text)))
+        sendRaw("@+$tag=$messageId " + Irc.serialise("PRIVMSG", listOf(target, text)))
     }
 
-    /** React to a message. TAGMSG, so it carries no text of its own. */
     /**
-     * React to a message, or take the reaction back.
+     * React to a message, or take the reaction back. TAGMSG, so it carries no
+     * text of its own.
      *
-     * The same tags the desktop sends, down to their spelling: two clients
-     * emitting `+reply` and `+draft/reply` for the same thing works only for as
-     * long as every server they meet is generous about both.
+     * A reaction is two client tags and needs both: the emoji, and which
+     * message it is about. Libera carries neither, and the TAGMSG that arrived
+     * there had been stripped of everything that made it a reaction — so the
+     * button appeared to work and nothing happened. Returns false so the caller
+     * can say so instead.
      */
-    fun react(target: String, messageId: String, emoji: String, remove: Boolean = false) {
-        if (!state.capabilities.contains("message-tags")) return
-        val tag = if (remove) "+draft/unreact" else "+draft/react"
-        sendRaw("@$tag=$emoji;+reply=$messageId " + Irc.serialise("TAGMSG", listOf(target)))
+    fun react(
+        target: String,
+        messageId: String,
+        emoji: String,
+        remove: Boolean = false
+    ): Boolean {
+        if (!state.capabilities.contains("message-tags")) return false
+
+        val deny = state.isupport["CLIENTTAGDENY"]
+        val names = if (remove) ClientTags.UNREACT else ClientTags.REACT
+        val tag = ClientTags.toUse(deny, names) ?: return false
+        val replyTag = ClientTags.toUse(deny, ClientTags.REPLY) ?: return false
+
+        sendRaw("@+$tag=$emoji;+$replyTag=$messageId " + Irc.serialise("TAGMSG", listOf(target)))
+        return true
     }
 
     /** Take a message back, where the server allows it */

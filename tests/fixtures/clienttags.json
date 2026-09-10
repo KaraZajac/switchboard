@@ -1,0 +1,117 @@
+{
+  "$comment": "Which client-only tags a network will carry, shared by tests/shared/clienttags.test.ts and the Android SharedCorpusTest. Neither client read CLIENTTAGDENY, so on Libera a reaction went out, had its tag stripped in passing, and arrived as a TAGMSG that meant nothing \u2014 no reaction, no error, and a button that appeared to work. The values here are the ones those networks actually send.",
+  "$carries": "`deny` is the CLIENTTAGDENY token; `tag` is a client tag without its `+`.",
+  "carries": [
+    {
+      "name": "a network that says nothing carries everything",
+      "deny": null,
+      "tag": "draft/react",
+      "carried": true
+    },
+    {
+      "name": "Libera carries typing",
+      "deny": "*,-typing",
+      "tag": "typing",
+      "carried": true
+    },
+    {
+      "name": "Libera carries nothing else",
+      "deny": "*,-typing",
+      "tag": "draft/react",
+      "carried": false
+    },
+    {
+      "name": "Libera does not carry the draft spelling of typing",
+      "deny": "*,-typing",
+      "tag": "draft/typing",
+      "carried": false
+    },
+    {
+      "name": "FurNet carries both spellings of typing",
+      "deny": "*,-draft/typing,-typing,-draft/channel-context,-draft/reply",
+      "tag": "draft/typing",
+      "carried": true
+    },
+    {
+      "name": "FurNet carries the draft spelling of reply",
+      "deny": "*,-draft/typing,-typing,-draft/channel-context,-draft/reply",
+      "tag": "draft/reply",
+      "carried": true
+    },
+    {
+      "name": "FurNet does not carry the short spelling of reply",
+      "deny": "*,-draft/typing,-typing,-draft/channel-context,-draft/reply",
+      "tag": "reply",
+      "carried": false
+    },
+    {
+      "name": "FurNet does not carry reactions",
+      "deny": "*,-draft/typing,-typing,-draft/channel-context,-draft/reply",
+      "tag": "draft/react",
+      "carried": false
+    },
+    {
+      "name": "a list without a star denies only what it names",
+      "deny": "foo,bar",
+      "tag": "draft/react",
+      "carried": true
+    },
+    {
+      "name": "and denies what it names",
+      "deny": "foo,bar",
+      "tag": "bar",
+      "carried": false
+    },
+    {
+      "name": "an empty token carries everything",
+      "deny": "",
+      "tag": "draft/react",
+      "carried": true
+    },
+    {
+      "name": "names are not case sensitive",
+      "deny": "*,-Typing",
+      "tag": "typing",
+      "carried": true
+    }
+  ],
+  "$choose": "Two names exist for most of these while the drafts settle. `use` is the first spelling the network will carry, or null when it will carry none.",
+  "choose": [
+    {
+      "name": "Libera takes the short spelling of typing",
+      "deny": "*,-typing",
+      "names": [
+        "typing",
+        "draft/typing"
+      ],
+      "use": "typing"
+    },
+    {
+      "name": "FurNet needs the draft spelling of reply",
+      "deny": "*,-draft/typing,-typing,-draft/channel-context,-draft/reply",
+      "names": [
+        "reply",
+        "draft/reply"
+      ],
+      "use": "draft/reply"
+    },
+    {
+      "name": "neither spelling of react gets through Libera",
+      "deny": "*,-typing",
+      "names": [
+        "draft/react",
+        "react"
+      ],
+      "use": null
+    },
+    {
+      "name": "a network that says nothing takes the first",
+      "deny": null,
+      "names": [
+        "draft/react",
+        "react"
+      ],
+      "use": "draft/react"
+    }
+  ]
+}

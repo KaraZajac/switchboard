@@ -77,7 +77,13 @@ fun SwitchboardEngine.react(
     act(
         serverId, "message:react",
         JsonPrimitive(target), JsonPrimitive(messageId), JsonPrimitive(emoji), JsonPrimitive(remove)
-    ) { it.react(target, messageId, emoji, remove) }
+    ) {
+        // A network that will not carry reactions says so, and somebody has to
+        // hear it. Silently doing nothing is what this replaces.
+        if (!it.react(target, messageId, emoji, remove)) {
+            store.noteRefusal("This network does not carry reactions.")
+        }
+    }
 
 fun SwitchboardEngine.redact(serverId: String, target: String, messageId: String) =
     act(serverId, "message:redact", JsonPrimitive(target), JsonPrimitive(messageId)) {
