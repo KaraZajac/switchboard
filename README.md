@@ -28,6 +28,44 @@ Pre-built binaries for macOS, Linux, and Windows are available on the [Releases]
 - **Auto-update** — Get notified of new releases and update in-app
 - **Cross-platform** — macOS (.dmg), Linux (.AppImage, .deb, .rpm), and Windows (.exe)
 
+## Two clients, one you
+
+Switchboard is a desktop app and an [Android app](android/), and the point of
+having both is that you can put one down and pick the other up. Three separate
+mechanisms make that work, and they are worth telling apart because they fail
+differently.
+
+**The shared config travels between the devices.** Pair them once and they hold
+one encrypted vault between them: the networks, the credentials, your profile,
+your mutes, your friend list, and which channels to join on connect. Either
+device can change any of it; whichever seals a newer version offers it, and the
+other pulls. The passphrase never crosses the wire — only the sealed envelope
+does — and a paired device is never handed a password in the clear through any
+other channel.
+
+**Both devices can be on the network at once**, where the server allows it. IRC
+lets two connections share a nick when both have authenticated to the same
+account — rIRCd calls this `multiclient` — so on those networks nobody stands in
+for anybody: both clients connect, both see everything, and switching is
+picking up the other device. The client's precondition is a saved SASL
+mechanism and password, which is why the account screen offers to remember one.
+Where a network refuses, the second connection is offered `nick_` instead of the
+nick it asked for; it notices, gives the connection back, and falls back to the
+older arrangement below.
+
+**Where a network allows only one of you**, the two devices take turns. The
+desktop holds the connections whenever it is running; when it stops, the phone
+notices the heartbeat lapse, opens the vault and takes over, and hands back when
+the desktop returns. The phone is a window onto the desktop's connections the
+rest of the time.
+
+What was said while a device was closed comes from the network, not from the
+other device: `CHATHISTORY AFTER` catches a channel up on rejoining, and
+`CHATHISTORY TARGETS` finds the conversations that started while you were away —
+a direct message from somebody new leaves nothing else behind to notice. Read
+state travels the same way: `draft/read-marker` means reading something at your
+desk puts the badge out on your phone, and stops it buzzing about it.
+
 ## IRCv3 Support
 
 Switchboard negotiates and supports a wide range of IRCv3 capabilities:
