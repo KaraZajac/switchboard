@@ -1,6 +1,7 @@
 import { registerHandler } from './registry'
 import { operFrom } from '@shared/tags'
 import { isServerSource } from '@shared/source'
+import { statusTarget } from '@shared/isupport'
 
 /** App name and version for CTCP VERSION replies */
 const APP_VERSION = 'Switchboard IRC Client 1.0'
@@ -45,7 +46,10 @@ registerHandler('PRIVMSG', (client, msg) => {
   // Determine the "channel" for display purposes
   // If target is our nick, it's a PM — use the sender's nick as the channel key
   const isPrivate = client.state.casemap(target) === client.state.casemap(client.state.nick)
-  const channel = isPrivate ? nick : target
+  // `@#chan` is still #chan: ops and bots address half a room at a time, and
+  // the prefix used to open a second conversation beside the real one.
+  const addressed = statusTarget(target, client.state.isupport['STATUSMSG']).target
+  const channel = isPrivate ? nick : addressed
 
   // Extract relevant tags
   const msgid = typeof msg.tags['msgid'] === 'string' ? msg.tags['msgid'] : undefined
@@ -98,7 +102,8 @@ registerHandler('NOTICE', (client, msg) => {
   // A server's notice belongs in the console, not in a conversation named
   // after the server. Rizon sends its connection banner from irc.rizon.life,
   // which used to sit in Direct Messages between two real people.
-  const channel = isPrivate ? (isServerSource(msg.prefix) ? '*' : nick) : target
+  const addressed = statusTarget(target, client.state.isupport['STATUSMSG']).target
+  const channel = isPrivate ? (isServerSource(msg.prefix) ? '*' : nick) : addressed
 
   const msgid = typeof msg.tags['msgid'] === 'string' ? msg.tags['msgid'] : undefined
   const time = typeof msg.tags['time'] === 'string' ? msg.tags['time'] : new Date().toISOString()

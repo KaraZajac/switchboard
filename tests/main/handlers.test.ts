@@ -258,6 +258,22 @@ describe('Channel Handlers', () => {
     })
   })
 
+  it('files an ops-only message under the channel it was addressed to', () => {
+    const { client, events, state } = createMockClient()
+    state.nick = 'kara'
+    state.isupport['STATUSMSG'] = '@+'
+
+    const seen: string[] = []
+    events.on('privmsg', (data) => seen.push(data.channel))
+
+    // What an op or a bot sends when it wants half the room: the prefix used
+    // to open a second conversation called @#linux beside the real one.
+    dispatchMessage(client, parseMessage(':op!u@h PRIVMSG @#linux :ops only'))
+    dispatchMessage(client, parseMessage(':someone!u@h PRIVMSG #linux :everyone'))
+
+    expect(seen).toEqual(['#linux', '#linux'])
+  })
+
   it('puts a server notice in the console, not in a conversation with the server', () => {
     const { client, events, state } = createMockClient()
     state.nick = 'kara'

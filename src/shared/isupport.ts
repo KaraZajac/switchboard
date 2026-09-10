@@ -78,3 +78,26 @@ export function groupTargets(targets: string, max: number | null): string[] {
 export function fitsLimit(text: string, limit: number | null): boolean {
   return limit === null || Buffer.byteLength(text, 'utf8') <= limit
 }
+
+/**
+ * The channel a message was really addressed to.
+ *
+ * Ops and bots talk to half a room at a time: `PRIVMSG @#channel` reaches
+ * everyone with `@` or better, `+#channel` everyone with a voice. Every
+ * network I connected to advertises the prefixes it allows — `STATUSMSG=@+` on
+ * Libera and OFTC, `~&@%+` on Rizon and Furnet — and neither client looked at
+ * the token, so an ops-only line arrived as a conversation called `@#channel`,
+ * sitting beside the real one and collecting its own unread count.
+ *
+ * Returns the channel and the prefix that was on it, so a caller that wants to
+ * say who could see the line still can.
+ */
+export function statusTarget(
+  target: string,
+  statusmsg: string | true | null | undefined
+): { target: string; status: string | null } {
+  const allowed = typeof statusmsg === 'string' ? statusmsg : ''
+  if (allowed.length === 0 || target.length === 0) return { target, status: null }
+  if (!allowed.includes(target[0])) return { target, status: null }
+  return { target: target.slice(1), status: target[0] }
+}

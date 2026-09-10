@@ -639,7 +639,15 @@ private fun ChannelHeader(
                     Spacer(Modifier.width(3.dp))
                 }
                 Text(
-                    channel?.removePrefix("#") ?: "Switchboard",
+                    when {
+                        channel == null -> "Switchboard"
+                        // `*` is how the console is addressed on the wire, not
+                        // what it is called. The drawer says "Server messages"
+                        // and the desktop says "Server"; only this line showed
+                        // the reader the sentinel.
+                        isConsole(channel) -> "Server"
+                        else -> channel.removePrefix("#")
+                    },
                     color = Text0,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,

@@ -1092,4 +1092,18 @@ class SharedCorpusTest {
         }
     }
 
+    @Test
+    fun `files a message to part of a channel under the channel`() {
+        for (entry in load("statusmsg.json")["cases"]!!.jsonArray) {
+            val case = entry.jsonObject
+            val name = case["name"]!!.jsonPrimitive.content
+            val got = Isupport.statusTarget(
+                case["target"]!!.jsonPrimitive.content,
+                case["statusmsg"]!!.jsonPrimitive.contentOrNull
+            )
+            assertEquals("$name: channel", case["channel"]!!.jsonPrimitive.content, got.target)
+            assertEquals("$name: status", case["status"]!!.jsonPrimitive.contentOrNull, got.status)
+        }
+    }
+
 }

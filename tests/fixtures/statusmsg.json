@@ -1,0 +1,62 @@
+{
+  "$comment": "Messages addressed to part of a channel, shared by tests/shared/statusmsg.test.ts and the Android SharedCorpusTest. Ops and bots talk to half a room at a time \u2014 PRIVMSG @#channel reaches everyone with @ or better \u2014 and neither client looked at the STATUSMSG token, so those lines arrived as a conversation called @#channel sitting beside the real one.",
+  "$cases": "`statusmsg` is what the network advertised. `target` is what came in; `channel` and `status` are what it means.",
+  "cases": [
+    {
+      "name": "an ops-only line on Libera",
+      "statusmsg": "@+",
+      "target": "@#linux",
+      "channel": "#linux",
+      "status": "@"
+    },
+    {
+      "name": "a voiced-and-up line",
+      "statusmsg": "@+",
+      "target": "+#linux",
+      "channel": "#linux",
+      "status": "+"
+    },
+    {
+      "name": "an ordinary channel line",
+      "statusmsg": "@+",
+      "target": "#linux",
+      "channel": "#linux",
+      "status": null
+    },
+    {
+      "name": "halfops, which only some networks have",
+      "statusmsg": "~&@%+",
+      "target": "%#chat",
+      "channel": "#chat",
+      "status": "%"
+    },
+    {
+      "name": "a prefix this network does not use is part of the name",
+      "statusmsg": "@+",
+      "target": "%#chat",
+      "channel": "%#chat",
+      "status": null
+    },
+    {
+      "name": "a network that advertises none",
+      "statusmsg": null,
+      "target": "@#chat",
+      "channel": "@#chat",
+      "status": null
+    },
+    {
+      "name": "a person is not a channel",
+      "statusmsg": "@+",
+      "target": "kara",
+      "channel": "kara",
+      "status": null
+    },
+    {
+      "name": "nothing at all",
+      "statusmsg": "@+",
+      "target": "",
+      "channel": "",
+      "status": null
+    }
+  ]
+}

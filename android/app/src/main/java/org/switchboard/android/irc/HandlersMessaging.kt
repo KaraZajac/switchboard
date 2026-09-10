@@ -38,8 +38,12 @@ internal fun registerMessagingHandlers() {
             // the console rather than in a conversation named after the server.
             // Rizon sends its connection banner from irc.rizon.life, which used
             // to sit in Direct Messages between two real people.
+            // `@#chan` is still #chan: ops and bots address half a room at a
+            // time, and the prefix used to open a second conversation beside
+            // the real one.
+            val addressed = Isupport.statusTarget(target, state.isupport["STATUSMSG"]).target
             val conversation = when {
-                !state.isMe(target) -> target
+                !state.isMe(target) -> addressed
                 Irc.isServerSource(message.prefix) -> SERVER_CONSOLE
                 else -> from
             }

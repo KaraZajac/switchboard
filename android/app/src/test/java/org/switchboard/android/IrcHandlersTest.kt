@@ -155,6 +155,24 @@ class IrcHandlersTest {
     }
 
     @Test
+    fun `an ops-only message is filed under the channel it was addressed to`() {
+        register()
+        session.state.isupport["STATUSMSG"] = "@+"
+        feed(":kara!u@h JOIN #chan")
+        session.events.clear()
+
+        // What an op or a bot sends when it wants half the room: the prefix
+        // used to open a second conversation called @#chan beside the real one.
+        feed(":op!u@h PRIVMSG @#chan :ops only")
+        feed(":someone!u@h PRIVMSG #chan :everyone")
+
+        assertEquals(
+            listOf("#chan", "#chan"),
+            session.eventsOn("irc:message").map { it.str("channel") }
+        )
+    }
+
+    @Test
     fun `a server notice goes to the console, not to a conversation with the server`() {
         register()
 

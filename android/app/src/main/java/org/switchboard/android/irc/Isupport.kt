@@ -65,4 +65,23 @@ object Isupport {
      */
     fun fits(text: String, limit: Int?): Boolean =
         limit == null || text.toByteArray(Charsets.UTF_8).size <= limit
+
+    /**
+     * The channel a message was really addressed to.
+     *
+     * Ops and bots talk to half a room at a time: `PRIVMSG @#channel` reaches
+     * everyone with `@` or better, `+#channel` everyone with a voice. Every
+     * network advertises the prefixes it allows — `@+` on Libera and OFTC,
+     * `~&@%+` on Rizon and Furnet — and neither client looked at the token, so
+     * an ops-only line arrived as a conversation called `@#channel`, sitting
+     * beside the real one and collecting its own unread count.
+     */
+    data class Addressed(val target: String, val status: String?)
+
+    fun statusTarget(target: String, statusmsg: String?): Addressed {
+        val allowed = statusmsg ?: ""
+        if (allowed.isEmpty() || target.isEmpty()) return Addressed(target, null)
+        if (!allowed.contains(target[0])) return Addressed(target, null)
+        return Addressed(target.substring(1), target[0].toString())
+    }
 }
