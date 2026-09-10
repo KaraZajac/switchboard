@@ -567,6 +567,17 @@ class SwitchboardStore {
 
     fun watchedFor(serverId: String): List<String> = watched[serverId].orEmpty()
 
+    /**
+     * Adopt a watched list from the vault.
+     *
+     * MONITOR is per connection: the server reports who is *online* and never
+     * who is on the list, so a device has to be handed it rather than being
+     * able to ask.
+     */
+    fun setWatched(serverId: String, nicks: List<String>) {
+        watched[serverId] = nicks.toMutableList()
+    }
+
     fun isOnline(serverId: String, nick: String): Boolean =
         watchedOnline["$serverId:${nick.lowercase()}"] == true
 

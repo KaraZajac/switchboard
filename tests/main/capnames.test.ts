@@ -75,7 +75,6 @@ describe('capability names', () => {
       'draft/channel-rename',
       'draft/message-redaction',
       'monitor',
-      'whox',
       'echo-message',
       'setname',
       'chghost',
@@ -96,6 +95,21 @@ describe('capability names', () => {
   it('rules out the names that were wrong before', () => {
     for (const name of fixture.notCapabilities) {
       expect(caps, `${name} is not a capability`).not.toContain(name)
+    }
+  })
+
+  /**
+   * A feature module is not evidence of a capability.
+   *
+   * WHOX, bot mode and account extbans each have code behind them and are each
+   * announced with an ISUPPORT token — `WHOX`, `BOT`, `ACCOUNTEXTBAN`. Asking
+   * for them in a CAP REQ asks for something that cannot be granted, and
+   * because only advertised names are ever requested it fails by doing nothing
+   * at all rather than by saying so.
+   */
+  it('does not mistake an ISUPPORT feature for a capability', () => {
+    for (const name of ['whox', 'bot', 'account-extban']) {
+      expect(caps, `${name} is an ISUPPORT token`).not.toContain(name)
     }
   })
 })

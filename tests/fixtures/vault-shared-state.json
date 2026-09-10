@@ -1,0 +1,45 @@
+{
+  "$comment": "What the vault carries besides servers, read by tests/main/vaultshared.test.ts and the Android SharedCorpusTest. Servers were the only shared thing for a long time, so a theme picked on the phone and a friend added on the desktop each stayed where they were made. These are the fields that fixed that, and both clients have to read them the same way or the two devices quietly disagree about what the person chose.",
+
+  "$payload": "A sealed vault's plaintext, as either client would write it.",
+  "payload": {
+    "version": 7,
+    "servers": [
+      { "id": "srv-1", "name": "Doll", "host": "irc.d0ll.link", "port": 6697, "tls": true, "nick": "kara" },
+      { "id": "srv-2", "name": "Libera", "host": "irc.libera.chat", "port": 6697, "tls": true, "nick": "kara" }
+    ],
+    "settings": {
+      "theme": "nord",
+      "mutes": { "srv-1:#noisy": 0 }
+    },
+    "monitor": {
+      "srv-1": ["robin", "mara"],
+      "srv-2": ["jules"]
+    }
+  },
+
+  "$expected": "What both clients must make of it.",
+  "expected": {
+    "theme": "nord",
+    "watched": {
+      "srv-1": ["robin", "mara"],
+      "srv-2": ["jules"]
+    },
+    "serverIds": ["srv-1", "srv-2"]
+  },
+
+  "$older": "A vault sealed before any of this existed. It still has to open, and the fields that were not there yet read as empty rather than as an error — otherwise upgrading one device locks the other out of its own config.",
+  "older": {
+    "version": 3,
+    "servers": [{ "id": "srv-1", "name": "Doll", "host": "irc.d0ll.link", "port": 6697, "tls": true, "nick": "kara" }]
+  },
+
+  "$newer": "And a vault from a client that knows about something we do not. Unknown fields are ignored, not fatal, or the older device stops being able to read its own vault the moment the other one is updated.",
+  "newer": {
+    "version": 9,
+    "servers": [],
+    "settings": { "theme": "gruvbox" },
+    "monitor": {},
+    "somethingAddedLater": { "we": "do not know what this is" }
+  }
+}

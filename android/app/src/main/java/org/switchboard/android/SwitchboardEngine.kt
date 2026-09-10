@@ -380,11 +380,36 @@ class SwitchboardEngine(
         val opened = withContext(Dispatchers.Default) { vault.unlock(passphrase, keepOpen) }
         if (opened) {
             vaultVersion = vault.version
+            applySharedState()
             // If we already won the election but had nothing to connect to,
             // this is the moment we can actually do it.
             if (coordinator.state().role == SessionRole.PRIMARY) takeConnections() else recomputeMode()
         }
         return opened
+    }
+
+    /**
+     * Take on the parts of the vault that are not servers.
+     *
+     * The theme and the watched-nick lists belong to the person rather than to
+     * either device, and the vault is where they travel: `settings:get` over
+     * the link only answers while the desktop is reachable, and this has to be
+     * right on a phone that is on its own.
+     */
+    private fun applySharedState() {
+        (vault.setting("theme") as? JsonPrimitive)?.contentOrNull()?.takeIf { it.isNotBlank() }
+            ?.let { shared ->
+                if (shared != themeId) {
+                    themeId = shared
+                    prefs.edit().putString(THEME_KEY, shared).apply()
+                    applyTheme(shared)
+                }
+            }
+
+        for (server in vault.servers()) {
+            val watched = vault.watched(server.id)
+            if (watched.isNotEmpty()) store.setWatched(server.id, watched)
+        }
     }
 
     fun lockVault() {
@@ -708,6 +733,7 @@ class SwitchboardEngine(
                     ?: return
                 vaultVersion = vault.version
                 store.status = result.reason
+                applySharedState()
             }
         }
     }

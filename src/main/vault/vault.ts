@@ -1,6 +1,11 @@
 import { getSetting, setSetting } from '../storage/models/settings'
-import { serversChanged } from '../ipc/notify'
+import { serversChanged, settingChanged, monitorChanged } from '../ipc/notify'
 import { getAllServers, removeServer, upsertServer } from '../storage/models/server'
+import {
+  addToMonitorList,
+  clearMonitorList,
+  getMonitorList
+} from '../storage/models/monitor'
 import type { ServerConfig } from '@shared/types/server'
 import {
   deriveKey,
@@ -30,7 +35,27 @@ const DEVICE_NAME_KEY = 'vaultDeviceName'
 export interface VaultPayload {
   version: number
   servers: ServerConfig[]
+  /**
+   * Settings both devices should agree on.
+   *
+   * An allowlist rather than everything, because not every setting is about
+   * the person: a proxy address and a CA path describe the machine they were
+   * typed on, and copying those to a phone would be wrong rather than helpful.
+   */
+  settings?: Record<string, unknown>
+  /** Watched nicks, per server. MONITOR is per connection, so each device has
+   * to be told the list rather than being able to ask for it. */
+  monitor?: Record<string, string[]>
 }
+
+/**
+ * Settings that belong to the person rather than the machine.
+ *
+ * The theme is the obvious one — the two clients share it deliberately. Mutes
+ * are the same kind of thing: a conversation you have silenced is silenced
+ * because of what it is, not because of which device you silenced it on.
+ */
+export const SHARED_SETTINGS = ['theme', 'mutes'] as const
 
 export interface VaultStatus {
   /** A vault exists on this device */
@@ -195,7 +220,12 @@ export function importVault(envelope: VaultEnvelope): {
 // ── internals ────────────────────────────────────────────────────────
 
 function seal(key: Buffer, salt: Buffer, version: number): VaultEnvelope {
-  const payload: VaultPayload = { version, servers: getAllServers() }
+  const payload: VaultPayload = {
+    version,
+    servers: getAllServers(),
+    settings: sharedSettings(),
+    monitor: watchedNicks()
+  }
   return sealVault(payload, key, salt, {
     version,
     updatedAt: new Date().toISOString(),
@@ -210,6 +240,26 @@ function seal(key: Buffer, salt: Buffer, version: number): VaultEnvelope {
  * rather than ending up with duplicates, and a server deleted elsewhere goes
  * away here too.
  */
+/** The shared settings as they stand, for sealing into the vault */
+function sharedSettings(): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  for (const key of SHARED_SETTINGS) {
+    const value = getSetting(key)
+    if (value !== null && value !== undefined) out[key] = value
+  }
+  return out
+}
+
+/** The watched nicks of every server, for sealing into the vault */
+function watchedNicks(): Record<string, string[]> {
+  const out: Record<string, string[]> = {}
+  for (const server of getAllServers()) {
+    const nicks = getMonitorList(server.id)
+    if (nicks.length > 0) out[server.id] = nicks
+  }
+  return out
+}
+
 function applyPayload(payload: VaultPayload): void {
   const local = new Map(getAllServers().map((server) => [server.id, server]))
 
@@ -220,6 +270,25 @@ function applyPayload(payload: VaultPayload): void {
 
   for (const id of local.keys()) {
     removeServer(id)
+  }
+
+  // Written through the models rather than the IPC handlers on purpose: those
+  // reseal, and a device applying what it was just handed would seal a new
+  // version and offer it back, and the two would pass versions between them
+  // for as long as both were running.
+  for (const key of SHARED_SETTINGS) {
+    const value = payload.settings?.[key]
+    if (value === undefined) continue
+    setSetting(key, value)
+    settingChanged(key)
+  }
+
+  if (payload.monitor) {
+    for (const [serverId, nicks] of Object.entries(payload.monitor)) {
+      clearMonitorList(serverId)
+      if (nicks.length > 0) addToMonitorList(serverId, nicks)
+      monitorChanged(serverId)
+    }
   }
 
   // The whole list has just been replaced by another device's. The window is

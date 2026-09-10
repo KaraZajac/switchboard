@@ -23,6 +23,7 @@ import org.junit.Test
 import org.switchboard.android.irc.Casemap
 import org.switchboard.android.irc.ConnectionState
 import org.switchboard.android.irc.Irc
+import org.switchboard.android.vault.VaultPayload
 import org.switchboard.android.irc.Isupport
 import org.switchboard.android.irc.LineLength
 import org.switchboard.android.irc.IrcMessage
@@ -661,6 +662,69 @@ class SharedCorpusTest {
         assertTrue(Isupport.fits("日本語", 10))
         assertFalse(Isupport.fits("日本語です", 10))
         assertTrue(Isupport.fits("anything at all", null))
+    }
+
+    // ── what the vault carries besides servers ───────────────────────
+
+    /**
+     * Servers were the only shared thing for a long time, so a theme picked
+     * here and a friend added on the desktop each stayed where they were made
+     * — on two clients that are meant to be one client in two places.
+     */
+    @Test
+    fun `reads the shared state the desktop seals`() {
+        val fixture = load("vault-shared-state.json")
+        val payload = json.decodeFromJsonElement(
+            VaultPayload.serializer(),
+            fixture["payload"]!!
+        )
+        val expected = fixture["expected"]!!.jsonObject
+
+        assertEquals(
+            expected["theme"]!!.jsonPrimitive.content,
+            (payload.settings["theme"] as? JsonPrimitive)?.content
+        )
+
+        val watched = expected["watched"]!!.jsonObject
+        for ((serverId, nicks) in watched) {
+            assertEquals(
+                "watched nicks for $serverId",
+                nicks.jsonArray.map { it.jsonPrimitive.content },
+                payload.monitor[serverId]
+            )
+        }
+
+        assertEquals(
+            expected["serverIds"]!!.jsonArray.map { it.jsonPrimitive.content },
+            payload.servers.map { it.id }
+        )
+    }
+
+    /**
+     * Upgrading one device must not lock the other out of its own config, in
+     * either direction.
+     */
+    @Test
+    fun `opens a vault sealed before any of this existed`() {
+        val payload = json.decodeFromJsonElement(
+            VaultPayload.serializer(),
+            load("vault-shared-state.json")["older"]!!
+        )
+
+        assertEquals(1, payload.servers.size)
+        assertTrue("missing fields read as empty, not as an error", payload.settings.isEmpty())
+        assertTrue(payload.monitor.isEmpty())
+    }
+
+    @Test
+    fun `opens a vault from a client that knows something we do not`() {
+        val payload = json.decodeFromJsonElement(
+            VaultPayload.serializer(),
+            load("vault-shared-state.json")["newer"]!!
+        )
+
+        assertEquals("gruvbox", (payload.settings["theme"] as? JsonPrimitive)?.content)
+        assertTrue(payload.servers.isEmpty())
     }
 
 }

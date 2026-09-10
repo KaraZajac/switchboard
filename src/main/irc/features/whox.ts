@@ -58,9 +58,14 @@ registerHandler('354', (client, msg) => {
   const ch = client.state.channels.get(client.state.casemap(channel))
   if (!ch) return
 
-  // Parse flags: H=here, G=gone(away), *=ircop, @+=prefixes, B=bot
+  // Parse flags: H=here, G=gone(away), *=ircop, @+=prefixes, and the bot mode
+  // letter — which the server names in ISUPPORT rather than it being fixed.
+  // `B` is what everyone uses and what to assume when nothing was said.
   const isAway = flags.includes('G')
-  const isBot = flags.includes('B')
+  const botMode = typeof client.state.isupport['BOT'] === 'string'
+    ? (client.state.isupport['BOT'] as string)
+    : 'B'
+  const isBot = botMode.length > 0 && flags.includes(botMode)
 
   const prefixes: string[] = []
   const prefixChars = ['~', '&', '@', '%', '+']

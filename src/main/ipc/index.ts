@@ -20,7 +20,14 @@ import { getSetting, setSetting } from '../storage/models/settings'
 import { secretsProtected, secretsBackendDescription } from '../storage/secrets'
 import { databaseIsEncrypted } from '../storage/database'
 import { serversChanged, monitorChanged, settingChanged, readMarkerChanged } from './notify'
-import { createVault, lockVault, resealVault, unlockVault, vaultStatus } from '../vault/vault'
+import {
+  createVault,
+  lockVault,
+  resealVault,
+  unlockVault,
+  vaultStatus,
+  SHARED_SETTINGS
+} from '../vault/vault'
 import {
   sessionState,
   remoteStatus,
@@ -530,6 +537,9 @@ export function registerIPCHandlers(): void {
     // May not have come from the window: a paired phone picking a theme
     // reaches the same handler, and the two are meant to match.
     settingChanged(key)
+    // And the other device is not necessarily attached right now, so the
+    // durable copy has to move too, not just the live signal.
+    if ((SHARED_SETTINGS as readonly string[]).includes(key)) resealVault()
   })
 
   // ── Read markers ─────────────────────────────────────────────────
@@ -570,6 +580,9 @@ export function registerIPCHandlers(): void {
     }
     // The server echoes who is online, never who is on the list
     monitorChanged(serverId)
+    // MONITOR is per connection: the other device has to be handed the list,
+    // because there is nothing it can ask the server for.
+    resealVault()
   })
 
   handle('monitor:remove', async (_event, serverId: string, nicks: string[]) => {
@@ -580,6 +593,7 @@ export function registerIPCHandlers(): void {
       client.connection.send('MONITOR', '-', nicks.join(','))
     }
     monitorChanged(serverId)
+    resealVault()
   })
 
   handle('monitor:list', async (_event, serverId: string) => {

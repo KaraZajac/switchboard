@@ -43,17 +43,14 @@ export const REQUESTED_CAPS = [
   'chghost',
   'setname',
   'invite-notify',
-  'bot',
   'standard-replies',
   'no-implicit-names',
-  'account-extban',
   'monitor',
   'extended-monitor',
   // Not registered — WHOX is de facto throughout, signalled by the WHOX
   // ISUPPORT token. Kept because a server that gates the 354 reply on a
   // capability of this name would otherwise answer a WHOX query with a plain
   // WHO, and asking for a name nobody advertises costs nothing.
-  'whox',
   'draft/message-redaction',
   'draft/message-edit',
   'draft/chathistory',

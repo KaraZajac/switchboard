@@ -3,6 +3,7 @@ package org.switchboard.android.vault
 import android.content.Context
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
 import org.switchboard.android.irc.ServerConfig
 import java.io.File
 import java.time.Instant
@@ -47,6 +48,12 @@ class VaultStore(context: Context) {
 
     /** Servers the phone can connect to on its own, once unlocked */
     fun servers(): List<ServerConfig> = payload?.servers.orEmpty()
+
+    /** A setting the two devices share, as the desktop last sealed it */
+    fun setting(key: String): JsonElement? = payload?.settings?.get(key)
+
+    /** The nicks this account watches on a server, shared from the other device */
+    fun watched(serverId: String): List<String> = payload?.monitor?.get(serverId).orEmpty()
 
     /** True when the key is being kept, so a restart does not lock us out */
     val isKeptOpen: Boolean get() = keeper.isKept
@@ -198,5 +205,22 @@ class VaultStore(context: Context) {
 @Serializable
 data class VaultPayload(
     val version: Int = 0,
-    val servers: List<ServerConfig> = emptyList()
+    val servers: List<ServerConfig> = emptyList(),
+    /**
+     * Settings both devices should agree on — the theme, and which
+     * conversations are muted.
+     *
+     * An allowlist on the desktop side rather than everything, because not
+     * every setting is about the person: a proxy address and a CA path
+     * describe the machine they were typed on.
+     *
+     * Values are whatever JSON the setting holds, so this is a JsonElement
+     * rather than a String: `mutes` is an object, `theme` is a string.
+     */
+    val settings: Map<String, JsonElement> = emptyMap(),
+    /**
+     * Watched nicks, per server id. MONITOR is per connection, so a device has
+     * to be handed the list — there is nothing it can ask the server for.
+     */
+    val monitor: Map<String, List<String>> = emptyMap()
 )

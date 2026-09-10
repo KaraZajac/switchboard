@@ -17,13 +17,10 @@
     "chghost",
     "setname",
     "invite-notify",
-    "bot",
     "standard-replies",
     "no-implicit-names",
-    "account-extban",
     "monitor",
     "extended-monitor",
-    "whox",
     "draft/message-redaction",
     "draft/message-edit",
     "draft/chathistory",
@@ -49,7 +46,8 @@
   "rules": {
     "lowercase": "Capability names are case-sensitive and every registered one is lowercase. UTF8ONLY is the ISUPPORT token, not a capability.",
     "noClientTagPrefix": "A '+' prefixes a message tag. A CAP REQ token starting with one names a capability that cannot exist.",
-    "maxLineBytes": 512
+    "maxLineBytes": 512,
+    "isupportNotCapability": "Bot mode, account extbans and WHOX are announced with the ISUPPORT tokens BOT, ACCOUNTEXTBAN and WHOX. None of them is a capability, so asking for one is asking for something that cannot be granted \u2014 and because only advertised names are ever requested, it fails by doing nothing rather than by saying so."
   },
   "notCapabilities": [
     "message-ids",
@@ -60,7 +58,10 @@
     "draft/no-implicit-names",
     "draft/edit",
     "utf8only",
-    "message-redaction"
+    "message-redaction",
+    "bot",
+    "account-extban",
+    "whox"
   ],
   "deliberatelyNotRequested": {
     "draft/persistence": "A real capability, and nothing here implements the PERSISTENCE command. Enabling it changes what a server does when a client goes away, which is not something to ask for and then ignore."
