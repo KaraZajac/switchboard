@@ -23,6 +23,7 @@ import '../features/whox'
 // Phase 5: Message features
 import '../features/batch'
 import '../features/labeled'
+import '../features/chathistory'
 import '../features/readmarker'
 import '../features/rename'
 import '../features/redact'

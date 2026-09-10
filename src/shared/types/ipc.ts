@@ -171,6 +171,8 @@ export interface MainToRendererEvents {
   'irc:monitor-online': { serverId: string; nick: string; user: string | null; host: string | null }
   'irc:monitor-offline': { serverId: string; nick: string }
   'irc:chathistory': { serverId: string; channel: string; messages: ChatMessage[] }
+  /** A conversation that had traffic while this device was closed */
+  'irc:chathistory-target': { serverId: string; target: string; timestamp: string }
   'irc:invite': { serverId: string; channel: string; by: string }
   'irc:search-results': { serverId: string; messages: ChatMessage[] }
   'irc:netsplit': { serverId: string; server1: string; server2: string; nicks: string[] }
@@ -246,6 +248,8 @@ export interface RendererToMainInvocations {
   'account:verify': (serverId: string, account: string, code: string) => Promise<boolean>
   'history:fetch': (serverId: string, channel: string, before?: string, limit?: number) => Promise<ChatMessage[]>
   'chathistory:request': (serverId: string, channel: string, before?: string, limit?: number) => Promise<void>
+  /** Which conversations had traffic since `since` — the only way to find a missed DM */
+  'chathistory:targets': (serverId: string, since: string) => Promise<void>
   /** What was said after `after`, for catching up on another device's evening */
   'chathistory:catchup': (serverId: string, channel: string, after: string, limit?: number) => Promise<void>
   'notification:send': (title: string, body: string) => Promise<void>

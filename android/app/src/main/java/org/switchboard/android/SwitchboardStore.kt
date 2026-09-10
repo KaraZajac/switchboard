@@ -294,6 +294,15 @@ class SwitchboardStore {
 
     /** Apply `app:renderer-ready`: every connected server and what it is in. */
     /**
+     * Conversations we learned about from `CHATHISTORY TARGETS` and have not
+     * yet fetched.
+     *
+     * Held so the engine can ask for each one's history without the store
+     * needing a connection of its own.
+     */
+    val missedConversations = mutableStateListOf<String>()
+
+    /**
      * Capabilities the network offered, and their values, per server.
      *
      * Filled from the desktop's snapshot while following, and from our own
@@ -677,6 +686,23 @@ class SwitchboardStore {
                         .map { if (it.name.equals(channel, true)) it.copy(unread = 0, mentions = 0) else it }
                         .toMutableStateList()
                 }
+            }
+
+            /**
+             * A conversation somebody started while this device was closed.
+             *
+             * Channels are covered by rejoining them. A DM is not: nothing is
+             * joined, so a message from somebody new leaves no trace for a
+             * client that was not there. Only the ones we have no record of at
+             * all are worth opening — the rest are already on screen.
+             */
+            "irc:chathistory-target" -> {
+                val target = data["target"]?.str() ?: return
+                if (isChannel(target) || Services.isServices(target)) return
+                if (channelsFor(serverId).any { it.name.equals(target, true) }) return
+
+                openConversation(serverId, target)
+                missedConversations.add(key(serverId, target))
             }
 
             "irc:search-results" -> {

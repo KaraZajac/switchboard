@@ -609,3 +609,66 @@ class ReadMarkerTest {
         assertEquals(0, unread())
     }
 }
+
+/**
+ * A conversation that started while this device was closed.
+ *
+ * Channels look after themselves — rejoining one asks for its history. A DM
+ * does not: nothing is joined, so a message from somebody this phone has never
+ * spoken to leaves no trace at all for a client that was not connected to watch
+ * it arrive. `CHATHISTORY TARGETS` is the only way to find it.
+ */
+class MissedConversationTest {
+
+    private lateinit var store: SwitchboardStore
+    private val server = "s1"
+
+    @Before
+    fun setUp() {
+        store = SwitchboardStore()
+        store.servers[server] = Server(id = server, name = "Test", host = "h", nick = "kara")
+        store.channels[server] = mutableListOf(Channel("#lounge"))
+    }
+
+    private fun target(name: String) {
+        store.handleEvent("irc:chathistory-target", buildJsonObject {
+            put("serverId", server)
+            put("target", name)
+            put("timestamp", "2026-09-10T12:00:00Z")
+        })
+    }
+
+    @Test
+    fun `somebody who messaged us gets a conversation`() {
+        target("mara")
+
+        assertTrue(store.channelsFor(server).any { it.name == "mara" })
+        assertTrue(store.missedConversations.contains("$server:mara"))
+    }
+
+    @Test
+    fun `a channel is not a missed conversation`() {
+        target("#somewhere")
+
+        assertFalse(store.channelsFor(server).any { it.name == "#somewhere" })
+    }
+
+    /** Services talk to everybody; a NickServ notice is not a conversation */
+    @Test
+    fun `services do not get one either`() {
+        target("NickServ")
+
+        assertFalse(store.channelsFor(server).any { it.name.equals("NickServ", true) })
+    }
+
+    @Test
+    fun `a conversation already on screen is left alone`() {
+        store.openConversation(server, "robin")
+        val before = store.channelsFor(server).size
+
+        target("robin")
+
+        assertEquals(before, store.channelsFor(server).size)
+        assertTrue(store.missedConversations.isEmpty())
+    }
+}

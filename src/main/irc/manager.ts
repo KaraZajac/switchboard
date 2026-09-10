@@ -539,6 +539,17 @@ export class IRCManager {
       this.send('irc:webpush', { serverId, ...data })
     })
 
+    /**
+     * A conversation that had traffic while this device was closed.
+     *
+     * Channels take care of themselves — rejoining one asks for its history.
+     * A DM does not: nobody joins anything, so a message from somebody new
+     * leaves no trace at all for a client that was not connected to see it.
+     */
+    client.events.on('chathistoryTarget', (data: { target: string; timestamp: string }) => {
+      this.send('irc:chathistory-target', { serverId, ...data })
+    })
+
     client.events.on('accountVerified', (data) => {
       this.send('irc:verify', { serverId, status: 'SUCCESS', ...data })
     })

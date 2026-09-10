@@ -184,6 +184,24 @@ internal object ChatHistory {
             allowed(session, limit).toString()
         )
     }
+
+    /**
+     * Which conversations had traffic while this device was closed.
+     *
+     * Channels look after themselves: rejoining one asks for its history. A DM
+     * does not — nothing is joined, so a message from somebody this phone has
+     * never spoken to leaves no trace at all for a client that was not
+     * connected to watch it arrive. This is the only way to find it.
+     */
+    fun requestTargets(session: IrcSession, since: String, limit: Int = 50) {
+        if (!session.state.capabilities.contains("draft/chathistory")) return
+        session.send(
+            "CHATHISTORY", "TARGETS",
+            "timestamp=$since",
+            "timestamp=" + Instant.now().toString(),
+            allowed(session, limit).toString()
+        )
+    }
 }
 
 /**
@@ -288,4 +306,24 @@ private fun answerCtcp(session: IrcSession, from: String, body: String) {
         else -> return
     }
     session.sendRaw("NOTICE $from :\u0001$reply\u0001")
+}
+
+/**
+ * The reply to `CHATHISTORY TARGETS`.
+ *
+ * `CHATHISTORY TARGETS <target> <timestamp>`, inside a batch, one line for each
+ * conversation that had traffic in the window asked about.
+ */
+internal fun registerChatHistoryTargetHandler() {
+    Handlers.on("CHATHISTORY") { session, message ->
+        if (!message.param(0).equals("TARGETS", ignoreCase = true)) return@on
+        val target = message.param(1) ?: return@on
+        val timestamp = message.param(2) ?: return@on
+
+        session.emit("irc:chathistory-target", buildJsonObject {
+            put("serverId", session.state.serverId)
+            put("target", target)
+            put("timestamp", timestamp)
+        })
+    }
 }

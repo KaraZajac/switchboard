@@ -21,6 +21,7 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
+import org.switchboard.android.irc.ChatHistory
 import org.switchboard.android.irc.IrcConnection
 import org.switchboard.android.pairing.DeviceIdentity
 import org.switchboard.android.irc.ServerConfig
@@ -263,6 +264,21 @@ class SwitchboardEngine(
             colour = notificationColour(serverId, nick),
             mentioned = mentioned
         )
+    }
+
+    /**
+     * Ask which conversations had traffic while we were shut.
+     *
+     * A fortnight is long enough to cover a weekend away and short enough that
+     * the list stays readable; the server caps it anyway. Channels are already
+     * covered by rejoining them — this is about the DM from somebody we have
+     * never spoken to, which leaves nothing at all behind for a client that was
+     * not connected to see it arrive.
+     */
+    private fun askWhatWeMissed(serverId: String) {
+        val connection = connections[serverId] ?: return
+        val since = java.time.Instant.now().minus(14, java.time.temporal.ChronoUnit.DAYS)
+        ChatHistory.requestTargets(connection, since.toString())
     }
 
     /**
@@ -786,7 +802,17 @@ class SwitchboardEngine(
             if (channel == "irc:connected") {
                 rearmMonitor(config.id)
                 if (!keptOurNameAlongside(config.id)) return@IrcConnection
+                askWhatWeMissed(config.id)
                 recomputeMode()
+            }
+
+            // A conversation somebody started while this phone was closed.
+            // Opening it is the store's job; fetching what was said is ours.
+            if (channel == "irc:chathistory-target") {
+                val target = (data as? JsonObject)?.get("target")?.jsonPrimitive?.contentOrNull()
+                if (target != null && !isChannel(target)) {
+                    connections[config.id]?.requestHistoryLatest(target)
+                }
             }
             if (channel == "irc:disconnected") recomputeMode()
         }

@@ -1,4 +1,5 @@
 import { isupportNumber } from '@shared/isupport'
+import { registerHandler } from '../handlers/registry'
 
 /**
  * draft/chathistory — Server-side message history.
@@ -107,3 +108,22 @@ export function requestChathistoryTargets(
   )
   return true
 }
+
+/**
+ * The reply to CHATHISTORY TARGETS.
+ *
+ * `CHATHISTORY TARGETS <target> <timestamp>`, one line per conversation that
+ * had traffic in the window, inside a batch. It is the only way to find out
+ * that somebody messaged you while this device was closed: a DM from a stranger
+ * creates no channel, sends no JOIN and leaves nothing behind for a client that
+ * was not connected to notice.
+ */
+registerHandler('CHATHISTORY', (client, msg) => {
+  if ((msg.params[0] ?? '').toUpperCase() !== 'TARGETS') return
+
+  const target = msg.params[1]
+  const timestamp = msg.params[2]
+  if (!target || !timestamp) return
+
+  client.events.emit('chathistoryTarget', { target, timestamp })
+})

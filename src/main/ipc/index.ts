@@ -489,6 +489,21 @@ export function registerIPCHandlers(): void {
    * BEFORE only ever reaches further back into what we already missed nothing
    * of.
    */
+  /**
+   * Which conversations had traffic while this device was closed.
+   *
+   * Channels look after themselves: rejoining one asks for its history. A DM
+   * does not — nobody joins anything, so a message from somebody this client
+   * has never spoken to leaves no trace at all for a client that was not
+   * connected to see it arrive.
+   */
+  handle('chathistory:targets', async (_event, serverId: string, since: string) => {
+    const client = ircManager.getClient(serverId)
+    if (!client) return
+    const { requestChathistoryTargets } = await import('../irc/features/chathistory')
+    requestChathistoryTargets(client, `timestamp=${since}`, `timestamp=${new Date().toISOString()}`, 50)
+  })
+
   handle('chathistory:catchup', async (_event, serverId: string, channel: string, after: string, limit?: number) => {
     const client = ircManager.getClient(serverId)
     if (!client) return

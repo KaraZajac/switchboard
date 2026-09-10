@@ -96,6 +96,7 @@ object Handlers {
         registerCapabilityHandlers()
         registerChannelHandlers()
         registerMessagingHandlers()
+        registerChatHistoryTargetHandler()
         registerUserHandlers()
         registerBatchHandlers()
         registerMetadataHandlers()

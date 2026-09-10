@@ -436,9 +436,37 @@ export function useIRCEvents(): void {
       })
     )
 
+    /**
+     * A conversation somebody started while this device was closed.
+     *
+     * Channels are covered by rejoining them. A DM is not: nothing is joined,
+     * so a message from somebody new leaves no trace for a client that was not
+     * there. We only go looking for the history of conversations we have no
+     * record of at all — the rest is already on screen.
+     */
+    cleanups.push(
+      api.on('irc:chathistory-target', ({ serverId, target }) => {
+        if (isChannelName(target) || isServiceNick(target)) return
+
+        const known = useChannelStore
+          .getState()
+          .channels[serverId]?.some((ch) => ch.name.toLowerCase() === target.toLowerCase())
+        if (known) return
+
+        useChannelStore.getState().addChannel(serverId, target)
+        api.invoke('chathistory:request', serverId, target, undefined, 50)
+      })
+    )
+
     // On connect, load read markers from DB and monitor list
     cleanups.push(
       api.on('irc:connected', ({ serverId: sid }) => {
+        // What happened while we were shut. A fortnight is long enough to
+        // cover a weekend away and short enough that the list stays readable;
+        // the server caps it anyway.
+        const since = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString()
+        api.invoke('chathistory:targets', sid, since)
+
         api.invoke('read-marker:get-all', sid).then((markers) => {
           if (markers && Object.keys(markers).length > 0) {
             useChannelStore.getState().setReadMarkers(sid, markers)
