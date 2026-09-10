@@ -126,7 +126,7 @@ private fun MemberRow(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(contentAlignment = Alignment.BottomEnd) {
-            Avatar(member.nick, 32.dp, color)
+            Avatar(member.nick, 32.dp, color, avatar = profile?.avatar)
             // Away is IRC's only presence signal, and it is worth showing
             Box(
                 modifier = Modifier

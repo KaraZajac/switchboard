@@ -443,7 +443,7 @@ private fun MessageRow(
         if (grouped) {
             Spacer(Modifier.width(GUTTER.dp))
         } else {
-            Avatar(message.nick, 40.dp, color)
+            Avatar(message.nick, 40.dp, color, avatar = profile.avatar)
             Spacer(Modifier.width(16.dp))
         }
 

@@ -8,6 +8,7 @@ import { displayNameFor, metadataColor, type UserMetadata } from '@shared/types/
 import { ContextMenu, type ContextMenuItem } from '../common/ContextMenu'
 import type { ChannelUser } from '@shared/types/channel'
 import { PREFIX_RANKS } from '@shared/types/channel'
+import { avatarUrl as safeAvatarUrl } from '@shared/avatar'
 
 const EMPTY_USERS: ChannelUser[] = []
 
@@ -110,7 +111,8 @@ function UserItem({
   const metadata: UserMetadata = activeServerId
     ? userMetadata[`${activeServerId}:${user.nick.toLowerCase()}`] ?? {}
     : {}
-  const avatarUrl = metadata.avatar ?? null
+  // An avatar is a string a stranger typed. Only https, and only a real host.
+  const avatarUrl = safeAvatarUrl(metadata.avatar)
   const shownName = displayNameFor(user.nick, metadata)
   const nameColor = metadataColor(metadata.color)
 

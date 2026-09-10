@@ -200,7 +200,7 @@ private fun Hit(engine: SwitchboardEngine, hit: SearchHit, term: String, onClick
             .padding(horizontal = 16.dp, vertical = 10.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Avatar(hit.nick, 20.dp, colour)
+            Avatar(hit.nick, 20.dp, colour, avatar = profile?.avatar)
             Spacer(Modifier.width(8.dp))
             Text(
                 profile?.displayName?.takeIf { it.isNotBlank() } ?: hit.nick,

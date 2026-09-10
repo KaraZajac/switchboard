@@ -86,7 +86,7 @@ fun ProfileSheet(
                 .padding(start = 24.dp, end = 24.dp, bottom = 32.dp)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Avatar(nick, 64.dp, colour)
+                Avatar(nick, 64.dp, colour, avatar = profile.avatar)
                 Spacer(Modifier.width(16.dp))
                 Column {
                     Text(

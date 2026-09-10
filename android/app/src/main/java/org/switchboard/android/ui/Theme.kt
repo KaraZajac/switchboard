@@ -22,6 +22,10 @@ import androidx.compose.ui.unit.sp
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.runtime.remember
+import coil.compose.AsyncImage
+import org.switchboard.android.irc.avatarUrl
 
 /**
  * The phone's surfaces, type and small shared parts.
@@ -121,19 +125,28 @@ fun withinFiveMinutes(a: String, b: String): Boolean {
 /**
  * A person's avatar.
  *
- * IRC has no avatars of its own — `draft/metadata-2` carries a URL, and until
- * one is set the initial on a colour derived from the nick is what everyone
- * already recognises each other by in a channel list.
+ * IRC has no avatars of its own — `draft/metadata-2` carries a URL, and the
+ * desktop has drawn it since it could. The phone kept the URL and drew the
+ * initial anyway, so the same person in the same channel was a picture on one
+ * device and a letter on the other.
+ *
+ * The initial is still what everyone recognises each other by until a picture
+ * is set, and it is what stays there while one loads or if it never does. A
+ * URL we will not fetch — anything but https, per [avatarUrl] — is the same as
+ * none.
  */
 @Composable
 fun Avatar(
     nick: String,
     size: Dp = 40.dp,
     color: Color = nickColor(nick),
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    avatar: String? = null
 ) {
+    val url = remember(avatar) { avatarUrl(avatar) }
+
     Box(
-        modifier = modifier.size(size).background(color, CircleShape),
+        modifier = modifier.size(size).clip(CircleShape).background(color),
         contentAlignment = Alignment.Center
     ) {
         Text(
@@ -142,6 +155,15 @@ fun Avatar(
             fontSize = (size.value * 0.42f).sp,
             fontWeight = FontWeight.Bold
         )
+
+        if (url != null) {
+            AsyncImage(
+                model = url,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.matchParentSize()
+            )
+        }
     }
 }
 

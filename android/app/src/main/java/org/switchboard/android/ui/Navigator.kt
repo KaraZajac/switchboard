@@ -544,7 +544,12 @@ private fun ChannelList(
                         .padding(horizontal = 8.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Avatar(who, 24.dp, metadataColor(profile.color) ?: nickColor(who))
+                    Avatar(
+                        who,
+                        24.dp,
+                        metadataColor(profile.color) ?: nickColor(who),
+                        avatar = profile.avatar
+                    )
                     Spacer(Modifier.width(8.dp))
                     Text(
                         profile.displayName?.takeIf { it.isNotBlank() } ?: who,
@@ -742,7 +747,12 @@ private fun UserPanel(
             modifier = Modifier.clip(CircleShape).clickable(onClick = onEditProfile),
             contentAlignment = Alignment.BottomEnd
         ) {
-            Avatar(nick, 34.dp, metadataColor(profile?.color) ?: nickColor(nick))
+            Avatar(
+                nick,
+                34.dp,
+                metadataColor(profile?.color) ?: nickColor(nick),
+                avatar = profile?.avatar
+            )
             if (server?.away == true) {
                 Box(
                     modifier = Modifier

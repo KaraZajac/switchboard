@@ -1,0 +1,61 @@
+{
+  "$comment": "Which avatars we are willing to fetch, shared by tests/shared/avatar.test.ts and the Android SharedCorpusTest. An avatar is a metadata key, which means it is a string a stranger typed, and both clients handed it straight to an image loader. An image loader attempts whatever it is given.",
+  "$cases": "`value` is what the metadata said; `url` is what we will fetch, or null.",
+  "cases": [
+    {
+      "name": "an ordinary avatar",
+      "value": "https://example.net/me.png",
+      "url": "https://example.net/me.png"
+    },
+    {
+      "name": "surrounding space is not part of it",
+      "value": "  https://example.net/me.png  ",
+      "url": "https://example.net/me.png"
+    },
+    {
+      "name": "plain http tells everyone in the channel where you are",
+      "value": "http://example.net/me.png",
+      "url": null
+    },
+    {
+      "name": "a local file is a read somebody else started",
+      "value": "file:///etc/passwd",
+      "url": null
+    },
+    {
+      "name": "javascript is not a picture",
+      "value": "javascript:alert(1)",
+      "url": null
+    },
+    {
+      "name": "an inline image is unbounded",
+      "value": "data:image/png;base64,iVBORw0KGgo=",
+      "url": null
+    },
+    {
+      "name": "a path with no host fetches nothing",
+      "value": "/me.png",
+      "url": null
+    },
+    {
+      "name": "not a URL at all",
+      "value": "me.png",
+      "url": null
+    },
+    {
+      "name": "nothing set",
+      "value": "",
+      "url": null
+    },
+    {
+      "name": "a query string is kept",
+      "value": "https://example.net/a?v=2",
+      "url": "https://example.net/a?v=2"
+    },
+    {
+      "name": "a port is kept",
+      "value": "https://example.net:8443/a.png",
+      "url": "https://example.net:8443/a.png"
+    }
+  ]
+}

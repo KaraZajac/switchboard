@@ -111,6 +111,12 @@ dependencies {
     implementation("androidx.camera:camera-view:1.4.1")
     implementation("com.google.zxing:core:3.5.3")
 
+    // Avatars. Fetching, decoding, caching and cancelling on scroll are each
+    // easy to get slightly wrong, and getting any of them wrong in a member
+    // list shows up as jank or as a leak. Coil is the Compose-native one and
+    // brings its own OkHttp.
+    implementation("io.coil-kt:coil-compose:2.7.0")
+
     testImplementation("junit:junit:4.13.2")
     // Generating a QR in the unit test, so the decoder is checked against a
     // real image rather than a hand-made bitmap

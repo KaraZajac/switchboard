@@ -29,6 +29,7 @@ import org.switchboard.android.vault.VaultKdf
 import org.switchboard.android.vault.VaultPayload
 import org.switchboard.android.vault.shouldAdoptVault
 import org.switchboard.android.irc.Formatting
+import org.switchboard.android.irc.avatarUrl
 import org.switchboard.android.irc.Friends
 import org.switchboard.android.irc.Isupport
 import org.switchboard.android.irc.ServerConfig
@@ -1119,6 +1120,25 @@ class SharedCorpusTest {
                 Isupport.advertises(isupport, case["token"]!!.jsonPrimitive.content)
             )
         }
+    }
+
+    // ── avatars ───────────────────────────────────────────────────────
+
+    @Test
+    fun `only fetches an avatar it is willing to fetch`() {
+        for (entry in load("avatar.json")["cases"]!!.jsonArray) {
+            val case = entry.jsonObject
+            assertEquals(
+                case["name"]!!.jsonPrimitive.content,
+                case["url"]!!.jsonPrimitive.contentOrNull,
+                avatarUrl(case["value"]!!.jsonPrimitive.content)
+            )
+        }
+        assertNull("nothing set", avatarUrl(null))
+        assertNull(
+            "a URL long enough to be a denial of service is not an avatar",
+            avatarUrl("https://example.net/" + "a".repeat(4000))
+        )
     }
 
 }
