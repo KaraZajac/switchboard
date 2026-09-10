@@ -29,6 +29,7 @@ import org.switchboard.android.vault.VaultKdf
 import org.switchboard.android.vault.VaultPayload
 import org.switchboard.android.vault.shouldAdoptVault
 import org.switchboard.android.irc.ClientTags
+import org.switchboard.android.irc.Completion
 import org.switchboard.android.irc.Decoding
 import org.switchboard.android.irc.Filehost
 import org.switchboard.android.irc.dialChanged
@@ -1264,6 +1265,37 @@ class SharedCorpusTest {
             val after = config(case["after"]!!.jsonObject, before)
 
             assertEquals(name, case["redial"]!!.jsonPrimitive.boolean, dialChanged(before, after))
+        }
+    }
+
+    // ── finishing a half-typed name ───────────────────────────────────
+
+    @Test
+    fun `completes a name the way the desktop completes it`() {
+        val corpus = load("completion.json")
+
+        for (entry in corpus["matches"]!!.jsonArray) {
+            val case = entry.jsonObject
+            assertEquals(
+                case["name"]!!.jsonPrimitive.content,
+                case["completions"]!!.jsonArray.map { it.jsonPrimitive.content },
+                Completion.matching(
+                    case["partial"]!!.jsonPrimitive.content,
+                    case["people"]!!.jsonArray.map { it.jsonPrimitive.content }
+                )
+            )
+        }
+
+        for (entry in corpus["suffix"]!!.jsonArray) {
+            val case = entry.jsonObject
+            assertEquals(
+                case["name"]!!.jsonPrimitive.content,
+                case["result"]!!.jsonPrimitive.content,
+                Completion.complete(
+                    case["draft"]!!.jsonPrimitive.content,
+                    case["completion"]!!.jsonPrimitive.content
+                )
+            )
         }
     }
 

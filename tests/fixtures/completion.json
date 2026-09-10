@@ -1,0 +1,141 @@
+{
+  "$comment": "Finishing a half-typed name, shared by tests/shared/completion.test.ts and the Android CompletionTest. The two clients complete differently on purpose \u2014 the desktop cycles with Tab, the phone offers a row to tap \u2014 but not about the answer. They differed: the phone put a colon after anything completed at the start of a line, including a channel, so tapping #switchboard gave '#switchboard: '.",
+  "$matches": "`partial` is what has been typed, `people` who is here, `completions` what to offer.",
+  "matches": [
+    {
+      "name": "one letter is not enough to aim at",
+      "partial": "r",
+      "people": [
+        "robin",
+        "rachel"
+      ],
+      "completions": []
+    },
+    {
+      "name": "two is",
+      "partial": "ro",
+      "people": [
+        "robin",
+        "rachel"
+      ],
+      "completions": [
+        "robin"
+      ]
+    },
+    {
+      "name": "case does not matter",
+      "partial": "RO",
+      "people": [
+        "Robin"
+      ],
+      "completions": [
+        "Robin"
+      ]
+    },
+    {
+      "name": "sorted, so the same prefix offers the same order every time",
+      "partial": "ro",
+      "people": [
+        "Rowan",
+        "robin",
+        "Robert"
+      ],
+      "completions": [
+        "Robert",
+        "robin",
+        "Rowan"
+      ]
+    },
+    {
+      "name": "a name already complete is not a suggestion",
+      "partial": "robin",
+      "people": [
+        "robin"
+      ],
+      "completions": []
+    },
+    {
+      "name": "but a longer one that starts with it is",
+      "partial": "robin",
+      "people": [
+        "robin",
+        "robinson"
+      ],
+      "completions": [
+        "robinson"
+      ]
+    },
+    {
+      "name": "no more than a handful",
+      "partial": "us",
+      "people": [
+        "user1",
+        "user2",
+        "user3",
+        "user4",
+        "user5",
+        "user6",
+        "user7",
+        "user8",
+        "user9",
+        "user10",
+        "user11"
+      ],
+      "completions": [
+        "user1",
+        "user10",
+        "user11",
+        "user2",
+        "user3",
+        "user4"
+      ]
+    },
+    {
+      "name": "nobody matches",
+      "partial": "zz",
+      "people": [
+        "robin"
+      ],
+      "completions": []
+    }
+  ],
+  "$suffix": "What goes after the completed word. A colon addresses a person; a command or a channel never takes one.",
+  "suffix": [
+    {
+      "name": "a nick at the start of a line addresses them",
+      "draft": "ro",
+      "completion": "robin",
+      "result": "robin: "
+    },
+    {
+      "name": "a nick mid-sentence is a mention",
+      "draft": "ask ro",
+      "completion": "robin",
+      "result": "ask robin "
+    },
+    {
+      "name": "a channel at the start is not somebody to address",
+      "draft": "#sw",
+      "completion": "#switchboard",
+      "result": "#switchboard "
+    },
+    {
+      "name": "nor is a command",
+      "draft": "/jo",
+      "completion": "/join",
+      "result": "/join "
+    },
+    {
+      "name": "a channel mid-sentence",
+      "draft": "see #sw",
+      "completion": "#switchboard",
+      "result": "see #switchboard "
+    },
+    {
+      "name": "the rest of the line is kept",
+      "draft": "hello there ro",
+      "completion": "robin",
+      "result": "hello there robin "
+    }
+  ]
+}

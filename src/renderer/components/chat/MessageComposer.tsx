@@ -4,6 +4,7 @@ import type { ChannelUser } from '@shared/types/channel'
 import { IRC_COMMANDS, TYPING_THROTTLE_MS } from '@shared/constants'
 import { GifPicker } from './GifPicker'
 import { useServerStore } from '../../stores/serverStore'
+import { completionSuffix } from '@shared/completion'
 
 /** Composer grows with its content up to this height, then scrolls */
 const MAX_COMPOSER_HEIGHT = 320
@@ -178,9 +179,7 @@ export function MessageComposer({
         const completion = cs.candidates[cs.index]
         const before = text.slice(0, cs.start)
         const after = text.slice(input.selectionStart || text.length)
-        const suffix = cs.start === 0 && !completion.startsWith('/') && !completion.startsWith('#')
-          ? ': '
-          : ' '
+        const suffix = completionSuffix(cs.start === 0, completion)
         const newText = before + completion + suffix + after.trimStart()
         setText(newText)
         return
@@ -228,9 +227,7 @@ export function MessageComposer({
       const completion = candidates[0]
       const before = text.slice(0, wordStart)
       const after = text.slice(cursorPos)
-      const suffix = wordStart === 0 && !completion.startsWith('/') && !completion.startsWith('#')
-        ? ': '
-        : ' '
+      const suffix = completionSuffix(wordStart === 0, completion)
       setText(before + completion + suffix + after.trimStart())
     },
     [text, users, channels]

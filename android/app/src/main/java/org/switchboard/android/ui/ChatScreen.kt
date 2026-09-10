@@ -65,6 +65,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.LaunchedEffect
+import org.switchboard.android.irc.Completion
 import org.switchboard.android.EngineMode
 import org.switchboard.android.Message
 import org.switchboard.android.SwitchboardStore
@@ -986,13 +987,8 @@ private fun Composer(
  * characters before offering anything, so the row does not appear over the
  * whole roster the moment somebody types a letter.
  */
-internal fun completionsFor(partial: String, people: List<String>): List<String> {
-    if (partial.length < 2) return emptyList()
-    return people
-        .filter { it.startsWith(partial, ignoreCase = true) && !it.equals(partial, true) }
-        .sortedBy { it.lowercase() }
-        .take(6)
-}
+internal fun completionsFor(partial: String, people: List<String>): List<String> =
+    Completion.matching(partial, people)
 
 /**
  * The draft with the half-typed name finished.
@@ -1001,8 +997,5 @@ internal fun completionsFor(partial: String, people: List<String>): List<String>
  * every IRC client follows, and what makes the highlight land on the right
  * person rather than reading as a passing mention.
  */
-internal fun completedDraft(draft: String, nick: String): String {
-    val partial = draft.substringAfterLast(' ')
-    val head = draft.dropLast(partial.length)
-    return head + nick + if (head.isEmpty()) ": " else " "
-}
+internal fun completedDraft(draft: String, nick: String): String =
+    Completion.complete(draft, nick)
