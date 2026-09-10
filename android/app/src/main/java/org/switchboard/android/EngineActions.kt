@@ -16,6 +16,7 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
+import org.switchboard.android.irc.Commands
 import org.switchboard.android.irc.ServerConfig
 import java.time.Instant
 
@@ -33,8 +34,24 @@ import java.time.Instant
 
 // ── saying things ────────────────────────────────────────────────────
 
+/**
+ * Send what was typed, or run it.
+ *
+ * Following the desktop this goes to `message:send`, which runs `commands.ts`
+ * on the far side. Holding the connection there is nobody to run them but us —
+ * and until this called [Commands], `/msg NickServ IDENTIFY hunter2` was
+ * delivered to the channel as a public message.
+ */
 fun SwitchboardEngine.say(serverId: String, target: String, text: String) =
-    act(serverId, "message:send", JsonPrimitive(target), JsonPrimitive(text)) { it.say(target, text) }
+    act(serverId, "message:send", JsonPrimitive(target), JsonPrimitive(text)) { connection ->
+        val command = Commands.run(connection, target, text)
+        when {
+            !command.handled -> connection.say(target, command.message ?: text)
+            // No subject: the message already names the command, and the
+            // banner would otherwise read "Unknown command: /x — /x".
+            command.error != null -> store.noteRefusal(command.error)
+        }
+    }
 
 fun SwitchboardEngine.reply(serverId: String, target: String, messageId: String, text: String) =
     act(
@@ -244,6 +261,132 @@ private fun SwitchboardEngine.rememberProfileKey(
 fun SwitchboardEngine.savedProfile(): Map<String, String> = vault.defaultProfile()
 
 // ── accounts ─────────────────────────────────────────────────────────
+
+/**
+ * How this network does accounts.
+ *
+ * IRC has two answers and they need different screens. A modern server
+ * advertises `draft/account-registration` and the whole thing can happen in the
+ * client. Everywhere else there is a bot called NickServ that you talk to in
+ * English, and the client's job is to know the phrases and save the password.
+ */
+data class AccountAbilities(
+    /** The server will create an account for us over the protocol */
+    val canRegister: Boolean,
+    /** It insists on an email address it can send a code to */
+    val emailRequired: Boolean,
+    /** Shortest password it will take, when it said */
+    val minPasswordLength: Int?,
+    /** It will let us register before we are even on the network */
+    val beforeConnect: Boolean,
+    /** SASL mechanisms it offers, so a saved password can be used at connect */
+    val saslMechanisms: List<String>
+)
+
+/**
+ * Read the capability values, which is where all of this is stated.
+ *
+ * `draft/account-registration=before-connect,email-required,min-password-length=10`
+ * and `sasl=PLAIN,SCRAM-SHA-256`. Nothing here is guessed: a client that offers
+ * to register on a network that will not is offering a dead end.
+ */
+fun SwitchboardEngine.accountAbilities(serverId: String): AccountAbilities {
+    // Our own connection knows first-hand; following a desktop, the snapshot
+    // carried them across.
+    val available = connections[serverId]?.state?.available
+        ?: store.capabilityValues[serverId]
+        ?: emptyMap()
+    val registration = available["draft/account-registration"]
+
+    val values = registration?.split(",")?.map { it.trim() }.orEmpty()
+    val minimum = values.firstOrNull { it.startsWith("min-password-length=") }
+        ?.substringAfter('=')?.toIntOrNull()
+
+    return AccountAbilities(
+        canRegister = registration != null,
+        emailRequired = values.contains("email-required"),
+        minPasswordLength = minimum,
+        beforeConnect = values.contains("before-connect"),
+        saslMechanisms = available["sasl"]?.split(",")?.map { it.trim().uppercase() }
+            ?.filter { it.isNotEmpty() }
+            .orEmpty()
+    )
+}
+
+/**
+ * Whether this network already logs us in without being asked.
+ *
+ * Either SASL credentials or an identify command counts: both mean the next
+ * connection arrives as this account on its own, which is the only thing the
+ * question is really about.
+ */
+fun SwitchboardEngine.logsInAutomatically(serverId: String): Boolean {
+    val server = vaultServers().find { it.id == serverId } ?: return false
+    return !server.saslPassword.isNullOrBlank() || !server.identifyCommand.isNullOrBlank()
+}
+
+/**
+ * Log in the way networks without account registration expect.
+ *
+ * This is a plain message to a bot, and that is all it has ever been. What
+ * makes it worth a function is what happens around it: the same line is saved
+ * as the network's identify command, so the next connection does it without
+ * being asked, which is the actual thing people want when they ask for
+ * "friendly NickServ support".
+ */
+suspend fun SwitchboardEngine.identifyWithServices(
+    serverId: String,
+    account: String,
+    password: String,
+    remember: Boolean = true
+) {
+    val command = "PRIVMSG NickServ :IDENTIFY $account $password"
+    if (remember) {
+        vaultServers().find { it.id == serverId }?.let { server ->
+            updateServer(serverId, server.copy(identifyCommand = command))
+        }
+    }
+    act(serverId, "message:send", JsonPrimitive("NickServ"), JsonPrimitive("IDENTIFY $account $password")) {
+        it.say("NickServ", "IDENTIFY $account $password")
+    }
+}
+
+/**
+ * Remember an account so the next connection logs in by itself.
+ *
+ * SASL rather than an identify command wherever the network offers it: it
+ * happens before registration completes, so nothing is ever said or joined
+ * under the wrong identity, and there is no window where the nick is
+ * unprotected.
+ */
+suspend fun SwitchboardEngine.rememberAccount(
+    serverId: String,
+    account: String,
+    password: String
+) {
+    val server = vaultServers().find { it.id == serverId } ?: return
+    val mechanisms = accountAbilities(serverId).saslMechanisms
+
+    val mechanism = when {
+        mechanisms.contains("SCRAM-SHA-256") -> "SCRAM-SHA-256"
+        mechanisms.contains("PLAIN") -> "PLAIN"
+        else -> null
+    }
+
+    if (mechanism == null) {
+        identifyWithServices(serverId, account, password)
+        return
+    }
+
+    updateServer(
+        serverId,
+        server.copy(
+            saslMechanism = mechanism,
+            saslUsername = account,
+            saslPassword = password
+        )
+    )
+}
 
 /** draft/account-registration — ask this network for an account */
 fun SwitchboardEngine.registerAccount(serverId: String, email: String?, password: String) =
@@ -574,6 +717,44 @@ private const val SEARCH_TIMEOUT_MS = 10_000L
 private const val HISTORY_PAGE = 50
 
 /** Seal a new server list and offer it to whoever else holds the vault */
+/**
+ * Remember, in the shared config, that we are in this channel.
+ *
+ * "Join on connect" should not be a list someone maintains by hand. Joining a
+ * channel is the act of saying you want to be in it, and IRC gives no other
+ * signal — so the join *is* the setting, and leaving is how you unset it.
+ *
+ * It goes in the vault rather than in a local list because both clients read
+ * their channels from there: join `#help` on the phone in the morning and the
+ * desktop is in it that evening, which is the whole reason the config is
+ * shared. The write is skipped when nothing changed, so a reconnect that
+ * rejoins twelve channels does not seal twelve new versions of the config.
+ */
+internal fun SwitchboardEngine.rememberJoin(serverId: String, channel: String) {
+    if (!vault.isUnlocked) return
+    val servers = vault.servers()
+    val server = servers.find { it.id == serverId } ?: return
+    if (server.autoJoin.any { it.equals(channel, ignoreCase = true) }) return
+
+    resealWith(servers.map {
+        if (it.id == serverId) it.copy(autoJoin = it.autoJoin + channel) else it
+    })
+}
+
+/** And that we are not, so the next connection does not walk back in */
+internal fun SwitchboardEngine.forgetJoin(serverId: String, channel: String) {
+    if (!vault.isUnlocked) return
+    val servers = vault.servers()
+    val server = servers.find { it.id == serverId } ?: return
+    if (server.autoJoin.none { it.equals(channel, ignoreCase = true) }) return
+
+    resealWith(servers.map {
+        if (it.id == serverId) {
+            it.copy(autoJoin = it.autoJoin.filterNot { name -> name.equals(channel, true) })
+        } else it
+    })
+}
+
 private fun SwitchboardEngine.resealWith(servers: List<ServerConfig>) {
     vault.reseal(servers, deviceName = "phone") ?: return
     noteVaultChanged()

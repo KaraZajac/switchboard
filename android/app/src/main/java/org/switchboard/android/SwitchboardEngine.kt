@@ -235,6 +235,7 @@ class SwitchboardEngine(
 
         val conversationKey = "$serverId:${channel.lowercase()}"
         if (isForeground && conversationKey == store.conversationKey()) return
+        if (isMuted(serverId, channel)) return
 
         // A direct message is always for you; in a channel, your name has to
         // come up as a word rather than as part of a longer one.
@@ -250,6 +251,33 @@ class SwitchboardEngine(
             colour = notificationColour(serverId, nick),
             mentioned = mentioned
         )
+    }
+
+    /**
+     * Keep the shared config's join-on-connect list matching where we actually
+     * are.
+     *
+     * Only for our own connection: while the desktop holds them, the joins and
+     * parts on screen are its business to record, and both devices writing the
+     * same change would trade vault versions over nothing.
+     *
+     * A kick is left alone deliberately. Being thrown out of a channel is not a
+     * decision to stop being in it, and a client that quietly removed it would
+     * make the ban permanent on the user's behalf.
+     */
+    private fun rememberMembership(channel: String, data: JsonElement) {
+        val payload = data as? JsonObject ?: return
+        if (payload["isMe"]?.jsonPrimitive?.booleanOrNull != true) return
+
+        val serverId = payload["serverId"]?.jsonPrimitive?.contentOrNull() ?: return
+        val name = payload["channel"]?.jsonPrimitive?.contentOrNull() ?: return
+        // Only rooms: a private message is not somewhere you can be rejoined to.
+        if (!isChannel(name)) return
+
+        when (channel) {
+            "irc:join" -> rememberJoin(serverId, name)
+            "irc:part" -> forgetJoin(serverId, name)
+        }
     }
 
     /** Your nick as a whole word, so "karaoke" is not you */
@@ -281,6 +309,16 @@ class SwitchboardEngine(
 
     /** Dialling out to take over, but not connected yet */
     var isTakingOver by mutableStateOf(false)
+        private set
+
+    /**
+     * Whether a desktop is part of this at all.
+     *
+     * Half the things the UI says read completely differently depending on it,
+     * and for a phone used on its own the answer is no — which used to be the
+     * case none of those sentences were written for.
+     */
+    var pairedWithDesktop by mutableStateOf(false)
         private set
 
     /** Whether Doze is currently holding this phone back, for the UI to say so */
@@ -405,6 +443,8 @@ class SwitchboardEngine(
                     applyTheme(shared)
                 }
             }
+
+        (vault.setting(MUTES_KEY) as? JsonObject)?.let { mutes = Mutes.fromJson(it) }
 
         for (server in vault.servers()) {
             val watched = vault.watched(server.id)
@@ -536,6 +576,49 @@ class SwitchboardEngine(
         applyTheme(shared)
     }
 
+    // ── quiet, please ─────────────────────────────────────────────────
+
+    /**
+     * What is muted, in the shape the desktop writes it.
+     *
+     * `{ servers: { id: until }, channels: { "id:#chan": until } }`, where the
+     * timestamp is when the mute lapses and `0` means until someone unmutes it.
+     * The phone only ever writes `0` — a timed mute wants a duration picker,
+     * and the desktop has one — but it honours an expiry the desktop set, so
+     * "mute for an hour" over there goes quiet here too.
+     */
+    var mutes by mutableStateOf(Mutes())
+        private set
+
+    /** True when this conversation should not light the phone up */
+    fun isMuted(serverId: String, channel: String? = null): Boolean {
+        if (mutes.serverMuted(serverId)) return true
+        return channel != null && mutes.channelMuted(serverId, channel)
+    }
+
+    fun toggleServerMute(serverId: String) {
+        applyMutes(mutes.toggleServer(serverId))
+    }
+
+    fun toggleChannelMute(serverId: String, channel: String) {
+        applyMutes(mutes.toggleChannel(serverId, channel))
+    }
+
+    /**
+     * Hold it, seal it, and tell the desktop.
+     *
+     * The vault write is what makes this survive a restart on a phone with no
+     * desktop; the `settings:set` is what makes a mute show up over there
+     * before the next vault exchange. Neither one is enough alone.
+     */
+    private fun applyMutes(next: Mutes) {
+        mutes = next
+        val encoded = next.toJson()
+        vault.setSharedSetting(MUTES_KEY, encoded)
+        vaultVersion = vault.version
+        scope.launch { ask("settings:set", JsonPrimitive(MUTES_KEY), encoded) }
+    }
+
     // ── becoming, and un-becoming, the connection ─────────────────────
 
     /**
@@ -568,6 +651,14 @@ class SwitchboardEngine(
         seedServer(config)
         val connection = IrcConnection(config, scope) { channel, data ->
             store.handleEvent(channel, data)
+            rememberMembership(channel, data)
+
+            // Registering is the moment this phone stops dialling and starts
+            // being the connection, and nothing else was watching for it: the
+            // mode was worked out when the socket opened and never again, so a
+            // phone that had been in two channels for ten minutes went on
+            // saying "Connecting…" until something unrelated recomputed it.
+            if (channel == "irc:connected" || channel == "irc:disconnected") recomputeMode()
         }
         connections[config.id] = connection
         connection.start()
@@ -655,7 +746,7 @@ class SwitchboardEngine(
         // follows reads completely differently depending on it, and for a
         // phone used on its own the answer is no — which used to be the case
         // none of these messages were written for.
-        val pairedWithDesktop = hasPairedDesktop() || remote.isLinked
+        pairedWithDesktop = hasPairedDesktop() || remote.isLinked
 
         isTakingOver = dialling
         // A config that arrived from a desktop and has not been opened. A
@@ -866,6 +957,76 @@ class SwitchboardEngine(
 
         /** There is exactly one desktop on this link, so it needs only one name */
         const val DESKTOP_PEER = "desktop"
+
+        /** The shared setting both clients keep mutes in */
+        const val MUTES_KEY = "mutes"
+    }
+}
+
+/**
+ * Muted servers and channels, as both clients store them.
+ *
+ * A value is the moment the mute lapses, in epoch milliseconds, with `0`
+ * meaning "until unmuted" — the desktop's `mutePersistence.ts` shape, kept
+ * byte-for-byte so a mute set on either device means the same thing on the
+ * other. Channel keys are `serverId:channel`, lowercased, because IRC channel
+ * names are case-insensitive and nobody types them consistently.
+ */
+data class Mutes(
+    val servers: Map<String, Long> = emptyMap(),
+    val channels: Map<String, Long> = emptyMap()
+) {
+    fun serverMuted(serverId: String, now: Long = System.currentTimeMillis()): Boolean =
+        active(servers[serverId], now)
+
+    fun channelMuted(
+        serverId: String,
+        channel: String,
+        now: Long = System.currentTimeMillis()
+    ): Boolean = active(channels[key(serverId, channel)], now)
+
+    fun toggleServer(serverId: String): Mutes =
+        copy(servers = servers.toMutableMap().also {
+            if (serverMuted(serverId)) it.remove(serverId) else it[serverId] = 0L
+        })
+
+    fun toggleChannel(serverId: String, channel: String): Mutes =
+        copy(channels = channels.toMutableMap().also {
+            val at = key(serverId, channel)
+            if (channelMuted(serverId, channel)) it.remove(at) else it[at] = 0L
+        })
+
+    fun toJson(): JsonObject = buildJsonObject {
+        put("servers", JsonObject(servers.mapValues { JsonPrimitive(it.value) }))
+        put("channels", JsonObject(channels.mapValues { JsonPrimitive(it.value) }))
+    }
+
+    private fun active(until: Long?, now: Long): Boolean =
+        until != null && (until == 0L || until > now)
+
+    companion object {
+        fun key(serverId: String, channel: String): String = "$serverId:${channel.lowercase()}"
+
+        fun fromJson(json: JsonObject): Mutes = Mutes(
+            servers = longs(json["servers"]),
+            channels = longs(json["channels"])
+        )
+
+        /**
+         * The desktop writes numbers; be forgiving about how they arrive.
+         *
+         * A JSON number that has been through a round of `JSON.stringify` on a
+         * timestamp is an integer, but a hand-edited config or an older write
+         * could hold a string, and dropping the whole mute map because one
+         * value is quoted would un-mute everything silently.
+         */
+        private fun longs(element: JsonElement?): Map<String, Long> =
+            (element as? JsonObject)
+                ?.mapNotNull { (key, value) ->
+                    (value as? JsonPrimitive)?.content?.toLongOrNull()?.let { key to it }
+                }
+                ?.toMap()
+                .orEmpty()
     }
 }
 

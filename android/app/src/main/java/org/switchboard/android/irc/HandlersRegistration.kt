@@ -130,10 +130,25 @@ internal fun registerCapabilityHandlers() {
     }
 
     // RPL_LOGGEDIN / RPL_LOGGEDOUT
+    // Logged in, and logged out. Both were recorded and neither was announced,
+    // so nothing above the connection could say whose account this was — which
+    // is the one fact an account screen is for.
     Handlers.on("900") { session, message ->
         session.state.account = message.param(2)
+        session.emit("irc:account", buildJsonObject {
+            put("serverId", session.state.serverId)
+            put("nick", session.state.nick)
+            put("account", session.state.account)
+        })
     }
-    Handlers.on("901") { session, _ -> session.state.account = null }
+    Handlers.on("901") { session, _ ->
+        session.state.account = null
+        session.emit("irc:account", buildJsonObject {
+            put("serverId", session.state.serverId)
+            put("nick", session.state.nick)
+            put("account", null as String?)
+        })
+    }
 
     // SASL succeeded
     Handlers.on("903") { session, _ ->
@@ -220,6 +235,7 @@ internal fun registerRegistrationHandlers() {
         session.emit("irc:connected", buildJsonObject {
             put("serverId", state.serverId)
             put("nick", state.nick)
+            put("account", state.account)
         })
         session.emit("irc:cap", buildJsonObject {
             put("serverId", state.serverId)
@@ -441,8 +457,12 @@ internal object Sasl {
     fun finish(session: IrcSession, succeeded: Boolean, reason: String?) {
         scram.remove(session.state.serverId)
         if (!succeeded) {
+            // Named, not anonymous: a login that failed is not one refusal
+            // among many. It leaves the user on their own network as a
+            // stranger, and nothing else on screen would say why.
             session.emit("irc:error", buildJsonObject {
                 put("serverId", session.state.serverId)
+                put("command", "SASL")
                 put("message", reason ?: "SASL authentication failed")
             })
         }

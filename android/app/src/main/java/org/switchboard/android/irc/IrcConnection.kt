@@ -37,7 +37,7 @@ class IrcConnection(
     initialConfig: ServerConfig,
     private val scope: CoroutineScope,
     private val emitEvent: (channel: String, data: JsonElement) -> Unit
-) : IrcSession {
+) : IrcSession, IrcCommandTarget {
 
     /**
      * The settings this connection dials with.
@@ -84,7 +84,7 @@ class IrcConnection(
         writeJob = scope.launch(Dispatchers.IO) { drainOutbound() }
     }
 
-    fun stop(quitMessage: String = "Switchboard") {
+    override fun stop(quitMessage: String) {
         stopping = true
         // Whatever is queued is for a conversation we are leaving, and holding
         // QUIT behind it would only delay a clean goodbye.
@@ -288,7 +288,7 @@ class IrcConnection(
 
     // ── what the engine above asks for ────────────────────────────────
 
-    fun say(target: String, text: String) {
+    override fun say(target: String, text: String) {
         // A line too long for the wire is refused outright — `417 :Input line
         // was too long`, nothing delivered — so every line is cut to fit before
         // anything else decides how to send it. `continued` marks the pieces
@@ -338,26 +338,61 @@ class IrcConnection(
 
         // Without echo-message the server never tells us what we just said, so
         // the message has to appear locally or the user watches it vanish.
-        if (!state.capabilities.contains("echo-message")) {
-            emit("irc:message", buildJsonObject {
-                put("serverId", config.id)
-                put("channel", target)
-                put("message", buildJsonObject {
-                    put("id", "${config.id}-${System.currentTimeMillis()}-${++multilineCounter}")
-                    put("nick", state.nick)
-                    put("content", text)
-                    put("timestamp", java.time.Instant.now().toString())
-                    put("type", "privmsg")
-                })
-            })
-        }
+        if (!state.capabilities.contains("echo-message")) echoLocally(target, text, "privmsg")
     }
 
-    fun join(channel: String) = send("JOIN", channel)
-    fun part(channel: String) = send("PART", channel)
-    fun setTopic(channel: String, topic: String) = send("TOPIC", channel, topic)
+    /** Put our own message on screen, for a server that will not send it back */
+    private fun echoLocally(target: String, text: String, type: String) {
+        emit("irc:message", buildJsonObject {
+            put("serverId", config.id)
+            put("channel", target)
+            put("message", buildJsonObject {
+                put("id", "${config.id}-${System.currentTimeMillis()}-${++multilineCounter}")
+                put("nick", state.nick)
+                put("content", text)
+                put("timestamp", java.time.Instant.now().toString())
+                put("type", type)
+            })
+        })
+    }
 
-    fun setNick(nick: String) {
+    override fun join(channel: String, key: String?) =
+        if (key.isNullOrBlank()) send("JOIN", channel) else send("JOIN", channel, key)
+
+    override fun part(channel: String, reason: String?) =
+        if (reason.isNullOrBlank()) send("PART", channel) else send("PART", channel, reason)
+
+    override fun setTopic(channel: String, topic: String) = send("TOPIC", channel, topic)
+
+    /**
+     * A CTCP ACTION — what `/me` sends.
+     *
+     * The wrapper costs bytes too, so it comes out of the budget before the
+     * text is cut: an action long enough to be refused is refused as completely
+     * as anything else.
+     */
+    override fun action(target: String, text: String) {
+        val wrapper = "\u0001ACTION \u0001".length
+        val budget =
+            LineLength.budget(state.nick, state.userHost, state.isupport, "PRIVMSG", target) - wrapper
+
+        for (piece in LineLength.split(text, budget)) {
+            send("PRIVMSG", target, "\u0001ACTION $piece\u0001")
+        }
+
+        if (!state.capabilities.contains("echo-message")) echoLocally(target, text, "action")
+    }
+
+    /** A notice, which by convention is not answered automatically */
+    override fun notice(target: String, text: String) {
+        val budget =
+            LineLength.budget(state.nick, state.userHost, state.isupport, "NOTICE", target)
+        for (piece in LineLength.split(text, budget)) send("NOTICE", target, piece)
+
+        if (!state.capabilities.contains("echo-message")) echoLocally(target, text, "notice")
+    }
+
+    override fun setNick(nick: String) {
         state.desiredNick = nick
         state.pendingNick = nick
         send("NICK", nick)
@@ -373,9 +408,9 @@ class IrcConnection(
         else send("METADATA", "*", "SET", key, value)
     }
 
-    fun whois(nick: String) = send("WHOIS", nick)
+    override fun whois(nick: String) = send("WHOIS", nick)
 
-    fun setAway(message: String?) {
+    override fun setAway(message: String?) {
         if (message.isNullOrBlank()) send("AWAY") else send("AWAY", message)
     }
 
@@ -425,12 +460,12 @@ class IrcConnection(
         sendRaw("@+draft/edit=$messageId " + Irc.serialise("PRIVMSG", listOf(target, text)))
     }
 
-    fun kick(channel: String, nick: String, reason: String?) {
+    override fun kick(channel: String, nick: String, reason: String?) {
         if (reason.isNullOrBlank()) send("KICK", channel, nick)
         else send("KICK", channel, nick, reason)
     }
 
-    fun invite(nick: String, channel: String) = send("INVITE", nick, channel)
+    override fun invite(nick: String, channel: String) = send("INVITE", nick, channel)
 
     /** draft/account-registration — ask for an account */
     fun registerAccount(email: String?, password: String) {
@@ -449,7 +484,7 @@ class IrcConnection(
         send("VERIFY", account, code)
     }
 
-    fun setMode(target: String, mode: String, vararg args: String) =
+    override fun setMode(target: String, mode: String, vararg args: String) =
         send("MODE", target, mode, *args)
 
     /** Browse the network. The answer arrives as 322s, then a 323. */

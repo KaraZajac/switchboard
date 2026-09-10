@@ -9,9 +9,10 @@ import { IRCClient } from './client'
 import { storeMessage, deleteMessage, editStoredMessage } from '../storage/models/message'
 import { setReaction } from '../storage/models/reaction'
 import { getMonitorList } from '../storage/models/monitor'
-import { getAllServers } from '../storage/models/server'
+import { getAllServers, getServer, updateServer } from '../storage/models/server'
 import { getJoinedChannels, markChannelJoined, markChannelParted } from '../storage/models/channel'
 import { subscribeToMetadata, metadataValueFits } from './features/metadata'
+import { serversChanged } from '../ipc/notify'
 import type { UserMetadata } from '@shared/types/metadata'
 import { v4 as uuid } from 'uuid'
 
@@ -52,6 +53,44 @@ export class IRCManager {
     this.clients.set(config.id, client)
     this.bindClientEvents(config.id, client)
     client.connect()
+  }
+
+  /**
+   * Remember, in the server's config, that we are in this channel.
+   *
+   * `markChannelJoined` already keeps a local list, but local is the problem:
+   * the phone reads its channels out of the shared vault and never sees that
+   * table, so a channel joined here was one the phone did not rejoin. The
+   * config is what both clients read, so the config is where it belongs.
+   *
+   * Skipped when it is already listed, so reconnecting to a server with twelve
+   * auto-join channels does not write the config twelve times.
+   */
+  private rememberJoin(serverId: string, channel: string): void {
+    const config = getServer(serverId)
+    if (!config) return
+    if (config.autoJoin.some((name) => foldCase(name) === foldCase(channel))) return
+
+    updateServer(serverId, { autoJoin: [...config.autoJoin, channel] })
+    serversChanged()
+  }
+
+  /**
+   * And that we are not.
+   *
+   * Parting is how someone says they are done with a channel; there is no other
+   * signal. A kick is not one — being thrown out is not a decision to leave,
+   * and quietly un-listing the channel would make somebody else's ban stick.
+   */
+  private forgetJoin(serverId: string, channel: string): void {
+    const config = getServer(serverId)
+    if (!config) return
+    if (!config.autoJoin.some((name) => foldCase(name) === foldCase(channel))) return
+
+    updateServer(serverId, {
+      autoJoin: config.autoJoin.filter((name) => foldCase(name) !== foldCase(channel))
+    })
+    serversChanged()
   }
 
   /**
@@ -173,6 +212,9 @@ export class IRCManager {
         serverId,
         nick: client.state.nick,
         capabilities: Array.from(client.state.capabilities),
+        capabilityValues: Object.fromEntries(
+          Array.from(client.state.availableCapabilities).map(([name, value]) => [name, value ?? ''])
+        ),
         metadata: Object.fromEntries(client.state.metadata),
         channels: Array.from(client.state.channels.values()).map((channel) => ({
           name: channel.name,
@@ -303,17 +345,20 @@ export class IRCManager {
     client.events.on('join', (data) => {
       if (data.isMe) {
         markChannelJoined(serverId, data.channel)
+        this.rememberJoin(serverId, data.channel)
       }
       this.send('irc:join', {
         serverId,
         channel: data.channel,
-        user: data.user
+        user: data.user,
+        isMe: data.isMe
       })
     })
 
     client.events.on('part', (data) => {
       if (data.isMe) {
         markChannelParted(serverId, data.channel)
+        this.forgetJoin(serverId, data.channel)
       }
       this.send('irc:part', {
         serverId,
@@ -477,7 +522,7 @@ export class IRCManager {
     })
 
     client.events.on('accountVerified', (data) => {
-      this.send('irc:verify', { serverId, ...data })
+      this.send('irc:verify', { serverId, status: 'SUCCESS', ...data })
     })
 
     client.events.on('away', (data) => {
@@ -496,10 +541,15 @@ export class IRCManager {
       this.send('irc:metadata', { serverId, ...data })
     })
 
-    // Account registration
-    client.events.on('accountRegistered', (data: { account: string; message: string }) => {
-      this.send('irc:account-registered', { serverId, ...data })
-    })
+    // Account registration. `status` rides along because "registered" and
+    // "registered, now send the code from your email" are different outcomes,
+    // and a client shown only the first stops halfway through.
+    client.events.on(
+      'accountRegistered',
+      (data: { status: string; account: string; message: string }) => {
+        this.send('irc:account-registered', { serverId, ...data })
+      }
+    )
 
     // Channel rename
     client.events.on('channelRename', (data: { oldName: string; newName: string; reason: string | null }) => {

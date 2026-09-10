@@ -17,6 +17,7 @@ import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import org.switchboard.android.irc.Services
 
 /**
  * The phone's copy of what the desktop knows.
@@ -31,7 +32,17 @@ data class Server(
     val name: String,
     val host: String,
     var nick: String = "",
-    var connected: Boolean = false
+    var connected: Boolean = false,
+    /**
+     * The account we are logged in to on this network, if any.
+     *
+     * Not the same as the nick, and the difference is the whole of how IRC
+     * identity works: the nick is what you are called right now, the account is
+     * what the network agrees you own. A client that never shows this cannot
+     * answer "am I actually logged in?", which is the question behind most of
+     * what people ask NickServ.
+     */
+    var account: String? = null
 )
 
 data class Channel(
@@ -72,6 +83,25 @@ data class Member(
 
 /** Something the server declined to do, in words worth showing */
 data class ServerRefusal(val text: String, val subject: String?, val at: Long)
+
+/** A network wanting us to log in, in its own words where it gave any */
+data class IdentifyPrompt(val serverId: String, val text: String)
+
+/**
+ * The network's answer to REGISTER or VERIFY.
+ *
+ * [status] is the protocol word — `SUCCESS`, `VERIFICATION_REQUIRED`, or the
+ * `FAIL` code — and [text] is the sentence a person should read. Both are kept
+ * because the screen acts on the first and shows the second.
+ */
+data class AccountReply(
+    val serverId: String,
+    val status: String,
+    val account: String?,
+    val text: String?,
+    val failed: Boolean,
+    val at: Long = System.currentTimeMillis()
+)
 
 /** IRCv3 draft/metadata-2 keys we render */
 data class UserMetadata(
@@ -124,6 +154,44 @@ class SwitchboardStore {
         private set
 
     fun clearError() { lastError = null }
+
+    /**
+     * A network wanting something done about our account, and what.
+     *
+     * Two things land here and both are easy to miss. NickServ's notice arrives
+     * as a message from a stranger, in a conversation nobody was looking at. A
+     * SASL failure arrives during connection, as one refusal among the others,
+     * and then the user simply spends the evening as a stranger on their own
+     * network. Held here so the conversation can say so and offer the way in.
+     */
+    var identifyPrompt by mutableStateOf<IdentifyPrompt?>(null)
+
+    fun clearIdentifyPrompt() { identifyPrompt = null }
+
+    /** The network refused the account we had saved for it */
+    fun noteLoginFailed(serverId: String, reason: String?) {
+        identifyPrompt = IdentifyPrompt(
+            serverId,
+            reason?.takeIf { it.isNotBlank() } ?: "Logging in to this network failed"
+        )
+    }
+
+    /**
+     * What the network said about registering an account, when it last said
+     * anything.
+     *
+     * The screen that asked is waiting on this: REGISTER and VERIFY are answered
+     * asynchronously, and a "creating your account…" spinner with nothing on the
+     * other end is worse than no spinner at all.
+     */
+    var accountReply by mutableStateOf<AccountReply?>(null)
+
+    fun clearAccountReply() { accountReply = null }
+
+    /** Something we refused ourselves — a bad command, a topic the server would cut */
+    fun noteRefusal(text: String, subject: String? = null) {
+        lastError = ServerRefusal(text, subject, System.currentTimeMillis())
+    }
 
     /**
      * Where we had read up to when a conversation was opened.
@@ -217,6 +285,14 @@ class SwitchboardStore {
     // ── Building from the desktop's snapshot ──────────────────────────
 
     /** Apply `app:renderer-ready`: every connected server and what it is in. */
+    /**
+     * Capabilities the network offered, and their values, per server.
+     *
+     * Filled from the desktop's snapshot while following, and from our own
+     * connection while holding, so a screen reads one place either way.
+     */
+    val capabilityValues = mutableStateMapOf<String, Map<String, String>>()
+
     fun applySnapshot(snapshot: JsonElement, serverList: JsonElement) {
         serverList.jsonArray.forEach { entry ->
             val server = entry.jsonObject
@@ -233,6 +309,16 @@ class SwitchboardStore {
             val live = entry.jsonObject
             val id = live["serverId"]?.str() ?: return@forEach
             servers[id]?.let { servers[id] = it.copy(connected = true, nick = live["nick"]?.str() ?: it.nick) }
+
+            // What the network offered, and what each offer said about itself.
+            // Following a desktop this is the only way to know: there is no
+            // connection here to ask, and a screen that guesses offers forms
+            // the network will refuse.
+            live["capabilityValues"]?.jsonObject?.let { values ->
+                capabilityValues[id] = values.mapValues { (_, value) ->
+                    (value as? JsonPrimitive)?.contentOrNull.orEmpty()
+                }
+            }
 
             val list = mutableListOf<Channel>()
             live["channels"]?.jsonArray?.forEach { channelEntry ->
@@ -280,7 +366,8 @@ class SwitchboardStore {
             "irc:connected" -> {
                 servers[serverId] = (servers[serverId] ?: return).copy(
                     connected = true,
-                    nick = data["nick"]?.str() ?: ""
+                    nick = data["nick"]?.str() ?: "",
+                    account = data["account"]?.str()
                 )
                 // Nothing was selected because nothing was connected the last
                 // time we looked — which is what pairing before the desktop
@@ -391,6 +478,22 @@ class SwitchboardStore {
                     if (who.remove(message.nick) != null) typing[conversation] = LinkedHashMap(who)
                 }
 
+                // NickServ, asking us to log in. Historical lines are replayed
+                // history: a prompt from an hour ago is not a prompt.
+                val historical = data["message"]?.jsonObject
+                    ?.get("historical")?.jsonPrimitive?.booleanOrNull == true
+                if (Services.isServices(message.nick) && !historical) {
+                    when {
+                        Services.confirmsIdentification(message.content) -> identifyPrompt = null
+                        Services.asksForIdentification(message.content) &&
+                            servers[serverId]?.account == null ->
+                            identifyPrompt = IdentifyPrompt(
+                                serverId,
+                                "This nick is registered — log in to use it"
+                            )
+                    }
+                }
+
                 // Unread, unless this is the conversation on screen
                 if (conversation != conversationKey()) {
                     val myNick = servers[serverId]?.nick ?: ""
@@ -421,10 +524,32 @@ class SwitchboardStore {
             }
 
             "irc:setname", "irc:account" -> {
-                // Nothing rendered hangs off these yet, but they arrive for the
-                // same person the roster already knows, so keep it current
                 val nick = data["nick"]?.str() ?: return
+
+                // Our own login state, which the account screen is built on.
+                // Everyone else's is on the roster entry the line below keeps.
+                val server = servers[serverId]
+                if (server != null && nick.equals(server.nick, ignoreCase = true)) {
+                    val account = data["account"]?.str()
+                    servers[serverId] = server.copy(account = account)
+                    // Logged in. Whatever was being asked for has been done.
+                    if (account != null && identifyPrompt?.serverId == serverId) {
+                        identifyPrompt = null
+                    }
+                }
                 updateMember(serverId, nick) { it }
+            }
+
+            // draft/account-registration, both halves of it. The desktop
+            // relays the first under its own older name, so both are read.
+            "irc:register", "irc:verify", "irc:account-registered" -> {
+                accountReply = AccountReply(
+                    serverId = serverId,
+                    status = data["status"]?.str().orEmpty(),
+                    account = data["account"]?.str(),
+                    text = data["message"]?.str(),
+                    failed = false
+                )
             }
 
             "irc:typing" -> {
@@ -483,11 +608,28 @@ class SwitchboardStore {
 
             "irc:error" -> {
                 val text = data["message"]?.str()?.takeIf { it.isNotBlank() } ?: return
-                lastError = ServerRefusal(
-                    text = text,
-                    subject = data["command"]?.str()?.takeIf { it.isNotBlank() },
-                    at = System.currentTimeMillis()
-                )
+                val command = data["command"]?.str()?.takeIf { it.isNotBlank() }
+
+                // `FAIL REGISTER ACCOUNT_EXISTS :…`. A screen waiting on
+                // REGISTER has to know its own attempt failed, or it watches a
+                // spinner until it gives up and says nothing useful. Both modes
+                // deliver refusals this way, so one rule covers both.
+                if (command == "REGISTER" || command == "VERIFY") {
+                    accountReply = AccountReply(
+                        serverId = serverId,
+                        status = data["code"]?.str().orEmpty(),
+                        account = null,
+                        text = text,
+                        failed = true
+                    )
+                }
+
+                // A failed login is worth a banner that stays: the connection
+                // carries on regardless, and six seconds of red during
+                // registration is not a thing anyone was watching for.
+                if (command == "SASL") noteLoginFailed(serverId, text)
+
+                lastError = ServerRefusal(text, command, System.currentTimeMillis())
             }
 
             // draft/read-marker — another device says where it had read up to

@@ -385,10 +385,17 @@ private fun MessageRow(
     val name = profile.displayName?.takeIf { it.isNotBlank() } ?: message.nick
     val color = metadataColor(profile.color) ?: nickColor(message.nick)
 
-    // A /me reads as a sentence about the person, not a line from them
+    // A /me reads as a sentence about the person, not a line from them.
+    //
+    // Both sides strip the CTCP wrapper and say so with the type, which is what
+    // this looks at — checking the wrapper alone meant every action arrived as
+    // an ordinary message, because by then there was no wrapper left to find.
+    // The wrapper check stays as a fallback for anything that slips through
+    // with one still on.
     val ctcp = message.content.trim(CTCP)
-    val action = ctcp.startsWith("ACTION ")
-    val body = if (action) ctcp.removePrefix("ACTION ") else message.content
+    val wrapped = ctcp.startsWith("ACTION ")
+    val action = message.type == "action" || wrapped
+    val body = if (wrapped) ctcp.removePrefix("ACTION ") else message.content
 
     Column(modifier = Modifier.fillMaxWidth()) {
 

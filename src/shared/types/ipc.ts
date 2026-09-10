@@ -19,6 +19,16 @@ export interface ConnectionSnapshot {
   serverId: string
   nick: string
   capabilities: string[]
+  /**
+   * What each capability the server offered said about itself, by name.
+   *
+   * The names alone answer "is this supported"; the values answer everything
+   * else — whether registering an account needs an email address, how short a
+   * password may be, which SASL mechanisms exist. A paired phone has no
+   * connection of its own to read them from, so without this it can offer a
+   * form it cannot fill in correctly.
+   */
+  capabilityValues: Record<string, string>
   /** draft/metadata-2 values by lowercase nick, so a new client starts in sync */
   metadata: Record<string, UserMetadata>
   channels: {

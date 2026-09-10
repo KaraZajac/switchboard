@@ -70,7 +70,18 @@ import org.switchboard.android.updateServer
  * that is the whole point of there being one config.
  */
 @Composable
-fun ServersScreen(engine: SwitchboardEngine, onClose: () -> Unit) {
+fun ServersScreen(
+    engine: SwitchboardEngine,
+    onClose: () -> Unit,
+    /**
+     * Open straight into this network's settings.
+     *
+     * Set when someone long-pressed it on the rail and chose Edit. Closing the
+     * form then goes back where they came from rather than dropping them in a
+     * list they never asked for.
+     */
+    editServerId: String? = null
+) {
     var editing by remember { mutableStateOf<ServerConfig?>(null) }
     var adding by remember { mutableStateOf(false) }
     var servers by remember { mutableStateOf<List<ServerConfig>>(emptyList()) }
@@ -81,11 +92,23 @@ fun ServersScreen(engine: SwitchboardEngine, onClose: () -> Unit) {
         servers = engine.listServers()
     }
 
+    LaunchedEffect(editServerId, servers) {
+        if (editServerId != null && editing == null) {
+            editing = servers.find { it.id == editServerId }
+        }
+    }
+
     // Back closes the form, not the whole screen. Without this the app-level
     // handler wins and a half-filled form vanishes to the conversation.
+    //
+    // Unless the form *is* the screen: arriving from a long-press on the rail
+    // there is no list behind it to go back to, and dropping the user into one
+    // they never asked for is the flow this shortcut exists to avoid.
+    val cameStraightHere = editServerId != null && editing?.id == editServerId
     androidx.activity.compose.BackHandler(enabled = adding || editing != null) {
         adding = false
         editing = null
+        if (cameStraightHere) onClose()
     }
 
     if (adding || editing != null) {
@@ -96,6 +119,7 @@ fun ServersScreen(engine: SwitchboardEngine, onClose: () -> Unit) {
                 adding = false
                 editing = null
                 revision++
+                if (cameStraightHere) onClose()
             }
         )
         return
@@ -345,7 +369,7 @@ private fun ServerForm(
 }
 
 @Composable
-private fun Header(title: String, onBack: () -> Unit) {
+internal fun Header(title: String, onBack: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()

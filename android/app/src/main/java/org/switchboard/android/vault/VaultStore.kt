@@ -73,14 +73,28 @@ class VaultStore(context: Context) {
 
     /** Write one key of the profile, and seal it */
     fun setDefaultProfileKey(key: String, value: String): Boolean {
-        val current = payload ?: return false
-
         val profile = defaultProfile().toMutableMap()
         if (value.isEmpty()) profile.remove(key) else profile[key] = value
 
+        return setSharedSetting(
+            PROFILE_KEY,
+            if (profile.isEmpty()) null else JsonObject(profile.mapValues { JsonPrimitive(it.value) })
+        )
+    }
+
+    /**
+     * Write one shared setting, and seal it.
+     *
+     * The vault is where a phone on its own keeps things too, not only where
+     * they travel from: `settings:set` over the link is answered by the
+     * desktop, and an unpaired phone has no desktop to answer it. Anything the
+     * person should still have after a restart goes through here.
+     */
+    fun setSharedSetting(key: String, value: JsonElement?): Boolean {
+        val current = payload ?: return false
+
         val settings = current.settings.toMutableMap()
-        if (profile.isEmpty()) settings.remove(PROFILE_KEY)
-        else settings[PROFILE_KEY] = JsonObject(profile.mapValues { JsonPrimitive(it.value) })
+        if (value == null) settings.remove(key) else settings[key] = value
 
         return resealPayload(current.copy(settings = settings)) != null
     }

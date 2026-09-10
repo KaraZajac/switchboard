@@ -17,13 +17,17 @@ registerHandler('REGISTER', (client, msg) => {
   switch (subcommand) {
     case 'SUCCESS':
       client.events.emit('accountRegistered', {
+        status: 'SUCCESS',
         account: msg.params[1] || '',
         message: msg.params[2] || 'Account registered successfully'
       })
       break
 
     case 'VERIFICATION_REQUIRED':
+      // Carries its own status: the account exists but cannot be used yet, and
+      // a client told only "registered" would stop before asking for the code.
       client.events.emit('accountRegistered', {
+        status: 'VERIFICATION_REQUIRED',
         account: msg.params[1] || '',
         message: msg.params[2] || 'Verification required — check your email'
       })

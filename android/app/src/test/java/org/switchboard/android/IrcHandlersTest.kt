@@ -355,6 +355,62 @@ class IrcHandlersTest {
         assertEquals("alice", session.eventsOn("irc:message").single().str("channel"))
     }
 
+    /**
+     * `/me` arrives wrapped in \u0001, and a client that does not unwrap it
+     * shows its user a line of control characters instead of an action.
+     */
+    @Test
+    fun `an action is unwrapped and marked as one`() {
+        register()
+        feed(":alice!u@h PRIVMSG #chan :\u0001ACTION waves\u0001")
+
+        val message = session.eventsOn("irc:message").single()["message"]!!.jsonObject
+        assertEquals("waves", message.str("content"))
+        assertEquals("action", message.str("type"))
+    }
+
+    /**
+     * Every other CTCP is a question for the client rather than for the person.
+     * Showing it would put control characters on screen and answer nothing.
+     */
+    @Test
+    fun `a CTCP question is answered and not shown`() {
+        register()
+        feed(":alice!u@h PRIVMSG #chan :\u0001VERSION\u0001")
+
+        assertTrue(session.eventsOn("irc:message").isEmpty())
+        assertEquals(1, session.sent.count { it.startsWith("NOTICE alice :") })
+        assertTrue(session.sent.single().contains("VERSION Switchboard"))
+    }
+
+    @Test
+    fun `a CTCP PING comes back with what was sent`() {
+        register()
+        feed(":alice!u@h PRIVMSG kara :\u0001PING 1757375000\u0001")
+
+        assertEquals("NOTICE alice :\u0001PING 1757375000\u0001", session.sent.single())
+    }
+
+    @Test
+    fun `a CTCP we do not answer is dropped rather than displayed`() {
+        register()
+        feed(":alice!u@h PRIVMSG #chan :\u0001FINGER\u0001")
+
+        assertTrue(session.eventsOn("irc:message").isEmpty())
+        assertTrue(session.sent.isEmpty())
+    }
+
+    @Test
+    fun `a message that merely mentions a control character is still a message`() {
+        register()
+        feed(":alice!u@h PRIVMSG #chan :ACTION is a CTCP")
+
+        assertEquals(
+            "ACTION is a CTCP",
+            session.eventsOn("irc:message").single()["message"]!!.jsonObject.str("content")
+        )
+    }
+
     @Test
     fun `a typing tag becomes a typing event`() {
         register("message-tags")

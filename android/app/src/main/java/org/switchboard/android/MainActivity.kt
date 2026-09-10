@@ -31,6 +31,7 @@ import org.switchboard.android.pairing.PairingPayload
 import org.switchboard.android.ui.Base
 import org.switchboard.android.ui.Blue
 import org.switchboard.android.ui.BrowseScreen
+import org.switchboard.android.ui.AccountScreen
 import org.switchboard.android.ui.ChatScreen
 import org.switchboard.android.ui.SearchScreen
 import org.switchboard.android.ui.ServersScreen
@@ -113,7 +114,7 @@ class MainActivity : ComponentActivity() {
     // the connection with it. The service decides when the engine stops.
 }
 
-private enum class Screen { PAIRING, SCANNING, CHAT, SETTINGS, SEARCH, BROWSE, SERVERS }
+private enum class Screen { PAIRING, SCANNING, CHAT, SETTINGS, SEARCH, BROWSE, SERVERS, ACCOUNT }
 
 @Composable
 fun App(
@@ -133,6 +134,10 @@ fun App(
             Screen.CHAT
         )
     }
+    /** Which network the networks screen should open on, if a rail long-press sent us there */
+    var editingServer by remember { mutableStateOf<String?>(null) }
+    /** And which one the account screen is about */
+    var accountFor by remember { mutableStateOf<String?>(null) }
     val store = engine.store
 
     /**
@@ -260,7 +265,18 @@ fun App(
                     onOpenSettings = { screen = Screen.SETTINGS },
                     onOpenSearch = { screen = Screen.SEARCH },
                     onOpenBrowse = { screen = Screen.BROWSE },
-                    onOpenServers = { screen = Screen.SERVERS },
+                    onOpenServers = {
+                        editingServer = null
+                        screen = Screen.SERVERS
+                    },
+                    onEditServer = { serverId ->
+                        editingServer = serverId
+                        screen = Screen.SERVERS
+                    },
+                    onOpenAccount = { serverId ->
+                        accountFor = serverId
+                        screen = Screen.ACCOUNT
+                    },
                     onLoadHistory = { serverId, channel ->
                         scope.launch { loadHistory(engine, serverId, channel) }
                     }
@@ -289,15 +305,28 @@ fun App(
                     onClose = { screen = Screen.CHAT }
                 )
 
+                Screen.ACCOUNT -> AccountScreen(
+                    engine = engine,
+                    serverId = accountFor ?: store.activeServerId.orEmpty(),
+                    onClose = { screen = Screen.CHAT }
+                )
+
                 Screen.SERVERS -> ServersScreen(
                     engine = engine,
-                    onClose = { screen = Screen.CHAT }
+                    onClose = {
+                        editingServer = null
+                        screen = Screen.CHAT
+                    },
+                    editServerId = editingServer
                 )
 
                 Screen.SETTINGS -> SettingsScreen(
                     engine = engine,
                     onBack = { screen = Screen.CHAT },
-                    onManageServers = { screen = Screen.SERVERS },
+                    onManageServers = {
+                        editingServer = null
+                        screen = Screen.SERVERS
+                    },
                     onPairDesktop = { screen = Screen.PAIRING },
                     onUnpair = {
                         engine.identity.forgetTicket()

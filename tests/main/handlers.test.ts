@@ -1039,7 +1039,11 @@ describe('registering an account', () => {
 
     dispatchMessage(client, parseMessage(':irc.test REGISTER SUCCESS kara :You are now registered'))
 
-    expect(seen).toHaveBeenCalledWith({ account: 'kara', message: 'You are now registered' })
+    expect(seen).toHaveBeenCalledWith({
+      status: 'SUCCESS',
+      account: 'kara',
+      message: 'You are now registered'
+    })
   })
 
   it('reports one that needs an email confirming', () => {
@@ -1052,7 +1056,13 @@ describe('registering an account', () => {
       parseMessage(':irc.test REGISTER VERIFICATION_REQUIRED kara :Check your email')
     )
 
-    expect(seen).toHaveBeenCalledWith({ account: 'kara', message: 'Check your email' })
+    // The status is the difference between "done" and "now send us the code",
+    // and a client that cannot tell them apart stops halfway through.
+    expect(seen).toHaveBeenCalledWith({
+      status: 'VERIFICATION_REQUIRED',
+      account: 'kara',
+      message: 'Check your email'
+    })
   })
 
   it('reports the verification landing', () => {

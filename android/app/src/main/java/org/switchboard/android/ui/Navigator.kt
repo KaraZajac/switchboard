@@ -1,9 +1,13 @@
-@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@file:OptIn(
+    androidx.compose.material3.ExperimentalMaterial3Api::class,
+    androidx.compose.foundation.ExperimentalFoundationApi::class
+)
 
 package org.switchboard.android.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,6 +31,8 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
@@ -65,21 +71,51 @@ fun Navigator(
     mode: EngineMode,
     modeDetail: String,
     takingOver: Boolean,
+    pairedWithDesktop: Boolean,
     vaultUnlocked: Boolean,
     onSelect: (serverId: String, channel: String) -> Unit,
     onSelectServer: (serverId: String) -> Unit,
+    onEditServer: (serverId: String) -> Unit,
+    onOpenAccount: (serverId: String) -> Unit,
+    onToggleConnection: (serverId: String) -> Unit,
+    isMuted: (serverId: String) -> Boolean,
+    onToggleMute: (serverId: String) -> Unit,
     onJoin: (serverId: String, channel: String) -> Unit,
+    onLeave: (serverId: String, channel: String) -> Unit,
+    isChannelMuted: (serverId: String, channel: String) -> Boolean,
+    onToggleChannelMute: (serverId: String, channel: String) -> Unit,
     onOpenSettings: () -> Unit,
     onEditProfile: () -> Unit,
     onBrowse: () -> Unit,
     onManageServers: () -> Unit
 ) {
     Row(modifier = Modifier.fillMaxSize().background(Mantle)) {
-        ServerRail(store, onSelectServer, onManageServers)
+        ServerRail(
+            store = store,
+            onSelect = onSelectServer,
+            onManageServers = onManageServers,
+            onEditServer = onEditServer,
+            onOpenAccount = onOpenAccount,
+            onToggleConnection = onToggleConnection,
+            isMuted = isMuted,
+            onToggleMute = onToggleMute
+        )
 
         Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
-            ChannelList(store, onSelect, onJoin, onBrowse, modifier = Modifier.weight(1f))
-            UserPanel(store, mode, modeDetail, takingOver, vaultUnlocked, onOpenSettings, onEditProfile)
+            ChannelList(
+                store = store,
+                onSelect = onSelect,
+                onJoin = onJoin,
+                onBrowse = onBrowse,
+                onLeave = onLeave,
+                isChannelMuted = isChannelMuted,
+                onToggleChannelMute = onToggleChannelMute,
+                modifier = Modifier.weight(1f)
+            )
+            UserPanel(
+                store, mode, modeDetail, takingOver, pairedWithDesktop, vaultUnlocked,
+                onOpenSettings, onEditProfile
+            )
         }
     }
 }
@@ -95,9 +131,18 @@ fun Navigator(
 private fun ServerRail(
     store: SwitchboardStore,
     onSelect: (String) -> Unit,
-    onManageServers: () -> Unit
+    onManageServers: () -> Unit,
+    onEditServer: (String) -> Unit,
+    onOpenAccount: (String) -> Unit,
+    onToggleConnection: (String) -> Unit,
+    isMuted: (String) -> Boolean,
+    onToggleMute: (String) -> Unit
 ) {
     val servers = store.servers.values.sortedBy { it.name.lowercase() }
+    // Which server's menu is open, if any. Long-press is the only way to reach
+    // it — editing a network used to mean pressing "add a network" and then
+    // choosing an existing one, which reads like a mistake even when it works.
+    var menuFor by remember { mutableStateOf<String?>(null) }
 
     Column(
         modifier = Modifier
@@ -127,7 +172,25 @@ private fun ServerRail(
                 )
 
                 Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    ServerBadge(server, active, mentions, onSelect)
+                    ServerBadge(
+                        server = server,
+                        active = active,
+                        mentions = mentions,
+                        muted = isMuted(server.id),
+                        onSelect = onSelect,
+                        onLongPress = { menuFor = server.id }
+                    )
+
+                    ServerMenu(
+                        server = server,
+                        muted = isMuted(server.id),
+                        expanded = menuFor == server.id,
+                        onDismiss = { menuFor = null },
+                        onAccount = { menuFor = null; onOpenAccount(server.id) },
+                        onEdit = { menuFor = null; onEditServer(server.id) },
+                        onToggleConnection = { menuFor = null; onToggleConnection(server.id) },
+                        onMute = { menuFor = null; onToggleMute(server.id) }
+                    )
                 }
             }
         }
@@ -146,12 +209,70 @@ private fun ServerRail(
     }
 }
 
+/**
+ * What you can do to a network, without leaving the screen you are on.
+ *
+ * Long-press, because the rail is a row of small round buttons and there is
+ * nowhere to put five more. Editing lives here rather than behind "add a
+ * network", which is where it used to be: you pressed add, and then chose an
+ * existing one, and the form quietly turned into an edit form.
+ */
+@Composable
+private fun ServerMenu(
+    server: Server,
+    muted: Boolean,
+    expanded: Boolean,
+    onDismiss: () -> Unit,
+    onAccount: () -> Unit,
+    onEdit: () -> Unit,
+    onToggleConnection: () -> Unit,
+    onMute: () -> Unit
+) {
+    DropdownMenu(expanded = expanded, onDismissRequest = onDismiss, modifier = Modifier.background(Surface0)) {
+        DropdownMenuItem(
+            text = { Text(server.name, color = Overlay, fontSize = 12.sp, fontWeight = FontWeight.Bold) },
+            onClick = {},
+            enabled = false
+        )
+        DropdownMenuItem(
+            text = {
+                Text(
+                    if (server.connected) "Disconnect" else "Connect",
+                    color = if (server.connected) Yellow else Green,
+                    fontSize = 14.sp
+                )
+            },
+            onClick = onToggleConnection
+        )
+        DropdownMenuItem(
+            text = { Text("Account…", color = Text0, fontSize = 14.sp) },
+            onClick = onAccount
+        )
+        DropdownMenuItem(
+            text = { Text("Edit network", color = Text0, fontSize = 14.sp) },
+            onClick = onEdit
+        )
+        DropdownMenuItem(
+            text = {
+                Text(
+                    if (muted) "Unmute this network" else "Mute this network",
+                    color = Text0,
+                    fontSize = 14.sp
+                )
+            },
+            onClick = onMute
+        )
+    }
+}
+
 @Composable
 private fun ServerBadge(
     server: Server,
     active: Boolean,
     mentions: Int,
-    onSelect: (String) -> Unit
+    muted: Boolean,
+    onSelect: (String) -> Unit,
+    onLongPress: () -> Unit
 ) {
     Box(contentAlignment = Alignment.BottomEnd) {
         Box(
@@ -161,7 +282,10 @@ private fun ServerBadge(
                 // so selection is legible even without colour.
                 .clip(RoundedCornerShape(if (active) 16.dp else 24.dp))
                 .background(if (active) Blue else Surface0)
-                .clickable { onSelect(server.id) },
+                .combinedClickable(
+                    onClick = { onSelect(server.id) },
+                    onLongClick = onLongPress
+                ),
             contentAlignment = Alignment.Center
         ) {
             Text(
@@ -181,9 +305,12 @@ private fun ServerBadge(
                 .background(if (server.connected) Green else Overlay, CircleShape)
         )
 
+        // A muted network still counts its mentions; it just does not shout
+        // about them. Grey rather than red says which of the two is happening —
+        // a rail with no badge at all reads as a quiet evening instead.
         if (mentions > 0) {
             Box(modifier = Modifier.align(Alignment.TopEnd)) {
-                CountBadge(mentions)
+                CountBadge(mentions, background = if (muted) Overlay else Red)
             }
         }
     }
@@ -196,9 +323,16 @@ private fun ChannelList(
     onSelect: (serverId: String, channel: String) -> Unit,
     onJoin: (serverId: String, channel: String) -> Unit,
     onBrowse: () -> Unit,
+    onLeave: (serverId: String, channel: String) -> Unit,
+    isChannelMuted: (serverId: String, channel: String) -> Boolean,
+    onToggleChannelMute: (serverId: String, channel: String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var joining by remember { mutableStateOf(false) }
+    // Which channel's menu is open. Leaving a channel had no button at all
+    // before this: you could join from three places and never get out again,
+    // which since joining now sets join-on-connect meant permanently.
+    var channelMenu by remember { mutableStateOf<String?>(null) }
     val serverId = store.activeServerId
     val server = serverId?.let { store.servers[it] }
     // Only rooms here; people have their own section below, and a nick listed
@@ -285,38 +419,72 @@ private fun ChannelList(
             val selected = store.activeServerId == serverId &&
                 store.activeChannel.equals(channel.name, true)
             val unread = channel.unread > 0
+            val muted = serverId != null && isChannelMuted(serverId, channel.name)
 
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 1.dp)
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(if (selected) Surface0 else Color.Transparent)
-                    .clickable { serverId?.let { onSelect(it, channel.name) } }
-                    .padding(horizontal = 8.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    "#",
-                    color = if (selected || unread) Subtext else Overlay,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Medium,
-                    modifier = Modifier.width(22.dp)
-                )
-                Text(
-                    channel.name.removePrefix("#"),
-                    color = if (selected || unread) Text0 else Subtext,
-                    fontWeight = if (unread) FontWeight.SemiBold else FontWeight.Normal,
-                    fontSize = 15.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f)
-                )
-                if (channel.mentions > 0) {
-                    CountBadge(channel.mentions)
-                } else if (unread) {
-                    CountBadge(channel.unread, Surface1)
+            Box {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 1.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(if (selected) Surface0 else Color.Transparent)
+                        .combinedClickable(
+                            onClick = { serverId?.let { onSelect(it, channel.name) } },
+                            onLongClick = { channelMenu = channel.name }
+                        )
+                        .padding(horizontal = 8.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "#",
+                        color = if (selected || unread) Subtext else Overlay,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier.width(22.dp)
+                    )
+                    Text(
+                        channel.name.removePrefix("#"),
+                        color = if (selected || unread) Text0 else Subtext,
+                        fontWeight = if (unread) FontWeight.SemiBold else FontWeight.Normal,
+                        fontSize = 15.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                    if (channel.mentions > 0) {
+                        CountBadge(channel.mentions, if (muted) Overlay else Red)
+                    } else if (unread && !muted) {
+                        CountBadge(channel.unread, Surface1)
+                    }
                 }
+
+                ChannelMenu(
+                    name = channel.name,
+                    muted = muted,
+                    expanded = channelMenu == channel.name,
+                    onDismiss = { channelMenu = null },
+                    onMute = {
+                        channelMenu = null
+                        serverId?.let { onToggleChannelMute(it, channel.name) }
+                    },
+                    onLeave = {
+                        channelMenu = null
+                        serverId?.let { onLeave(it, channel.name) }
+                    }
+                )
+            }
+        }
+
+        // Two ways in, both named. There used to be one: a bare "+" beside the
+        // section heading, whose sheet had a link to the room list at the
+        // bottom. Nobody found it, which is the expected outcome for putting
+        // "find a channel to join" — the thing a new user needs first — behind
+        // an unlabelled glyph and then one more tap.
+        if (serverId != null) {
+            Spacer(Modifier.height(4.dp))
+            ChannelAction("Browse rooms", "See what is on this network", onBrowse)
+            ChannelAction("Join by name", "If you already know where you are going") {
+                joining = true
             }
         }
 
@@ -358,6 +526,63 @@ private fun ChannelList(
         }
 
         Spacer(Modifier.height(16.dp))
+    }
+}
+
+/** What you can do to a channel you are in */
+@Composable
+private fun ChannelMenu(
+    name: String,
+    muted: Boolean,
+    expanded: Boolean,
+    onDismiss: () -> Unit,
+    onMute: () -> Unit,
+    onLeave: () -> Unit
+) {
+    DropdownMenu(
+        expanded = expanded,
+        onDismissRequest = onDismiss,
+        modifier = Modifier.background(Surface0)
+    ) {
+        DropdownMenuItem(
+            text = { Text(name, color = Overlay, fontSize = 12.sp, fontWeight = FontWeight.Bold) },
+            onClick = {},
+            enabled = false
+        )
+        DropdownMenuItem(
+            text = { Text(if (muted) "Unmute" else "Mute", color = Text0, fontSize = 14.sp) },
+            onClick = onMute
+        )
+        DropdownMenuItem(
+            text = { Text("Leave", color = Red, fontSize = 14.sp) },
+            onClick = onLeave
+        )
+    }
+}
+
+/** A named way into the channel list, rather than a glyph */
+@Composable
+private fun ChannelAction(label: String, detail: String, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp, vertical = 1.dp)
+            .clip(RoundedCornerShape(4.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            "+",
+            color = Green,
+            fontSize = 18.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.width(22.dp)
+        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(label, color = Subtext, fontSize = 15.sp)
+            Text(detail, color = Overlay, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
     }
 }
 
@@ -460,6 +685,7 @@ private fun UserPanel(
     mode: EngineMode,
     modeDetail: String,
     takingOver: Boolean,
+    pairedWithDesktop: Boolean,
     vaultUnlocked: Boolean,
     onOpenSettings: () -> Unit,
     onEditProfile: () -> Unit
@@ -493,7 +719,7 @@ private fun UserPanel(
                     modifier = Modifier.weight(1f, fill = false)
                 )
                 Spacer(Modifier.width(6.dp))
-                ModePill(mode, takingOver)
+                ModePill(mode, takingOver, pairedWithDesktop)
             }
             Text(
                 modeDetail,
@@ -532,9 +758,22 @@ private fun UserPanel(
  * server, which is exactly when someone is looking at this.
  */
 @Composable
-fun ModePill(mode: EngineMode, takingOver: Boolean = false) = when {
+fun ModePill(
+    mode: EngineMode,
+    takingOver: Boolean = false,
+    /**
+     * Whether a desktop is part of this at all.
+     *
+     * "TAKING OVER" is a sentence about two devices. On a phone that has never
+     * been paired it names something the user has no idea about and cannot act
+     * on, while what is actually happening — a socket dialling — has a perfectly
+     * ordinary name.
+     */
+    pairedWithDesktop: Boolean = false
+) = when {
     mode == EngineMode.HOLDING -> Pill("LIVE", Green)
     mode == EngineMode.FOLLOWING -> Pill("DESKTOP", Blue)
-    takingOver -> Pill("TAKING OVER", Yellow)
+    takingOver && pairedWithDesktop -> Pill("TAKING OVER", Yellow)
+    takingOver -> Pill("CONNECTING", Yellow)
     else -> Pill("OFFLINE", Overlay)
 }

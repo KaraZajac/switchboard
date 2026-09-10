@@ -81,7 +81,10 @@ fun BrowseScreen(
 
     val shown = store.channelListing
         .filter { filter.isBlank() || it.name.contains(filter, true) || it.topic.contains(filter, true) }
-        .sortedByDescending { it.users }
+        // Busiest first, which is what someone looking for somewhere to talk
+        // wants. Ties by name, so a network where every channel has the same
+        // count does not come back in a different order every time it is asked.
+        .sortedWith(compareByDescending<ChannelListing> { it.users }.thenBy { it.name.lowercase() })
 
     Column(modifier = Modifier.fillMaxSize().background(Base)) {
         Row(
@@ -181,11 +184,19 @@ private fun Listing(entry: ChannelListing, alreadyIn: Boolean, onJoin: () -> Uni
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f, fill = false)
+                // One weight in this row, not two: with a weighted spacer as
+                // well, the leftover space was split between them and the Join
+                // button came to rest in the middle of the row, at a different
+                // place on every line.
+                modifier = Modifier.weight(1f)
             )
             Spacer(Modifier.width(10.dp))
-            Text("${entry.users}", color = Overlay, fontSize = 12.sp)
-            Spacer(Modifier.weight(1f))
+            Text(
+                "${entry.users}",
+                color = Overlay,
+                fontSize = 12.sp
+            )
+            Spacer(Modifier.width(10.dp))
             Text(
                 if (alreadyIn) "Joined" else "Join",
                 color = if (alreadyIn) Overlay else Crust,

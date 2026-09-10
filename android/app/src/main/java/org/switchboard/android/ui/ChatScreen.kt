@@ -66,9 +66,12 @@ import org.switchboard.android.Message
 import org.switchboard.android.SwitchboardStore
 import org.switchboard.android.isChannel
 import org.switchboard.android.SwitchboardEngine
+import org.switchboard.android.connectServer
+import org.switchboard.android.disconnectServer
 import org.switchboard.android.editMessage
 import org.switchboard.android.join
 import org.switchboard.android.loadOlder
+import org.switchboard.android.part
 import org.switchboard.android.previewLink
 import org.switchboard.android.react
 import org.switchboard.android.redact
@@ -91,6 +94,8 @@ fun ChatScreen(
     onOpenSearch: () -> Unit,
     onOpenBrowse: () -> Unit,
     onOpenServers: () -> Unit,
+    onEditServer: (serverId: String) -> Unit,
+    onOpenAccount: (serverId: String) -> Unit,
     onLoadHistory: (serverId: String, channel: String) -> Unit
 ) {
     val store = engine.store
@@ -138,6 +143,7 @@ fun ChatScreen(
                                 mode = engine.mode,
                                 modeDetail = engine.modeDetail,
                                 takingOver = engine.isTakingOver,
+                                pairedWithDesktop = engine.pairedWithDesktop,
                                 vaultUnlocked = engine.isVaultUnlocked,
                                 onSelect = { serverId, channel ->
                                     store.select(serverId, channel)
@@ -151,9 +157,35 @@ fun ChatScreen(
                                         onLoadHistory(serverId, it.name)
                                     }
                                 },
+                                onEditServer = { serverId ->
+                                    scope.launch { channelDrawer.close() }
+                                    onEditServer(serverId)
+                                },
+                                onOpenAccount = { serverId ->
+                                    scope.launch { channelDrawer.close() }
+                                    onOpenAccount(serverId)
+                                },
+                                onToggleConnection = { serverId ->
+                                    if (store.servers[serverId]?.connected == true) {
+                                        engine.disconnectServer(serverId)
+                                    } else {
+                                        engine.connectServer(serverId)
+                                    }
+                                },
+                                isMuted = { serverId -> engine.isMuted(serverId) },
+                                onToggleMute = { serverId -> engine.toggleServerMute(serverId) },
                                 onJoin = { serverId, channel ->
                                     engine.join(serverId, channel)
                                     scope.launch { channelDrawer.close() }
+                                },
+                                onLeave = { serverId, channel ->
+                                    engine.part(serverId, channel)
+                                },
+                                isChannelMuted = { serverId, channel ->
+                                    engine.mutes.channelMuted(serverId, channel)
+                                },
+                                onToggleChannelMute = { serverId, channel ->
+                                    engine.toggleChannelMute(serverId, channel)
                                 },
                                 onOpenSettings = onOpenSettings,
                                 onEditProfile = {
@@ -178,7 +210,8 @@ fun ChatScreen(
                         onOpenMembers = { scope.launch { memberDrawer.open() } },
                         onOpenSettings = onOpenSettings,
                         onOpenSearch = onOpenSearch,
-                        onOpenServers = onOpenServers
+                        onOpenServers = onOpenServers,
+                        onOpenAccount = onOpenAccount
                     )
                 }
             }
@@ -230,7 +263,8 @@ private fun Conversation(
     onOpenMembers: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenSearch: () -> Unit,
-    onOpenServers: () -> Unit
+    onOpenServers: () -> Unit,
+    onOpenAccount: (serverId: String) -> Unit
 ) {
     val store = engine.store
 
@@ -272,6 +306,21 @@ private fun Conversation(
             pairedWithDesktop && engine.mode == EngineMode.HOLDING -> Banner(
                 text = "This phone is holding the connections",
                 color = Green
+            )
+        }
+
+        // NickServ has asked us to log in. This is the moment the offer is
+        // worth making: it stays until it is acted on or the login lands,
+        // because unlike a refusal it is about something still undone.
+        store.identifyPrompt?.let { prompt ->
+            Banner(
+                text = prompt.text,
+                color = Yellow,
+                action = "Log in",
+                onClick = {
+                    store.clearIdentifyPrompt()
+                    onOpenAccount(prompt.serverId)
+                }
             )
         }
 
@@ -575,7 +624,7 @@ private fun ChannelHeader(
                     modifier = Modifier.weight(1f, fill = false)
                 )
                 Spacer(Modifier.width(6.dp))
-                ModePill(engine.mode, engine.isTakingOver)
+                ModePill(engine.mode, engine.isTakingOver, engine.pairedWithDesktop)
             }
             Text(
                 // The banner already carries the mode when there is one to

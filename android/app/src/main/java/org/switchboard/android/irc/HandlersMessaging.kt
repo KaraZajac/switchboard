@@ -36,6 +36,22 @@ internal fun registerMessagingHandlers() {
             // person, not for our own nick.
             val conversation = if (state.isMe(target)) from else target
 
+            // CTCP: text wrapped in \u0001. ACTION is the one people see —
+            // it is `/me` — and every other one is a question asked of the
+            // client rather than of the person, so it is answered and not
+            // shown. A client that displays them shows its user a line of
+            // control characters and answers nothing.
+            val ctcp = command == "PRIVMSG" &&
+                text.length >= 2 && text.startsWith("\u0001") && text.endsWith("\u0001")
+            val isAction = ctcp && text.startsWith("\u0001ACTION ")
+
+            if (ctcp && !isAction) {
+                answerCtcp(session, from, text.substring(1, text.length - 1))
+                return@on
+            }
+
+            val content = if (isAction) text.substring(8, text.length - 1) else text
+
             // draft/message-edit: this replaces something already said rather
             // than adding to it. Same event the desktop sends, so the store
             // needs one handler rather than one per mode.
@@ -57,9 +73,16 @@ internal fun registerMessagingHandlers() {
                 put("message", buildJsonObject {
                     put("id", messageId(message, state.serverId))
                     put("nick", from)
-                    put("content", text)
+                    put("content", content)
                     put("timestamp", timestampOf(message))
-                    put("type", if (command == "NOTICE") "notice" else "privmsg")
+                    put(
+                        "type",
+                        when {
+                            command == "NOTICE" -> "notice"
+                            isAction -> "action"
+                            else -> "privmsg"
+                        }
+                    )
                     put("account", message.tag("account"))
                     // draft/oper-tag: the server naming the sender as one of
                     // its operators, which is not something a nick can claim
@@ -241,4 +264,28 @@ internal object Whox {
             emitNames(session, channel)
         }
     }
+}
+
+/**
+ * Answer a CTCP question.
+ *
+ * Same four the desktop answers, with the same wording, so a person who
+ * CTCP-VERSIONs someone running Switchboard gets the same reply whichever
+ * device they happen to be holding. Everything else goes unanswered, which is
+ * the polite reading of the convention and also stops a channel-wide CTCP from
+ * turning into a flood of replies from us.
+ */
+private fun answerCtcp(session: IrcSession, from: String, body: String) {
+    val space = body.indexOf(' ')
+    val verb = (if (space == -1) body else body.substring(0, space)).uppercase()
+    val args = if (space == -1) "" else body.substring(space + 1)
+
+    val reply = when (verb) {
+        "VERSION" -> "VERSION Switchboard for Android"
+        "TIME" -> "TIME " + Instant.now().toString()
+        "PING" -> "PING $args"
+        "SOURCE" -> "SOURCE https://github.com/KaraZajac/switchboard"
+        else -> return
+    }
+    session.sendRaw("NOTICE $from :\u0001$reply\u0001")
 }
