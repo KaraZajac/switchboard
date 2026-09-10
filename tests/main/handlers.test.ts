@@ -17,6 +17,7 @@ import '../../src/main/irc/features/away'
 import '../../src/main/irc/features/chghost'
 import '../../src/main/irc/features/setname'
 import '../../src/main/irc/features/monitor'
+import '../../src/main/irc/features/chathistory'
 import { WHOX_TOKEN } from '../../src/main/irc/features/whox'
 import '../../src/main/irc/features/batch'
 import '../../src/main/irc/features/labeled'
@@ -1086,3 +1087,52 @@ describe('registering an account', () => {
   })
 })
 
+/**
+ * Which conversations had traffic while this device was closed.
+ *
+ * A channel looks after itself — rejoining one asks for its history. A DM does
+ * not: nothing is joined, so a message from somebody this client has never
+ * spoken to leaves no trace at all for a client that was not connected to watch
+ * it arrive. `CHATHISTORY TARGETS` is the only way to find it.
+ */
+describe('catching up on conversations', () => {
+  it('reports each target the server names', () => {
+    const { client, events } = createMockClient({ nick: 'kara' })
+    const seen: { target: string; timestamp: string }[] = []
+    events.on('chathistoryTarget', (data) => seen.push(data))
+
+    dispatchMessage(
+      client,
+      parseMessage(':irc.test CHATHISTORY TARGETS mara 2026-09-10T05:07:26.307Z')
+    )
+    dispatchMessage(
+      client,
+      parseMessage(':irc.test CHATHISTORY TARGETS #lobby 2026-09-10T05:08:00.000Z')
+    )
+
+    expect(seen).toEqual([
+      { target: 'mara', timestamp: '2026-09-10T05:07:26.307Z' },
+      { target: '#lobby', timestamp: '2026-09-10T05:08:00.000Z' }
+    ])
+  })
+
+  it('ignores a CHATHISTORY reply that is not a target list', () => {
+    const { client, events } = createMockClient({ nick: 'kara' })
+    const seen = vi.fn()
+    events.on('chathistoryTarget', seen)
+
+    dispatchMessage(client, parseMessage(':irc.test CHATHISTORY LATEST #lobby'))
+
+    expect(seen).not.toHaveBeenCalled()
+  })
+
+  it('ignores a line with a target and no timestamp', () => {
+    const { client, events } = createMockClient({ nick: 'kara' })
+    const seen = vi.fn()
+    events.on('chathistoryTarget', seen)
+
+    dispatchMessage(client, parseMessage(':irc.test CHATHISTORY TARGETS mara'))
+
+    expect(seen).not.toHaveBeenCalled()
+  })
+})

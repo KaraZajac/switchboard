@@ -442,6 +442,33 @@ class IrcHandlersTest {
         assertEquals("posted by mistake", event.str("reason"))
     }
 
+    /**
+     * Which conversations had traffic while this phone was closed.
+     *
+     * A channel looks after itself — rejoining one asks for its history. A DM
+     * does not: nothing is joined, so a message from somebody this phone has
+     * never spoken to leaves no trace for a client that was not there.
+     */
+    @Test
+    fun `chathistory targets name the conversations we missed`() {
+        register("draft/chathistory")
+        feed(":irc.example.org CHATHISTORY TARGETS mara 2026-09-10T05:07:26.307Z")
+        feed(":irc.example.org CHATHISTORY TARGETS #lobby 2026-09-10T05:08:00.000Z")
+
+        val targets = session.eventsOn("irc:chathistory-target")
+        assertEquals(listOf("mara", "#lobby"), targets.map { it.str("target") })
+        assertEquals("2026-09-10T05:07:26.307Z", targets.first().str("timestamp"))
+    }
+
+    @Test
+    fun `a CHATHISTORY reply that is not a target list is ignored`() {
+        register("draft/chathistory")
+        feed(":irc.example.org CHATHISTORY LATEST #lobby")
+        feed(":irc.example.org CHATHISTORY TARGETS mara")
+
+        assertTrue(session.eventsOn("irc:chathistory-target").isEmpty())
+    }
+
     // ── Batches ──────────────────────────────────────────────────────
 
     @Test
