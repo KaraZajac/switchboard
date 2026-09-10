@@ -90,3 +90,37 @@ export function canShareConnection(config: {
 }): boolean {
   return !!config.saslMechanism && !!config.saslPassword
 }
+
+/**
+ * Which half of the account screen to show.
+ *
+ * Four states, and getting them in the right order matters more than any of
+ * them individually: a network that has not been reached yet cannot be asked
+ * what it can do, and somebody already logged in should not be offered a
+ * registration form for the nick they are logged in as.
+ *
+ * Both clients render the same four, so the choice between them belongs
+ * somewhere both can reach.
+ */
+export type AccountView =
+  /** Not on the network yet, so nothing is known about what it can do */
+  | 'offline'
+  /** Logged in, and the credentials are saved for next time */
+  | 'settled'
+  /** Logged in for now, with nothing saved to do it again */
+  | 'remember'
+  /** The network will make an account for us */
+  | 'register'
+  /** It will not, so this is a conversation with NickServ */
+  | 'nickserv'
+
+export function accountView(state: {
+  connected: boolean
+  account: string | null
+  remembered: boolean
+  canRegister: boolean
+}): AccountView {
+  if (!state.connected) return 'offline'
+  if (state.account) return state.remembered ? 'settled' : 'remember'
+  return state.canRegister ? 'register' : 'nickserv'
+}

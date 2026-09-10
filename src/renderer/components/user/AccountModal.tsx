@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Modal } from '../common/Modal'
 import { useUIStore } from '../../stores/uiStore'
 import { useServerStore } from '../../stores/serverStore'
-import { accountAbilities, bestSaslMechanism } from '@shared/accounts'
+import { accountAbilities, accountView, bestSaslMechanism } from '@shared/accounts'
 
 /**
  * Your account on one network.
@@ -134,57 +134,61 @@ export function AccountModal() {
 
   const connected = status === 'connected'
   const longEnough = password.length >= (abilities.minPasswordLength ?? 1)
+  const view = accountView({
+    connected,
+    account,
+    remembered: alreadyRemembered,
+    canRegister: abilities.canRegister
+  })
 
   return (
     <Modal title="Account" onClose={closeModal}>
       <div className="space-y-4">
         <Standing nick={nick} account={account} connected={connected} />
 
-        {!connected && (
+        {view === 'offline' && (
           <Explain>
             Connect to this network first. What it can do about accounts is
             something it tells us when we get there.
           </Explain>
         )}
 
-        {connected && account && (
+        {view === 'settled' && (
+          <Explain>
+            This network logs you in as {account} on its own, before anything is said
+            or joined under the wrong name.
+          </Explain>
+        )}
+
+        {view === 'remember' && (
           <>
-            {alreadyRemembered ? (
-              <Explain>
-                This network logs you in as {account} on its own, before anything is
-                said or joined under the wrong name.
-              </Explain>
-            ) : (
-              <>
-                <Explain>
-                  You are logged in as {account}, but only for now — the next
-                  connection will start out as nobody.
-                </Explain>
-                <Field
-                  label="Password"
-                  hint="To log in automatically next time"
-                  value={password}
-                  secret
-                  onChange={setPassword}
-                />
-                <Action
-                  label="Remember this account"
-                  disabled={!password || busy}
-                  onClick={async () => {
-                    await remember(account, password)
-                    setPassword('')
-                    setOutcome({
-                      text: 'Saved. This network will log you in on its own from now on.',
-                      failed: false
-                    })
-                  }}
-                />
-              </>
-            )}
+            <Explain>
+              You are logged in as {account}, but only for now — the next connection
+              will start out as nobody.
+            </Explain>
+            <Field
+              label="Password"
+              hint="To log in automatically next time"
+              value={password}
+              secret
+              onChange={setPassword}
+            />
+            <Action
+              label="Remember this account"
+              disabled={!password || busy}
+              onClick={async () => {
+                await remember(account!, password)
+                setPassword('')
+                setOutcome({
+                  text: 'Saved. This network will log you in on its own from now on.',
+                  failed: false
+                })
+              }}
+            />
           </>
         )}
 
-        {connected && !account && abilities.canRegister && (
+        {view === 'register' && (
           <>
             {awaitingCode ? (
               <>
@@ -228,7 +232,7 @@ export function AccountModal() {
           </>
         )}
 
-        {connected && !account && !abilities.canRegister && (
+        {view === 'nickserv' && (
           <>
             <Explain>
               This network uses NickServ. Log in here and it will be done for you

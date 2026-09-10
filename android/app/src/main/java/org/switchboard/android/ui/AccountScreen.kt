@@ -43,7 +43,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 import org.switchboard.android.SwitchboardEngine
+import org.switchboard.android.AccountView
 import org.switchboard.android.accountAbilities
+import org.switchboard.android.accountView
 import org.switchboard.android.identifyWithServices
 import org.switchboard.android.logsInAutomatically
 import org.switchboard.android.registerAccount
@@ -103,44 +105,47 @@ fun AccountScreen(engine: SwitchboardEngine, serverId: String, onClose: () -> Un
             Spacer(Modifier.height(8.dp))
             Standing(server?.nick.orEmpty(), server?.account, server?.connected == true)
 
-            when {
-                server?.connected != true -> Explain(
+            val view = accountView(
+                connected = server?.connected == true,
+                account = server?.account,
+                remembered = remembered,
+                canRegister = abilities.canRegister
+            )
+
+            when (view) {
+                AccountView.OFFLINE -> Explain(
                     "Connect to this network first. What it can do about accounts is " +
                         "something it tells us when we get there."
                 )
 
-                // Logged in already. The only thing left worth offering is the
-                // one thing that makes it stick.
-                server.account != null -> {
-                    if (remembered) {
-                        Explain(
-                            "This network logs you in as ${server.account} on its own, " +
-                                "before anything is said or joined under the wrong name."
-                        )
-                    } else {
-                        Explain(
-                            "You are logged in as ${server.account}, but only for now — " +
-                                "the next connection will start out as nobody."
-                        )
-                        Spacer(Modifier.height(12.dp))
-                        Field("Password", "To log in automatically next time", password, secret = true) {
-                            password = it
-                        }
-                        Spacer(Modifier.height(16.dp))
-                        Action("Remember this account", enabled = password.isNotBlank() && !busy) {
-                            scope.launch {
-                                engine.rememberAccount(serverId, server.account!!, password)
-                                password = ""
-                                remembered = true
-                                note = "Saved. This network will log you in on its own from now on."
-                            }
+                AccountView.SETTLED -> Explain(
+                    "This network logs you in as ${server?.account} on its own, " +
+                        "before anything is said or joined under the wrong name."
+                )
+
+                AccountView.REMEMBER -> {
+                    Explain(
+                        "You are logged in as ${server?.account}, but only for now — " +
+                            "the next connection will start out as nobody."
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Field("Password", "To log in automatically next time", password, secret = true) {
+                        password = it
+                    }
+                    Spacer(Modifier.height(16.dp))
+                    Action("Remember this account", enabled = password.isNotBlank() && !busy) {
+                        scope.launch {
+                            engine.rememberAccount(serverId, server?.account.orEmpty(), password)
+                            password = ""
+                            remembered = true
+                            note = "Saved. This network will log you in on its own from now on."
                         }
                     }
                 }
 
                 // The server will make the account itself, and the whole flow
                 // fits on one screen.
-                abilities.canRegister -> {
+                AccountView.REGISTER -> {
                     val waitingForCode = reply?.status == "VERIFICATION_REQUIRED"
 
                     Explain(
@@ -200,7 +205,7 @@ fun AccountScreen(engine: SwitchboardEngine, serverId: String, onClose: () -> Un
                 }
 
                 // NickServ, which is most of IRC.
-                else -> {
+                AccountView.NICKSERV -> {
                     Explain(
                         "This network uses NickServ. Log in here and it will be done for " +
                             "you every time you connect."

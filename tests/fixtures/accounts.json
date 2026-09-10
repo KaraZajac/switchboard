@@ -134,5 +134,15 @@
       "config": { "saslMechanism": "", "saslPassword": "hunter2pass" },
       "canShare": false
     }
+  ],
+
+  "$views": "Which half of the account screen to show. Their order matters more than any of them individually: a network that has not been reached cannot be asked what it can do, and somebody already logged in should not be offered a form to register the nick they are logged in as.",
+  "views": [
+    { "name": "not on the network yet", "connected": false, "account": null, "remembered": false, "canRegister": true, "view": "offline" },
+    { "name": "logged in with nothing saved", "connected": true, "account": "kara", "remembered": false, "canRegister": false, "view": "remember" },
+    { "name": "logged in and it will happen again by itself", "connected": true, "account": "kara", "remembered": true, "canRegister": false, "view": "settled" },
+    { "name": "never offer to register a nick you are logged in as", "connected": true, "account": "kara", "remembered": false, "canRegister": true, "view": "remember" },
+    { "name": "the network will make the account", "connected": true, "account": null, "remembered": false, "canRegister": true, "view": "register" },
+    { "name": "and NickServ where it will not", "connected": true, "account": null, "remembered": false, "canRegister": false, "view": "nickserv" }
   ]
 }

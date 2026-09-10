@@ -340,6 +340,42 @@ fun bestSaslMechanism(mechanisms: List<String>): String? = when {
 }
 
 /**
+ * Which half of the account screen to show.
+ *
+ * Four states, and their order matters more than any of them individually: a
+ * network that has not been reached cannot be asked what it can do, and
+ * somebody already logged in should not be offered a form to register the nick
+ * they are logged in as.
+ *
+ * Both clients render the same four. Kept alongside `accountView` in
+ * `src/shared/accounts.ts`, and held to the same cases.
+ */
+enum class AccountView {
+    /** Not on the network yet, so nothing is known about what it can do */
+    OFFLINE,
+    /** Logged in, and the credentials are saved for next time */
+    SETTLED,
+    /** Logged in for now, with nothing saved to do it again */
+    REMEMBER,
+    /** The network will make an account for us */
+    REGISTER,
+    /** It will not, so this is a conversation with NickServ */
+    NICKSERV
+}
+
+fun accountView(
+    connected: Boolean,
+    account: String?,
+    remembered: Boolean,
+    canRegister: Boolean
+): AccountView = when {
+    !connected -> AccountView.OFFLINE
+    account != null -> if (remembered) AccountView.SETTLED else AccountView.REMEMBER
+    canRegister -> AccountView.REGISTER
+    else -> AccountView.NICKSERV
+}
+
+/**
  * Whether both devices can be on this network at the same time.
  *
  * IRC lets two connections share one nick when the server says so, and the

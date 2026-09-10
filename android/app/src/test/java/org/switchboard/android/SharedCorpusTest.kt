@@ -506,6 +506,29 @@ class SharedCorpusTest {
         }
     }
 
+    /**
+     * Both clients render the same four states, and a screen that picks a
+     * different one is a different client.
+     */
+    @Test
+    fun `chooses the same account screen the desktop chooses`() {
+        for (case in load("accounts.json")["views"]!!.jsonArray) {
+            val c = case.jsonObject
+            val chosen = accountView(
+                connected = c["connected"]!!.jsonPrimitive.content == "true",
+                account = (c["account"] as? JsonPrimitive)?.contentOrNull,
+                remembered = c["remembered"]!!.jsonPrimitive.content == "true",
+                canRegister = c["canRegister"]!!.jsonPrimitive.content == "true"
+            )
+
+            assertEquals(
+                c["name"]!!.jsonPrimitive.content,
+                c["view"]!!.jsonPrimitive.content,
+                chosen.name.lowercase()
+            )
+        }
+    }
+
     // ── knowing NickServ when you see it ─────────────────────────────
 
     /**
