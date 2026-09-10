@@ -230,10 +230,9 @@ class StoreTest {
             put("serverId", server)
             put("targets", "robin,mara")
         })
-        store.handleEvent("irc:monitor", buildJsonObject {
+        store.handleEvent("irc:monitor-online", buildJsonObject {
             put("serverId", server)
             put("nick", "robin")
-            put("online", true)
         })
 
         assertEquals(listOf("robin", "mara"), store.watchedFor(server))

@@ -254,6 +254,24 @@ class SwitchboardEngine(
     }
 
     /**
+     * Ask the server again to watch the people we watch.
+     *
+     * MONITOR lives on the connection: it is not an account setting, and the
+     * server forgets the whole list the moment the socket goes. So a friend
+     * list survived exactly until the first reconnect and then quietly stopped
+     * working — no notices, no error, just nothing ever again.
+     *
+     * The vault is the record; this puts it back on the wire.
+     */
+    private fun rearmMonitor(serverId: String) {
+        val watched = vault.watched(serverId)
+        if (watched.isEmpty()) return
+
+        store.setWatched(serverId, watched)
+        connections[serverId]?.monitorAdd(watched)
+    }
+
+    /**
      * Keep the shared config's join-on-connect list matching where we actually
      * are.
      *
@@ -683,7 +701,11 @@ class SwitchboardEngine(
             // mode was worked out when the socket opened and never again, so a
             // phone that had been in two channels for ten minutes went on
             // saying "Connecting…" until something unrelated recomputed it.
-            if (channel == "irc:connected" || channel == "irc:disconnected") recomputeMode()
+            if (channel == "irc:connected") {
+                rearmMonitor(config.id)
+                recomputeMode()
+            }
+            if (channel == "irc:disconnected") recomputeMode()
         }
         connections[config.id] = connection
         connection.start()

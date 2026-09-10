@@ -671,10 +671,9 @@ class SwitchboardStore {
 
             "irc:list-end" -> if (serverId == activeListServer) channelListComplete = true
 
-            "irc:monitor" -> {
+            "irc:monitor-online", "irc:monitor-offline" -> {
                 val nick = data["nick"]?.str() ?: return
-                watchedOnline["$serverId:${nick.lowercase()}"] =
-                    data["online"]?.jsonPrimitive?.booleanOrNull ?: false
+                watchedOnline["$serverId:${nick.lowercase()}"] = channelName == "irc:monitor-online"
             }
 
             "irc:monitor-list" -> {

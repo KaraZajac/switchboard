@@ -406,11 +406,42 @@ fun SwitchboardEngine.verifyAccount(serverId: String, account: String, code: Str
 
 // ── the friend list (MONITOR) ────────────────────────────────────────
 
-fun SwitchboardEngine.watchNicks(serverId: String, nicks: List<String>) =
+/**
+ * Watch for somebody turning up.
+ *
+ * Recorded in three places, and all three are needed. The server is told, so it
+ * notifies us. The store is told, so the friends list shows them straight away
+ * rather than waiting for a `MONITOR L` round trip. And the vault is told,
+ * because MONITOR lives on the connection and dies with it — a watch that is
+ * not written down stops working the first time the phone changes network, and
+ * says nothing about having stopped.
+ */
+fun SwitchboardEngine.watchNicks(serverId: String, nicks: List<String>) {
     act(serverId, "monitor:add", nicks.asJson()) { it.monitorAdd(nicks) }
 
-fun SwitchboardEngine.unwatchNicks(serverId: String, nicks: List<String>) =
+    val watched = store.watchedFor(serverId).toMutableList()
+    for (nick in nicks) if (watched.none { it.equals(nick, true) }) watched.add(nick)
+    store.setWatched(serverId, watched)
+    rememberWatched(serverId, watched)
+}
+
+fun SwitchboardEngine.unwatchNicks(serverId: String, nicks: List<String>) {
     act(serverId, "monitor:remove", nicks.asJson()) { it.monitorRemove(nicks) }
+
+    val watched = store.watchedFor(serverId)
+        .filterNot { held -> nicks.any { it.equals(held, true) } }
+    store.setWatched(serverId, watched)
+    rememberWatched(serverId, watched)
+}
+
+/** Keep the friend list in the shared config, where a reconnect can find it */
+private fun SwitchboardEngine.rememberWatched(serverId: String, nicks: List<String>) {
+    val current = vault.payloadNow() ?: return
+    val monitor = current.monitor.toMutableMap()
+    if (nicks.isEmpty()) monitor.remove(serverId) else monitor[serverId] = nicks
+
+    if (vault.resealPayload(current.copy(monitor = monitor)) != null) noteVaultChanged()
+}
 
 /**
  * Who we are watching.

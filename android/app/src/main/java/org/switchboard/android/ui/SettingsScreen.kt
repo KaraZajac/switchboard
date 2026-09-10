@@ -53,6 +53,7 @@ import kotlinx.coroutines.launch
 import org.switchboard.android.DozeWatch
 import org.switchboard.android.EngineMode
 import org.switchboard.android.SwitchboardEngine
+import org.switchboard.android.unwatchNicks
 
 /**
  * Settings: the shared config, and what this phone is currently doing.
@@ -121,6 +122,8 @@ fun SettingsScreen(
                 Text("Manage networks", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
             }
         }
+
+        FriendsCard(engine)
 
         Spacer(Modifier.height(8.dp))
         Text(
@@ -231,8 +234,16 @@ private fun SessionCard(engine: SwitchboardEngine) {
         }
         Spacer(Modifier.height(8.dp))
         Text(
-            "The desktop takes the connections back whenever it is running. This phone stands " +
-                "in for it the rest of the time, so you are only ever logged in once.",
+            // Two devices or one. The sentence about handing back describes
+            // something a phone that has never been paired does not do, and
+            // read as an explanation of why it was not working.
+            if (engine.pairedWithDesktop) {
+                "The desktop takes the connections back whenever it is running. This phone " +
+                    "stands in for it the rest of the time, so you are only ever logged in once."
+            } else {
+                "This phone connects to IRC itself. Pair a desktop and the two share one " +
+                    "config and take turns; until then, everything happens here."
+            },
             color = Overlay,
             fontSize = 12.sp,
             lineHeight = 17.sp
@@ -248,9 +259,14 @@ private fun SessionCard(engine: SwitchboardEngine) {
  */
 /** One sentence for what this phone is doing, matching the badge in the header */
 private fun headingFor(engine: SwitchboardEngine): String = when {
-    engine.mode == EngineMode.HOLDING -> "Holding the IRC connections"
+    engine.mode == EngineMode.HOLDING && engine.pairedWithDesktop -> "Holding the IRC connections"
+    engine.mode == EngineMode.HOLDING -> "Connected"
     engine.mode == EngineMode.FOLLOWING -> "Following the desktop"
-    engine.isTakingOver -> "Taking over from the desktop"
+    // "Taking over" is a sentence about two devices. On a phone that has never
+    // been paired it names something the reader knows nothing about, in place
+    // of the perfectly ordinary thing that is happening.
+    engine.isTakingOver && engine.pairedWithDesktop -> "Taking over from the desktop"
+    engine.isTakingOver -> "Connecting"
     else -> "Not connected"
 }
 
@@ -612,6 +628,94 @@ private fun VaultCard(engine: SwitchboardEngine) {
                             modifier = Modifier.size(16.dp)
                         )
                     }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Who you are waiting for.
+ *
+ * MONITOR is the one IRC feature that answers "tell me when they turn up", and
+ * the phone could ask for it — from a person's profile — but never show what it
+ * had asked for. So a watch was something you could turn on and never off, and
+ * a list you could add to and never read. This is the other half.
+ *
+ * Per network, because MONITOR is: the same nick on two networks is two people
+ * until proven otherwise, and the server only knows about its own.
+ */
+@Composable
+private fun FriendsCard(engine: SwitchboardEngine) {
+    val store = engine.store
+    val servers = store.servers.values.sortedBy { it.name.lowercase() }
+    val scope = rememberCoroutineScope()
+
+    Spacer(Modifier.height(8.dp))
+    Text(
+        "Friends",
+        color = Overlay,
+        fontSize = 11.sp,
+        fontWeight = FontWeight.Bold,
+        modifier = Modifier.padding(start = 20.dp, bottom = 6.dp)
+    )
+    Card {
+        val anyone = servers.any { store.watchedFor(it.id).isNotEmpty() }
+        if (!anyone) {
+            Text(
+                "Nobody yet. Open somebody's name in a channel and choose " +
+                    "\"Tell me when they are online\".",
+                color = Subtext,
+                fontSize = 13.sp,
+                lineHeight = 18.sp
+            )
+            return@Card
+        }
+
+        for (server in servers) {
+            val nicks = store.watchedFor(server.id).sortedBy { it.lowercase() }
+            if (nicks.isEmpty()) continue
+
+            if (servers.count { store.watchedFor(it.id).isNotEmpty() } > 1) {
+                Text(
+                    server.name.ifBlank { server.host },
+                    color = Overlay,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(Modifier.height(6.dp))
+            }
+
+            for (nick in nicks) {
+                val online = store.isOnline(server.id, nick)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(9.dp)
+                            .background(if (online) Green else Overlay, CircleShape)
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(nick, color = Text0, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            if (online) "Online now" else "Not on this network",
+                            color = if (online) Green else Overlay,
+                            fontSize = 11.sp
+                        )
+                    }
+                    Text(
+                        "Stop watching",
+                        color = Red,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable { engine.unwatchNicks(server.id, listOf(nick)) }
+                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                    )
                 }
             }
         }

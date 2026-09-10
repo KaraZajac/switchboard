@@ -102,6 +102,9 @@ class VaultStore(context: Context) {
     /** The nicks this account watches on a server, shared from the other device */
     fun watched(serverId: String): List<String> = payload?.monitor?.get(serverId).orEmpty()
 
+    /** The open payload, for a caller that wants to change part of it and reseal */
+    fun payloadNow(): VaultPayload? = payload
+
     /** True when the key is being kept, so a restart does not lock us out */
     val isKeptOpen: Boolean get() = keeper.isKept
 

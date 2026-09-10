@@ -329,3 +329,73 @@ class MentionTest {
         assertFalse(namesYou("anything at all", ""))
     }
 }
+
+/**
+ * The friend list.
+ *
+ * MONITOR is the only way IRC answers "tell me when they turn up", and the
+ * phone had half of it: you could ask, but never see what you had asked for,
+ * and — following a desktop — never hear the answer, because the two sides used
+ * different names for the same two events.
+ */
+class WatchTest {
+
+    private lateinit var store: SwitchboardStore
+    private val server = "s1"
+
+    @Before
+    fun setUp() {
+        store = SwitchboardStore()
+        store.servers[server] = Server(id = server, name = "Test", host = "h", nick = "kara")
+    }
+
+    @Test
+    fun `the desktop's names for coming and going are understood`() {
+        store.setWatched(server, listOf("robin"))
+
+        store.handleEvent("irc:monitor-online", buildJsonObject {
+            put("serverId", server)
+            put("nick", "robin")
+        })
+        assertTrue(store.isOnline(server, "robin"))
+
+        store.handleEvent("irc:monitor-offline", buildJsonObject {
+            put("serverId", server)
+            put("nick", "robin")
+        })
+        assertFalse(store.isOnline(server, "robin"))
+    }
+
+    @Test
+    fun `case does not decide whether your friend is online`() {
+        store.handleEvent("irc:monitor-online", buildJsonObject {
+            put("serverId", server)
+            put("nick", "Robin")
+        })
+
+        assertTrue(store.isOnline(server, "robin"))
+        assertTrue(store.isOnline(server, "ROBIN"))
+    }
+
+    @Test
+    fun `the same nick on another network is somebody else`() {
+        store.handleEvent("irc:monitor-online", buildJsonObject {
+            put("serverId", server)
+            put("nick", "robin")
+        })
+
+        assertFalse(store.isOnline("other", "robin"))
+    }
+
+    @Test
+    fun `a MONITOR L reply fills the list without losing what is there`() {
+        store.setWatched(server, listOf("robin"))
+
+        store.handleEvent("irc:monitor-list", buildJsonObject {
+            put("serverId", server)
+            put("targets", "mara,robin,vic")
+        })
+
+        assertEquals(listOf("robin", "mara", "vic"), store.watchedFor(server))
+    }
+}

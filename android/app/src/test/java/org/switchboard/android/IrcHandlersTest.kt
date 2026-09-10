@@ -582,10 +582,13 @@ class IrcHandlersTest {
     fun `monitor replies name the person, not their whole mask`() {
         register("monitor")
         feed(":irc.example.org 730 kara :alice!u@h,bob!u@h")
+        feed(":irc.example.org 731 kara :vic!u@h")
 
-        val online = session.eventsOn("irc:monitor")
+        // The desktop's names for these, because a phone following a desktop
+        // has to understand what it is sent — and it is sent these.
+        val online = session.eventsOn("irc:monitor-online")
         assertEquals(listOf("alice", "bob"), online.map { it.str("nick") })
-        assertTrue(online.all { it.bool("online") == true })
+        assertEquals(listOf("vic"), session.eventsOn("irc:monitor-offline").map { it.str("nick") })
     }
 
     @Test

@@ -201,11 +201,17 @@ internal fun registerMonitorHandlers() {
 private fun monitorStatus(session: IrcSession, message: IrcMessage, online: Boolean) {
     val targets = message.params.lastOrNull()?.split(",")?.filter { it.isNotBlank() } ?: return
     for (target in targets) {
-        session.emit("irc:monitor", buildJsonObject {
-            put("serverId", session.state.serverId)
-            // The reply carries nick!user@host; the nick is what a caller asked about
-            put("nick", target.substringBefore('!').trim())
-            put("online", online)
-        })
+        // The desktop's names for the same two events. This emitted
+        // `irc:monitor` with an `online` flag, which nothing on the other side
+        // of the link sends — so a phone following a desktop never learned that
+        // anybody had come online, and the friend list sat grey all evening.
+        session.emit(
+            if (online) "irc:monitor-online" else "irc:monitor-offline",
+            buildJsonObject {
+                put("serverId", session.state.serverId)
+                // The reply carries nick!user@host; the nick is what a caller asked about
+                put("nick", target.substringBefore('!').trim())
+            }
+        )
     }
 }
