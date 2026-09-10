@@ -86,7 +86,9 @@ fun SwitchboardEngine.redact(serverId: String, target: String, messageId: String
 
 fun SwitchboardEngine.setTyping(serverId: String, target: String, typing: Boolean) {
     val state = if (typing) "active" else "done"
-    act(serverId, "message:typing", JsonPrimitive(target), JsonPrimitive(state)) {
+    // Quiet: nobody needs a banner because the server did not hear them start
+    // typing, and offline it would fire on every keystroke.
+    act(serverId, "message:typing", JsonPrimitive(target), JsonPrimitive(state), quiet = true) {
         it.setTyping(target, state)
     }
 }

@@ -240,7 +240,7 @@ class SwitchboardEngine(
         // A direct message is always for you; in a channel, your name has to
         // come up as a word rather than as part of a longer one.
         val direct = !channel.startsWith("#") && !channel.startsWith("&")
-        val mentioned = direct || (me.isNotEmpty() && mentions(text, me))
+        val mentioned = direct || namesYou(text, me)
 
         notifier.show(
             conversationKey = conversationKey,
@@ -279,11 +279,6 @@ class SwitchboardEngine(
             "irc:part" -> forgetJoin(serverId, name)
         }
     }
-
-    /** Your nick as a whole word, so "karaoke" is not you */
-    private fun mentions(text: String, nick: String): Boolean =
-        Regex("(?<![\\w\\[\\]{}\\\\`|^-])" + Regex.escape(nick) + "(?![\\w\\[\\]{}\\\\`|^-])",
-            RegexOption.IGNORE_CASE).containsMatchIn(text)
 
     private fun notificationColour(serverId: String, nick: String): Int {
         val custom = store.metadataFor(serverId, nick).color?.trim()
@@ -500,11 +495,34 @@ class SwitchboardEngine(
         serverId: String,
         channel: String,
         vararg args: JsonElement,
+        /**
+         * Whether failing is worth interrupting the user about.
+         *
+         * A typing indicator that could not be sent is nothing; a message that
+         * could not be sent is the whole point of the app. Both come through
+         * here, so the difference has to be stated.
+         */
+        quiet: Boolean = false,
         local: (IrcConnection) -> Unit
     ) {
         if (mode == EngineMode.HOLDING) {
-            connections[serverId]?.let(local)
-                ?: Log.w(TAG, "$channel: holding, but not connected to $serverId")
+            val connection = connections[serverId]
+            if (connection == null) {
+                Log.w(TAG, "$channel: holding, but not connected to $serverId")
+                if (!quiet) store.noteRefusal("Not connected — that was not sent")
+                return
+            }
+
+            // A socket that has gone away still takes writes: the queue is
+            // unbounded and `writeDirect` swallows the failure, so a message
+            // typed while the connection was down disappeared without a word.
+            // The reconnect will be along shortly; the message will not.
+            if (!connection.isConnected) {
+                if (!quiet) store.noteRefusal("Not connected — that was not sent")
+                return
+            }
+
+            local(connection)
         } else {
             scope.launch {
                 runCatching { remote.call(channel, JsonPrimitive(serverId), *args) }
@@ -651,6 +669,13 @@ class SwitchboardEngine(
         seedServer(config)
         val connection = IrcConnection(config, scope) { channel, data ->
             store.handleEvent(channel, data)
+
+            // Notifying was wired only to the desktop's relay, so a phone
+            // holding its own connection — the case this whole client exists
+            // for — never told anyone anything. Messages arrived, the badge
+            // counted them, and the phone stayed dark.
+            if (channel == "irc:message") notifyIfWorthIt(data)
+
             rememberMembership(channel, data)
 
             // Registering is the moment this phone stops dialling and starts

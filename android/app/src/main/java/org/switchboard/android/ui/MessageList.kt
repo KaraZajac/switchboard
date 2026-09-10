@@ -42,6 +42,7 @@ import kotlinx.coroutines.flow.filter
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.SpanStyle
@@ -63,6 +64,7 @@ import org.switchboard.android.SwitchboardStore
 import org.switchboard.android.LinkPreview
 import org.switchboard.android.UserMetadata
 import org.switchboard.android.isChannel
+import org.switchboard.android.namesYou
 
 /**
  * The conversation.
@@ -397,6 +399,15 @@ private fun MessageRow(
     val action = message.type == "action" || wrapped
     val body = if (wrapped) ctcp.removePrefix("ACTION ") else message.content
 
+    // Somebody said your name. Not our own messages, which contain it often
+    // enough, and not a notice from the server, which is addressed to you by
+    // definition and would light up the whole conversation.
+    val mentioned = message.type != "notice" &&
+        myNick.isNotEmpty() &&
+        !message.nick.equals(myNick, ignoreCase = true) &&
+        namesYou(body, myNick)
+    val mentionWash = Yellow.copy(alpha = 0.07f)
+
     Column(modifier = Modifier.fillMaxWidth()) {
 
     // The line being answered, quoted above so the reply makes sense on its own
@@ -409,6 +420,19 @@ private fun MessageRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            // Your name being said is the single most important thing that
+            // happens in a channel, and it looked exactly like every other
+            // line. The bar down the left is what every IRC client has done
+            // about this since the 90s, and it reads at a glance in a way a
+            // colour change does not.
+            .then(
+                if (mentioned) {
+                    Modifier.drawBehind {
+                        drawRect(mentionWash, size = size)
+                        drawRect(Yellow, size = androidx.compose.ui.geometry.Size(3.dp.toPx(), size.height))
+                    }
+                } else Modifier
+            )
             .combinedClickable(
                 onClick = {},
                 onLongClick = { showActions = true }
@@ -732,3 +756,4 @@ private fun Linkified(text: String, edited: Boolean, onLongPress: () -> Unit) {
  * full stop.
  */
 private val LINK = Regex("""https?://[^\s<>\"]+[^\s<>\".,!?;:)\]}]""")
+

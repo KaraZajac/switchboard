@@ -320,7 +320,8 @@ private fun Conversation(
                 onClick = {
                     store.clearIdentifyPrompt()
                     onOpenAccount(prompt.serverId)
-                }
+                },
+                onDismiss = { store.clearIdentifyPrompt() }
             )
         }
 
@@ -669,14 +670,23 @@ private fun Banner(
     text: String,
     color: Color,
     action: String? = null,
-    onClick: (() -> Unit)? = null
+    onClick: (() -> Unit)? = null,
+    /**
+     * Put it away without doing the thing it suggests.
+     *
+     * A banner that only offers the thing you were avoiding is not an offer.
+     * Given here, an × appears on the right; without it the banner stays until
+     * whatever it is about is resolved, which is right for the ones about state
+     * rather than about a suggestion.
+     */
+    onDismiss: (() -> Unit)? = null
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .background(color.copy(alpha = 0.12f))
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
-            .padding(horizontal = 16.dp, vertical = 7.dp),
+            .padding(start = 16.dp, end = if (onDismiss != null) 4.dp else 16.dp, top = 7.dp, bottom = 7.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(modifier = Modifier.size(7.dp).background(color, CircleShape))
@@ -690,6 +700,18 @@ private fun Banner(
         )
         if (action != null && onClick != null) {
             Text(action, color = color, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        }
+        if (onDismiss != null) {
+            Text(
+                "×",
+                color = color,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(12.dp))
+                    .clickable(onClick = onDismiss)
+                    .padding(horizontal = 10.dp, vertical = 2.dp)
+            )
         }
     }
 }

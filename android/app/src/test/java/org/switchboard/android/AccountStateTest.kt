@@ -4,6 +4,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -201,5 +202,130 @@ class AccountStateTest {
 
         assertEquals("ACCOUNT_EXISTS", store.accountReply?.status)
         assertTrue(store.accountReply?.failed == true)
+    }
+}
+
+/**
+ * Where a message lands in the conversation.
+ *
+ * `chathistory` replays arrive as ordinary messages carrying their own
+ * timestamps, and they were appended: a conversation from ten minutes ago sat
+ * underneath one from ten seconds ago, with the day separator drawn twice.
+ */
+class MessageOrderTest {
+
+    private lateinit var store: SwitchboardStore
+    private val server = "s1"
+
+    @Before
+    fun setUp() {
+        store = SwitchboardStore()
+        store.servers[server] = Server(id = server, name = "Test", host = "h", nick = "kara")
+        store.channels[server] = mutableListOf(Channel("#lounge"))
+        store.activeServerId = server
+        store.activeChannel = "#lounge"
+    }
+
+    private fun arrive(id: String, at: String, historical: Boolean = false) {
+        store.handleEvent("irc:message", buildJsonObject {
+            put("serverId", server)
+            put("channel", "#lounge")
+            put("message", buildJsonObject {
+                put("id", id)
+                put("nick", "robin")
+                put("content", id)
+                put("timestamp", at)
+                put("type", "privmsg")
+                if (historical) put("historical", true)
+            })
+        })
+    }
+
+    private fun order() = store.messagesFor(server, "#lounge").map { it.id }
+
+    @Test
+    fun `live messages keep the order they arrive in`() {
+        arrive("a", "2026-09-10T12:00:00Z")
+        arrive("b", "2026-09-10T12:00:01Z")
+        arrive("c", "2026-09-10T12:00:02Z")
+
+        assertEquals(listOf("a", "b", "c"), order())
+    }
+
+    @Test
+    fun `history arriving afterwards goes where it belongs`() {
+        arrive("live", "2026-09-10T12:05:00Z")
+        arrive("old1", "2026-09-10T11:00:00Z", historical = true)
+        arrive("old2", "2026-09-10T11:30:00Z", historical = true)
+
+        assertEquals(listOf("old1", "old2", "live"), order())
+    }
+
+    @Test
+    fun `a message from the middle finds the middle`() {
+        arrive("first", "2026-09-10T10:00:00Z")
+        arrive("last", "2026-09-10T14:00:00Z")
+        arrive("middle", "2026-09-10T12:00:00Z", historical = true)
+
+        assertEquals(listOf("first", "middle", "last"), order())
+    }
+
+    @Test
+    fun `the same message twice is still one message`() {
+        arrive("a", "2026-09-10T12:00:00Z")
+        arrive("a", "2026-09-10T12:00:00Z")
+
+        assertEquals(listOf("a"), order())
+    }
+
+    @Test
+    fun `a message with no timestamp goes at the end`() {
+        arrive("a", "2026-09-10T12:00:00Z")
+        arrive("b", "")
+
+        assertEquals(listOf("a", "b"), order())
+    }
+}
+
+/**
+ * Whether a line is about you.
+ *
+ * Three parts of the app asked this and gave three answers: the notifier used a
+ * word-boundary regex, the badge used a plain substring — so "karaoke" counted
+ * as somebody saying "kara" — and the conversation did not ask at all.
+ */
+class MentionTest {
+
+    @Test
+    fun `your name as a word is you`() {
+        assertTrue(namesYou("kara: are you there?", "kara"))
+        assertTrue(namesYou("thanks kara", "kara"))
+        assertTrue(namesYou("(kara)", "kara"))
+        assertTrue(namesYou("KARA are you about", "kara"))
+    }
+
+    @Test
+    fun `your name inside a longer word is not`() {
+        assertFalse(namesYou("we went to karaoke", "kara"))
+        assertFalse(namesYou("okara is a soy product", "kara"))
+    }
+
+    /** IRC nicks may contain []{}\`|^- , so those are part of the word too */
+    @Test
+    fun `another nick that starts with yours is not you`() {
+        assertFalse(namesYou("kara[work]: ping", "kara"))
+        assertFalse(namesYou("kara-bot said no", "kara"))
+        assertTrue(namesYou("kara[work]: ping", "kara[work]"))
+    }
+
+    @Test
+    fun `a nick with regex characters in it is matched literally`() {
+        assertTrue(namesYou("hello {kara}", "{kara}"))
+        assertFalse(namesYou("hello xkarax", "{kara}"))
+    }
+
+    @Test
+    fun `nobody is mentioned when there is no nick to mention`() {
+        assertFalse(namesYou("anything at all", ""))
     }
 }

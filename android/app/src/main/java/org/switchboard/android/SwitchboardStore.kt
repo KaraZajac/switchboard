@@ -470,7 +470,7 @@ class SwitchboardStore {
                 if (!isChannel(channel)) openConversation(serverId, channel)
 
                 val list = messages.getOrPut(conversation) { mutableListOf() }
-                if (list.none { it.id == message.id }) list.add(message)
+                if (list.none { it.id == message.id }) list.insertByTime(message)
                 messages[conversation] = list.toMutableStateList()
 
                 // They have said their piece; stop showing them as typing
@@ -498,8 +498,7 @@ class SwitchboardStore {
                 if (conversation != conversationKey()) {
                     val myNick = servers[serverId]?.nick ?: ""
                     // Someone messaging you directly is a mention by definition
-                    val mentioned = !isChannel(channel) ||
-                        (myNick.isNotEmpty() && message.content.contains(myNick, true))
+                    val mentioned = !isChannel(channel) || namesYou(message.content, myNick)
                     channels[serverId] = (channels[serverId] ?: return)
                         .map {
                             if (it.name.equals(channel, true)) {
@@ -880,6 +879,32 @@ private fun JsonObject.toMessage(): Message = Message(
 )
 
 /**
+ * Put a message where its timestamp says it belongs.
+ *
+ * Live traffic is almost always newer than everything already held, so the walk
+ * from the end stops immediately and this costs nothing. History is the reason
+ * it exists: `chathistory` replays arrive as ordinary messages carrying their
+ * own `time` tag, and appending them put a conversation from ten minutes ago
+ * underneath one from ten seconds ago — with the day separator drawn twice,
+ * once on the way back and once on the way forward again.
+ *
+ * ISO-8601 in UTC sorts correctly as text, which is what the server-time tag
+ * always is. A message with no timestamp goes at the end, where a client with
+ * nothing better to go on would have put it anyway.
+ */
+private fun MutableList<Message>.insertByTime(message: Message) {
+    if (message.timestamp.isEmpty()) { add(message); return }
+
+    var at = size
+    while (at > 0) {
+        val before = this[at - 1].timestamp
+        if (before.isEmpty() || before <= message.timestamp) break
+        at--
+    }
+    add(at, message)
+}
+
+/**
  * Whether a conversation is a channel rather than a person.
  *
  * IRC says so with the first character, and the two the RFC defines cover
@@ -887,6 +912,26 @@ private fun JsonObject.toMessage(): Message = Message(
  * with a `#`, which is the difference between a room and a human being.
  */
 fun isChannel(name: String): Boolean = name.startsWith("#") || name.startsWith("&")
+
+/**
+ * Whether a line says your name, as a name rather than as a fragment.
+ *
+ * One rule, in one place, because three parts of the app ask this question and
+ * they must agree: the line the notifier rings for, the line the badge counts,
+ * and the line the conversation highlights should be the same line. They were
+ * not — the badge used a plain substring match, so "karaoke" counted as
+ * somebody saying "kara".
+ *
+ * IRC nicks may contain `[]{}\`|^-`, so those count as part of the word: "kara"
+ * must not match inside "kara[work]" either.
+ */
+fun namesYou(text: String, nick: String): Boolean {
+    if (nick.isEmpty()) return false
+    return Regex(
+        "(?<![\\w\\[\\]{}\\\\`|^-])" + Regex.escape(nick) + "(?![\\w\\[\\]{}\\\\`|^-])",
+        RegexOption.IGNORE_CASE
+    ).containsMatchIn(text)
+}
 
 /** How long someone stays "typing" without saying so again */
 const val TYPING_TIMEOUT_MS = 6_000L
