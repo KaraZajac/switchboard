@@ -15,7 +15,7 @@ import { KNOWN_NETWORKS, NETWORKS_CHECKED_AT, suggestedNetworks } from '@shared/
  */
 describe('the networks we offer to start with', () => {
   it('has a useful number of them', () => {
-    expect(KNOWN_NETWORKS.length).toBeGreaterThanOrEqual(8)
+    expect(KNOWN_NETWORKS.length).toBeGreaterThanOrEqual(20)
   })
 
   it('says when it was last checked', () => {
@@ -47,14 +47,24 @@ describe('the networks we offer to start with', () => {
   })
 
   /**
-   * Nobody should be sent to a plain-text network by a list we wrote. Where a
-   * network's own round-robin cannot be verified, the entry points at a server
-   * that can — see IRCnet and EFnet.
+   * Where a network's own round-robin cannot be verified, the entry points at a
+   * server that can — see IRCnet, EFnet, FurNet, SorceryNet, Nightstar.
+   *
+   * Two entries are plain text, because those networks refuse a connection on
+   * 6697 on the round-robin and on every individual server tried. What matters
+   * is that such an entry says so, so nobody is sent somewhere unencrypted
+   * without being told.
    */
-  it('sends nobody anywhere unencrypted', () => {
+  it('explains itself wherever it is not encrypted', () => {
     for (const network of KNOWN_NETWORKS) {
-      expect(network.tls, network.id).toBe(true)
+      if (network.tls) continue
+      expect(network.checked, network.id).toMatch(/plain text/)
     }
+  })
+
+  it('is mostly encrypted', () => {
+    const plain = KNOWN_NETWORKS.filter((n) => !n.tls)
+    expect(plain.length).toBeLessThan(KNOWN_NETWORKS.length / 4)
   })
 
   it('records what answered when each was checked', () => {

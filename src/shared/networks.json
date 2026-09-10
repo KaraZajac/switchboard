@@ -1,7 +1,7 @@
 {
-  "$comment": "Networks offered to someone who has none. One file, read by both clients — the desktop imports it, the Android build copies it into assets. Everything here was confirmed by connecting on 2026-09-10; `checked` on each entry says what came back. Sizes move, so treat the counts as the order of magnitude they were, not as a promise.",
+  "$comment": "Networks offered to somebody who has none. One file, read by both clients — the desktop imports it, the Android build copies it into assets. Every entry was confirmed by connecting on the date below; `checked` says what came back, including the caveats. Sizes move, so treat the counts as the order of magnitude they were, not as a promise.",
+  "$tls": "Two entries are plain text, and say so. That is not an oversight on our part: those networks refuse a connection on 6697 on the round-robin and on every individual server tried. Listing them honestly seemed better than pretending they are encrypted or leaving two of the largest networks out.",
   "checkedAt": "2026-09-10",
-
   "networks": [
     {
       "id": "libera",
@@ -12,8 +12,24 @@
       "description": "Free and open-source projects. Started in 2021 by the people who had been running freenode, and where most of those communities moved.",
       "region": "Worldwide",
       "homepage": "https://libera.chat",
-      "channels": ["#libera"],
-      "checked": "solanum, 30 servers, about 31,600 people, SASL (PLAIN, EXTERNAL, SCRAM-SHA-512, ECDSA)"
+      "channels": [
+        "#libera"
+      ],
+      "checked": "solanum, 30 servers, about 31,700 people, SASL (PLAIN, EXTERNAL, SCRAM-SHA-512, ECDSA)"
+    },
+    {
+      "id": "undernet",
+      "name": "Undernet",
+      "host": "irc.undernet.org",
+      "port": 6667,
+      "tls": false,
+      "description": "Running since 1992. Channels are looked after by a bot called X rather than by ChanServ.",
+      "region": "Worldwide",
+      "homepage": "https://www.undernet.org",
+      "channels": [
+        "#undernet"
+      ],
+      "checked": "ircu 2.10.12, 33 servers, about 16,400 people. No encrypted port: 6697 refuses the connection on the round-robin and on every individual server tried, so this is plain text."
     },
     {
       "id": "ircnet",
@@ -23,20 +39,10 @@
       "tls": true,
       "description": "One half of the 1990 split that made IRC two networks. Still large, still mostly European, and still without network-wide nick registration.",
       "region": "Europe",
-      "channels": ["#ircnet"],
+      "channels": [
+        "#ircnet"
+      ],
       "checked": "ircd 2.12, 34 servers, about 15,800 people. The round-robin open.ircnet.net cannot be verified over TLS — each server presents a certificate for its own name — so this points at one that can."
-    },
-    {
-      "id": "undernet",
-      "name": "Undernet",
-      "host": "irc.undernet.org",
-      "port": 6697,
-      "tls": true,
-      "description": "Running since 1992. Channels are looked after by a bot called X rather than by ChanServ.",
-      "region": "Worldwide",
-      "homepage": "https://www.undernet.org",
-      "channels": ["#undernet"],
-      "checked": "ircu 2.10.12, 33 servers, about 16,400 people. Port 6697 could not be reached from the machine this was checked on; 6667 answered."
     },
     {
       "id": "oftc",
@@ -47,7 +53,9 @@
       "description": "The Open and Free Technology Community — Debian, Tor, and the projects around them.",
       "region": "Worldwide",
       "homepage": "https://www.oftc.net",
-      "channels": ["#oftc"],
+      "channels": [
+        "#oftc"
+      ],
       "checked": "hybrid 7.2, 17 servers, about 14,200 people. No SASL: log in to NickServ instead."
     },
     {
@@ -59,7 +67,9 @@
       "description": "Anime, manga and general chat. Large, social, and busy at all hours.",
       "region": "Worldwide",
       "homepage": "https://www.rizon.net",
-      "channels": ["#rizon"],
+      "channels": [
+        "#rizon"
+      ],
       "checked": "plexus 4, 17 servers, about 9,100 people, SASL"
     },
     {
@@ -71,7 +81,9 @@
       "description": "The other half of the 1990 split, and the oldest network still running. Nothing is registered here: no NickServ, no ChanServ, no account.",
       "region": "North America and Europe",
       "homepage": "http://www.efnet.org",
-      "channels": ["#efnet"],
+      "channels": [
+        "#efnet"
+      ],
       "checked": "ircd-ratbox 3.0, 20 servers, about 8,400 people. The round-robin irc.efnet.org cannot be verified over TLS, so this points at one server that can."
     },
     {
@@ -83,20 +95,24 @@
       "description": "Running since 1994, and where NickServ and ChanServ were invented.",
       "region": "Worldwide",
       "homepage": "https://www.dal.net",
-      "channels": ["#dalnet"],
+      "channels": [
+        "#dalnet"
+      ],
       "checked": "bahamut 2.2, 35 servers, about 6,500 people. No SASL: log in to NickServ instead."
     },
     {
       "id": "quakenet",
       "name": "QuakeNet",
       "host": "irc.quakenet.org",
-      "port": 6697,
-      "tls": true,
+      "port": 6667,
+      "tls": false,
       "description": "Gaming, and the largest network in Europe for much of the 2000s. Channels are looked after by a bot called Q.",
       "region": "Europe",
       "homepage": "https://www.quakenet.org",
-      "channels": ["#quakenet"],
-      "checked": "snircd 1.3, 25 servers, about 5,400 people. Port 6697 could not be reached from the machine this was checked on; 6667 answered."
+      "channels": [
+        "#quakenet"
+      ],
+      "checked": "snircd 1.3, 25 servers, about 5,400 people. No encrypted port: 6697 refuses the connection on the round-robin and on every individual server tried, so this is plain text."
     },
     {
       "id": "hackint",
@@ -107,8 +123,24 @@
       "description": "The hacker community around the Chaos Computer Club and the European hackerspaces.",
       "region": "Europe",
       "homepage": "https://hackint.org",
-      "channels": ["#hackint"],
+      "channels": [
+        "#hackint"
+      ],
       "checked": "9 servers, about 4,200 people, SASL"
+    },
+    {
+      "id": "synirc",
+      "name": "synIRC",
+      "host": "irc.synirc.net",
+      "port": 6697,
+      "tls": true,
+      "description": "Anime, gaming and the communities that grew up around them.",
+      "region": "North America and Europe",
+      "homepage": "https://synirc.net",
+      "channels": [
+        "#synirc"
+      ],
+      "checked": "10 servers, about 1,500 people, SASL (PLAIN, EXTERNAL)"
     },
     {
       "id": "espernet",
@@ -119,7 +151,9 @@
       "description": "Game development and Minecraft modding projects.",
       "region": "North America and Europe",
       "homepage": "https://esper.net",
-      "channels": ["#esper"],
+      "channels": [
+        "#esper"
+      ],
       "checked": "charybdis 3.5, 5 servers, about 1,400 people, SASL"
     },
     {
@@ -131,7 +165,9 @@
       "description": "Communities that grew out of Reddit, and a general-purpose network besides.",
       "region": "North America and Europe",
       "homepage": "https://snoonet.org",
-      "channels": ["#snoonet"],
+      "channels": [
+        "#snoonet"
+      ],
       "checked": "InspIRCd 3, 11 servers, about 1,200 people, SASL (PLAIN, EXTERNAL)"
     },
     {
@@ -143,8 +179,206 @@
       "description": "The tilde community: shared public-access Unix servers, and the people who run them.",
       "region": "Worldwide",
       "homepage": "https://tilde.chat",
-      "channels": ["#meta"],
+      "channels": [
+        "#meta"
+      ],
       "checked": "InspIRCd 3, 6 servers, about 720 people, SASL"
+    },
+    {
+      "id": "slashnet",
+      "name": "SlashNET",
+      "host": "irc.slashnet.org",
+      "port": 6697,
+      "tls": true,
+      "description": "A long-running general-purpose network, going since the 1990s.",
+      "region": "North America and Europe",
+      "homepage": "https://www.slashnet.org",
+      "channels": [
+        "#slashnet"
+      ],
+      "checked": "5 servers, about 690 people. No SASL: log in to NickServ instead."
+    },
+    {
+      "id": "euirc",
+      "name": "euIRC",
+      "host": "irc.euirc.net",
+      "port": 6697,
+      "tls": true,
+      "description": "A German-speaking network, and one of the larger ones in central Europe.",
+      "region": "Germany and central Europe",
+      "homepage": "https://www.euirc.net",
+      "channels": [
+        "#euirc"
+      ],
+      "checked": "7 servers, about 560 people. No SASL: log in to NickServ instead."
+    },
+    {
+      "id": "furnet",
+      "name": "FurNet",
+      "host": "alicorn.furnet.org",
+      "port": 6697,
+      "tls": true,
+      "description": "The furry fandom, and one of the older places it gathers.",
+      "region": "Europe and North America",
+      "homepage": "https://www.furnet.org",
+      "channels": [
+        "#furnet"
+      ],
+      "checked": "3 servers, about 550 people, SASL (PLAIN, EXTERNAL). The round-robin irc.furnet.org cannot be verified over TLS — it hands out a server whose certificate is for its own name — so this points at one that can."
+    },
+    {
+      "id": "geekshed",
+      "name": "GeekShed",
+      "host": "irc.geekshed.net",
+      "port": 6697,
+      "tls": true,
+      "description": "Geek culture, podcasts and the communities around them.",
+      "region": "North America and Europe",
+      "homepage": "https://www.geekshed.net",
+      "channels": [
+        "#geekshed"
+      ],
+      "checked": "3 servers, about 470 people. No SASL: log in to NickServ instead."
+    },
+    {
+      "id": "sorcerynet",
+      "name": "SorceryNet",
+      "host": "likho.sorcery.net",
+      "port": 6697,
+      "tls": true,
+      "description": "Pagan, occult and spiritual communities, and general chat alongside them.",
+      "region": "Worldwide",
+      "homepage": "https://www.sorcery.net",
+      "channels": [
+        "#sorcerynet"
+      ],
+      "checked": "7 servers, about 350 people, SASL. The round-robin irc.sorcery.net cannot be verified over TLS, so this points at one server that can."
+    },
+    {
+      "id": "afternet",
+      "name": "AfterNET",
+      "host": "irc.afternet.org",
+      "port": 6697,
+      "tls": true,
+      "description": "A general-purpose network that has made a point of being a quiet, friendly one since 2001.",
+      "region": "North America and Europe",
+      "homepage": "https://www.afternet.org",
+      "channels": [
+        "#help"
+      ],
+      "checked": "9 servers, about 320 people, SASL"
+    },
+    {
+      "id": "swiftirc",
+      "name": "SwiftIRC",
+      "host": "irc.swiftirc.net",
+      "port": 6697,
+      "tls": true,
+      "description": "Grew up around RuneScape, and still where a lot of that community is.",
+      "region": "North America and Europe",
+      "homepage": "https://www.swiftirc.net",
+      "channels": [
+        "#help"
+      ],
+      "checked": "4 servers, about 300 people, SASL (PLAIN, EXTERNAL, ANONYMOUS)"
+    },
+    {
+      "id": "darkscience",
+      "name": "darkscience",
+      "host": "irc.darkscience.net",
+      "port": 6697,
+      "tls": true,
+      "description": "Hacking, information security and the people who do it for a living.",
+      "region": "Europe and North America",
+      "homepage": "https://darkscience.net",
+      "channels": [
+        "#darkscience"
+      ],
+      "checked": "6 servers, about 280 people, SASL (PLAIN, EXTERNAL, AUTHCOOKIE)"
+    },
+    {
+      "id": "spotchat",
+      "name": "SpotChat",
+      "host": "irc.spotchat.org",
+      "port": 6697,
+      "tls": true,
+      "description": "Technology and free-software projects, run by people who clearly enjoy the protocol.",
+      "region": "North America and Europe",
+      "homepage": "https://spotchat.org",
+      "channels": [
+        "#spotchat"
+      ],
+      "checked": "6 servers, about 180 people, and the longest SASL list of anywhere checked: SCRAM-SHA-256, ECDSA, ECDH-X25519, PLAIN, EXTERNAL and more"
+    },
+    {
+      "id": "austnet",
+      "name": "AustNet",
+      "host": "irc.austnet.org",
+      "port": 6697,
+      "tls": true,
+      "description": "An Australian network, running since the mid-1990s.",
+      "region": "Australia",
+      "homepage": "https://www.austnet.org",
+      "channels": [
+        "#austnet"
+      ],
+      "checked": "4 servers, about 180 people, SASL"
+    },
+    {
+      "id": "canternet",
+      "name": "Canternet",
+      "host": "irc.canternet.org",
+      "port": 6697,
+      "tls": true,
+      "description": "The My Little Pony fandom, and the projects and conventions around it.",
+      "region": "North America and Europe",
+      "homepage": "https://canternet.org",
+      "channels": [
+        "#canternet"
+      ],
+      "checked": "5 servers, about 140 people, SASL"
+    },
+    {
+      "id": "xertion",
+      "name": "Xertion",
+      "host": "irc.xertion.org",
+      "port": 6697,
+      "tls": true,
+      "description": "A small network with a privacy-minded operator and rather more servers than its size suggests.",
+      "region": "Worldwide",
+      "homepage": "https://xertion.org",
+      "channels": [
+        "#xertion"
+      ],
+      "checked": "12 servers, about 130 people, SASL"
+    },
+    {
+      "id": "nightstar",
+      "name": "Nightstar",
+      "host": "traal.nightstar.net",
+      "port": 6697,
+      "tls": true,
+      "description": "Webcomics, tabletop games and the creative communities around them.",
+      "region": "North America and Europe",
+      "homepage": "https://www.nightstar.net",
+      "channels": [
+        "#nightstar"
+      ],
+      "checked": "4 servers, about 100 people. No SASL: log in to NickServ instead. The round-robin irc.nightstar.net cannot be verified over TLS, so this points at one server that can."
+    },
+    {
+      "id": "anthrochat",
+      "name": "AnthroChat",
+      "host": "irc.anthrochat.net",
+      "port": 6697,
+      "tls": true,
+      "description": "A small, long-running network for the furry fandom.",
+      "region": "North America and Europe",
+      "homepage": "https://anthrochat.net",
+      "channels": [
+        "#anthrochat"
+      ],
+      "checked": "2 servers, about 90 people. No SASL: log in to NickServ instead."
     }
   ]
 }

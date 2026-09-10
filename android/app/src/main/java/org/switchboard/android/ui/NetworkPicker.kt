@@ -120,11 +120,21 @@ fun NetworkPicker(
                     Spacer(Modifier.height(3.dp))
                     Text(network.description, color = Subtext, fontSize = 13.sp, lineHeight = 18.sp)
                     Spacer(Modifier.height(4.dp))
-                    Text(
-                        "${network.host}:${network.port}" + if (network.tls) " · TLS" else "",
-                        color = Overlay,
-                        fontSize = 11.sp
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "${network.host}:${network.port}" + if (network.tls) " · TLS" else "",
+                            color = Overlay,
+                            fontSize = 11.sp
+                        )
+                        // Said out loud rather than left as an absence. A
+                        // network with no encrypted port is a real choice
+                        // somebody is making, and they can only make it if we
+                        // tell them.
+                        if (!network.tls) {
+                            Spacer(Modifier.width(6.dp))
+                            Text("not encrypted", color = Yellow, fontSize = 11.sp)
+                        }
+                    }
                 }
                 Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Mantle))
             }

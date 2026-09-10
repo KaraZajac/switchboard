@@ -42,7 +42,7 @@ class NetworksTest {
     @Test
     fun `parses into what the picker renders`() {
         val networks = parse(copied)["networks"]!!.jsonArray
-        assertTrue("a useful number of them", networks.size >= 8)
+        assertTrue("a useful number of them", networks.size >= 20)
 
         for (entry in networks) {
             val network = entry as JsonObject
@@ -52,7 +52,17 @@ class NetworksTest {
             assertTrue("$id says what it is for", network["description"]!!.jsonPrimitive.content.length > 20)
             assertTrue("$id says where it is", network["region"]!!.jsonPrimitive.content.isNotBlank())
             assertTrue("$id has a host", network["host"]!!.jsonPrimitive.content.contains('.'))
-            assertTrue("$id is over TLS", network["tls"]!!.jsonPrimitive.content == "true")
+
+            // Two networks refuse a connection on 6697 on the round-robin and
+            // on every individual server tried. What matters is that such an
+            // entry says so, so nobody is sent somewhere unencrypted without
+            // being told.
+            if (network["tls"]!!.jsonPrimitive.content != "true") {
+                assertTrue(
+                    "$id should say why it is not encrypted",
+                    network["checked"]!!.jsonPrimitive.content.contains("plain text")
+                )
+            }
 
             val port = network["port"]!!.jsonPrimitive.content.toInt()
             assertTrue("$id has a usable port", port in 1..65535)

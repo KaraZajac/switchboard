@@ -49,7 +49,14 @@ export function NetworkPicker({
             <div className="mt-0.5 text-sm leading-snug text-gray-400">{network.description}</div>
             <div className="mt-1 font-mono text-xs text-gray-600">
               {network.host}:{network.port}
-              {network.tls ? ' · TLS' : ''}
+              {network.tls ? (
+                ' · TLS'
+              ) : (
+                // Said out loud rather than left as an absence. A network with
+                // no encrypted port is a real choice somebody is making, and
+                // they can only make it if we tell them.
+                <span className="ml-1 font-sans text-amber-500/80">not encrypted</span>
+              )}
             </div>
           </button>
         ))}
