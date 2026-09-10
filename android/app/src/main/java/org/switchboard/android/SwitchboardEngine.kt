@@ -417,6 +417,25 @@ class SwitchboardEngine(
         releaseConnections()
     }
 
+    /** Whether this phone has a config of its own, desktop or no desktop */
+    val hasOwnConfig: Boolean get() = vault.exists
+
+    /**
+     * Begin a config on this phone alone.
+     *
+     * The way in for someone who has no desktop and does not want one. What it
+     * makes is the same shared config a desktop would have handed over, so
+     * pairing one later is a merge rather than a fresh start.
+     */
+    suspend fun startOwnConfig(passphrase: String, keepOpen: Boolean = true): Boolean {
+        val made = withContext(Dispatchers.Default) { vault.create(passphrase, keepOpen) }
+        if (made) {
+            vaultVersion = vault.version
+            recomputeMode()
+        }
+        return made
+    }
+
     val vaultFingerprint: String? get() = vault.fingerprint
     val isVaultUnlocked: Boolean get() = vault.isUnlocked
     val isVaultKeptOpen: Boolean get() = vault.isKeptOpen

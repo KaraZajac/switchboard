@@ -47,11 +47,14 @@ import org.switchboard.android.pairing.Pairing
 fun PairingScreen(
     status: String,
     onScan: () -> Unit,
-    onPair: (ticket: String, code: String) -> Unit
+    onPair: (ticket: String, code: String) -> Unit,
+    onGoItAlone: (passphrase: String) -> Unit
 ) {
     var ticket by remember { mutableStateOf("") }
     var code by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
+    var alonePassphrase by remember { mutableStateOf("") }
+    var aloneError by remember { mutableStateOf<String?>(null) }
 
     Column(
         modifier = Modifier
@@ -80,8 +83,10 @@ fun PairingScreen(
         Spacer(Modifier.height(28.dp))
 
         Text(
-            "Pair with your desktop and it hands over the servers, the history and the shared " +
-                "config. After that, either device can be the one that is actually connected.",
+            "This phone is an IRC client in its own right — it can connect to networks on its " +
+                "own and never needs a desktop. Pairing with one is how the two come to share " +
+                "the same servers and settings, and how either can be the one that is " +
+                "actually connected.",
             color = Subtext,
             fontSize = 14.sp,
             lineHeight = 21.sp
@@ -160,7 +165,66 @@ fun PairingScreen(
             Text("Pair with desktop", fontWeight = FontWeight.Bold, fontSize = 15.sp)
         }
 
+        Spacer(Modifier.height(28.dp))
+
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.weight(1f).height(1.dp).background(Surface0))
+            Text(
+                "  or use this phone on its own  ",
+                color = Overlay,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Box(Modifier.weight(1f).height(1.dp).background(Surface0))
+        }
+
         Spacer(Modifier.height(16.dp))
+
+        Text(
+            "Set up your networks here and connect straight from this phone. Choose a " +
+                "passphrase now and you can pair a desktop later without starting again — it " +
+                "is what the two devices use to share one config.",
+            color = Subtext,
+            fontSize = 13.sp,
+            lineHeight = 19.sp
+        )
+
+        Spacer(Modifier.height(14.dp))
+
+        Field(
+            value = alonePassphrase,
+            onChange = { alonePassphrase = it; aloneError = null },
+            label = "Passphrase",
+            hint = "Protects your servers and passwords on this phone",
+            monospace = false,
+            lines = 1
+        )
+
+        aloneError?.let {
+            Spacer(Modifier.height(8.dp))
+            Text(it, color = Red, fontSize = 12.sp)
+        }
+
+        Spacer(Modifier.height(14.dp))
+
+        Button(
+            onClick = {
+                val chosen = alonePassphrase
+                if (chosen.length < 8) {
+                    aloneError = "Use at least eight characters — this is what protects your passwords"
+                } else {
+                    onGoItAlone(chosen)
+                }
+            },
+            enabled = alonePassphrase.isNotBlank(),
+            colors = ButtonDefaults.buttonColors(containerColor = Green, contentColor = Crust),
+            shape = RoundedCornerShape(10.dp),
+            modifier = Modifier.fillMaxWidth().height(50.dp)
+        ) {
+            Text("Start using it on this phone", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+        }
+
+        Spacer(Modifier.height(24.dp))
 
         Row(
             modifier = Modifier

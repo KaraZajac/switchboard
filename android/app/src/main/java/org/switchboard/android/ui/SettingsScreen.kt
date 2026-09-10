@@ -300,6 +300,22 @@ private fun VaultCard(engine: SwitchboardEngine) {
         }
     }
 
+    fun startOwn() {
+        if (working) return
+        if (passphrase.length < 8) {
+            error = "Use at least eight characters — this is what protects your passwords"
+            return
+        }
+        working = true
+        error = null
+        scope.launch {
+            val made = engine.startOwnConfig(passphrase, keepOpen)
+            error = if (made) null else "There is already a config on this phone"
+            if (made) passphrase = ""
+            working = false
+        }
+    }
+
     Text(
         "Shared config",
         color = Overlay,
@@ -375,18 +391,99 @@ private fun VaultCard(engine: SwitchboardEngine) {
                 }
             }
 
-            // The consequence first. "Not received yet" is a status; what
-            // someone needs to know is that their standby phone is not one.
-            !engine.vault.exists -> Text(
-                "Until this arrives, the phone can watch the desktop but cannot take over " +
-                    "when it goes offline — it has no server list and no logins of its own.\n\n" +
-                    "Set a passphrase on the desktop, under Settings → Devices. It reaches " +
-                    "this phone over the pairing link, sealed; the passphrase itself never " +
-                    "travels.",
-                color = Subtext,
-                fontSize = 13.sp,
-                lineHeight = 18.sp
-            )
+            // The consequence first, then both ways out of it. Telling someone
+            // to go and do it on a desktop is no help to someone who does not
+            // have one, and this phone does not need one.
+            !engine.vault.exists -> {
+                Text(
+                    "Without a config this phone has no server list and no logins of its " +
+                        "own, so it can watch a desktop but cannot connect by itself.\n\n" +
+                        "Start one here and use this phone on its own. Or set a passphrase " +
+                        "on a desktop, under Settings → Devices, and it reaches this phone " +
+                        "over the pairing link, sealed — the passphrase itself never travels. " +
+                        "Either way it is the same config, so a desktop can join later.",
+                    color = Subtext,
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp
+                )
+                Spacer(Modifier.height(12.dp))
+
+                OutlinedTextField(
+                    value = passphrase,
+                    onValueChange = { passphrase = it; error = null },
+                    placeholder = { Text("Choose a passphrase", color = Overlay, fontSize = 14.sp) },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
+                    keyboardActions = KeyboardActions(onGo = { startOwn() }),
+                    enabled = !working,
+                    shape = RoundedCornerShape(8.dp),
+                    colors = TextFieldDefaults.colors(
+                        focusedContainerColor = Surface0,
+                        unfocusedContainerColor = Surface0,
+                        focusedTextColor = Text0,
+                        unfocusedTextColor = Text0,
+                        focusedIndicatorColor = Color.Transparent,
+                        unfocusedIndicatorColor = Color.Transparent,
+                        cursorColor = Blue
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                error?.let {
+                    Spacer(Modifier.height(6.dp))
+                    Text(it, color = Red, fontSize = 12.sp)
+                }
+
+                Spacer(Modifier.height(14.dp))
+
+                Row(
+                    verticalAlignment = Alignment.Top,
+                    modifier = Modifier.clickable { keepOpen = !keepOpen }
+                ) {
+                    Checkbox(
+                        checked = keepOpen,
+                        onCheckedChange = { keepOpen = it },
+                        colors = CheckboxDefaults.colors(
+                            checkedColor = Blue,
+                            uncheckedColor = Overlay,
+                            checkmarkColor = Crust
+                        )
+                    )
+                    Column(modifier = Modifier.padding(top = 12.dp)) {
+                        Text(
+                            "Stay unlocked on this phone",
+                            color = Text0,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            "Keeps you from typing this every time the app restarts. The key " +
+                                "is held in the phone's hardware keystore.",
+                            color = Overlay,
+                            fontSize = 12.sp,
+                            lineHeight = 16.sp
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(12.dp))
+                Button(
+                    onClick = { startOwn() },
+                    enabled = !working && passphrase.isNotBlank(),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Surface0,
+                        contentColor = Green
+                    ),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text(
+                        if (working) "Starting…" else "Start a config on this phone",
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 14.sp
+                    )
+                }
+            }
 
             else -> {
                 Text(

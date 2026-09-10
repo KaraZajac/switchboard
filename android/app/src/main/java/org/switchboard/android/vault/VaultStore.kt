@@ -89,6 +89,47 @@ class VaultStore(context: Context) {
      * Returns false rather than throwing: a mistyped passphrase is an ordinary
      * thing for a person to do, not an exceptional one.
      */
+    /**
+     * Start a config on this phone, with no desktop involved.
+     *
+     * Until this existed a vault could only ever *arrive* — from a desktop,
+     * over a pairing — so a phone on its own had nowhere to keep a server and
+     * could not add one. That made the desktop a requirement for using the app
+     * at all, which was never the intent: the two are separate clients that
+     * share a config when they are paired, not a client and its terminal.
+     *
+     * The passphrase is what a second device will need later. It is asked for
+     * up front rather than invented here, because a config that cannot be
+     * shared without being re-sealed under a new key is a worse trade than one
+     * question at setup.
+     *
+     * Returns false only if there is already a vault — replacing one silently
+     * would throw away every server on it.
+     */
+    fun create(passphrase: String, keepOpen: Boolean = false): Boolean {
+        if (envelope != null) return false
+
+        val salt = VaultCrypto.generateSalt()
+        val derived = VaultCrypto.deriveKey(passphrase, salt)
+        val first = VaultPayload(version = 1)
+        val sealed = VaultCrypto.seal(
+            payloadJson = json.encodeToString(VaultPayload.serializer(), first),
+            key = derived,
+            salt = salt,
+            version = first.version,
+            updatedAt = Instant.now().toString(),
+            updatedBy = "phone",
+            iterations = KDF_ITERATIONS
+        )
+
+        envelope = sealed
+        payload = first
+        key = derived
+        file.writeText(VaultCrypto.encode(sealed))
+        if (keepOpen) keeper.keep(derived) else keeper.forget()
+        return true
+    }
+
     fun unlock(passphrase: String, keepOpen: Boolean = false): Boolean {
         val sealed = envelope ?: return false
         return try {
@@ -172,7 +213,15 @@ class VaultStore(context: Context) {
         val currentKey = key ?: return null
         val sealed = envelope ?: return null
 
-        val next = VaultPayload(version = sealed.version + 1, servers = servers)
+        // Carry the rest of the payload forward. Servers are what this call
+        // changes; the theme, the mutes and the watched nicks belong to the
+        // person and would otherwise be dropped by a phone editing a server.
+        val next = VaultPayload(
+            version = sealed.version + 1,
+            servers = servers,
+            settings = payload?.settings.orEmpty(),
+            monitor = payload?.monitor.orEmpty()
+        )
         val resealed = VaultCrypto.seal(
             payloadJson = json.encodeToString(VaultPayload.serializer(), next),
             key = currentKey,
