@@ -250,6 +250,10 @@ class SwitchboardEngine(
         val me = store.servers[serverId]?.nick.orEmpty()
         if (me.isNotEmpty() && nick.equals(me, ignoreCase = true)) return
 
+        // The server's own notices — "Looking up your hostname", and the rest
+        // of the connection banner. Not somebody talking to you.
+        if (isConsole(channel)) return
+
         val conversationKey = "$serverId:${channel.lowercase()}"
         if (isForeground && conversationKey == store.conversationKey()) return
         if (isMuted(serverId, channel)) return

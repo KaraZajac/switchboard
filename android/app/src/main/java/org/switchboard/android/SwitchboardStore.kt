@@ -241,7 +241,13 @@ class SwitchboardStore {
 
     /** Conversations with one person rather than a channel */
     fun directMessages(serverId: String): List<String> =
-        channels[serverId].orEmpty().filterNot { isChannel(it.name) }.map { it.name }
+        channels[serverId].orEmpty()
+            .filterNot { isChannel(it.name) || isConsole(it.name) }
+            .map { it.name }
+
+    /** Whether this server has anything in its console worth showing */
+    fun hasConsole(serverId: String): Boolean =
+        messages[key(serverId, SERVER_CONSOLE)]?.isNotEmpty() == true
 
     /**
      * Make sure a conversation exists to put messages in.
@@ -492,7 +498,9 @@ class SwitchboardStore {
                 val conversation = key(serverId, channel)
 
                 // A direct message is the first anyone hears of that
-                // conversation, so it has to create one
+                // conversation, so it has to create one. The server's own
+                // target is not a person and gets one anyway — it is where its
+                // notices go — but it is listed as the console, not as a DM.
                 if (!isChannel(channel)) openConversation(serverId, channel)
 
                 val list = messages.getOrPut(conversation) { mutableListOf() }
@@ -523,8 +531,14 @@ class SwitchboardStore {
                 // Unread, unless this is the conversation on screen
                 if (conversation != conversationKey()) {
                     val myNick = servers[serverId]?.nick ?: ""
-                    // Someone messaging you directly is a mention by definition
-                    val mentioned = !isChannel(channel) || namesYou(message.content, myNick)
+                    // Someone messaging you directly is a mention by
+                    // definition — but the server is not someone, and its
+                    // connection banner is not four people saying your name.
+                    val mentioned = when {
+                        isConsole(channel) -> false
+                        !isChannel(channel) -> true
+                        else -> namesYou(message.content, myNick)
+                    }
                     channels[serverId] = (channels[serverId] ?: return)
                         .map {
                             if (it.name.equals(channel, true)) {
@@ -985,6 +999,19 @@ private fun MutableList<Message>.insertByTime(message: Message) {
  * with a `#`, which is the difference between a room and a human being.
  */
 fun isChannel(name: String): Boolean = name.startsWith("#") || name.startsWith("&")
+
+/**
+ * Where the server itself talks.
+ *
+ * IRC has no target for "the server", so servers address their own notices to
+ * `*` — "Looking up your hostname", "Checking ident", and later the ones that
+ * matter, like being told you are now an operator. It is not a person, and
+ * treating it as one put Libera's connection banner in Direct Messages and
+ * counted every line of it as somebody saying your name.
+ */
+const val SERVER_CONSOLE = "*"
+
+fun isConsole(name: String): Boolean = name == SERVER_CONSOLE
 
 /**
  * Whether a line says your name, as a name rather than as a fragment.

@@ -716,3 +716,73 @@ class SharedConnectionTest {
         assertTrue(keepSharedConnection(primary = false, wanted = "kara", got = ""))
     }
 }
+
+/**
+ * Where the server itself talks.
+ *
+ * IRC has no target for "the server", so servers address their own notices to
+ * `*` — "Looking up your hostname", "Checking ident", and later the ones that
+ * matter. Connecting to Libera put that banner in Direct Messages and counted
+ * every line of it as somebody saying your name.
+ */
+class ServerConsoleTest {
+
+    private lateinit var store: SwitchboardStore
+    private val server = "s1"
+
+    @Before
+    fun setUp() {
+        store = SwitchboardStore()
+        store.servers[server] = Server(id = server, name = "Test", host = "h", nick = "kara")
+        store.channels[server] = mutableListOf()
+        store.activeServerId = server
+        store.activeChannel = "#elsewhere"
+    }
+
+    private fun from(target: String, text: String, nick: String = "irc.example.org") {
+        store.handleEvent("irc:message", buildJsonObject {
+            put("serverId", server)
+            put("channel", target)
+            put("message", buildJsonObject {
+                put("id", "m-$target-${text.hashCode()}")
+                put("nick", nick)
+                put("content", text)
+                put("timestamp", "2026-09-10T12:00:00Z")
+                put("type", "notice")
+            })
+        })
+    }
+
+    @Test
+    fun `the server is not somebody you are talking to`() {
+        from("*", "*** Looking up your hostname...")
+        from("*", "*** Checking Ident")
+
+        assertTrue(store.directMessages(server).isEmpty())
+        assertTrue(store.hasConsole(server))
+    }
+
+    @Test
+    fun `its connection banner is not four people saying your name`() {
+        from("*", "*** Looking up your hostname...")
+        from("*", "*** Checking Ident")
+        from("*", "*** No Ident response")
+        from("*", "*** Found your hostname")
+
+        val console = store.channelsFor(server).first { it.name == "*" }
+        assertEquals(0, console.mentions)
+    }
+
+    @Test
+    fun `somebody actually messaging you still is`() {
+        from("kara", "are you there?", nick = "robin")
+
+        assertEquals(listOf("kara"), store.directMessages(server))
+        assertEquals(1, store.channelsFor(server).first { it.name == "kara" }.mentions)
+    }
+
+    @Test
+    fun `a server with nothing to say has no console`() {
+        assertFalse(store.hasConsole(server))
+    }
+}

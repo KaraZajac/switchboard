@@ -55,6 +55,7 @@ import androidx.compose.ui.unit.sp
 import org.switchboard.android.EngineMode
 import org.switchboard.android.Server
 import org.switchboard.android.SwitchboardStore
+import org.switchboard.android.SERVER_CONSOLE
 import org.switchboard.android.isChannel
 
 /**
@@ -486,6 +487,39 @@ private fun ChannelList(
             ChannelAction("Browse rooms", "See what is on this network", onBrowse)
             ChannelAction("Join by name", "If you already know where you are going") {
                 joining = true
+            }
+        }
+
+        // Where the server itself talks. Listed once it has said something,
+        // under its own heading rather than among the people — its connection
+        // banner is not a conversation, but it is worth being able to read.
+        if (serverId != null && store.hasConsole(serverId)) {
+            val selected = store.activeChannel == SERVER_CONSOLE
+            Spacer(Modifier.height(12.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 1.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(if (selected) Surface0 else Color.Transparent)
+                    .clickable { onSelect(serverId, SERVER_CONSOLE) }
+                    .padding(horizontal = 8.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    "!",
+                    color = Overlay,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.width(22.dp)
+                )
+                Text(
+                    "Server messages",
+                    color = if (selected) Text0 else Subtext,
+                    fontSize = 15.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
         }
 

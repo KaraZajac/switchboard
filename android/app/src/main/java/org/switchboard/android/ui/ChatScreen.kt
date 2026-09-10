@@ -69,6 +69,7 @@ import org.switchboard.android.EngineMode
 import org.switchboard.android.Message
 import org.switchboard.android.SwitchboardStore
 import org.switchboard.android.isChannel
+import org.switchboard.android.isConsole
 import org.switchboard.android.SwitchboardEngine
 import org.switchboard.android.connectServer
 import org.switchboard.android.disconnectServer
@@ -407,7 +408,9 @@ private fun Conversation(
 
         Composer(
             channel = store.activeChannel,
-            enabled = store.activeServerId != null && store.activeChannel != null,
+            enabled = store.activeServerId != null &&
+                store.activeChannel != null &&
+                !isConsole(store.activeChannel.orEmpty()),
             seedKey = editingMessage?.id,
             seedText = editingMessage?.content,
             people = store.activeServerId?.let { serverId ->
@@ -548,6 +551,8 @@ private val COMPOSER_RADIUS = 12.dp
 /** What the empty composer says it will send, and where */
 private fun conversationHint(channel: String?): String = when {
     channel == null -> "No channel"
+    // The server talks; it does not listen. There is no target to send to.
+    isConsole(channel) -> "What the server has said"
     isChannel(channel) -> "Message #" + channel.removePrefix("#")
     else -> "Message $channel"
 }
