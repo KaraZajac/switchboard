@@ -1,5 +1,7 @@
 package org.switchboard.android.irc
 
+import java.text.BreakIterator
+
 /**
  * Making a message fit on the wire.
  *
@@ -66,6 +68,31 @@ object LineLength {
      * Word boundaries are preferred but not required — a single long token has
      * to go somewhere, and cutting it is better than dropping the message.
      */
+    /**
+     * The smallest thing a line may be cut between.
+     *
+     * Not a character: a flag is two code points, a skin tone is two, and a
+     * family is seven with the joins in between. Cutting between any of them
+     * leaves half an emoji at the end of one message and a stray modifier at
+     * the start of the next — a thumbs-up arrives as a thumb and a coloured
+     * square. `BreakIterator` knows where the seams are; `Intl.Segmenter` is
+     * the same answer on the desktop.
+     */
+    private fun graphemes(text: String): List<String> {
+        val breaks = BreakIterator.getCharacterInstance()
+        breaks.setText(text)
+
+        val out = mutableListOf<String>()
+        var start = breaks.first()
+        var end = breaks.next()
+        while (end != BreakIterator.DONE) {
+            out.add(text.substring(start, end))
+            start = end
+            end = breaks.next()
+        }
+        return out
+    }
+
     fun split(text: String, budget: Int): List<String> {
         if (text.utf8() <= budget) return listOf(text)
 
@@ -74,12 +101,7 @@ object LineLength {
         var bytes = 0
         var lastSpace = -1
 
-        var at = 0
-        while (at < text.length) {
-            val point = text.codePointAt(at)
-            val char = String(Character.toChars(point))
-            at += Character.charCount(point)
-
+        for (char in graphemes(text)) {
             val size = char.utf8()
             if (bytes + size > budget) {
                 // Break at the last space if there was one. A run with no space
@@ -94,7 +116,7 @@ object LineLength {
                     pieces.add(current.substring(0, lastSpace + 1))
                     current = StringBuilder(current.substring(lastSpace + 1))
                     bytes = current.toString().utf8()
-                } else {
+                } else if (current.isNotEmpty()) {
                     pieces.add(current.toString())
                     current = StringBuilder()
                     bytes = 0

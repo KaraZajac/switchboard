@@ -72,6 +72,25 @@ export function lineBudget(
 }
 
 /**
+ * The smallest thing a line may be cut between.
+ *
+ * Not a character: a flag is two code points, a skin tone is two, and a family
+ * is seven with the joins in between. Cutting between any of them leaves half
+ * an emoji at the end of one message and a stray modifier at the start of the
+ * next — 👍🏽 arrives as a thumb and a coloured square. `Intl.Segmenter` knows
+ * where the seams are; `BreakIterator` is the same answer on the phone.
+ */
+const segmenter =
+  typeof Intl !== 'undefined' && 'Segmenter' in Intl
+    ? new Intl.Segmenter(undefined, { granularity: 'grapheme' })
+    : null
+
+function graphemes(text: string): Iterable<string> {
+  if (!segmenter) return text
+  return Array.from(segmenter.segment(text), (piece) => piece.segment)
+}
+
+/**
  * Break text into pieces that each fit the budget.
  *
  * Measured in UTF-8 bytes, because that is what the limit is in, and split on
@@ -87,7 +106,7 @@ export function splitToFit(text: string, budget: number): string[] {
   let bytes = 0
   let lastSpace = -1
 
-  for (const char of text) {
+  for (const char of graphemes(text)) {
     const size = Buffer.byteLength(char, 'utf8')
 
     if (bytes + size > budget) {
@@ -102,7 +121,7 @@ export function splitToFit(text: string, budget: number): string[] {
         pieces.push(current.slice(0, lastSpace + 1))
         current = current.slice(lastSpace + 1)
         bytes = Buffer.byteLength(current, 'utf8')
-      } else {
+      } else if (current.length > 0) {
         pieces.push(current)
         current = ''
         bytes = 0

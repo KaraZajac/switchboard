@@ -1,5 +1,5 @@
 {
-  "$comment": "draft/multiline, shared by tests/main/multiline.test.ts and the Android SharedCorpusTest. The two clients had already drifted here once — the phone honoured draft/multiline-concat and the desktop did not — which is exactly what this file is for.",
+  "$comment": "draft/multiline, shared by tests/main/multiline.test.ts and the Android SharedCorpusTest. The two clients had already drifted here once \u2014 the phone honoured draft/multiline-concat and the desktop did not \u2014 which is exactly what this file is for.",
   "$limits": "The capability value carries what the server will accept. Exceeding either is not a truncated message, it is FAIL BATCH MULTILINE_MAX_BYTES and nothing delivered at all, so the client has to do the splitting.",
   "limits": [
     {
@@ -21,7 +21,7 @@
       "maxLines": null
     },
     {
-      "name": "advertised bare — the server names no limit of its own",
+      "name": "advertised bare \u2014 the server names no limit of its own",
       "value": "",
       "maxBytes": null,
       "maxLines": null
@@ -39,7 +39,7 @@
       "maxLines": null
     }
   ],
-  "$splits": "Lines going out, grouped into the batches they must be sent as. Byte counts are of the message content only, which is what the spec limits — UTF-8 bytes, not characters.",
+  "$splits": "Lines going out, grouped into the batches they must be sent as. Byte counts are of the message content only, which is what the spec limits \u2014 UTF-8 bytes, not characters.",
   "splits": [
     {
       "name": "under both limits, one batch",
@@ -127,15 +127,15 @@
       "name": "counted in UTF-8 bytes, not characters",
       "value": "max-bytes=8",
       "lines": [
-        "日本語",
-        "日本語"
+        "\u65e5\u672c\u8a9e",
+        "\u65e5\u672c\u8a9e"
       ],
       "batches": [
         [
-          "日本語"
+          "\u65e5\u672c\u8a9e"
         ],
         [
-          "日本語"
+          "\u65e5\u672c\u8a9e"
         ]
       ]
     },
@@ -168,7 +168,7 @@
       ]
     }
   ],
-  "$concat": "Coming back the other way. A part tagged draft/multiline-concat continues the one before it with no line break — it is how a sender says 'this was one long line that had to be split', and joining everything with \\n instead puts breaks in the middle of their sentence.",
+  "$concat": "Coming back the other way. A part tagged draft/multiline-concat continues the one before it with no line break \u2014 it is how a sender says 'this was one long line that had to be split', and joining everything with \\n instead puts breaks in the middle of their sentence.",
   "concat": [
     {
       "name": "plain parts are separate lines",
@@ -253,7 +253,7 @@
       "text": "alpha\n\nbeta"
     }
   ],
-  "$linelen": "An IRC line is 512 bytes and that budget covers the prefix the server prepends on the way out, so what can actually be said is 512 minus \":nick!user@host PRIVMSG #channel :\" and the CRLF. Over it, rIRCd answers 417 and delivers nothing — not truncated, dropped.",
+  "$linelen": "An IRC line is 512 bytes and that budget covers the prefix the server prepends on the way out, so what can actually be said is 512 minus \":nick!user@host PRIVMSG #channel :\" and the CRLF. Over it, rIRCd answers 417 and delivers nothing \u2014 not truncated, dropped.",
   "budget": [
     {
       "name": "the mask is known, so the budget is exact",
@@ -298,7 +298,7 @@
       "budget": 982
     }
   ],
-  "$split": "Cutting one over-long line into pieces that fit. Measured in UTF-8 bytes, split on whole code points, and preferring a space so words survive.",
+  "$split": "Cutting one over-long line into pieces that fit. Measured in UTF-8 bytes, split between whole grapheme clusters, and preferring a space so words survive. Not code points: a flag is two, a skin tone is two, and a family is seven with the joins in between \u2014 cutting between any of them leaves half an emoji at the end of one message and a stray modifier at the start of the next.",
   "split": [
     {
       "name": "short enough already, one piece",
@@ -340,11 +340,11 @@
     {
       "name": "never mid-character",
       "budget": 7,
-      "text": "日本語です",
+      "text": "\u65e5\u672c\u8a9e\u3067\u3059",
       "pieces": [
-        "日本",
-        "語で",
-        "す"
+        "\u65e5\u672c",
+        "\u8a9e\u3067",
+        "\u3059"
       ]
     },
     {
@@ -353,6 +353,34 @@
       "text": "",
       "pieces": [
         ""
+      ]
+    },
+    {
+      "name": "a skin tone stays on its thumb, and the pieces still join back up",
+      "text": "ab \ud83d\udc4d\ud83c\udffd cd",
+      "budget": 6,
+      "pieces": [
+        "ab ",
+        "\ud83d\udc4d\ud83c\udffd",
+        " cd"
+      ]
+    },
+    {
+      "name": "a flag is one thing, not two letters",
+      "text": "hi \ud83c\uddec\ud83c\udde7",
+      "budget": 5,
+      "pieces": [
+        "hi ",
+        "\ud83c\uddec\ud83c\udde7"
+      ]
+    },
+    {
+      "name": "a cluster with no space before it is still not cut in half",
+      "text": "abcd\ud83d\udc4d\ud83c\udffd",
+      "budget": 6,
+      "pieces": [
+        "abcd",
+        "\ud83d\udc4d\ud83c\udffd"
       ]
     }
   ]
