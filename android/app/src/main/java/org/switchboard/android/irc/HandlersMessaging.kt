@@ -58,7 +58,14 @@ internal fun registerMessagingHandlers() {
             val isAction = ctcp && text.startsWith("\u0001ACTION ")
 
             if (ctcp && !isAction) {
-                answerCtcp(session, from, text.substring(1, text.length - 1))
+                // Only when it was asked of us. A CTCP sent to a channel is
+                // asked of everyone in it at once, and a room full of clients
+                // each answering it privately is the flood that got CTCP a bad
+                // name — and gets the clients killed for it on networks that
+                // watch for exactly this.
+                if (state.isMe(target)) {
+                    answerCtcp(session, from, text.substring(1, text.length - 1))
+                }
                 return@on
             }
 
@@ -297,13 +304,21 @@ internal object Whox {
 }
 
 /**
+ * What we answer, and what we say we answer.
+ *
+ * The same set the desktop answers, with the same wording, so a person who
+ * CTCP-VERSIONs someone running Switchboard gets the same reply whichever
+ * device they happen to be holding. CLIENTINFO is how the convention says to
+ * ask what the rest of the list is, so it names them rather than being one
+ * more thing to keep in step by hand.
+ */
+private val CTCP_ANSWERS = listOf("CLIENTINFO", "PING", "SOURCE", "TIME", "VERSION")
+
+/**
  * Answer a CTCP question.
  *
- * Same four the desktop answers, with the same wording, so a person who
- * CTCP-VERSIONs someone running Switchboard gets the same reply whichever
- * device they happen to be holding. Everything else goes unanswered, which is
- * the polite reading of the convention and also stops a channel-wide CTCP from
- * turning into a flood of replies from us.
+ * Everything outside the list goes unanswered, which is the polite reading of
+ * the convention.
  */
 private fun answerCtcp(session: IrcSession, from: String, body: String) {
     val space = body.indexOf(' ')
@@ -315,6 +330,7 @@ private fun answerCtcp(session: IrcSession, from: String, body: String) {
         "TIME" -> "TIME " + Instant.now().toString()
         "PING" -> "PING $args"
         "SOURCE" -> "SOURCE https://github.com/KaraZajac/switchboard"
+        "CLIENTINFO" -> "CLIENTINFO " + CTCP_ANSWERS.joinToString(" ")
         else -> return
     }
     session.sendRaw("NOTICE $from :\u0001$reply\u0001")

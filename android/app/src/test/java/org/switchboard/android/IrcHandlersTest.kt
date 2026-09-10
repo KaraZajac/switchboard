@@ -155,6 +155,37 @@ class IrcHandlersTest {
     }
 
     @Test
+    fun `answers a CTCP asked of us, and ignores one asked of a channel`() {
+        register()
+        feed(":kara!u@h JOIN #chan")
+        session.sent.clear()
+
+        feed(":asker!u@h PRIVMSG kara :\u0001VERSION\u0001")
+        assertEquals(
+            listOf("NOTICE asker :\u0001VERSION Switchboard for Android\u0001"),
+            session.sent
+        )
+
+        // Asked of everyone in the room at once. A room full of clients each
+        // answering privately is the flood that got CTCP a bad name.
+        feed(":asker!u@h PRIVMSG #chan :\u0001VERSION\u0001")
+        assertEquals(1, session.sent.size)
+    }
+
+    @Test
+    fun `says which CTCPs it answers when asked`() {
+        register()
+        session.sent.clear()
+
+        feed(":asker!u@h PRIVMSG kara :\u0001CLIENTINFO\u0001")
+
+        assertEquals(
+            listOf("NOTICE asker :\u0001CLIENTINFO CLIENTINFO PING SOURCE TIME VERSION\u0001"),
+            session.sent
+        )
+    }
+
+    @Test
     fun `an ops-only message is filed under the channel it was addressed to`() {
         register()
         session.state.isupport["STATUSMSG"] = "@+"
@@ -435,11 +466,29 @@ class IrcHandlersTest {
     @Test
     fun `a CTCP question is answered and not shown`() {
         register()
-        feed(":alice!u@h PRIVMSG #chan :\u0001VERSION\u0001")
+        feed(":alice!u@h PRIVMSG kara :\u0001VERSION\u0001")
 
         assertTrue(session.eventsOn("irc:message").isEmpty())
         assertEquals(1, session.sent.count { it.startsWith("NOTICE alice :") })
         assertTrue(session.sent.single().contains("VERSION Switchboard"))
+    }
+
+    /**
+     * One sent to a channel is asked of everyone in it at once. It is still
+     * not shown — it is not something anybody said — but answering it is what
+     * turns one line typed by one person into a reply from every client in the
+     * room.
+     */
+    @Test
+    fun `a CTCP sent to a channel is neither shown nor answered`() {
+        register()
+        feed(":kara!u@h JOIN #chan")
+        session.sent.clear()
+
+        feed(":alice!u@h PRIVMSG #chan :\u0001VERSION\u0001")
+
+        assertTrue(session.eventsOn("irc:message").isEmpty())
+        assertTrue(session.sent.isEmpty())
     }
 
     @Test

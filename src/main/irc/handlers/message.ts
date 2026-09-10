@@ -7,6 +7,34 @@ import { statusTarget } from '@shared/isupport'
 const APP_VERSION = 'Switchboard IRC Client 1.0'
 
 /**
+ * What we answer, and what we say we answer.
+ *
+ * The same four as the phone, with the same wording, so a person who
+ * CTCP-VERSIONs someone running Switchboard gets the same reply whichever
+ * device they happen to be holding. CLIENTINFO is how the convention says to
+ * ask what the rest of the list is, so it names them rather than being a
+ * fifth thing to keep in step by hand.
+ */
+const CTCP_ANSWERS = ['CLIENTINFO', 'PING', 'SOURCE', 'TIME', 'VERSION']
+
+function ctcpAnswer(verb: string, args: string): string | null {
+  switch (verb) {
+    case 'VERSION':
+      return `VERSION ${APP_VERSION}`
+    case 'TIME':
+      return `TIME ${new Date().toISOString()}`
+    case 'PING':
+      return `PING ${args}`
+    case 'SOURCE':
+      return 'SOURCE https://github.com/KaraZajac/switchboard'
+    case 'CLIENTINFO':
+      return `CLIENTINFO ${CTCP_ANSWERS.join(' ')}`
+    default:
+      return null
+  }
+}
+
+/**
  * PRIVMSG — Channel or private message
  */
 registerHandler('PRIVMSG', (client, msg) => {
@@ -21,19 +49,14 @@ registerHandler('PRIVMSG', (client, msg) => {
     const ctcpCommand = spaceIdx === -1 ? ctcpContent : ctcpContent.slice(0, spaceIdx)
     const ctcpArgs = spaceIdx === -1 ? '' : ctcpContent.slice(spaceIdx + 1)
 
-    switch (ctcpCommand.toUpperCase()) {
-      case 'VERSION':
-        client.connection.sendRaw(`NOTICE ${nick} :\x01VERSION ${APP_VERSION}\x01`)
-        break
-      case 'TIME':
-        client.connection.sendRaw(`NOTICE ${nick} :\x01TIME ${new Date().toISOString()}\x01`)
-        break
-      case 'PING':
-        client.connection.sendRaw(`NOTICE ${nick} :\x01PING ${ctcpArgs}\x01`)
-        break
-      case 'SOURCE':
-        client.connection.sendRaw(`NOTICE ${nick} :\x01SOURCE https://github.com/KaraZajac/switchboard\x01`)
-        break
+    // Only when it was asked of us. A CTCP sent to a channel is asked of
+    // everyone in it at once, and a room full of clients each answering it
+    // privately is the flood that got CTCP a bad name — and gets the clients
+    // killed for it on networks that watch for exactly this.
+    const askedOfUs = client.state.casemap(target) === client.state.casemap(client.state.nick)
+    if (askedOfUs) {
+      const answer = ctcpAnswer(ctcpCommand.toUpperCase(), ctcpArgs)
+      if (answer) client.connection.sendRaw(`NOTICE ${nick} :\x01${answer}\x01`)
     }
     // Don't display CTCP requests to the user
     return

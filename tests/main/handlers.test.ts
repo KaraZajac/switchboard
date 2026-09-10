@@ -258,6 +258,33 @@ describe('Channel Handlers', () => {
     })
   })
 
+  it('answers a CTCP asked of us, and ignores one asked of a channel', () => {
+    const { client, state } = createMockClient()
+    state.nick = 'kara'
+    const sent: string[] = []
+    client.connection.sendRaw = (line: string) => sent.push(line)
+
+    dispatchMessage(client, parseMessage(':asker!u@h PRIVMSG kara :\x01VERSION\x01'))
+    expect(sent).toHaveLength(1)
+    expect(sent[0]).toContain('VERSION')
+
+    // Asked of everyone in the room at once. A room full of clients each
+    // answering privately is the flood that got CTCP a bad name.
+    dispatchMessage(client, parseMessage(':asker!u@h PRIVMSG #linux :\x01VERSION\x01'))
+    expect(sent).toHaveLength(1)
+  })
+
+  it('says which CTCPs it answers when asked', () => {
+    const { client, state } = createMockClient()
+    state.nick = 'kara'
+    const sent: string[] = []
+    client.connection.sendRaw = (line: string) => sent.push(line)
+
+    dispatchMessage(client, parseMessage(':asker!u@h PRIVMSG kara :\x01CLIENTINFO\x01'))
+
+    expect(sent[0]).toBe('NOTICE asker :\x01CLIENTINFO CLIENTINFO PING SOURCE TIME VERSION\x01')
+  })
+
   it('files an ops-only message under the channel it was addressed to', () => {
     const { client, events, state } = createMockClient()
     state.nick = 'kara'
