@@ -325,6 +325,58 @@ class StoreTest {
         assertEquals("me", store.servers[server]?.nick)
         assertEquals("Kara", store.metadataFor(server, "me").displayName)
     }
+    // ── pairing before the desktop has connected ─────────────────────
+
+    /**
+     * Pair the phone before the desktop has dialled anything and the snapshot
+     * it pulls is empty — so nothing gets selected, and nothing ever selected
+     * one afterwards. The desktop would connect, join channels, send messages,
+     * and the phone went on showing "nothing joined yet" until it was
+     * restarted.
+     */
+    @Test
+    fun `a server that connects later is the one we show`() {
+        val empty = SwitchboardStore()
+        empty.servers["s2"] = Server(id = "s2", name = "Doll", host = "h", nick = "me")
+        assertNull("nothing is connected yet, so nothing is chosen", empty.activeServerId)
+
+        empty.handleEvent("irc:connected", buildJsonObject {
+            put("serverId", "s2")
+            put("nick", "me")
+        })
+
+        assertEquals("s2", empty.activeServerId)
+    }
+
+    @Test
+    fun `a channel joined on the desktop is the one we open`() {
+        val empty = SwitchboardStore()
+        empty.servers["s2"] = Server(id = "s2", name = "Doll", host = "h", nick = "me")
+
+        empty.handleEvent("irc:connected", buildJsonObject {
+            put("serverId", "s2"); put("nick", "me")
+        })
+        empty.handleEvent("irc:join", buildJsonObject {
+            put("serverId", "s2")
+            put("channel", "#after-pairing")
+        })
+
+        assertEquals("s2", empty.activeServerId)
+        assertEquals("#after-pairing", empty.activeChannel)
+        assertEquals(listOf("#after-pairing"), empty.channelsFor("s2").map { it.name })
+    }
+
+    /** Choosing one must not steal the screen from a server already open */
+    @Test
+    fun `another server connecting does not move us`() {
+        store.handleEvent("irc:connected", buildJsonObject {
+            put("serverId", "other"); put("nick", "me")
+        })
+
+        assertEquals(server, store.activeServerId)
+        assertEquals("#lounge", store.activeChannel)
+    }
+
 }
 
 private fun kotlinx.serialization.json.JsonArrayBuilder.add(element: JsonElement) {

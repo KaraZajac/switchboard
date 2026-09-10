@@ -254,9 +254,12 @@ class SwitchboardStore {
                 metadata["$id:${nick.lowercase()}"] = entry
             }
 
-            if (activeServerId == null && list.isNotEmpty()) {
+            // A connected server is worth selecting even with nothing joined
+            // yet: the alternative is a window that stays on "nothing here"
+            // while channels arrive underneath it.
+            if (activeServerId == null) {
                 activeServerId = id
-                activeChannel = list.first().name
+                activeChannel = list.firstOrNull()?.name
             }
         }
     }
@@ -279,6 +282,13 @@ class SwitchboardStore {
                     connected = true,
                     nick = data["nick"]?.str() ?: ""
                 )
+                // Nothing was selected because nothing was connected the last
+                // time we looked — which is what pairing before the desktop
+                // has dialled anything leaves behind. A server coming up is
+                // the moment to choose one; without this the phone sits on
+                // "nothing joined yet" while the desktop fills up, and only a
+                // restart puts it right.
+                if (activeServerId == null) activeServerId = serverId
             }
 
             "irc:disconnected" -> {
@@ -290,6 +300,12 @@ class SwitchboardStore {
                 val list = channels[serverId] ?: mutableListOf()
                 if (list.none { it.name.equals(channel, true) }) list.add(Channel(channel))
                 channels[serverId] = list.toMutableStateList()
+
+                // Same again for a join that arrives before anything is
+                // selected, and for the first channel on the server we are
+                // looking at.
+                if (activeServerId == null) activeServerId = serverId
+                if (activeServerId == serverId && activeChannel == null) activeChannel = channel
 
                 data["user"]?.jsonObject?.toMember()?.let { member ->
                     val roster = members.getOrPut(key(serverId, channel)) { mutableListOf() }

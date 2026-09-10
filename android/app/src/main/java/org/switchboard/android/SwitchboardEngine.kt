@@ -597,6 +597,15 @@ class SwitchboardEngine(
      * election — a phone that is nominally primary but has a locked vault is not
      * connected to anything, and saying otherwise would be a lie the user acts on.
      */
+    /**
+     * Something outside the engine changed what mode we are in.
+     *
+     * Pairing is the case: the ticket is written by the screen that dialled,
+     * after the dial succeeds, and until something looks again the banner goes
+     * on telling a phone that just paired to go and pair.
+     */
+    fun refreshMode() = recomputeMode()
+
     private fun recomputeMode() {
         val state = coordinator.state()
         val primary = state.role == SessionRole.PRIMARY

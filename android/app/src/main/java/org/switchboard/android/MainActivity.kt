@@ -158,6 +158,9 @@ fun App(
             refill()
 
             engine.identity.rememberTicket(ticket)
+            // The engine works out what to tell the user from whether a ticket
+            // exists, and one does now.
+            engine.refreshMode()
             screen = Screen.CHAT
         } catch (e: Exception) {
             store.status = "Could not reach the desktop: ${e.message}"
