@@ -2,7 +2,13 @@ import { getDb } from '../database'
 
 export function getMonitorList(serverId: string): string[] {
   const db = getDb()
-  const rows = db.exec('SELECT nick FROM monitor_list WHERE server_id = ?', [serverId])
+  // Ordered, so that sealing the same friend list twice produces the same
+  // bytes. Without it an unstable row order is a config change to the vault,
+  // and the two devices trade versions over nothing.
+  const rows = db.exec(
+    'SELECT nick FROM monitor_list WHERE server_id = ? ORDER BY nick',
+    [serverId]
+  )
   if (rows.length === 0) return []
   return rows[0].values.map((row) => row[0] as string)
 }
