@@ -13,8 +13,6 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
-import java.io.BufferedReader
-import java.io.InputStreamReader
 import java.io.OutputStream
 import java.net.InetSocketAddress
 import java.net.Socket
@@ -227,33 +225,72 @@ class IrcConnection(
     }
 
     private suspend fun readLoop() = withContext(Dispatchers.IO) {
-        val reader = BufferedReader(InputStreamReader(socket!!.getInputStream(), Charsets.UTF_8))
+        // Bytes, not a Reader: an encoding is chosen per line — see
+        // [Decoding.line] — and a Reader would have picked one for the whole
+        // stream before the first line arrived.
+        val input = socket!!.getInputStream()
+        val pending = ByteArray(MAX_INCOMING_BYTES)
+        var held = 0
+
         while (!stopping) {
-            val line = reader.readLine() ?: break
+            val read = input.read(pending, held, pending.size - held)
+            if (read <= 0) break
             lastHeard = System.currentTimeMillis()
-            if (line.isBlank()) continue
+            held += read
 
-            val message = try {
-                Irc.parse(line)
-            } catch (e: IrcParseException) {
-                // A line we cannot parse is the server's problem, not a reason
-                // to drop a working connection.
-                continue
+            var from = 0
+            while (true) {
+                val at = indexOfCrLf(pending, from, held)
+                if (at == -1) break
+                val line = Decoding.line(pending.copyOfRange(from, at))
+                from = at + 2
+                if (line.isBlank()) continue
+                handle(line)
             }
 
-            // Keepalive is answered here rather than in a handler, so it cannot
-            // be delayed by anything the protocol layer is doing.
-            if (message.command == "PING") {
-                writeDirect(Irc.serialise("PONG", message.params))
-                continue
+            // Keep whatever did not end a line. A line longer than the buffer
+            // is not one any server may send, so drop it rather than grow.
+            if (from > 0) {
+                System.arraycopy(pending, from, pending, 0, held - from)
+                held -= from
+            } else if (held == pending.size) {
+                held = 0
             }
-
-            // A message inside a batch we handle ourselves is collected, not
-            // acted on: replayed history must not drive live state.
-            if (consumedByBatch(state, message)) continue
-
-            Handlers.dispatch(this@IrcConnection, message)
         }
+    }
+
+    /** Where the next CRLF starts between [from] and [until], or -1 */
+    private fun indexOfCrLf(bytes: ByteArray, from: Int, until: Int): Int {
+        var at = from
+        while (at + 1 < until) {
+            if (bytes[at] == 0x0d.toByte() && bytes[at + 1] == 0x0a.toByte()) return at
+            at++
+        }
+        return -1
+    }
+
+    /** One line, once it has been decoded */
+    private fun handle(line: String) {
+        val message = try {
+            Irc.parse(line)
+        } catch (e: IrcParseException) {
+            // A line we cannot parse is the server's problem, not a reason to
+            // drop a working connection.
+            return
+        }
+
+        // Keepalive is answered here rather than in a handler, so it cannot be
+        // delayed by anything the protocol layer is doing.
+        if (message.command == "PING") {
+            writeDirect(Irc.serialise("PONG", message.params))
+            return
+        }
+
+        // A message inside a batch we handle ourselves is collected, not acted
+        // on: replayed history must not drive live state.
+        if (consumedByBatch(state, message)) return
+
+        Handlers.dispatch(this@IrcConnection, message)
     }
 
     /**
@@ -654,6 +691,17 @@ class IrcConnection(
     companion object {
         /** RFC 1459's line limit, in bytes, including the trailing CRLF */
         const val MAX_LINE_BYTES = 512
+
+        /**
+         * The most one incoming line can be.
+         *
+         * Not 512: `message-tags` allows 8191 bytes of tags in front of it, and
+         * a chathistory replay carries most of them — msgid, time, account,
+         * batch, and whatever else the network attaches. Sized for the whole of
+         * that with room over, because a line that will not fit has to be
+         * dropped, and dropping half of one corrupts the next.
+         */
+        const val MAX_INCOMING_BYTES = 16384
 
         /** How many commands may go back to back, matching the desktop */
         const val SEND_BURST = 5

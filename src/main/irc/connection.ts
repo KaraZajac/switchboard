@@ -7,6 +7,7 @@ import type { IRCMessage } from '@shared/types/irc'
 import type { ServerConfig } from '@shared/types/server'
 import { parseMessage } from './parser'
 import { cmd } from './serializer'
+import { decodeLine } from '@shared/decoding'
 
 export interface ConnectionEvents {
   raw: (direction: 'in' | 'out', line: string) => void
@@ -97,7 +98,9 @@ export class IRCConnection extends EventEmitter {
   private socket: net.Socket | tls.TLSSocket | null = null
   private ws: WebSocket | null = null
   private useWebSocket = false
-  private buffer = ''
+  /** Bytes read but not yet ending a line. Bytes, not text: an encoding is
+   *  chosen per line, and a multi-byte character can straddle two reads. */
+  private buffer: Buffer = Buffer.alloc(0)
   private _connected = false
   private reconnectAttempts = 0
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
@@ -129,7 +132,7 @@ export class IRCConnection extends EventEmitter {
   connect(): void {
     this.cleanup()
     this.intentionalDisconnect = false
-    this.buffer = ''
+    this.buffer = Buffer.alloc(0)
 
     // WebSocket transport
     if (this.config.websocketUrl) {
@@ -165,7 +168,8 @@ export class IRCConnection extends EventEmitter {
       this.socket = net.connect(options)
     }
 
-    this.socket.setEncoding('utf8')
+    // Deliberately no setEncoding: lines arrive as bytes so each can be
+    // decoded on its own. See `decodeLine`.
     this.socket.setTimeout(0) // No idle timeout — we use PING/PONG
 
     // A TLS socket emits 'connect' when the TCP connection is up and
@@ -178,7 +182,7 @@ export class IRCConnection extends EventEmitter {
       this.socket.once('connect', () => this.onConnect())
     }
 
-    this.socket.on('data', (data: string) => this.onData(data))
+    this.socket.on('data', (data: Buffer) => this.onData(data))
     this.socket.on('error', (err: Error) => this.onError(err))
     this.socket.on('close', () => this.onClose())
     this.socket.on('end', () => this.onEnd())
@@ -198,8 +202,11 @@ export class IRCConnection extends EventEmitter {
       // One frame is one IRC line, with no CRLF of its own — under either
       // subprotocol, since a text frame is UTF-8 and a binary one carries the
       // same bytes. The parser wants terminated lines, so put it back.
-      const str = typeof data === 'string' ? data : data.toString('utf8')
-      this.onData(str.replace(/\r?\n$/, '') + '\r\n')
+      // A text frame is already UTF-8 by the WebSocket spec; a binary one
+      // carries the same bytes an ordinary socket would.
+      const bytes = typeof data === 'string' ? Buffer.from(data, 'utf8') : Buffer.from(data as Buffer)
+      const trimmed = bytes.subarray(0, bytes.length - (bytes.at(-1) === 0x0a ? (bytes.at(-2) === 0x0d ? 2 : 1) : 0))
+      this.onData(Buffer.concat([trimmed, Buffer.from('\r\n')]))
     })
 
     this.ws.on('error', (err: Error) => this.onError(err))
@@ -344,14 +351,23 @@ export class IRCConnection extends EventEmitter {
     this.emit('connected')
   }
 
-  private onData(data: string): void {
-    this.buffer += data
-    const lines = this.buffer.split('\r\n')
-    // Keep the last (possibly incomplete) chunk in the buffer
-    this.buffer = lines.pop() || ''
+  private onData(data: Buffer): void {
+    this.buffer = this.buffer.length === 0 ? data : Buffer.concat([this.buffer, data])
 
-    for (const line of lines) {
-      if (line.length === 0) continue
+    const lines: Buffer[] = []
+    let from = 0
+    for (;;) {
+      const at = this.buffer.indexOf('\r\n', from)
+      if (at === -1) break
+      lines.push(this.buffer.subarray(from, at))
+      from = at + 2
+    }
+    // Keep the last (possibly incomplete) chunk in the buffer
+    this.buffer = this.buffer.subarray(from)
+
+    for (const raw of lines) {
+      if (raw.length === 0) continue
+      const line = decodeLine(raw)
       this.emit('raw', 'in', line)
 
       try {

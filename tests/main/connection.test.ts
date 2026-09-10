@@ -104,9 +104,53 @@ describe('IRCConnection transport', () => {
     const socket = fakeSockets[fakeSockets.length - 1]
     socket.emit('connect')
 
-    socket.emit('data', 'PING :abc123\r\n')
+    // Bytes, not text: the socket has no encoding set, because each line
+    // picks its own — see `decodeLine`.
+    socket.emit('data', Buffer.from('PING :abc123\r\n'))
     expect(socket.written).toContain('PONG abc123\r\n')
 
+    connection.destroy()
+  })
+
+  it('reads a line that is not UTF-8 as the text it meant', () => {
+    const connection = new IRCConnection(config({ tls: false, port: 6667 }))
+    const seen: string[] = []
+    connection.on('message', (msg) => seen.push(msg.params[1] ?? ''))
+    connection.connect()
+    const socket = fakeSockets[fakeSockets.length - 1]
+    socket.emit('connect')
+
+    // Latin-1 from a network with no UTF8ONLY to stop it. Decoded strictly as
+    // UTF-8 this arrived as a replacement character.
+    socket.emit(
+      'data',
+      Buffer.concat([
+        Buffer.from(':n!u@h PRIVMSG #c :caf', 'ascii'),
+        Buffer.from([0xe9]),
+        Buffer.from('\r\n', 'ascii')
+      ])
+    )
+
+    expect(seen).toContain('café')
+    connection.destroy()
+  })
+
+  it('keeps a character that arrived split across two reads', () => {
+    const connection = new IRCConnection(config({ tls: false, port: 6667 }))
+    const seen: string[] = []
+    connection.on('message', (msg) => seen.push(msg.params[1] ?? ''))
+    connection.connect()
+    const socket = fakeSockets[fakeSockets.length - 1]
+    socket.emit('connect')
+
+    // The two bytes of é, in separate packets. Decoding per read rather than
+    // per line would have turned this into two replacement characters.
+    const line = Buffer.from(':n!u@h PRIVMSG #c :café\r\n', 'utf8')
+    const cut = line.indexOf(0xc3) + 1
+    socket.emit('data', line.subarray(0, cut))
+    socket.emit('data', line.subarray(cut))
+
+    expect(seen).toContain('café')
     connection.destroy()
   })
 

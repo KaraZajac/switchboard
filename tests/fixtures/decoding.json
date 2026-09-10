@@ -1,0 +1,61 @@
+{
+  "$comment": "Turning wire bytes into text, shared by tests/shared/decoding.test.ts and the Android SharedCorpusTest. IRC never agreed on an encoding: UTF-8 won wherever it was allowed to, but EFnet and IRCnet have no UTF8ONLY and never will, and both clients decoded strictly as UTF-8 \u2014 so a Latin-1 line arrived as a row of replacement characters with nothing to say whose fault it was.",
+  "$cases": "`bytes` is hex, exactly as the line arrived. `text` is what it should read as.",
+  "cases": [
+    {
+      "name": "plain ASCII",
+      "bytes": "68656c6c6f",
+      "text": "hello"
+    },
+    {
+      "name": "valid UTF-8 is UTF-8",
+      "bytes": "636166c3a9",
+      "text": "caf\u00e9"
+    },
+    {
+      "name": "an emoji, which only UTF-8 can carry",
+      "bytes": "686920f09f918d",
+      "text": "hi \ud83d\udc4d"
+    },
+    {
+      "name": "Latin-1, which is not valid UTF-8, reads as the accent it meant",
+      "bytes": "636166e9",
+      "text": "caf\u00e9"
+    },
+    {
+      "name": "a Windows curly quote, in the range ISO-8859-1 leaves unassigned",
+      "bytes": "697492732068657265",
+      "text": "it\u2019s here"
+    },
+    {
+      "name": "an em dash from an old Windows client",
+      "bytes": "6f6e6520972074776f",
+      "text": "one \u2014 two"
+    },
+    {
+      "name": "a truncated multi-byte sequence is not UTF-8",
+      "bytes": "62616420c3",
+      "text": "bad \u00c3"
+    },
+    {
+      "name": "an overlong encoding of a slash is not UTF-8 either",
+      "bytes": "c0af",
+      "text": "\u00c0\u00af"
+    },
+    {
+      "name": "a lone surrogate half has no UTF-8 encoding",
+      "bytes": "eda080",
+      "text": "\u00ed\u00a0\u20ac"
+    },
+    {
+      "name": "nothing at all",
+      "bytes": "",
+      "text": ""
+    },
+    {
+      "name": "formatting codes survive either way",
+      "bytes": "02626f6c640220636166e9",
+      "text": "\u0002bold\u0002 caf\u00e9"
+    }
+  ]
+}

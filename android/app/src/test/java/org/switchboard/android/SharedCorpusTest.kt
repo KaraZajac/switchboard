@@ -29,6 +29,7 @@ import org.switchboard.android.vault.VaultKdf
 import org.switchboard.android.vault.VaultPayload
 import org.switchboard.android.vault.shouldAdoptVault
 import org.switchboard.android.irc.ClientTags
+import org.switchboard.android.irc.Decoding
 import org.switchboard.android.irc.Formatting
 import org.switchboard.android.irc.avatarUrl
 import org.switchboard.android.irc.Friends
@@ -1170,6 +1171,34 @@ class SharedCorpusTest {
                     case["names"]!!.jsonArray.map { it.jsonPrimitive.content }
                 )
             )
+        }
+    }
+
+    // ── decoding ──────────────────────────────────────────────────────
+
+    @Test
+    fun `reads a line in the encoding it was written in`() {
+        for (entry in load("decoding.json")["cases"]!!.jsonArray) {
+            val case = entry.jsonObject
+            val hex = case["bytes"]!!.jsonPrimitive.content
+            val bytes = ByteArray(hex.length / 2) {
+                hex.substring(it * 2, it * 2 + 2).toInt(16).toByte()
+            }
+            assertEquals(
+                case["name"]!!.jsonPrimitive.content,
+                case["text"]!!.jsonPrimitive.content,
+                Decoding.line(bytes)
+            )
+        }
+    }
+
+    @Test
+    fun `never turns a byte that meant something into a replacement character`() {
+        // Every byte 0x80-0xFF on its own is invalid UTF-8 and valid Windows-1252
+        for (byte in 0x80..0xff) {
+            val decoded = Decoding.line(byteArrayOf(byte.toByte()))
+            assertEquals(1, decoded.length)
+            assertTrue("0x%02x became a replacement character".format(byte), decoded != "\uFFFD")
         }
     }
 
