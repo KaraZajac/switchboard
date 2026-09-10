@@ -31,4 +31,10 @@ export interface ChatMessage {
    * capability — and this is the server saying it, not a nick.
    */
   oper?: string | null
+  /**
+   * The bot that carried this, from a `draft/relaymsg` tag, when the message
+   * came through a bridge. The nick is the person who wrote it — that is what
+   * the relay is for — and this says how it got here.
+   */
+  relayedBy?: string | null
 }

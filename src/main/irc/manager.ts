@@ -472,6 +472,7 @@ export class IRCManager {
         timestamp: data.time,
         account: data.account || null,
         oper: (data.oper as string | null) ?? null,
+        relayedBy: (data.relayedBy as string | null) ?? null,
         pending: false,
         reactions: {},
         channelContext: typeof data.tags['+draft/channel-context'] === 'string'

@@ -201,6 +201,18 @@ export function MessageItem({ message, prevMessage, onReply }: MessageItemProps)
               operator
             </span>
           )}
+          {message.relayedBy !== null && message.relayedBy !== undefined && (
+            <span
+              className="rounded bg-sky-500/20 px-1.5 py-0.5 text-[10px] font-medium text-sky-300"
+              title={
+                message.relayedBy
+                  ? `Carried in from somewhere else by ${message.relayedBy}`
+                  : 'Carried in from somewhere else'
+              }
+            >
+              bridged
+            </span>
+          )}
           {message.channelContext && (
             <span className="rounded bg-gray-700/50 px-1.5 py-0.5 text-[10px] text-gray-400">
               from {message.channelContext}

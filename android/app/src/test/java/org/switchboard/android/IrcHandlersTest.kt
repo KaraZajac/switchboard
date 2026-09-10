@@ -155,6 +155,36 @@ class IrcHandlersTest {
     }
 
     @Test
+    fun `marks a bridged message with the bot that carried it`() {
+        register("message-tags")
+        feed(":kara!u@h JOIN #chan")
+        session.events.clear()
+
+        // What a relay looks like on arrival: the nick is the person who wrote
+        // it, and the tag is the bot that carried it in.
+        feed("@draft/relaymsg=bridgebot :alice/d!bridge@h PRIVMSG #chan :hello from there")
+        feed(":bob!u@h PRIVMSG #chan :hello from here")
+
+        val relayed = session.eventsOn("irc:message")
+            .map { it["message"]!!.jsonObject["relayedBy"]?.jsonPrimitive?.contentOrNull }
+        assertEquals(listOf("bridgebot", null), relayed)
+    }
+
+    @Test
+    fun `does not let a client tag claim a message was bridged`() {
+        register("message-tags")
+        feed(":kara!u@h JOIN #chan")
+        session.events.clear()
+
+        // `+draft/relaymsg` is a client tag, which is to say anyone can send one
+        feed("@+draft/relaymsg=staff :liar!u@h PRIVMSG #chan :trust me")
+
+        val relayed = session.eventsOn("irc:message")
+            .map { it["message"]!!.jsonObject["relayedBy"]?.jsonPrimitive?.contentOrNull }
+        assertEquals(listOf(null), relayed)
+    }
+
+    @Test
     fun `answers a CTCP asked of us, and ignores one asked of a channel`() {
         register()
         feed(":kara!u@h JOIN #chan")

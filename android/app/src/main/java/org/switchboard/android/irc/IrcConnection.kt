@@ -775,6 +775,13 @@ class IrcConnection(
             "draft/auto-join",
             "draft/client-batch",
             "draft/oper-tag",
+            // Bridged messages, so a relayed line is attributed to the
+            // person who wrote it rather than to the bot that carried it
+            "draft/relaymsg",
+            // What we said from another client, where a bouncer is holding
+            // the connection. Without it the phone never sees what the
+            // desktop typed, and the other way about.
+            "znc.in/self-message",
             "draft/extended-isupport",
             "draft/channel-context",
             "draft/react",

@@ -76,6 +76,12 @@ export const REQUESTED_CAPS = [
   // Marks messages from network operators, so someone claiming to be staff
   // can be told apart from someone who is.
   'draft/oper-tag',
+  // Bridged messages, so a relayed line is attributed to the person who
+  // wrote it rather than to the bot that carried it
+  'draft/relaymsg',
+  // What we said from another client, where a bouncer is holding the
+  // connection. Without it the desktop never sees what the phone typed.
+  'znc.in/self-message',
   'draft/extended-isupport',
   // Server-side names for features that are client tags in the spec
   'draft/channel-context',

@@ -457,6 +457,9 @@ private fun MessageRow(
                     // draft/oper-tag — the server naming the sender as one of
                     // its operators, which is not something a nick can claim.
                     message.oper?.let { Pill("OPERATOR", Yellow) }
+                    // draft/relaymsg — carried in from somewhere else by a
+                    // bridge, under the name of whoever actually wrote it
+                    message.relayedBy?.let { Pill("BRIDGED", Blue) }
                     profile.pronouns?.takeIf { it.isNotBlank() }?.let {
                         Pill(it, Overlay)
                     }

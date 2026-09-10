@@ -1,5 +1,5 @@
 import { registerHandler } from './registry'
-import { operFrom } from '@shared/tags'
+import { operFrom, relayedBy } from '@shared/tags'
 import { isServerSource } from '@shared/source'
 import { statusTarget } from '@shared/isupport'
 
@@ -82,6 +82,7 @@ registerHandler('PRIVMSG', (client, msg) => {
   const label = typeof msg.tags['label'] === 'string' ? msg.tags['label'] : undefined
   const editOf = typeof msg.tags['+draft/edit'] === 'string' ? msg.tags['+draft/edit'] : undefined
   const oper = operFrom(msg.tags)
+  const relayed = relayedBy(msg.tags)
 
   // Check if this is an echo of our own message
   const isEcho = client.state.casemap(nick) === client.state.casemap(client.state.nick)
@@ -100,6 +101,7 @@ registerHandler('PRIVMSG', (client, msg) => {
     editOf,
     label,
     oper,
+    relayedBy: relayed,
     userHost: msg.source
       ? `${msg.source.user || ''}@${msg.source.host || ''}`
       : null,

@@ -106,6 +106,7 @@ internal fun registerMessagingHandlers() {
                     // draft/oper-tag: the server naming the sender as one of
                     // its operators, which is not something a nick can claim
                     put("oper", message.tag("draft/oper"))
+                    put("relayedBy", message.tag("draft/relaymsg"))
                     // draft/message-edit and the reply client tag
                     put("replyTo", message.tag("+draft/reply") ?: message.tag("+reply"))
                 })

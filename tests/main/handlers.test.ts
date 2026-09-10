@@ -275,6 +275,40 @@ describe('Channel Handlers', () => {
     expect(tagToUse(state.isupport['CLIENTTAGDENY'], TAG_NAMES.typing)).toBe('typing')
   })
 
+  it('marks a bridged message with the bot that carried it', () => {
+    const { client, events, state } = createMockClient()
+    state.getChannel('#chan')
+
+    const seen: (string | null | undefined)[] = []
+    events.on('privmsg', (data) => seen.push(data.relayedBy))
+
+    // What a relay looks like on arrival: the nick is the person who wrote it,
+    // and the tag is the bot that carried it in.
+    dispatchMessage(
+      client,
+      parseMessage('@draft/relaymsg=bridgebot :alice/d!bridge@h PRIVMSG #chan :hello from there')
+    )
+    dispatchMessage(client, parseMessage(':bob!u@h PRIVMSG #chan :hello from here'))
+
+    expect(seen).toEqual(['bridgebot', null])
+  })
+
+  it('does not let a client tag claim a message was bridged', () => {
+    const { client, events, state } = createMockClient()
+    state.getChannel('#chan')
+
+    const seen: (string | null | undefined)[] = []
+    events.on('privmsg', (data) => seen.push(data.relayedBy))
+
+    // `+draft/relaymsg` is a client tag, which is to say anyone can send one
+    dispatchMessage(
+      client,
+      parseMessage('@+draft/relaymsg=staff :liar!u@h PRIVMSG #chan :trust me')
+    )
+
+    expect(seen).toEqual([null])
+  })
+
   it('answers a CTCP asked of us, and ignores one asked of a channel', () => {
     const { client, state } = createMockClient()
     state.nick = 'kara'

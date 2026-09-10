@@ -80,7 +80,13 @@ data class Message(
      * is one. Worth showing: someone claiming to be staff in a DM is a common
      * enough trick that being able to tell is the point of the capability.
      */
-    val oper: String? = null
+    val oper: String? = null,
+    /**
+     * The bot that carried this, on a `draft/relaymsg` tag, when the message
+     * came through a bridge. The nick is the person who wrote it — that is what
+     * the relay is for — and this says how it got here.
+     */
+    val relayedBy: String? = null
 )
 
 data class Member(
@@ -955,6 +961,7 @@ private fun JsonObject.toMessage(): Message = Message(
     // after a restart rather than quietly becoming the original wording
     editedAt = this["editedAt"]?.str(),
     oper = this["oper"]?.str(),
+    relayedBy = this["relayedBy"]?.str(),
     // And the reactions, for the same reason: the desktop keeps them now, so
     // reopening a conversation should not quietly strip them off again
     reactions = (this["reactions"] as? JsonObject)

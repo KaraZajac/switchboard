@@ -37,6 +37,8 @@
     "draft/auto-join",
     "draft/client-batch",
     "draft/oper-tag",
+    "draft/relaymsg",
+    "znc.in/self-message",
     "draft/extended-isupport",
     "draft/channel-context",
     "draft/react",
@@ -48,7 +50,7 @@
     "lowercase": "Capability names are case-sensitive and every registered one is lowercase. UTF8ONLY is the ISUPPORT token, not a capability.",
     "noClientTagPrefix": "A '+' prefixes a message tag. A CAP REQ token starting with one names a capability that cannot exist.",
     "maxLineBytes": 512,
-    "isupportNotCapability": "Bot mode, account extbans and WHOX are announced with the ISUPPORT tokens BOT, ACCOUNTEXTBAN and WHOX. None of them is a capability, so asking for one is asking for something that cannot be granted \u2014 and because only advertised names are ever requested, it fails by doing nothing rather than by saying so."
+    "isupportNotCapability": "Bot mode, account extbans and WHOX are announced with the ISUPPORT tokens BOT, ACCOUNTEXTBAN and WHOX. None of them is a capability, so asking for one is asking for something that cannot be granted — and because only advertised names are ever requested, it fails by doing nothing rather than by saying so."
   },
   "notCapabilities": [
     "message-ids",
