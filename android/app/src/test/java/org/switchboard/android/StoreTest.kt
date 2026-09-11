@@ -441,6 +441,104 @@ class StoreTest {
         assertEquals(1, after.size)
         assertSame(before, after)
     }
+
+    // ── what a snapshot from the desktop may and may not throw away ──
+
+    /**
+     * A snapshot says what the desktop is *in*. That is channels, and only
+     * channels — the desktop's own state has no notion of the conversation
+     * somebody opened by writing to you, so its snapshot cannot carry one.
+     *
+     * Applying it by replacing the list wholesale therefore deleted every
+     * direct message on that network, every time the link to the desktop came
+     * back. The conversation was still on the desktop and gone from the phone,
+     * with nothing on screen to say why.
+     */
+    @Test
+    fun `a snapshot from the desktop does not take the direct messages with it`() {
+        store.handleEvent("irc:message", incoming("robin", "m1", "robin", "are you there?"))
+        assertEquals(listOf("robin"), store.directMessages(server))
+
+        store.applySnapshot(
+            buildJsonArray {
+                add(buildJsonObject {
+                    put("serverId", server)
+                    put("nick", "me")
+                    put("channels", buildJsonArray {
+                        add(buildJsonObject { put("name", "#lounge") })
+                    })
+                })
+            },
+            buildJsonArray {
+                add(buildJsonObject {
+                    put("id", server)
+                    put("name", "Test")
+                    put("host", "h")
+                    put("nick", "me")
+                })
+            }
+        )
+
+        assertEquals(listOf("robin"), store.directMessages(server))
+        assertEquals(1, store.messagesFor(server, "robin").size)
+        // And the channels it did declare are there
+        assertTrue(store.channelsFor(server).any { it.name == "#lounge" })
+    }
+
+    /** A channel the desktop has left is the desktop's to drop, and goes */
+    @Test
+    fun `a snapshot is still the last word on which channels there are`() {
+        store.handleEvent("irc:join", buildJsonObject {
+            put("serverId", server)
+            put("channel", "#old")
+        })
+        assertTrue(store.channelsFor(server).any { it.name == "#old" })
+
+        store.applySnapshot(
+            buildJsonArray {
+                add(buildJsonObject {
+                    put("serverId", server)
+                    put("nick", "me")
+                    put("channels", buildJsonArray {
+                        add(buildJsonObject { put("name", "#new") })
+                    })
+                })
+            },
+            buildJsonArray {
+                add(buildJsonObject {
+                    put("id", server); put("name", "Test"); put("host", "h"); put("nick", "me")
+                })
+            }
+        )
+
+        assertFalse(store.channelsFor(server).any { it.name == "#old" })
+        assertTrue(store.channelsFor(server).any { it.name == "#new" })
+    }
+
+    /**
+     * Selecting clears the counts by replacing the entry.
+     *
+     * It used to edit the `Channel` where it sat and write the same list back,
+     * neither of which Compose notices — so a badge could stay lit on a
+     * conversation you were looking at.
+     */
+    @Test
+    fun `opening a conversation clears its badge in a way the screen can see`() {
+        // Looking somewhere else, or the message would be read as it arrives
+        store.activeChannel = "#elsewhere"
+        store.handleEvent("irc:message", incoming("#lounge", "m1", "robin", "hello"))
+        val before = store.channelsFor(server)
+        assertTrue(before.first { it.name == "#lounge" }.unread > 0)
+
+        store.select(server, "#lounge")
+        val after = store.channelsFor(server)
+
+        assertEquals(0, after.first { it.name == "#lounge" }.unread)
+        assertNotSame(before, after)
+        // The entry the screen was holding did not change under it
+        assertTrue(before.first { it.name == "#lounge" }.unread > 0)
+    }
+
 }
 
 private fun kotlinx.serialization.json.JsonArrayBuilder.add(element: JsonElement) {

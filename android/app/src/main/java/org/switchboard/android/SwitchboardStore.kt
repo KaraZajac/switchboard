@@ -54,11 +54,20 @@ data class Server(
     var away: Boolean = false
 )
 
+/**
+ * A conversation in the list: a channel, a person, or the server's console.
+ *
+ * Every field is a `val`. Editing one where it sits is invisible to Compose —
+ * the list holding it has not changed as far as the snapshot system is
+ * concerned — and writing the same list back afterwards does not help, because
+ * a map write whose value is equal to what is there is a no-op. Changes go
+ * through `copy()` into a new list, which is what makes them show up.
+ */
 data class Channel(
     val name: String,
-    var topic: String? = null,
-    var unread: Int = 0,
-    var mentions: Int = 0
+    val topic: String? = null,
+    val unread: Int = 0,
+    val mentions: Int = 0
 )
 
 data class Message(
@@ -141,7 +150,7 @@ data class UserMetadata(
 class SwitchboardStore {
 
     val servers = mutableStateMapOf<String, Server>()
-    val channels = mutableStateMapOf<String, MutableList<Channel>>()          // serverId -> channels
+    val channels = mutableStateMapOf<String, List<Channel>>()          // serverId -> channels
     /**
      * Everything said, per conversation.
      *
@@ -164,7 +173,7 @@ class SwitchboardStore {
      * which is what makes the map notice it.
      */
     val messages = mutableStateMapOf<String, List<Message>>()                 // "serverId:#chan" -> messages
-    val members = mutableStateMapOf<String, MutableList<Member>>()            // "serverId:#chan" -> members
+    val members = mutableStateMapOf<String, List<Member>>()            // "serverId:#chan" -> members
     val metadata = mutableStateMapOf<String, UserMetadata>()                  // "serverId:nick" -> profile
 
     /** Who is typing where, and when they last said so */
@@ -285,10 +294,9 @@ class SwitchboardStore {
      * while you happen to be looking at it.
      */
     fun openConversation(serverId: String, name: String) {
-        val list = channels[serverId] ?: mutableListOf()
+        val list = channels[serverId] ?: emptyList()
         if (list.any { it.name.equals(name, true) }) return
-        list.add(Channel(name))
-        channels[serverId] = list.toMutableStateList()
+        channels[serverId] = list + Channel(name)
     }
 
     private fun key(serverId: String, channel: String) = "$serverId:${channel.lowercase()}"
@@ -316,12 +324,10 @@ class SwitchboardStore {
     fun select(serverId: String, channel: String) {
         activeServerId = serverId
         activeChannel = channel
-        channels[serverId]?.find { it.name.equals(channel, true) }?.let {
-            it.unread = 0
-            it.mentions = 0
+        val list = channels[serverId] ?: return
+        channels[serverId] = list.map {
+            if (it.name.equals(channel, true)) it.copy(unread = 0, mentions = 0) else it
         }
-        // Force recomposition of the list holding the mutated channel
-        channels[serverId] = channels[serverId]?.toMutableStateList() ?: return
     }
 
     // ── Building from the desktop's snapshot ──────────────────────────
@@ -402,7 +408,20 @@ class SwitchboardStore {
                     ?.map { it.jsonObject.toMember() }
                     ?.toMutableList() ?: mutableListOf()
             }
-            channels[id] = list.toMutableStateList()
+            // A snapshot says what the desktop is *in*, which is channels and
+            // only channels — it has no idea about the conversation somebody
+            // opened by writing to you. Replacing the list wholesale therefore
+            // deleted every direct message on that network the moment a
+            // snapshot arrived, which is whenever the link to the desktop came
+            // back. The conversation was still there on the desktop and gone
+            // here, with nothing to say why.
+            //
+            // Channels are the desktop's to declare; conversations with people
+            // are this phone's own knowledge, and are kept.
+            val keep = channels[id].orEmpty().filterNot { isChannel(it.name) }
+            channels[id] = list + keep.filterNot { held ->
+                list.any { it.name.equals(held.name, true) }
+            }
 
             // Whatever the desktop already knows about people's profiles
             live["metadata"]?.jsonObject?.forEach { (nick, profile) ->
@@ -456,9 +475,10 @@ class SwitchboardStore {
 
             "irc:join" -> {
                 val channel = data["channel"]?.str() ?: return
-                val list = channels[serverId] ?: mutableListOf()
-                if (list.none { it.name.equals(channel, true) }) list.add(Channel(channel))
-                channels[serverId] = list.toMutableStateList()
+                val list = channels[serverId] ?: emptyList()
+                if (list.none { it.name.equals(channel, true) }) {
+                    channels[serverId] = list + Channel(channel)
+                }
 
                 // Same again for a join that arrives before anything is
                 // selected, and for the first channel on the server we are
@@ -467,9 +487,10 @@ class SwitchboardStore {
                 if (activeServerId == serverId && activeChannel == null) activeChannel = channel
 
                 data["user"]?.jsonObject?.toMember()?.let { member ->
-                    val roster = members.getOrPut(key(serverId, channel)) { mutableListOf() }
-                    if (roster.none { it.nick.equals(member.nick, true) }) roster.add(member)
-                    members[key(serverId, channel)] = roster.toMutableStateList()
+                    val roster = members[key(serverId, channel)] ?: emptyList()
+                    if (roster.none { it.nick.equals(member.nick, true) }) {
+                        members[key(serverId, channel)] = roster + member
+                    }
                 }
             }
 
