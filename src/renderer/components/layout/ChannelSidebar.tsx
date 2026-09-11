@@ -6,7 +6,7 @@ import { ServerMenu } from '../server/ServerMenu'
 import { ChannelBrowser } from '../channel/ChannelBrowser'
 import { UserProfilePanel } from '../user/UserProfilePanel'
 import { FriendList } from './FriendList'
-import { isChannelName } from '@shared/constants'
+import { isChannelName, isServiceNick } from '@shared/constants'
 import { rowLook, rowBadge, badgeLabel, badgeDiameter } from '@shared/unread'
 
 const EMPTY_CHANNELS: { name: string; serverId: string; topic: string | null; topicSetBy: string | null; unreadCount: number; mentionCount: number; muted: boolean }[] = []
@@ -21,6 +21,7 @@ interface ChannelContextState {
 export function ChannelSidebar() {
   const activeServerId = useServerStore((s) => s.activeServerId)
   const servers = useServerStore((s) => s.servers)
+  const servicesSeen = useServerStore((s) => s.servicesSeen)
   const allChannels = useChannelStore((s) =>
     activeServerId ? s.channels[activeServerId] ?? EMPTY_CHANNELS : EMPTY_CHANNELS
   )
@@ -106,6 +107,7 @@ export function ChannelSidebar() {
           <ServiceItems
             activeChannel={activeChannel}
             allChannels={allChannels}
+            seen={servicesSeen[activeServerId || ''] || []}
             onChannelClick={handleChannelClick}
           />
         )}
@@ -297,11 +299,28 @@ export function ChannelSidebar() {
   )
 }
 
-const SERVICE_ENTRIES = [
-  { name: '*', label: 'Server', icon: 'server' as const },
-  { name: 'NickServ', label: 'NickServ', icon: 'service' as const },
-  { name: 'ChanServ', label: 'ChanServ', icon: 'service' as const }
-]
+/**
+ * What to list above the channels: the console, and whatever services this
+ * network actually has.
+ *
+ * It used to be a fixed three — Server, NickServ, ChanServ — shown whenever
+ * connected. That invents a NickServ on a network with no services at all,
+ * and misses Undernet's `X` and QuakeNet's `Q`, which is exactly where
+ * somebody would need the help.
+ *
+ * A bot is here because it has spoken to us or we have spoken to it, which is
+ * the only honest signal IRC offers: there is no ISUPPORT token for "this
+ * network has a NickServ". The phone detects them the same way.
+ */
+function serviceEntries(
+  seen: string[]
+): { name: string; label: string; icon: 'server' | 'service' }[] {
+  const services = seen
+    .filter((nick) => isServiceNick(nick))
+    .map((nick) => ({ name: nick, label: nick, icon: 'service' as const }))
+
+  return [{ name: '*', label: 'Server', icon: 'server' as const }, ...services]
+}
 
 function ServiceIcon({ type }: { type: 'server' | 'service' }) {
   if (type === 'server') {
@@ -320,19 +339,28 @@ function ServiceIcon({ type }: { type: 'server' | 'service' }) {
 
 interface ServiceItemsProps {
   activeChannel: string | null
-  allChannels: { name: string; unreadCount: number; mentionCount: number }[]
+  /** The services this network has actually shown us */
+  seen: string[]
+  allChannels: { name: string; unreadCount: number; mentionCount: number; muted?: boolean }[]
   onChannelClick: (name: string) => void
 }
 
-function ServiceItems({ activeChannel, allChannels, onChannelClick }: ServiceItemsProps) {
+function ServiceItems({ activeChannel, allChannels, seen, onChannelClick }: ServiceItemsProps) {
   return (
     <div className="mb-1">
-      {SERVICE_ENTRIES.map((entry) => {
+      {serviceEntries(seen).map((entry) => {
         const isActive = activeChannel === entry.name ||
           (entry.name !== '*' && activeChannel?.toLowerCase() === entry.name.toLowerCase())
         const chInfo = allChannels.find((ch) => ch.name.toLowerCase() === entry.name.toLowerCase())
-        const hasUnread = (chInfo?.unreadCount ?? 0) > 0
-        const hasMention = (chInfo?.mentionCount ?? 0) > 0
+        // The same three states as everywhere else, and the same circle
+        const look = rowLook(
+          { unread: chInfo?.unreadCount ?? 0, muted: Boolean(chInfo?.muted) },
+          isActive
+        )
+        const badge = rowBadge({
+          mentions: chInfo?.mentionCount ?? 0,
+          muted: Boolean(chInfo?.muted)
+        })
 
         return (
           <button
@@ -341,18 +369,27 @@ function ServiceItems({ activeChannel, allChannels, onChannelClick }: ServiceIte
             className={`mb-0.5 flex h-8 w-full items-center gap-2 rounded-md px-2 text-left transition-colors ${
               isActive
                 ? 'bg-gray-700 text-white'
-                : hasUnread
+                : look === 'unread'
                   ? 'text-gray-100 hover:bg-gray-700/40'
                   : 'text-gray-400 hover:bg-gray-700/40 hover:text-gray-200'
             }`}
           >
             <ServiceIcon type={entry.icon} />
-            <span className={`truncate ${hasUnread && !isActive ? 'font-semibold' : ''}`}>
+            <span className={`truncate ${look === 'unread' ? 'font-semibold' : ''}`}>
               {entry.label}
             </span>
-            {hasMention && (
-              <span className="ml-auto flex h-4 min-w-[16px] items-center justify-center rounded-full bg-red-500 px-1 text-xs font-bold text-white">
-                {chInfo!.mentionCount}
+            {badge && (
+              <span
+                style={{
+                  width: badgeDiameter(badge.count),
+                  height: badgeDiameter(badge.count),
+                  fontSize: badgeDiameter(badge.count) > 22 ? 10 : 11
+                }}
+                className={`ml-auto flex shrink-0 items-center justify-center rounded-full font-bold leading-none text-white ${
+                  badge.muted ? 'bg-gray-600' : 'bg-red-500'
+                }`}
+              >
+                {badgeLabel(badge.count)}
               </span>
             )}
           </button>

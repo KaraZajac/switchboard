@@ -202,6 +202,10 @@ export function useIRCEvents(): void {
           useChannelStore.getState().addChannel(serverId, channel)
         }
 
+        // This network has a services bot, and now we know its name — which
+        // is the only way to know: there is no ISUPPORT token that says so.
+        if (isService) useServerStore.getState().noteService(serverId, channel)
+
         // Route service messages to the server console channel
         const effectiveChannel = isService ? '*' : channel
         useMessageStore.getState().addMessage(serverId, effectiveChannel, message)

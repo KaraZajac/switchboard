@@ -573,10 +573,15 @@ private fun ChannelList(
         }
 
         if (channels.isEmpty()) {
+            // Says where to go, now that the two rows that used to say it have
+            // gone. Finding a channel is the thing somebody needs first on a
+            // network they have just joined, and a sidebar reading "nothing
+            // joined yet" and stopping there does not help them do it.
             Text(
-                "Nothing joined yet.",
+                "Nothing joined yet — the + above finds rooms, or joins one by name.",
                 color = Overlay,
                 fontSize = 13.sp,
+                lineHeight = 18.sp,
                 modifier = Modifier.padding(horizontal = 18.dp, vertical = 6.dp)
             )
         }
@@ -660,18 +665,15 @@ private fun ChannelList(
             }
         }
 
-        // Two ways in, both named. There used to be one: a bare "+" beside the
-        // section heading, whose sheet had a link to the room list at the
-        // bottom. Nobody found it, which is the expected outcome for putting
-        // "find a channel to join" — the thing a new user needs first — behind
-        // an unlabelled glyph and then one more tap.
-        if (serverId != null) {
-            Spacer(Modifier.height(4.dp))
-            ChannelAction("Browse rooms", "See what is on this network", onBrowse)
-            ChannelAction("Join by name", "If you already know where you are going") {
-                joining = true
-            }
-        }
+        // Both of these used to be spelled out here as their own rows, because
+        // the "+" beside the heading was a bare glyph whose sheet hid the room
+        // list one tap further down. The sheet names both now and is where the
+        // "+" goes, so two more rows saying the same thing is a list of four
+        // things where there are two.
+        //
+        // The empty state below still says it in words, which is the case the
+        // spelled-out rows were really for: a network you have just joined and
+        // have not found anything on yet.
 
         // Where the server itself talks. Listed once it has said something,
         // under its own heading rather than among the people — its connection
@@ -949,31 +951,6 @@ private fun ChannelMenu(
     }
 }
 
-/** A named way into the channel list, rather than a glyph */
-@Composable
-private fun ChannelAction(label: String, detail: String, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 1.dp)
-            .clip(RoundedCornerShape(4.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 8.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            "+",
-            color = Green,
-            fontSize = 18.sp,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.width(22.dp)
-        )
-        Column(modifier = Modifier.weight(1f)) {
-            Text(label, color = Subtext, fontSize = 15.sp)
-            Text(detail, color = Overlay, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
-    }
-}
 
 /** Asking to join somewhere new */
 @Composable

@@ -27,6 +27,18 @@ interface ServerState {
   mutedServers: Record<string, number>
   /** Network icons from ISUPPORT draft/ICON: serverId -> URL */
   networkIcons: Record<string, string>
+  /**
+   * The services bots each network has actually shown us.
+   *
+   * Kept rather than assumed. The sidebar used to list NickServ and ChanServ
+   * whenever it was connected, which invents them on a network with no
+   * services and misses the ones whose bots are called something else.
+   *
+   * Tracked here rather than read off the channel list, because a service's
+   * messages are filed in the console and it never gets a channel entry of
+   * its own — so there is nothing in the channel list to notice.
+   */
+  servicesSeen: Record<string, string[]>
   /** Filehost URLs from ISUPPORT draft/FILEHOST: serverId -> URL */
   filehostUrls: Record<string, string>
   /** Away status per server: serverId -> away message (null = not away) */
@@ -50,6 +62,8 @@ interface ServerState {
   setCurrentNick: (id: string, nick: string) => void
   setUserMetadata: (serverId: string, nick: string, key: string, value: string) => void
   setNetworkIcon: (serverId: string, url: string) => void
+  /** A services bot has spoken on this network, so it has one */
+  noteService: (serverId: string, nick: string) => void
   setFilehostUrl: (serverId: string, url: string) => void
   setAwayMessage: (serverId: string, message: string | null) => void
   setAccount: (serverId: string, account: string | null) => void
@@ -70,6 +84,7 @@ export const useServerStore = create<ServerState>((set, get) => ({
   userMetadata: {},
   mutedServers: {},
   networkIcons: {},
+  servicesSeen: {},
   filehostUrls: {},
   awayMessage: {},
   account: {},
@@ -96,6 +111,13 @@ export const useServerStore = create<ServerState>((set, get) => ({
     })),
 
   setActiveServer: (id) => set({ activeServerId: id }),
+
+  noteService: (serverId, nick) =>
+    set((state) => {
+      const seen = state.servicesSeen[serverId] || []
+      if (seen.some((s) => s.toLowerCase() === nick.toLowerCase())) return state
+      return { servicesSeen: { ...state.servicesSeen, [serverId]: [...seen, nick] } }
+    }),
 
   setConnectionStatus: (id, status) =>
     set((state) => ({
