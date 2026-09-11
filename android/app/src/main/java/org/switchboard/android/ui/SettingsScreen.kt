@@ -59,6 +59,8 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.foundation.layout.FlowRow
+import org.switchboard.android.irc.Aliases
+import org.switchboard.android.irc.Ignore
 
 /**
  * Settings: the shared config, and what this phone is currently doing.
@@ -137,6 +139,8 @@ fun SettingsScreen(
 
         FriendsCard(engine)
         HighlightsCard(engine)
+        IgnoredCard(engine)
+        AliasesCard(engine)
         ProxyCard(engine)
 
         Spacer(Modifier.height(8.dp))
@@ -814,6 +818,231 @@ private fun HighlightsCard(engine: SwitchboardEngine) {
                         Spacer(Modifier.width(6.dp))
                         Text("×", color = Overlay, fontSize = 13.sp)
                     }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * People you have decided not to hear from.
+ *
+ * The list has to be visible somewhere, or the only way to undo an ignore is
+ * to find the person again and open their profile — which is exactly what you
+ * cannot do once they are silent.
+ */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun IgnoredCard(engine: SwitchboardEngine) {
+    val list = engine.ignores
+    var typed by remember { mutableStateOf("") }
+
+    fun nameOf(network: String): String = when (network) {
+        Ignore.EVERYWHERE -> "Everywhere"
+        else -> engine.store.servers[network]?.name ?: "a network you left"
+    }
+
+    Spacer(Modifier.height(8.dp))
+    Text(
+        "Ignored",
+        color = Overlay,
+        fontSize = 11.sp,
+        fontWeight = FontWeight.Bold,
+        modifier = Modifier.padding(start = 20.dp, bottom = 6.dp)
+    )
+    Card {
+        Text(
+            "Nothing from anybody matching one of these reaches this phone — not a " +
+                "message, not a notification, not a badge. Shared with your desktop.",
+            color = Subtext,
+            fontSize = 13.sp,
+            lineHeight = 18.sp
+        )
+
+        Spacer(Modifier.height(12.dp))
+        Row(modifier = Modifier.fillMaxWidth()) {
+            SettingField(
+                value = typed,
+                onChange = { typed = it },
+                hint = "A nick, or a mask",
+                modifier = Modifier.weight(1f).padding(end = 8.dp)
+            )
+            Button(
+                onClick = {
+                    // Everywhere, from here. Ignoring somebody on one network
+                    // is what the profile sheet does, where a network is in
+                    // front of you; this list has no such context.
+                    engine.addIgnore(typed, Ignore.EVERYWHERE)
+                    typed = ""
+                },
+                enabled = typed.isNotBlank(),
+                colors = ButtonDefaults.buttonColors(containerColor = Surface0, contentColor = Blue),
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier.align(Alignment.CenterVertically)
+            ) {
+                Text("Add", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+            }
+        }
+
+        // What a bare nick will become, before it is added
+        if (typed.isNotBlank() && Ignore.toMask(typed) != typed.trim()) {
+            Spacer(Modifier.height(4.dp))
+            Text("Will be saved as ${Ignore.toMask(typed)}", color = Overlay, fontSize = 11.sp)
+        }
+
+        Spacer(Modifier.height(12.dp))
+        if (list.isEmpty()) {
+            Text("Nobody. Open someone's profile to add them.", color = Overlay, fontSize = 13.sp)
+        } else {
+            for (entry in list.sortedByDescending { it.added }) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 6.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Surface0)
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            entry.mask,
+                            color = Text0,
+                            fontSize = 13.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(nameOf(entry.network), color = Overlay, fontSize = 11.sp)
+                    }
+                    Text(
+                        "Remove",
+                        color = Subtext,
+                        fontSize = 13.sp,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .clickable { engine.removeIgnore(entry.mask, entry.network) }
+                            .padding(horizontal = 10.dp, vertical = 4.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Commands you make up yourself.
+ *
+ * The phone has applied these since they existed and had no way to edit one,
+ * so an alias could only be made at a desk. Shared with the desktop: an alias
+ * that works there and not here is two clients, and the whole point of one is
+ * that it is shorter than what it stands for.
+ */
+@Composable
+private fun AliasesCard(engine: SwitchboardEngine) {
+    val aliases = engine.savedAliases()
+    var name by remember { mutableStateOf("") }
+    var expansion by remember { mutableStateOf("") }
+    var problem by remember { mutableStateOf<String?>(null) }
+
+    fun add() {
+        val wanted = name.trim().removePrefix("/")
+        when {
+            !Aliases.validName(wanted) ->
+                problem = "A name can only be letters, digits, dashes and underscores."
+            expansion.isBlank() -> problem = "An alias needs something to expand into."
+            else -> {
+                engine.setAliases(
+                    aliases.filterNot { it.name.equals(wanted, true) } +
+                        Aliases.Alias(wanted, expansion.trim())
+                )
+                name = ""
+                expansion = ""
+                problem = null
+            }
+        }
+    }
+
+    Spacer(Modifier.height(8.dp))
+    Text(
+        "Aliases",
+        color = Overlay,
+        fontSize = 11.sp,
+        fontWeight = FontWeight.Bold,
+        modifier = Modifier.padding(start = 20.dp, bottom = 6.dp)
+    )
+    Card {
+        Text(
+            "A command of your own. \$1 is the first word after it, \$* is all of them, " +
+                "\$2- is the second onwards. One alias may use another, but not itself.",
+            color = Subtext,
+            fontSize = 13.sp,
+            lineHeight = 18.sp
+        )
+
+        Spacer(Modifier.height(12.dp))
+        Row(modifier = Modifier.fillMaxWidth()) {
+            SettingField(
+                value = name,
+                onChange = { name = it; problem = null },
+                hint = "j",
+                modifier = Modifier.weight(1f).padding(end = 8.dp)
+            )
+            SettingField(
+                value = expansion,
+                onChange = { expansion = it; problem = null },
+                hint = "/join \$1",
+                modifier = Modifier.weight(2f)
+            )
+        }
+
+        problem?.let {
+            Spacer(Modifier.height(6.dp))
+            Text(it, color = Red, fontSize = 12.sp, lineHeight = 16.sp)
+        }
+
+        Spacer(Modifier.height(10.dp))
+        Button(
+            onClick = { add() },
+            enabled = name.isNotBlank() && expansion.isNotBlank(),
+            colors = ButtonDefaults.buttonColors(containerColor = Surface0, contentColor = Blue),
+            shape = RoundedCornerShape(8.dp)
+        ) {
+            Text("Add", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+        }
+
+        Spacer(Modifier.height(12.dp))
+        if (aliases.isEmpty()) {
+            Text("None yet.", color = Overlay, fontSize = 13.sp)
+        } else {
+            for (alias in aliases.sortedBy { it.name }) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 6.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Surface0)
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("/${alias.name}", color = Blue, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.width(10.dp))
+                    Text(
+                        alias.expansion.replace("\n", " ; "),
+                        color = Subtext,
+                        fontSize = 12.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Text(
+                        "Remove",
+                        color = Overlay,
+                        fontSize = 13.sp,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .clickable { engine.setAliases(aliases.filterNot { it.name == alias.name }) }
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
                 }
             }
         }

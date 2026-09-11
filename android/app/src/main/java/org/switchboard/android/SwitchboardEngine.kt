@@ -624,7 +624,7 @@ class SwitchboardEngine(
         (vault.setting(HIGHLIGHTS_KEY) as? JsonArray)?.let { array ->
             store.highlightWords = array.mapNotNull { (it as? JsonPrimitive)?.content }
         }
-        (vault.setting(ALIASES_KEY) as? JsonArray)?.let { aliases = readAliases(it) }
+        (vault.setting(ALIASES_KEY) as? JsonArray)?.let { storedAliases = readAliases(it) }
 
         for (server in vault.servers()) {
             val watched = vault.watched(server.id)
@@ -860,8 +860,10 @@ class SwitchboardEngine(
      * list. See `src/shared/ignore.ts` for the matching, which both clients do
      * identically.
      */
-    @Volatile
-    var ignores: List<Ignore.Entry> = emptyList()
+    // Snapshot state rather than @Volatile: the settings screen lists these,
+    // and a plain field changing tells Compose nothing — the list would sit
+    // there stale until something else forced a redraw.
+    var ignores: List<Ignore.Entry> by mutableStateOf(emptyList())
         private set
 
     /** Whether this is somebody we have decided not to hear from */
@@ -937,14 +939,16 @@ class SwitchboardEngine(
      * pocket is two clients, and the whole point of one is that it is shorter
      * than what it stands for.
      */
-    @Volatile
-    private var aliases: List<Aliases.Alias> = emptyList()
+    // Snapshot state, for the same reason the ignore list is. Named for the
+    // field rather than the thing, because a property called `aliases`
+    // generates a `setAliases` that collides with the one below.
+    private var storedAliases: List<Aliases.Alias> by mutableStateOf(emptyList())
 
-    internal fun savedAliases(): List<Aliases.Alias> = aliases
+    internal fun savedAliases(): List<Aliases.Alias> = storedAliases
 
     /** Change them, and seal them for the other device */
     fun setAliases(next: List<Aliases.Alias>) {
-        aliases = next
+        storedAliases = next
         val encoded = JsonArray(
             next.map {
                 buildJsonObject {
