@@ -41,6 +41,7 @@ import org.switchboard.android.irc.Isupport
 import org.switchboard.android.irc.ServerConfig
 import org.switchboard.android.irc.Reconnect
 import org.switchboard.android.irc.Redact
+import org.switchboard.android.irc.Unread
 import org.switchboard.android.irc.Services
 import org.switchboard.android.irc.Typing
 import org.switchboard.android.irc.LineLength
@@ -691,6 +692,75 @@ class SharedCorpusTest {
                 c["name"]!!.jsonPrimitive.content,
                 c["redacted"]!!.jsonPrimitive.content,
                 Redact.line(c["line"]!!.jsonPrimitive.content)
+            )
+        }
+    }
+
+    // ── grey, white, or a number ─────────────────────────────────────
+
+    /**
+     * Three states and nothing else, because a sidebar is read at a glance.
+     * This phone put a grey count on every unread channel, so "something was
+     * said" and "you were named" were both numbers; it counted direct messages
+     * toward the network badge, which double-counts them now that people have
+     * their own button; and it ignored muting entirely.
+     */
+    @Test
+    fun `reads unread the way the desktop reads it`() {
+        val corpus = load("unread.json")
+
+        for (case in corpus["rows"]!!.jsonArray) {
+            val c = case.jsonObject
+            val name = c["name"]!!.jsonPrimitive.content
+            val look = Unread.rowLook(
+                c["unread"]!!.jsonPrimitive.int,
+                c["muted"]!!.jsonPrimitive.content == "true",
+                c["selected"]!!.jsonPrimitive.content == "true"
+            )
+            assertEquals(name, c["look"]!!.jsonPrimitive.content, look.name.lowercase())
+
+            val badge = Unread.rowBadge(
+                c["mentions"]!!.jsonPrimitive.int,
+                c["muted"]!!.jsonPrimitive.content == "true"
+            )
+            val expected = c["badge"] as? JsonObject
+            if (expected == null) {
+                assertEquals(name, null, badge)
+            } else {
+                assertEquals(name, expected["count"]!!.jsonPrimitive.int, badge?.count)
+                assertEquals(
+                    name,
+                    expected["muted"]!!.jsonPrimitive.content == "true",
+                    badge?.muted
+                )
+            }
+        }
+
+        for (case in corpus["rails"]!!.jsonArray) {
+            val c = case.jsonObject
+            val name = c["name"]!!.jsonPrimitive.content
+            val conversations = c["conversations"]!!.jsonArray.map { entry ->
+                val o = entry.jsonObject
+                Unread.Conversation(
+                    name = o["name"]!!.jsonPrimitive.content,
+                    unread = o["unread"]!!.jsonPrimitive.int,
+                    mentions = o["mentions"]!!.jsonPrimitive.int,
+                    muted = o["muted"]!!.jsonPrimitive.content == "true"
+                )
+            }
+
+            val look = Unread.railLook(
+                conversations,
+                active = c["active"]!!.jsonPrimitive.content == "true",
+                serverMuted = c["serverMuted"]!!.jsonPrimitive.content == "true"
+            )
+
+            assertEquals(name, c["chip"]!!.jsonPrimitive.content, look.chip.name.lowercase())
+            assertEquals(name, c["mentions"]!!.jsonPrimitive.int, look.mentions)
+            assertEquals(
+                name,
+                c["mentionsMuted"]!!.jsonPrimitive.content == "true",
+                look.mentionsMuted
             )
         }
     }

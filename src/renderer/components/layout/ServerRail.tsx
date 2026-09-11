@@ -5,6 +5,7 @@ import { useUIStore } from '../../stores/uiStore'
 import { SwitchboardIcon } from '../common/SwitchboardIcon'
 import { ServerMenu } from '../server/ServerMenu'
 import { isChannelName } from '@shared/constants'
+import { railLook } from '@shared/unread'
 import { nickColor } from '../../utils/nickColor'
 
 type ConnectionStatus = 'connected' | 'connecting' | 'disconnected'
@@ -86,20 +87,27 @@ export function ServerRail() {
           const isMuted = mutedServers[server.id] !== undefined
           const serverChannels = allChannels[server.id] || []
 
-          // DM unread shows on the Switchboard icon instead, and a muted channel
-          // should never light up its server.
-          const channelOnly = serverChannels.filter(
-            (ch) => (isChannelName(ch.name) || ch.name === '*') && !ch.muted
+          // One rule, shared with the phone: people are counted on the
+          // Messages item rather than here, a muted channel does not light its
+          // server, and a mention inside one still counts — greyed, because
+          // muting means "do not shout", not "do not tell me".
+          const look = railLook(
+            serverChannels.map((ch) => ({
+              name: ch.name,
+              unread: ch.unreadCount,
+              mentions: ch.mentionCount,
+              muted: Boolean(ch.muted)
+            })),
+            { active: isActive, serverMuted: isMuted }
           )
-          const totalMentions = channelOnly.reduce((sum, ch) => sum + ch.mentionCount, 0)
-          const hasUnread = !isMuted && channelOnly.some((ch) => ch.unreadCount > 0)
 
           return (
             <RailItem
               key={server.id}
               active={isActive}
-              unread={hasUnread}
-              badge={totalMentions}
+              unread={look.chip === 'short'}
+              badge={look.mentions}
+              badgeMuted={look.mentionsMuted}
               label={server.name}
               sublabel={STATUS_LABEL[status]}
               status={status}
@@ -184,6 +192,8 @@ interface RailItemProps {
   active?: boolean
   unread?: boolean
   badge?: number
+  /** A count worth showing but not shouting: grey rather than red */
+  badgeMuted?: boolean
   status?: ConnectionStatus
   onClick: () => void
   onContextMenu?: (e: React.MouseEvent) => void
@@ -199,6 +209,7 @@ function RailItem({
   active = false,
   unread = false,
   badge = 0,
+  badgeMuted = false,
   status,
   onClick,
   onContextMenu
@@ -226,7 +237,11 @@ function RailItem({
 
       {/* Mention badge */}
       {badge > 0 && (
-        <span className="pointer-events-none absolute -bottom-0.5 -right-0.5 flex h-5 min-w-[20px] items-center justify-center rounded-full border-[3px] border-gray-950 bg-red-500 px-1 text-[11px] font-bold leading-none text-white">
+        <span
+          className={`pointer-events-none absolute -bottom-0.5 -right-0.5 flex h-5 min-w-[20px] items-center justify-center rounded-full border-[3px] border-gray-950 px-1 text-[11px] font-bold leading-none text-white ${
+            badgeMuted ? 'bg-gray-600' : 'bg-red-500'
+          }`}
+        >
           {badge > 99 ? '99+' : badge}
         </span>
       )}

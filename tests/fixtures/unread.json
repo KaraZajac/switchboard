@@ -1,0 +1,254 @@
+{
+  "$comment": "What a conversation and a network look like when something has happened. Read by tests/shared/unread.test.ts and the Android SharedCorpusTest. Three states and nothing else: grey for quiet, white for unread, a number for a mention.",
+  "$rows": "One conversation in the list. `look` is grey/white/selected; `badge` is the number on it, null for none.",
+  "rows": [
+    {
+      "name": "nothing has happened here",
+      "unread": 0,
+      "mentions": 0,
+      "muted": false,
+      "selected": false,
+      "look": "quiet",
+      "badge": null
+    },
+    {
+      "name": "something was said",
+      "unread": 3,
+      "mentions": 0,
+      "muted": false,
+      "selected": false,
+      "look": "unread",
+      "badge": null,
+      "$comment": "White, and no number. The phone used to put a grey count here, which made 'something was said' and 'you were named' both numbers \u2014 you had to read them to tell which was which."
+    },
+    {
+      "name": "somebody said your name",
+      "unread": 3,
+      "mentions": 1,
+      "muted": false,
+      "selected": false,
+      "look": "unread",
+      "badge": {
+        "count": 1,
+        "muted": false
+      }
+    },
+    {
+      "name": "the one you are looking at is never shouting at you",
+      "unread": 0,
+      "mentions": 0,
+      "muted": false,
+      "selected": true,
+      "look": "selected",
+      "badge": null
+    },
+    {
+      "$comment": "Muting is 'do not shout', not 'do not tell me'. The row stays grey and the count stays, greyed.",
+      "name": "a muted conversation stays grey however much was said",
+      "unread": 9,
+      "mentions": 0,
+      "muted": true,
+      "selected": false,
+      "look": "quiet",
+      "badge": null
+    },
+    {
+      "name": "and still counts a mention, quietly",
+      "unread": 9,
+      "mentions": 2,
+      "muted": true,
+      "selected": false,
+      "look": "quiet",
+      "badge": {
+        "count": 2,
+        "muted": true
+      }
+    }
+  ],
+  "$rails": "A network's item on the rail, given everything on that network. `chip` is the pill on the left edge.",
+  "rails": [
+    {
+      "name": "a quiet network has no chip",
+      "conversations": [
+        {
+          "name": "#lounge",
+          "unread": 0,
+          "mentions": 0,
+          "muted": false
+        }
+      ],
+      "active": false,
+      "serverMuted": false,
+      "chip": "none",
+      "mentions": 0,
+      "mentionsMuted": false
+    },
+    {
+      "name": "one with something unread has a short one",
+      "conversations": [
+        {
+          "name": "#lounge",
+          "unread": 2,
+          "mentions": 0,
+          "muted": false
+        }
+      ],
+      "active": false,
+      "serverMuted": false,
+      "chip": "short",
+      "mentions": 0,
+      "mentionsMuted": false
+    },
+    {
+      "name": "the one you are looking at has a tall one",
+      "conversations": [
+        {
+          "name": "#lounge",
+          "unread": 0,
+          "mentions": 0,
+          "muted": false
+        }
+      ],
+      "active": true,
+      "serverMuted": false,
+      "chip": "tall",
+      "mentions": 0,
+      "mentionsMuted": false
+    },
+    {
+      "name": "a mention puts a number on the icon",
+      "conversations": [
+        {
+          "name": "#lounge",
+          "unread": 4,
+          "mentions": 2,
+          "muted": false
+        }
+      ],
+      "active": false,
+      "serverMuted": false,
+      "chip": "short",
+      "mentions": 2,
+      "mentionsMuted": false
+    },
+    {
+      "$comment": "People have their own button now. Counting a direct message here as well makes a network look busy because somebody sent you one line.",
+      "name": "a direct message does not light up the network it arrived on",
+      "conversations": [
+        {
+          "name": "robin",
+          "unread": 5,
+          "mentions": 5,
+          "muted": false
+        }
+      ],
+      "active": false,
+      "serverMuted": false,
+      "chip": "none",
+      "mentions": 0,
+      "mentionsMuted": false
+    },
+    {
+      "name": "a muted channel does not light up its network",
+      "conversations": [
+        {
+          "name": "#noisy",
+          "unread": 40,
+          "mentions": 0,
+          "muted": true
+        }
+      ],
+      "active": false,
+      "serverMuted": false,
+      "chip": "none",
+      "mentions": 0,
+      "mentionsMuted": false
+    },
+    {
+      "$comment": "Still worth knowing somebody named you, even somewhere turned down \u2014 grey rather than red says which of the two is happening.",
+      "name": "but a mention in it still counts, greyed",
+      "conversations": [
+        {
+          "name": "#noisy",
+          "unread": 40,
+          "mentions": 3,
+          "muted": true
+        }
+      ],
+      "active": false,
+      "serverMuted": false,
+      "chip": "none",
+      "mentions": 3,
+      "mentionsMuted": true
+    },
+    {
+      "name": "a silenced network says nothing at all in colour",
+      "conversations": [
+        {
+          "name": "#lounge",
+          "unread": 9,
+          "mentions": 2,
+          "muted": false
+        }
+      ],
+      "active": false,
+      "serverMuted": true,
+      "chip": "none",
+      "mentions": 2,
+      "mentionsMuted": true
+    },
+    {
+      "name": "one loud channel among quiet ones is enough",
+      "conversations": [
+        {
+          "name": "#quiet",
+          "unread": 0,
+          "mentions": 0,
+          "muted": false
+        },
+        {
+          "name": "#noisy",
+          "unread": 1,
+          "mentions": 0,
+          "muted": false
+        }
+      ],
+      "active": false,
+      "serverMuted": false,
+      "chip": "short",
+      "mentions": 0,
+      "mentionsMuted": false
+    },
+    {
+      "name": "mentions add up across the network",
+      "conversations": [
+        {
+          "name": "#one",
+          "unread": 1,
+          "mentions": 2,
+          "muted": false
+        },
+        {
+          "name": "#two",
+          "unread": 1,
+          "mentions": 3,
+          "muted": false
+        }
+      ],
+      "active": false,
+      "serverMuted": false,
+      "chip": "short",
+      "mentions": 5,
+      "mentionsMuted": false
+    },
+    {
+      "name": "a network with nothing in it is quiet",
+      "conversations": [],
+      "active": false,
+      "serverMuted": false,
+      "chip": "none",
+      "mentions": 0,
+      "mentionsMuted": false
+    }
+  ]
+}

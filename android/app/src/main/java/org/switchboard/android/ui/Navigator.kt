@@ -64,6 +64,7 @@ import coil.compose.AsyncImage
 import androidx.compose.ui.layout.ContentScale
 import org.switchboard.android.SwitchboardStore
 import org.switchboard.android.SERVER_CONSOLE
+import org.switchboard.android.irc.Unread
 import org.switchboard.android.isChannel
 
 /**
@@ -109,6 +110,7 @@ fun Navigator(
             onOpenAccount = onOpenAccount,
             onToggleConnection = onToggleConnection,
             isMuted = isMuted,
+            isChannelMuted = isChannelMuted,
             onToggleMute = onToggleMute
         )
 
@@ -156,6 +158,8 @@ private fun ServerRail(
     onOpenAccount: (String) -> Unit,
     onToggleConnection: (String) -> Unit,
     isMuted: (String) -> Boolean,
+    /** A silenced channel should not light the network it is on */
+    isChannelMuted: (serverId: String, channel: String) -> Boolean,
     onToggleMute: (String) -> Unit
 ) {
     val servers = store.servers.values.sortedBy { it.name.lowercase() }
@@ -233,9 +237,23 @@ private fun ServerRail(
         )
 
         for (server in servers) {
-            val active = store.activeServerId == server.id
-            val unread = store.channelsFor(server.id).sumOf { it.unread }
-            val mentions = store.channelsFor(server.id).sumOf { it.mentions }
+            val active = store.activeServerId == server.id && !store.dmMode
+            // One rule, shared with the desktop: people are not counted here —
+            // their unread belongs to the Messages button above — a muted
+            // channel does not light its network, and a mention in one still
+            // counts, greyed.
+            val look = Unread.railLook(
+                store.channelsFor(server.id).map { channel ->
+                    Unread.Conversation(
+                        name = channel.name,
+                        unread = channel.unread,
+                        mentions = channel.mentions,
+                        muted = isChannelMuted(server.id, channel.name)
+                    )
+                },
+                active = active,
+                serverMuted = isMuted(server.id)
+            )
 
             Box(
                 modifier = Modifier.fillMaxWidth().height(52.dp),
@@ -244,7 +262,13 @@ private fun ServerRail(
                 Box(
                     modifier = Modifier
                         .width(4.dp)
-                        .height(if (active) 40.dp else if (unread > 0) 10.dp else 0.dp)
+                        .height(
+                            when (look.chip) {
+                                Unread.Chip.TALL -> 40.dp
+                                Unread.Chip.SHORT -> 10.dp
+                                Unread.Chip.NONE -> 0.dp
+                            }
+                        )
                         .clip(RoundedCornerShape(topEnd = 4.dp, bottomEnd = 4.dp))
                         .background(Text0)
                 )
@@ -253,8 +277,8 @@ private fun ServerRail(
                     ServerBadge(
                         server = server,
                         active = active,
-                        mentions = mentions,
-                        muted = isMuted(server.id),
+                        mentions = look.mentions,
+                        muted = look.mentionsMuted,
                         onSelect = onSelect,
                         onLongPress = { menuFor = server.id }
                     )
@@ -544,10 +568,26 @@ private fun ChannelList(
         for (channel in channels) {
             val selected = store.activeServerId == serverId &&
                 store.activeChannel.equals(channel.name, true)
-            val unread = channel.unread > 0
             val muted = serverId != null && isChannelMuted(serverId, channel.name)
+            val look = Unread.rowLook(channel.unread, muted, selected)
+            val lit = look != Unread.RowLook.QUIET
+            val badge = Unread.rowBadge(channel.mentions, muted)
 
             Box {
+                // The same mark the desktop puts at the edge of an unread
+                // channel. White text says it too, but a row of names is read
+                // down the left edge and this is what the eye lands on first.
+                if (look == Unread.RowLook.UNREAD) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.CenterStart)
+                            .width(3.dp)
+                            .height(8.dp)
+                            .clip(RoundedCornerShape(topEnd = 3.dp, bottomEnd = 3.dp))
+                            .background(Text0)
+                    )
+                }
+
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -563,25 +603,28 @@ private fun ChannelList(
                 ) {
                     Text(
                         "#",
-                        color = if (selected || unread) Subtext else Overlay,
+                        color = if (lit) Subtext else Overlay,
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Medium,
                         modifier = Modifier.width(22.dp)
                     )
                     Text(
                         channel.name.removePrefix("#"),
-                        color = if (selected || unread) Text0 else Subtext,
-                        fontWeight = if (unread) FontWeight.SemiBold else FontWeight.Normal,
+                        color = if (lit) Text0 else Subtext,
+                        fontWeight = if (look == Unread.RowLook.UNREAD) {
+                            FontWeight.SemiBold
+                        } else {
+                            FontWeight.Normal
+                        },
                         fontSize = 15.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f)
                     )
-                    if (channel.mentions > 0) {
-                        CountBadge(channel.mentions, if (muted) Overlay else Red)
-                    } else if (unread && !muted) {
-                        CountBadge(channel.unread, Surface1)
-                    }
+                    // A number means somebody said your name. Unread on its own
+                    // is the white, and putting a count there as well made the
+                    // two indistinguishable without reading them.
+                    badge?.let { CountBadge(it.count, if (it.muted) Overlay else Red) }
                 }
 
                 ChannelMenu(
