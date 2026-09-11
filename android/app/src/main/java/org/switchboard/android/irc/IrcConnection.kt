@@ -207,8 +207,24 @@ class IrcConnection(
                     "${config.host}: waiting ${backoff / 1000}s — ${state.closingMessage}"
                 )
             }
+
+            // Say so, or nothing recomputes and the screen goes on claiming to
+            // be connecting for the whole wait. A failed attempt that never
+            // registered emits nothing at all — `irc:disconnected` only fires
+            // for a connection that had got in — so without this the last
+            // thing the UI heard was the dial starting.
+            emit("irc:waiting", buildJsonObject {
+                put("serverId", config.id)
+                put("ms", backoff)
+            })
+
             withTimeoutOrNull(backoff) { retryNow.receive() }
+
             waitingUntil = 0L
+            emit("irc:waiting", buildJsonObject {
+                put("serverId", config.id)
+                put("ms", 0L)
+            })
         }
     }
 

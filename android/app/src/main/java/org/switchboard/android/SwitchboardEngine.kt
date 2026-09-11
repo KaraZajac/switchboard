@@ -94,6 +94,14 @@ class SwitchboardEngine(
     private var reconnectAttempt = 0
 
     /** The last thing a server said when we could not reach it */
+    /**
+     * Why the last attempt on this network failed, for the status line.
+     *
+     * Read in three places and assigned in none, so every branch that meant to
+     * explain itself fell through to "Connecting…" instead. A client that
+     * knows exactly why it cannot connect and says nothing is worse than one
+     * that does not know.
+     */
     private var lastConnectionError: String? = null
 
     data class LinkDetails(val ticket: String, val deviceName: String, val secretKey: ByteArray)
@@ -940,6 +948,7 @@ class SwitchboardEngine(
             // phone that had been in two channels for ten minutes went on
             // saying "Connecting…" until something unrelated recomputed it.
             if (channel == "irc:connected") {
+                lastConnectionError = null
                 rearmMonitor(config.id)
                 if (!keptOurNameAlongside(config.id)) return@IrcConnection
                 askWhatWeMissed(config.id)
@@ -961,6 +970,19 @@ class SwitchboardEngine(
                 }
             }
             if (channel == "irc:disconnected") recomputeMode()
+
+            // Why we are not on. Only while there is no connection to speak
+            // of: once we are in, an ordinary error is about a command rather
+            // than about being able to get here at all.
+            if (channel == "irc:error" && connections[config.id]?.isConnected != true) {
+                (data as? JsonObject)?.get("message")?.jsonPrimitive?.contentOrNull()
+                    ?.let { lastConnectionError = it }
+            }
+
+            // Entering or leaving a backoff. Nothing else fires for an attempt
+            // that never registered, so without this the screen keeps saying
+            // "Connecting…" through a minute of deliberate waiting.
+            if (channel == "irc:waiting") recomputeMode()
         }
         connections[config.id] = connection
         connection.start()
@@ -1130,11 +1152,14 @@ class SwitchboardEngine(
             live -> "Connected"
             dialling && pairedWithDesktop ->
                 lastConnectionError?.let { "Taking over — $it" } ?: "Taking over — connecting…"
-            // Told to slow down, and doing it. The reason is the server's own
-            // words, which is the only thing here that says why.
+            // Told to slow down, and doing it. Deliberately not a countdown:
+            // this is worked out when something happens, and nothing happens
+            // during a wait — a "Waiting 60s" computed once would still say 60
+            // a minute later. The reason is the server's own words, which is
+            // the only thing here that says why.
             waitingFor != null && waitingFor >= Reconnect.THROTTLED_FLOOR_MS / 2 ->
-                lastConnectionError?.let { "Waiting ${waitingFor / 1000}s — $it" }
-                    ?: "Waiting ${waitingFor / 1000}s before trying again"
+                lastConnectionError?.let { "Waiting before trying again — $it" }
+                    ?: "Waiting before trying again"
 
             dialling -> lastConnectionError?.let { "Connecting — $it" } ?: "Connecting…"
 
