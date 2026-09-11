@@ -162,10 +162,23 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # The notes are the tag's own message. `git tag -a` strips lines
-          # beginning with `#` as comments unless the tag was made with
-          # --cleanup=verbatim, which would quietly eat every markdown heading.
-          git tag -l --format='%(contents)' '${{ github.ref_name }}' > notes.md
+          # The notes are the tag's own message, asked of GitHub rather than
+          # of the checkout. `git tag -l --format=%(contents)` reads whatever
+          # local ref actions/checkout left behind, and for a tag build that is
+          # a lightweight one — so it silently gave the *commit* message
+          # instead, and v2.1.1-beta shipped with the version-bump commit as
+          # its release notes.
+          #
+          # Note for whoever writes the next tag: annotate it with
+          # --cleanup=verbatim, or git strips every `#` heading as a comment.
+          ref=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/${{ github.ref_name }}")
+          kind=$(jq -r '.object.type' <<<"$ref")
+          if [ "$kind" != "tag" ]; then
+            echo "::error::${{ github.ref_name }} is a lightweight tag — annotate it so it has notes"
+            exit 1
+          fi
+          gh api "repos/$GITHUB_REPOSITORY/git/tags/$(jq -r '.object.sha' <<<"$ref")" \
+            --jq '.message' > notes.md
           [ -s notes.md ] || { echo "::error::no message on ${{ github.ref_name }} — annotate the tag"; exit 1; }
 
           # `-F key=@file` reads a file; `-f` does not, and takes the whole
@@ -187,5 +200,14 @@ jobs:
         run: |
           gh api "repos/$GITHUB_REPOSITORY/releases/${{ steps.release.outputs.id }}" \
             --jq '"draft=\(.draft) prerelease=\(.prerelease) assets=\(.assets|length) notes=\(.body|length) bytes"'
-          empty=$(gh api "repos/$GITHUB_REPOSITORY/releases/${{ steps.release.outputs.id }}" --jq '.body|length')
-          [ "$empty" -gt 0 ] || { echo "::error::published with no release notes"; exit 1; }
+          # Not just "is there a body": the last release had one and it was
+          # the wrong text entirely. Check it is the tag's.
+          published=$(gh api "repos/$GITHUB_REPOSITORY/releases/${{ steps.release.outputs.id }}" --jq '.body')
+          if [ -z "$published" ]; then
+            echo "::error::published with no release notes"
+            exit 1
+          fi
+          if [ "$published" != "$(cat notes.md)" ]; then
+            echo "::error::the release notes are not the tag's message"
+            exit 1
+          fi

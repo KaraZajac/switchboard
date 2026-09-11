@@ -147,6 +147,22 @@ async function loadSecretKey(): Promise<number[]> {
 }
 
 /**
+ * Events that stay on this machine, whatever else is relayed.
+ *
+ * `irc:raw` is the wire log: every line in and out, verbatim. Nothing
+ * consumes it — not the renderer, not the phone — and it was going to every
+ * paired device carrying `PASS`, and `AUTHENTICATE`, which for SASL PLAIN is
+ * base64 of `user\0user\0password` and decodes in one step.
+ *
+ * So the rule `sanitizeForRemote` exists to keep — that credentials never
+ * leave this desktop for a paired device — was being kept in the config and
+ * broken on the wire beside it. Relaying a debug stream is not something to
+ * do by default; it is something to do on purpose, and there is no purpose
+ * here.
+ */
+const NEVER_RELAYED = new Set(['irc:raw'])
+
+/**
  * The setting that says this desktop is one a phone may reach.
  *
  * Pairing is a durable relationship — the endpoint's secret key is kept on
@@ -205,6 +221,7 @@ export async function startRemoteLink(): Promise<RemoteStatus> {
   }
 
   unsubscribeEvents = ircManager.subscribe((channel, data) => {
+    if (NEVER_RELAYED.has(channel)) return
     broadcast({ t: 'event', channel, data })
   })
 

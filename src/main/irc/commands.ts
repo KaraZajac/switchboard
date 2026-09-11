@@ -186,6 +186,23 @@ export function runCommand(client: IRCClient, target: string, text: string): Com
       return { handled: true }
     }
 
+    /**
+     * Become a server operator.
+     *
+     * The password goes on the wire and nowhere else: the debug stream
+     * redacts it (`@shared/redact`) and that stream does not leave this
+     * machine at all. Worth saying because this is the one command here whose
+     * argument is a credential.
+     */
+    case 'oper': {
+      const [name, ...password] = rest.split(' ')
+      if (!name || password.length === 0) {
+        return { handled: true, error: 'Usage: /oper <name> <password>' }
+      }
+      client.connection.send('OPER', name, password.join(' '))
+      return { handled: true }
+    }
+
     case 'raw':
     case 'quote': {
       if (!rest) return { handled: true, error: 'Usage: /raw <IRC line>' }

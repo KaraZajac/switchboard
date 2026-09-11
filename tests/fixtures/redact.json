@@ -1,0 +1,97 @@
+{
+  "$comment": "Taking the secret out of a line before anything else sees it, read by tests/shared/redact.test.ts and the Android SharedCorpusTest. Every line the client sends is emitted on a debug stream; that stream used to be handed to every paired device, carrying the same credentials `sanitizeForRemote` strips from the config.",
+  "$cases": "`line` is what is about to go on the wire; `redacted` is what anything watching should see. A line with no secret in it comes back unchanged.",
+  "cases": [
+    {
+      "name": "a server password",
+      "line": "PASS hunter2",
+      "redacted": "PASS ***"
+    },
+    {
+      "name": "and the trailing spelling of it",
+      "line": "PASS :hunter2",
+      "redacted": "PASS ***"
+    },
+    {
+      "$comment": "SASL PLAIN is base64 of user\\0user\\0password and decodes in one step. This is the one that mattered most.",
+      "name": "a SASL response is the credential itself",
+      "line": "AUTHENTICATE a2FyYQBrYXJhAGh1bnRlcjI=",
+      "redacted": "AUTHENTICATE ***"
+    },
+    {
+      "$comment": "Protocol tokens rather than secrets. Blanking these makes an exchange unreadable and hides nothing.",
+      "name": "an empty SASL response is not a secret",
+      "line": "AUTHENTICATE +",
+      "redacted": "AUTHENTICATE +"
+    },
+    {
+      "name": "nor is an abort",
+      "line": "AUTHENTICATE *",
+      "redacted": "AUTHENTICATE *"
+    },
+    {
+      "name": "the mechanism being chosen is not a secret either",
+      "line": "AUTHENTICATE PLAIN",
+      "redacted": "AUTHENTICATE ***",
+      "$comment": "Kept deliberately: the mechanism is already visible in the CAP exchange, and telling a mechanism name from a short base64 payload is not worth getting wrong."
+    },
+    {
+      "name": "an oper password, keeping who it was for",
+      "line": "OPER kara hunter2",
+      "redacted": "OPER kara ***"
+    },
+    {
+      "name": "an oper line with nothing after the name is already harmless",
+      "line": "OPER kara",
+      "redacted": "OPER kara"
+    },
+    {
+      "name": "a password typed at NickServ",
+      "line": "PRIVMSG NickServ :IDENTIFY hunter2",
+      "redacted": "PRIVMSG NickServ :IDENTIFY ***"
+    },
+    {
+      "name": "with the account named as well",
+      "line": "PRIVMSG NickServ :IDENTIFY kara hunter2",
+      "redacted": "PRIVMSG NickServ :IDENTIFY kara ***"
+    },
+    {
+      "name": "registering",
+      "line": "PRIVMSG NickServ :REGISTER hunter2 kara@example.org",
+      "redacted": "PRIVMSG NickServ :REGISTER ***",
+      "$comment": "REGISTER puts the password first, where IDENTIFY puts the account first. Keeping a fixed number of words for both is how the password in this one used to survive; the count is per verb now."
+    },
+    {
+      "name": "ghosting a stale connection",
+      "line": "PRIVMSG NickServ :GHOST kara hunter2",
+      "redacted": "PRIVMSG NickServ :GHOST kara ***"
+    },
+    {
+      "$comment": "A person is not a service, and somebody saying the word is not a password.",
+      "name": "a person who happens to say identify is left alone",
+      "line": "PRIVMSG robin :IDENTIFY yourself",
+      "redacted": "PRIVMSG robin :IDENTIFY yourself"
+    },
+    {
+      "name": "an ordinary message is untouched",
+      "line": "PRIVMSG #lounge :morning",
+      "redacted": "PRIVMSG #lounge :morning"
+    },
+    {
+      "name": "so is a join",
+      "line": "JOIN #lounge",
+      "redacted": "JOIN #lounge"
+    },
+    {
+      "name": "and a line with client tags on it",
+      "line": "@+typing=active TAGMSG #lounge",
+      "redacted": "@+typing=active TAGMSG #lounge"
+    },
+    {
+      "$comment": "No password in this one, but telling that apart from `IDENTIFY hunter2` means knowing which verb takes what. Over-redacting is the safe direction.",
+      "name": "a ghost with no password still comes out blanked",
+      "line": "PRIVMSG NickServ :GHOST kara",
+      "redacted": "PRIVMSG NickServ :GHOST ***"
+    }
+  ]
+}

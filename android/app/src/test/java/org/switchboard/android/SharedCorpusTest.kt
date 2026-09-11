@@ -40,6 +40,7 @@ import org.switchboard.android.irc.Friends
 import org.switchboard.android.irc.Isupport
 import org.switchboard.android.irc.ServerConfig
 import org.switchboard.android.irc.Reconnect
+import org.switchboard.android.irc.Redact
 import org.switchboard.android.irc.Services
 import org.switchboard.android.irc.Typing
 import org.switchboard.android.irc.LineLength
@@ -672,6 +673,26 @@ class SharedCorpusTest {
     fun `says nothing about a message that is not there`() {
         assertEquals(false, Reconnect.saysSlowDown(null))
         assertEquals(Reconnect.BASE_MS, Reconnect.delay(1, null))
+    }
+
+    // ── taking the secret out of a line ──────────────────
+
+    /**
+     * Every line the desktop sent was emitted on a debug stream, and that
+     * stream was handed to every paired device, carrying the credentials
+     * `sanitizeForRemote` strips out of the config before it travels. Both
+     * clients hold to the same idea of what a secret is.
+     */
+    @Test
+    fun `hides the same secrets the desktop hides`() {
+        for (case in load("redact.json")["cases"]!!.jsonArray) {
+            val c = case.jsonObject
+            assertEquals(
+                c["name"]!!.jsonPrimitive.content,
+                c["redacted"]!!.jsonPrimitive.content,
+                Redact.line(c["line"]!!.jsonPrimitive.content)
+            )
+        }
     }
 
     // ── knowing NickServ when you see it ─────────────────────────────

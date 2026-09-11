@@ -252,6 +252,23 @@ object Commands {
                 Result(true)
             }
 
+            /**
+             * Become a server operator.
+             *
+             * The password goes on the wire and nowhere else — the one
+             * command here whose argument is a credential.
+             */
+            "oper" -> {
+                val name = rest.substringBefore(' ').trim()
+                val password = rest.substringAfter(' ', "").trim()
+                if (name.isEmpty() || password.isEmpty()) {
+                    Result(true, error = "Usage: /oper <name> <password>")
+                } else {
+                    connection.send("OPER", name, password)
+                    Result(true)
+                }
+            }
+
             "raw", "quote" -> {
                 if (rest.isEmpty()) Result(true, error = "Usage: /raw <IRC line>")
                 else {

@@ -166,5 +166,6 @@ export const IRC_COMMANDS = [
   'away',
   'back',
   'quit',
+  'oper',
   'raw'
 ] as const

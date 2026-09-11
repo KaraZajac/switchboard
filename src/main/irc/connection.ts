@@ -7,6 +7,7 @@ import type { IRCMessage } from '@shared/types/irc'
 import type { ServerConfig } from '@shared/types/server'
 import { parseMessage } from './parser'
 import { reconnectDelay, THROTTLED_FLOOR_MS } from '@shared/reconnect'
+import { redactLine } from '@shared/redact'
 import { cmd } from './serializer'
 import { decodeLine } from '@shared/decoding'
 import { readCertificate } from '@shared/certfp'
@@ -333,7 +334,9 @@ export class IRCConnection extends EventEmitter {
       if (!this.socket || this.socket.destroyed) return
       this.socket.write(line + '\r\n')
     }
-    this.emit('raw', 'out', line)
+    // Redacted at the source, so the secret is not in the renderer, a log,
+    // or a devtools window either — see `@shared/redact`.
+    this.emit('raw', 'out', redactLine(line))
   }
 
   /**
