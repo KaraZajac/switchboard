@@ -26,6 +26,14 @@ interface ServerState {
    * a member menu may offer. The renderer could not see either before this.
    */
   isupport: Record<string, Record<string, string>>
+  /**
+   * The profile you carry everywhere.
+   *
+   * IRC has no global anything, so this is the client's own: kept with your
+   * config, shared with the phone through the vault, and published to each
+   * network that has not been given something different.
+   */
+  globalProfile: UserMetadata
   /** Our current nick per server */
   currentNick: Record<string, string>
   /** User avatars from metadata: `${serverId}:${nick}` -> URL */
@@ -71,6 +79,7 @@ interface ServerState {
   setUserMetadata: (serverId: string, nick: string, key: string, value: string) => void
   setNetworkIcon: (serverId: string, url: string) => void
   setIsupport: (serverId: string, tokens: Record<string, string>) => void
+  setGlobalProfile: (profile: UserMetadata) => void
   /** A services bot has spoken on this network, so it has one */
   noteService: (serverId: string, nick: string) => void
   setFilehostUrl: (serverId: string, url: string) => void
@@ -90,6 +99,7 @@ export const useServerStore = create<ServerState>((set, get) => ({
   capabilities: {},
   capabilityValues: {},
   isupport: {},
+  globalProfile: {},
   currentNick: {},
   userMetadata: {},
   mutedServers: {},
@@ -121,6 +131,8 @@ export const useServerStore = create<ServerState>((set, get) => ({
     })),
 
   setActiveServer: (id) => set({ activeServerId: id }),
+
+  setGlobalProfile: (profile) => set({ globalProfile: profile }),
 
   setIsupport: (serverId, tokens) =>
     set((state) => ({

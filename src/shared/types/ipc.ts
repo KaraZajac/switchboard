@@ -254,7 +254,14 @@ export interface RendererToMainInvocations {
   'user:setname': (serverId: string, realname: string) => Promise<void>
   'user:away': (serverId: string, message?: string) => Promise<void>
   'metadata:get': (serverId: string, target: string, key: string) => Promise<void>
-  'metadata:set': (serverId: string, key: string, value: string) => Promise<void>
+  /** @param scope `global` for the profile you carry everywhere, or a serverId */
+  'metadata:set': (
+    scope: string,
+    key: string,
+    value: string
+  ) => Promise<{ saved: boolean; published: boolean; reason?: string } | void>
+  /** Drop this network's own profile, so it follows the one you carry again */
+  'metadata:reset': (serverId: string) => Promise<void>
   'account:register': (serverId: string, email: string | null, password: string) => Promise<boolean>
   'account:verify': (serverId: string, account: string, code: string) => Promise<boolean>
   'history:fetch': (serverId: string, channel: string, before?: string, limit?: number) => Promise<ChatMessage[]>

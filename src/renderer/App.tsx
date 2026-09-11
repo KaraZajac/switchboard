@@ -3,6 +3,7 @@ import { AppLayout } from './components/layout/AppLayout'
 import { ToastContainer } from './components/common/ToastContainer'
 import { useIRCEvents } from './hooks/useIRC'
 import { useServerStore } from './stores/serverStore'
+import type { UserMetadata } from '@shared/types/metadata'
 import { initMutePersistence } from './stores/mutePersistence'
 import { useUIStore } from './stores/uiStore'
 
@@ -63,6 +64,17 @@ function AppInner() {
     loadServers().catch((err) => {
       console.error('Failed to load servers:', err)
     })
+
+    // The profile you carry everywhere, which each network follows unless it
+    // has been given something different.
+    window.switchboard
+      .invoke('settings:get', 'profile')
+      .then((value) => {
+        if (value && typeof value === 'object') {
+          useServerStore.getState().setGlobalProfile(value as UserMetadata)
+        }
+      })
+      .catch((err) => console.error('Failed to load your profile:', err))
 
     const off = window.switchboard.on('servers:changed', () => {
       loadServers().catch((err) => {

@@ -41,6 +41,7 @@ import org.switchboard.android.irc.Isupport
 import org.switchboard.android.irc.ServerConfig
 import org.switchboard.android.irc.Reconnect
 import org.switchboard.android.irc.Powers
+import org.switchboard.android.irc.Profile
 import org.switchboard.android.irc.Redact
 import org.switchboard.android.irc.Unread
 import org.switchboard.android.irc.Services
@@ -816,6 +817,67 @@ class SharedCorpusTest {
                 c["name"]!!.jsonPrimitive.content,
                 c["weak"]!!.jsonPrimitive.content == "true",
                 Powers.maskIsWeak(host)
+            )
+        }
+    }
+
+    // ── one profile for you, and a different one where you want it ───
+
+    /**
+     * A network with nothing of its own follows your profile; one with a
+     * profile of its own overrides it field by field. Before this, adding a
+     * network copied the global into it and editing anywhere wrote both, so
+     * changing your name updated whichever network you were looking at and
+     * left the rest frozen.
+     */
+    @Test
+    fun `resolves a profile the way the desktop resolves it`() {
+        val corpus = load("profile.json")
+
+        fun mapOfOrNull(e: JsonElement?): Map<String, String>? =
+            (e as? JsonObject)?.mapValues { it.value.jsonPrimitive.content }
+
+        for (case in corpus["resolve"]!!.jsonArray) {
+            val c = case.jsonObject
+            assertEquals(
+                c["name"]!!.jsonPrimitive.content,
+                mapOfOrNull(c["result"]),
+                Profile.resolve(mapOfOrNull(c["global"]), mapOfOrNull(c["override"]))
+            )
+        }
+
+        for (case in corpus["override"]!!.jsonArray) {
+            val c = case.jsonObject
+            assertEquals(
+                c["name"]!!.jsonPrimitive.content,
+                mapOfOrNull(c["stored"]),
+                Profile.overrideFrom(mapOfOrNull(c["global"]), mapOfOrNull(c["typed"]))
+            )
+        }
+
+        for (case in corpus["same"]!!.jsonArray) {
+            val c = case.jsonObject
+            assertEquals(
+                c["name"]!!.jsonPrimitive.content,
+                c["same"]!!.jsonPrimitive.content == "true",
+                Profile.same(mapOfOrNull(c["a"]), mapOfOrNull(c["b"]))
+            )
+        }
+
+        // Clearing a field has to be published, or the network goes on wearing
+        // the old one — on a server that keeps metadata between sessions, for
+        // good. Both clients have to agree on which fields those are, and on
+        // leaving alone the ones the network set on us itself.
+        for (case in corpus["clear"]!!.jsonArray) {
+            val c = case.jsonObject
+            assertEquals(
+                c["name"]!!.jsonPrimitive.content,
+                c["result"]!!.jsonArray.map { it.jsonPrimitive.content },
+                Profile.keysToClear(
+                    c["keys"]!!.jsonArray.map { it.jsonPrimitive.content },
+                    mapOfOrNull(c["published"]),
+                    mapOfOrNull(c["next"])
+                )
             )
         }
     }

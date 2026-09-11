@@ -8,7 +8,9 @@ import { initDatabase, closeDatabase } from './storage/database'
 import { loadSTSPolicies, persistSTSPoliciesWith } from './irc/features/sts'
 import { allSTSPolicies, saveSTSPolicy, forgetSTSPolicy } from './storage/models/sts'
 import { resumeRemoteLink, stopRemoteLink } from './remote/link'
-import { encryptStoredCredentials } from './storage/models/server'
+import { encryptStoredCredentials, getAllServers, updateServer } from './storage/models/server'
+import { getSetting } from './storage/models/settings'
+import { hasOverride, sameProfile, overrideFrom } from '@shared/profile'
 import { secretsBackendDescription } from './storage/secrets'
 
 let mainWindow: BrowserWindow | null = null
@@ -277,6 +279,32 @@ app.whenReady().then(async () => {
     }
   } catch (err) {
     console.error('Failed to initialize database:', err)
+  }
+
+  // What a network was given rather than what it was handed a copy of.
+  //
+  // Adding a network used to copy the default profile into it, so every
+  // network has one of its own without anybody choosing that — and under the
+  // rule that a network with its own profile ignores the global, editing your
+  // name would have changed nothing anywhere.
+  //
+  // Narrowed field by field rather than all or nothing: somebody who changed
+  // their display name on one network got a whole frozen copy along with it,
+  // and only the name was ever a choice. What matches the global goes back to
+  // following it; what differs stays.
+  try {
+    const global = getSetting<Record<string, string>>('profile') ?? {}
+    let freed = 0
+    for (const server of getAllServers()) {
+      if (!hasOverride(server.profile)) continue
+      const narrowed = overrideFrom(global, server.profile) ?? {}
+      if (sameProfile(narrowed, server.profile)) continue
+      updateServer(server.id, { profile: narrowed })
+      freed++
+    }
+    if (freed > 0) console.info(`${freed} network(s) now follow your profile again`)
+  } catch (err) {
+    console.error('Could not tidy seeded profiles:', err)
   }
 
   // Register IPC handlers

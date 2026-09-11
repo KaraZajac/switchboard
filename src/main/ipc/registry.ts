@@ -61,6 +61,7 @@ export const REMOTE_ALLOWED = new Set([
   'user:setname',
   'user:away',
   'metadata:set',
+  'metadata:reset',
   'read-marker:set',
   'monitor:add',
   'monitor:remove',

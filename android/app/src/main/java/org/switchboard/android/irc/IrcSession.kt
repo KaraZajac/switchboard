@@ -14,6 +14,15 @@ interface IrcSession {
     val config: ServerConfig
     val state: ConnectionState
 
+    /**
+     * The profile you carry everywhere, which this network's own is laid over.
+     *
+     * The connection reads it rather than holding a copy, because it is edited
+     * while connections are up — see [Profile] and `src/shared/profile.ts`.
+     * Empty by default so a test session need not know about the vault.
+     */
+    val globalProfile: Map<String, String> get() = emptyMap()
+
     /** Queue a command. Ordering is preserved; pacing is the connection's job. */
     fun send(command: String, vararg params: String)
 

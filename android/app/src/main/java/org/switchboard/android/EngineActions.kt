@@ -26,6 +26,7 @@ import android.provider.OpenableColumns
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.switchboard.android.irc.Filehost
+import org.switchboard.android.irc.Profile
 import org.switchboard.android.irc.dialChanged
 
 /**
@@ -215,35 +216,43 @@ fun SwitchboardEngine.setAway(serverId: String, message: String?) =
 data class ProfileSaved(val saved: Boolean, val published: Boolean, val reason: String?)
 
 /**
+ * Which profile is being edited.
+ *
+ * IRC has no global anything — every network is told separately — so
+ * "everywhere" is this client's own idea, kept in the vault where both devices
+ * can see it and published to each network on connect. The same two words the
+ * desktop's `metadata:set` takes, so the scope travels over the link unchanged.
+ */
+const val GLOBAL_SCOPE = "global"
+
+private const val NO_METADATA =
+    "This network does not support profiles, so nobody here will see it"
+
+/**
  * Set one of your own profile keys.
  *
  * Not routed through `act`, because unlike everything else here the answer
  * matters — this used to be fire-and-forget, so filling the form in on a
  * network that does not carry profiles looked exactly like success and lost
  * every word of it.
+ *
+ * @param scope [GLOBAL_SCOPE] for the profile you carry everywhere, or a
+ *   serverId for one network only. These used to be the same write: editing a
+ *   profile anywhere set the network's copy *and* the default, so you could
+ *   not be called something different in one place without changing what you
+ *   were called in all of them.
  */
 suspend fun SwitchboardEngine.setProfile(
-    serverId: String?,
+    scope: String,
     key: String,
     value: String
 ): ProfileSaved {
-    if (isHolding || !remote.isLinked || serverId == null) {
-        // Your profile is yours, not one network's: it is written down first
-        // and always, with no server selected and none configured. Publishing
-        // is a separate question, and its answer is per network.
-        val stored = rememberProfileKey(serverId, key, value)
-
-        val connection = serverId?.let { connections[it] }
-            ?: return ProfileSaved(stored, false, if (serverId == null) null else "Not connected to this network")
-
-        if (!connection.supportsMetadata) {
-            return ProfileSaved(stored, false, NO_METADATA)
-        }
-        connection.setMetadata(key, value)
-        return ProfileSaved(stored, true, null)
+    if (isHolding || !remote.isLinked) {
+        return if (scope == GLOBAL_SCOPE) setGlobalProfileKey(key, value)
+        else setServerProfileKey(scope, key, value)
     }
 
-    val answer = ask("metadata:set", JsonPrimitive(serverId), JsonPrimitive(key), JsonPrimitive(value))
+    val answer = ask("metadata:set", JsonPrimitive(scope), JsonPrimitive(key), JsonPrimitive(value))
         as? JsonObject
         ?: return ProfileSaved(false, false, "Could not reach the desktop")
 
@@ -254,41 +263,95 @@ suspend fun SwitchboardEngine.setProfile(
     )
 }
 
-private const val NO_METADATA =
-    "This network does not support profiles, so nobody here will see it"
-
-/** Put one key into the vault's copy of this server, so it outlives the session */
 /**
- * Write one profile key down.
+ * Change the profile you carry everywhere.
  *
- * The config's own copy always, so that saving works with nothing connected
- * and no networks added — a profile is a thing about you, and refusing to
- * remember it until you have somewhere to send it is the wrong way round.
- * The named server, if there is one, gets it too, because that is the copy it
- * publishes on connect.
+ * Every network that has not been given one of its own is describing you, so
+ * they all say the new thing now rather than at their next reconnect.
  */
-private fun SwitchboardEngine.rememberProfileKey(
-    serverId: String?,
+private fun SwitchboardEngine.setGlobalProfileKey(key: String, value: String): ProfileSaved {
+    if (!vault.isUnlocked) return ProfileSaved(false, false, "Locked")
+
+    val stored = vault.setDefaultProfileKey(key, value)
+    if (stored) noteVaultChanged()
+
+    // Per field, not per network: an override is field by field, so a network
+    // you gave a different display name still follows your pronouns — and
+    // skipping the whole network meant it followed them only until the next
+    // time anybody reconnected.
+    var published = false
+    for (server in vaultServers()) {
+        if (server.profile.containsKey(key)) continue
+        val connection = connections[server.id] ?: continue
+        connection.refreshProfile()
+        if (connection.supportsMetadata) published = true
+    }
+
+    // Saved either way — a profile is a thing about you, not about a network —
+    // but say so when there is nowhere it can be seen.
+    return ProfileSaved(
+        stored,
+        published,
+        if (published) null else "Saved. No connected network here can show it to anyone"
+    )
+}
+
+/**
+ * Change what one network is told, and only that one.
+ *
+ * Stored as a difference from your profile rather than a copy of it, so a
+ * network only stops following you where somebody meant it to — and a blank
+ * where your profile has something is a deliberate blank, which is the only
+ * way to have something everywhere except in one place.
+ */
+private fun SwitchboardEngine.setServerProfileKey(
+    serverId: String,
     key: String,
     value: String
-): Boolean {
-    if (!vault.isUnlocked) return false
-
-    val kept = vault.setDefaultProfileKey(key, value)
-    if (kept) noteVaultChanged()
-
-    if (serverId == null) return kept
+): ProfileSaved {
+    if (!vault.isUnlocked) return ProfileSaved(false, false, "Locked")
 
     val servers = vaultServers()
-    if (servers.none { it.id == serverId }) return kept
+    val server = servers.firstOrNull { it.id == serverId }
+        ?: return ProfileSaved(false, false, "Not one of your networks")
 
-    resealWith(servers.map { server ->
-        if (server.id != serverId) return@map server
-        val profile = server.profile.toMutableMap()
-        if (value.isEmpty()) profile.remove(key) else profile[key] = value
-        server.copy(profile = profile)
-    })
-    return true
+    val typed = Profile.resolve(vault.defaultProfile(), server.profile).toMutableMap()
+    typed[key] = value
+    val profile = Profile.overrideFrom(vault.defaultProfile(), typed).orEmpty()
+
+    resealWith(servers.map { if (it.id == serverId) it.copy(profile = profile) else it })
+
+    val connection = connections[serverId]
+        ?: return ProfileSaved(true, false, "Not connected to this network")
+    connection.applyProfile(profile)
+    connection.refreshProfile()
+
+    if (!connection.supportsMetadata) return ProfileSaved(true, false, NO_METADATA)
+    return ProfileSaved(true, true, null)
+}
+
+/**
+ * Give one network back the profile you carry.
+ *
+ * The counterpart to editing a field of a network's own profile: there has to
+ * be a way out of having one, and typing your global values back in field by
+ * field until the difference disappears is not it.
+ */
+suspend fun SwitchboardEngine.resetProfile(serverId: String) {
+    if (isHolding || !remote.isLinked) {
+        if (!vault.isUnlocked) return
+        val servers = vaultServers()
+        if (servers.none { it.id == serverId }) return
+        resealWith(servers.map { if (it.id == serverId) it.copy(profile = emptyMap()) else it })
+
+        val connection = connections[serverId] ?: return
+        connection.applyProfile(emptyMap())
+        // Republishing is what clears the fields this network had of its own:
+        // a valueless SET goes up for anything we are no longer saying.
+        connection.refreshProfile()
+        return
+    }
+    ask("metadata:reset", JsonPrimitive(serverId))
 }
 
 /** Your profile as the config holds it, whatever networks exist */
@@ -778,12 +841,11 @@ suspend fun SwitchboardEngine.addServer(config: ServerConfig): String? {
     if (isHolding || !remote.isLinked) {
         if (!vault.isUnlocked) return null
         val id = config.id.ifBlank { java.util.UUID.randomUUID().toString() }
-        // A profile set before this network existed still belongs to you on it
-        val stored = config.copy(
-            id = id,
-            sortOrder = vault.servers().size,
-            profile = if (config.profile.isEmpty()) vault.defaultProfile() else config.profile
-        )
+        // No copy of the global taken: a new network follows the profile you
+        // carry, and only stops following it where somebody says so. Seeding
+        // it here is what used to freeze every network against a global they
+        // could no longer change.
+        val stored = config.copy(id = id, sortOrder = vault.servers().size)
         resealWith(vault.servers() + stored)
         if (stored.autoConnect) connectServer(stored.id)
         return id

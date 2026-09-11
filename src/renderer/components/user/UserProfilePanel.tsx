@@ -1,4 +1,6 @@
-import { useState, useCallback, useRef, useEffect } from 'react'
+import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
+import { resolveProfile, hasOverride, overrideFrom } from '@shared/profile'
+import { hasMetadata } from '@shared/metadata'
 import { useServerStore } from '../../stores/serverStore'
 import {
   METADATA_FIELDS,
@@ -84,7 +86,7 @@ export function UserProfilePanel() {
 
   const displayNick = displayNameFor(currentNick, myMetadata)
   const supportsSetname = capabilities.includes('setname')
-  const supportsMetadata = capabilities.includes('draft/metadata-2')
+  const supportsMetadata = hasMetadata(capabilities)
 
   return (
     <div className="relative bg-gray-950">
@@ -123,10 +125,10 @@ export function UserProfilePanel() {
       {showPopup && (
         <ProfileEditPopup
           serverId={activeServerId}
-          nick={displayNick}
+          nick={currentNick}
+          displayNick={displayNick}
           username={server?.username ?? ''}
           realname={server?.realname ?? ''}
-          metadata={myMetadata}
           awayMessage={awayMessage}
           supportsSetname={supportsSetname}
           supportsMetadata={supportsMetadata}
@@ -140,10 +142,12 @@ export function UserProfilePanel() {
 
 interface ProfileEditPopupProps {
   serverId: string
+  /** The real one, which is what a NICK changes and what metadata is keyed by */
   nick: string
+  /** What the person is called here, for the header */
+  displayNick: string
   username: string
   realname: string
-  metadata: UserMetadata
   awayMessage: string | null
   supportsSetname: boolean
   supportsMetadata: boolean
@@ -154,22 +158,61 @@ interface ProfileEditPopupProps {
 function ProfileEditPopup({
   serverId,
   nick,
+  displayNick,
   username,
   realname,
-  metadata,
   awayMessage,
   supportsSetname,
   supportsMetadata,
   onClose,
   popupRef
 }: ProfileEditPopupProps) {
+  const servers = useServerStore((s) => s.servers)
+  const serverName = servers.find((sv) => sv.id === serverId)?.name ?? ''
+  const serverProfile = servers.find((sv) => sv.id === serverId)?.profile
+  const globalProfile = useServerStore((s) => s.globalProfile)
+  const overridden = hasOverride(serverProfile)
+
+  /**
+   * Which profile the fields below are showing.
+   *
+   * Starts on whichever one this network is actually using, so opening the
+   * editor on a network you have given something different does not look like
+   * your profile has changed.
+   */
+  const [profileScope, setProfileScope] = useState<'global' | 'server'>(
+    overridden ? 'server' : 'global'
+  )
+
   const [editNick, setEditNick] = useState(nick)
   const [editRealname, setEditRealname] = useState(realname)
-  const [editMetadata, setEditMetadata] = useState<UserMetadata>(metadata)
+  const [editMetadata, setEditMetadata] = useState<UserMetadata>(
+    overridden ? resolveProfile(globalProfile, serverProfile) : globalProfile
+  )
+
+  // Swapping between them shows what that one actually says
+  const baseline = useMemo(
+    () =>
+      profileScope === 'global' ? globalProfile : resolveProfile(globalProfile, serverProfile),
+    [profileScope, globalProfile, serverProfile]
+  )
+  useEffect(() => {
+    setEditMetadata(baseline)
+  }, [baseline])
   const [editAwayMessage, setEditAwayMessage] = useState(awayMessage ?? '')
   const [isAway, setIsAway] = useState(awayMessage !== null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  /**
+   * What this will call you once it is saved.
+   *
+   * A display name if you have one, otherwise the nick. The header used to
+   * show `editNick`, which is the nick — so the field labelled "Display name"
+   * changed nothing you could see until the server echoed it back.
+   */
+  const preview =
+    (editMetadata['display-name'] ?? '').trim() || editNick.trim() || displayNick || nick
 
   const handleSave = useCallback(async () => {
     setSaving(true)
@@ -193,27 +236,48 @@ function ProfileEditPopup({
         }
       }
 
-      // Publish whichever metadata keys changed, and remember them locally so
-      // they can be republished on the next connect.
-      if (supportsMetadata) {
-        const changed = METADATA_KEYS.filter(
-          (key) => (editMetadata[key] ?? '').trim() !== (metadata[key] ?? '')
-        )
+      // Whichever keys changed against the profile being edited — not against
+      // what the server echoed. Editing the global from a network that has one
+      // of its own is comparing two different profiles, which showed up as
+      // saving fields nobody touched and skipping ones they did.
+      const changed = METADATA_KEYS.filter(
+        (key) => (editMetadata[key] ?? '').trim() !== (baseline[key] ?? '').trim()
+      )
 
-        for (const key of changed) {
-          const value = (editMetadata[key] ?? '').trim()
+      // Saved whatever the network can carry: a profile is a thing about you,
+      // and a server without `draft/metadata-2` is a reason nobody here sees
+      // it, not a reason to throw it away.
+      //
+      // `global` is the one you carry; a serverId is this network only.
+      const scope = profileScope === 'global' ? 'global' : serverId
+      for (const key of changed) {
+        const value = (editMetadata[key] ?? '').trim()
+        // Only echo it into this network's view when it is what this network
+        // is now saying — editing the global changes nothing here if this
+        // network has been given something of its own for that field.
+        if (profileScope === 'server' || (serverProfile?.[key] ?? '') === '') {
           useServerStore.getState().setUserMetadata(serverId, nick, key, value)
-          await window.switchboard.invoke('metadata:set', serverId, key, value)
         }
+        await window.switchboard.invoke('metadata:set', scope, key, value)
+      }
 
-        if (changed.length > 0) {
-          const profile: UserMetadata = {}
-          for (const key of METADATA_KEYS) {
+      // The store's copy, so the editor is not comparing the next edit against
+      // what the profile said before this one.
+      if (changed.length > 0) {
+        if (profileScope === 'global') {
+          const next: UserMetadata = { ...globalProfile }
+          for (const key of changed) {
             const value = (editMetadata[key] ?? '').trim()
-            if (value) profile[key] = value
+            if (value) next[key] = value
+            else delete next[key]
           }
-          await window.switchboard.invoke('server:update', serverId, { profile })
-          useServerStore.getState().updateServer(serverId, { profile })
+          useServerStore.getState().setGlobalProfile(next)
+        } else {
+          const typed: UserMetadata = { ...resolveProfile(globalProfile, serverProfile) }
+          for (const key of changed) typed[key] = (editMetadata[key] ?? '').trim()
+          useServerStore
+            .getState()
+            .updateServer(serverId, { profile: overrideFrom(globalProfile, typed) ?? {} })
         }
       }
 
@@ -233,7 +297,7 @@ function ProfileEditPopup({
     } finally {
       setSaving(false)
     }
-  }, [serverId, nick, editNick, realname, editRealname, metadata, editMetadata, awayMessage, isAway, editAwayMessage, supportsSetname, supportsMetadata, onClose])
+  }, [serverId, profileScope, baseline, globalProfile, serverProfile, nick, editNick, realname, editRealname, editMetadata, awayMessage, isAway, editAwayMessage, supportsSetname, onClose])
 
   return (
     <div
@@ -243,17 +307,17 @@ function ProfileEditPopup({
       <h3 className="mb-3 text-sm font-semibold text-gray-100">Edit Profile</h3>
 
       <div className="space-y-3">
-        {/* Avatar preview */}
+        {/* Avatar preview, showing what you are typing rather than what is saved */}
         <div className="flex items-center gap-3">
           {editMetadata.avatar ? (
-            <AvatarImg src={editMetadata.avatar} nick={editNick || nick} size="h-12 w-12" textSize="text-lg" />
+            <AvatarImg src={editMetadata.avatar} nick={preview} size="h-12 w-12" textSize="text-lg" />
           ) : (
             <div className="flex h-12 w-12 items-center justify-center rounded-full bg-indigo-500 text-lg font-medium text-white">
-              {(editNick || nick).charAt(0).toUpperCase()}
+              {preview.charAt(0).toUpperCase()}
             </div>
           )}
           <div className="min-w-0 flex-1">
-            <div className="text-sm font-medium text-gray-100">{editNick || nick}</div>
+            <div className="text-sm font-medium text-gray-100">{preview}</div>
             <div className="text-xs text-gray-400">{username}</div>
           </div>
         </div>
@@ -291,10 +355,65 @@ function ProfileEditPopup({
             <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">
               Profile
             </span>
+            {/*
+              Saved either way. The fields used to be disabled here, which
+              meant a network without metadata could not be used to edit the
+              profile you carry everywhere — and that profile is not this
+              network's business.
+            */}
             {!supportsMetadata && (
-              <span className="text-xs text-gray-500">not supported by this server</span>
+              <span className="text-xs text-gray-500">nobody on this network will see it</span>
             )}
           </div>
+
+          {/*
+            Which profile is being edited. IRC has no global anything — every
+            network is told separately — so "everywhere" is this client's own
+            idea, kept with your config and published to each network as you
+            connect. A network only stops following it where you say so here.
+          */}
+          <div className="flex gap-1 rounded bg-gray-800 p-0.5 text-xs">
+            {(['global', 'server'] as const).map((which) => (
+              <button
+                key={which}
+                onClick={() => setProfileScope(which)}
+                className={`flex-1 rounded px-2 py-1 font-medium transition-colors ${
+                  profileScope === which
+                    ? 'bg-gray-600 text-white'
+                    : 'text-gray-400 hover:text-gray-200'
+                }`}
+              >
+                {which === 'global' ? 'Everywhere' : `On ${serverName || 'this network'}`}
+              </button>
+            ))}
+          </div>
+
+          <p className="text-xs text-gray-500">
+            {profileScope === 'global'
+              ? 'Who you are on every network that has not been given something different.'
+              : overridden
+                ? `Only on ${serverName || 'this network'}. Anything left blank here is cleared on this network rather than falling back.`
+                : `This network follows your profile. Change something here and only this network changes.`}
+          </p>
+
+          {/*
+            The way out of having a profile of your own here. Without it the
+            only way back is typing your global values in field by field until
+            the difference disappears, which is not something anyone would
+            guess and gets a field wrong every time.
+          */}
+          {profileScope === 'server' && overridden && (
+            <button
+              onClick={async () => {
+                await window.switchboard.invoke('metadata:reset', serverId)
+                useServerStore.getState().updateServer(serverId, { profile: {} })
+                setProfileScope('global')
+              }}
+              className="text-xs text-indigo-400 hover:text-indigo-300"
+            >
+              Use my profile here instead
+            </button>
+          )}
 
           {METADATA_FIELDS.map((field) => (
             <div key={field.key}>
@@ -316,8 +435,7 @@ function ProfileEditPopup({
                     setEditMetadata((current) => ({ ...current, [field.key]: e.target.value }))
                   }
                   placeholder={field.placeholder}
-                  disabled={!supportsMetadata}
-                  className="w-full rounded bg-gray-800 px-2.5 py-1.5 text-sm text-gray-100 outline-none ring-1 ring-gray-700 focus:ring-indigo-500 disabled:opacity-50"
+                  className="w-full rounded bg-gray-800 px-2.5 py-1.5 text-sm text-gray-100 outline-none ring-1 ring-gray-700 focus:ring-indigo-500"
                 />
               </div>
             </div>

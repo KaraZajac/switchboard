@@ -28,6 +28,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import org.switchboard.android.irc.ChatHistory
 import org.switchboard.android.irc.IrcConnection
+import org.switchboard.android.irc.Profile
 import org.switchboard.android.irc.Reconnect
 import org.switchboard.android.pairing.DeviceIdentity
 import org.switchboard.android.irc.ServerConfig
@@ -866,6 +867,8 @@ class SwitchboardEngine(
             "already=${connections.size}")
 
         if (vault.isUnlocked) {
+            freeSeededProfiles()
+
             // What the desktop was holding, as well as what this phone would
             // open on its own. `autoConnect` answers "dial this when the app
             // starts", which is not the question here: standing in for a
@@ -878,6 +881,40 @@ class SwitchboardEngine(
             }
         }
         recomputeMode()
+    }
+
+    /**
+     * Let the networks that were only ever given a copy follow you again.
+     *
+     * Adding a network used to copy your profile into it, so every network had
+     * one of its own without anybody choosing that — and under the rule that a
+     * network with its own profile ignores the global one, editing your name
+     * would have changed nothing anywhere.
+     *
+     * Narrowed field by field rather than all or nothing: somebody who changed
+     * their display name on one network got a whole frozen copy along with it,
+     * and only the name was ever a choice. What matches the global goes back to
+     * following it; what differs stays.
+     *
+     * The desktop does the same on startup, and whichever device gets there
+     * first reseals for the other.
+     */
+    private fun freeSeededProfiles() {
+        val global = vault.defaultProfile()
+        val servers = vault.servers()
+        var freed = 0
+        val narrowed = servers.map { server ->
+            if (!Profile.hasOverride(server.profile)) return@map server
+            val kept = Profile.overrideFrom(global, server.profile).orEmpty()
+            if (Profile.same(kept, server.profile)) return@map server
+            freed++
+            server.copy(profile = kept)
+        }
+        if (freed == 0) return
+
+        Log.i(TAG, "$freed network(s) now follow your profile again")
+        vault.reseal(narrowed, deviceName = "phone") ?: return
+        noteVaultChanged()
     }
 
     /**
@@ -931,7 +968,7 @@ class SwitchboardEngine(
         if (connections.containsKey(config.id)) return
         Log.i(TAG, "connecting to ${config.host}:${config.port} as ${config.nick}")
         seedServer(config)
-        val connection = IrcConnection(config, scope) { channel, data ->
+        val connection = IrcConnection(config, scope, { vault.defaultProfile() }) { channel, data ->
             store.handleEvent(channel, data)
 
             // Notifying was wired only to the desktop's relay, so a phone

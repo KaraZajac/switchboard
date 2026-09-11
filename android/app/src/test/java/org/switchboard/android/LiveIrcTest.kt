@@ -83,7 +83,7 @@ class LiveIrcTest {
                 )
             ),
             scope,
-            recorder::record
+            emitEvent = recorder::record
         )
 
         try {
@@ -152,7 +152,7 @@ class LiveIrcTest {
                 saslPassword = password
             ),
             scope,
-            recorder::record
+            emitEvent = recorder::record
         )
 
         try {

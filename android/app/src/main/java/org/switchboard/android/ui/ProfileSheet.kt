@@ -54,6 +54,9 @@ import org.switchboard.android.watchNicks
 import org.switchboard.android.savedProfile
 import org.switchboard.android.setProfile
 import org.switchboard.android.storedProfile
+import org.switchboard.android.resetProfile
+import org.switchboard.android.GLOBAL_SCOPE
+import org.switchboard.android.irc.Profile
 import org.switchboard.android.whois
 
 /**
@@ -265,41 +268,72 @@ private fun SecondaryAction(label: String, colour: Color, onClick: () -> Unit) {
 /**
  * Your own profile, edited here.
  *
- * The six keys the IRCv3 registry defines for describing a person. They travel
- * per network rather than per account, which is why this is edited against the
- * server you are looking at rather than in one global place.
+ * The six keys the IRCv3 registry defines for describing a person. IRC has no
+ * global anything — every network is told separately — so "everywhere" is this
+ * client's own idea, kept in the shared config and published to each network on
+ * connect. A network with nothing of its own follows it; one that has been
+ * given something of its own differs only in what it was given.
  */
 @Composable
 fun EditProfileSheet(engine: SwitchboardEngine, onDismiss: () -> Unit) {
     val store = engine.store
     val serverId = store.activeServerId
-    val nick = serverId?.let { store.servers[it]?.nick }.orEmpty()
-    val current = serverId?.let { store.metadataFor(it, nick) } ?: UserMetadata()
+    val server = serverId?.let { store.servers[it] }
+    val nick = server?.nick.orEmpty()
+    val networkName = server?.name?.takeIf { it.isNotBlank() } ?: "this network"
 
-    val fields = remember(nick) {
-        mutableStateMapOf(
-            "display-name" to current.displayName.orEmpty(),
-            "pronouns" to current.pronouns.orEmpty(),
-            "status" to current.status.orEmpty(),
-            "avatar" to current.avatar.orEmpty(),
-            "homepage" to current.homepage.orEmpty(),
-            "color" to current.color.orEmpty()
-        )
-    }
+    // What the network echoed back about us. Not the source of truth — a
+    // server without `draft/metadata-2` echoes nothing at all — but it is the
+    // only thing that knows about a profile set from some other client.
+    val echoed = serverId?.let { store.metadataFor(it, nick) } ?: UserMetadata()
 
-    // What you set beats what the server echoed back.
-    //
-    // For your own profile the stored copy is the honest one: a network without
-    // `draft/metadata-2` echoes nothing at all, and at least one echoes a
-    // cleared key back as its own name. Received metadata is still worth
-    // having — it is all we have for everyone else — so it fills the blanks.
+    var global by remember { mutableStateOf(emptyMap<String, String>()) }
+    var override by remember { mutableStateOf(emptyMap<String, String>()) }
+    var loaded by remember { mutableStateOf(false) }
+
+    /**
+     * Which profile the fields are showing.
+     *
+     * Starts on whichever one this network is actually using, so opening the
+     * editor on a network you have given something different does not look
+     * like your profile has changed.
+     */
+    var scopeIsServer by remember { mutableStateOf(false) }
+
     LaunchedEffect(serverId) {
-        val stored = serverId?.let { engine.storedProfile(it) }.orEmpty()
-            .ifEmpty { engine.savedProfile() }
-        for ((key, value) in stored) {
-            if (value.isNotBlank()) fields[key] = value
-        }
+        global = engine.savedProfile()
+        override = serverId?.let { engine.storedProfile(it) }.orEmpty()
+        scopeIsServer = Profile.hasOverride(override)
+        loaded = true
     }
+
+    val fields = remember { mutableStateMapOf<String, String>() }
+
+    /**
+     * What the scope being edited says right now, which is what Save is
+     * measured against. Comparing against the server's echo instead meant
+     * editing the global from a network that has its own profile compared two
+     * different profiles — saving fields nobody touched, skipping ones they had.
+     */
+    val baseline = remember(loaded, scopeIsServer, global, override, echoed) {
+        val values = if (!scopeIsServer) global else buildMap {
+            putAll(Profile.resolve(global, override))
+            // Only where neither profile says anything: a network's own echo
+            // is better than a blank form that would wipe it on save, and
+            // worse than anything you actually set.
+            for ((key, value) in echoed.asFields()) {
+                if (value.isNotBlank() && get(key).isNullOrBlank()) put(key, value)
+            }
+        }
+        PROFILE_FIELDS.associate { (key, _, _) -> key to values[key].orEmpty() }
+    }
+
+    // Swapping between them shows what that one actually says
+    LaunchedEffect(baseline) {
+        fields.clear()
+        fields.putAll(baseline)
+    }
+
     var saving by remember { mutableStateOf(false) }
     var problem by remember { mutableStateOf<String?>(null) }
     var note by remember { mutableStateOf<String?>(null) }
@@ -315,19 +349,58 @@ fun EditProfileSheet(engine: SwitchboardEngine, onDismiss: () -> Unit) {
         Column(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(horizontal = 24.dp)) {
                 Text("Your profile", color = Text0, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(4.dp))
+
+                if (serverId != null) {
+                    Spacer(Modifier.height(12.dp))
+                    ScopeSwitch(
+                        networkName = networkName,
+                        scopeIsServer = scopeIsServer,
+                        onPick = {
+                            problem = null
+                            note = null
+                            scopeIsServer = it
+                        }
+                    )
+                }
+
+                Spacer(Modifier.height(8.dp))
                 Text(
-                    if (serverId == null)
-                        "Kept on this phone and shown on every network that carries " +
-                            "profiles. Each of these is a separate thing, so you can leave " +
-                            "any of them blank."
-                    else
-                        "Shown to everyone on this network. Each of these is a separate " +
-                            "thing the server stores, so you can leave any of them blank.",
+                    when {
+                        serverId == null || !scopeIsServer ->
+                            "Who you are on every network that has not been given " +
+                                "something different. Each of these is a separate thing, " +
+                                "so you can leave any of them blank."
+                        Profile.hasOverride(override) ->
+                            "Only on $networkName. Anything left blank here is cleared on " +
+                                "this network rather than falling back to your profile."
+                        else ->
+                            "This network follows your profile. Change something here and " +
+                                "only this network changes."
+                    },
                     color = Overlay,
                     fontSize = 12.sp,
                     lineHeight = 17.sp
                 )
+
+                // The way out of having a profile of your own here. Without it
+                // the only way back is typing your global values in field by
+                // field until the difference disappears, which is not
+                // something anyone would guess.
+                if (serverId != null && scopeIsServer && Profile.hasOverride(override)) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "Use my profile here instead",
+                        color = Blue,
+                        fontSize = 13.sp,
+                        modifier = Modifier.clickable {
+                            scope.launch {
+                                engine.resetProfile(serverId)
+                                override = emptyMap()
+                                scopeIsServer = false
+                            }
+                        }
+                    )
+                }
             }
 
             Spacer(Modifier.height(20.dp))
@@ -364,9 +437,19 @@ fun EditProfileSheet(engine: SwitchboardEngine, onDismiss: () -> Unit) {
                     problem = null
                     note = null
                     scope.launch {
-                        val results = fields.map { (key, value) ->
-                            engine.setProfile(serverId, key, value.trim())
+                        // `global` is the one you carry; a serverId is this
+                        // network only.
+                        val target = if (scopeIsServer && serverId != null) serverId else GLOBAL_SCOPE
+
+                        // Only what changed. Writing all six reseals the shared
+                        // config six times and sends five METADATA lines saying
+                        // what the server already knows.
+                        val results = fields.mapNotNull { (key, value) ->
+                            if (value.trim() == baseline[key].orEmpty().trim()) null
+                            else engine.setProfile(target, key, value.trim())
                         }
+                        if (target == GLOBAL_SCOPE) global = engine.savedProfile()
+                        else if (serverId != null) override = engine.storedProfile(serverId)
                         saving = false
 
                         when {
@@ -406,6 +489,48 @@ fun EditProfileSheet(engine: SwitchboardEngine, onDismiss: () -> Unit) {
                 )
             }
             Spacer(Modifier.height(32.dp))
+        }
+    }
+}
+
+/**
+ * Everywhere, or here.
+ *
+ * The same two-button switch the desktop shows, in the same order and with the
+ * same words, because the thing it chooses between is the same thing.
+ */
+@Composable
+private fun ScopeSwitch(
+    networkName: String,
+    scopeIsServer: Boolean,
+    onPick: (Boolean) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(Surface0)
+            .padding(2.dp)
+    ) {
+        for (server in listOf(false, true)) {
+            val picked = scopeIsServer == server
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(if (picked) Surface1 else Color.Transparent)
+                    .clickable { onPick(server) }
+                    .padding(vertical = 8.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    if (server) "On $networkName" else "Everywhere",
+                    color = if (picked) Text0 else Overlay,
+                    fontSize = 13.sp,
+                    fontWeight = if (picked) FontWeight.Bold else FontWeight.Normal,
+                    maxLines = 1
+                )
+            }
         }
     }
 }

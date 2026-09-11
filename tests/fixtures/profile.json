@@ -1,0 +1,372 @@
+{
+  "$comment": "One profile for you, and a different one where you want it. Read by tests/shared/profile.test.ts and the Android SharedCorpusTest. IRC has no global anything — draft/metadata-2 is per network — so the global is the client's own, kept in the vault where both devices see it and published to each network on connect.",
+  "$resolve": "What gets published to one network, given your profile and whatever that network was given of its own.",
+  "resolve": [
+    {
+      "name": "a network with nothing of its own uses yours",
+      "global": {
+        "display-name": "Kara",
+        "pronouns": "she/her",
+        "avatar": "https://example.org/k.png"
+      },
+      "override": null,
+      "result": {
+        "display-name": "Kara",
+        "pronouns": "she/her",
+        "avatar": "https://example.org/k.png"
+      }
+    },
+    {
+      "name": "and an empty override is nothing of its own",
+      "global": {
+        "display-name": "Kara",
+        "pronouns": "she/her",
+        "avatar": "https://example.org/k.png"
+      },
+      "override": {},
+      "result": {
+        "display-name": "Kara",
+        "pronouns": "she/her",
+        "avatar": "https://example.org/k.png"
+      }
+    },
+    {
+      "$comment": "The point of merging rather than replacing: being called something else in one place should not also mean forgetting your pronouns there.",
+      "name": "an override changes only what it names",
+      "global": {
+        "display-name": "Kara",
+        "pronouns": "she/her",
+        "avatar": "https://example.org/k.png"
+      },
+      "override": {
+        "display-name": "kara@work"
+      },
+      "result": {
+        "display-name": "kara@work",
+        "pronouns": "she/her",
+        "avatar": "https://example.org/k.png"
+      }
+    },
+    {
+      "$comment": "The only way to have something everywhere except one place.",
+      "name": "a blank in an override clears that field there",
+      "global": {
+        "display-name": "Kara",
+        "pronouns": "she/her",
+        "avatar": "https://example.org/k.png"
+      },
+      "override": {
+        "pronouns": ""
+      },
+      "result": {
+        "display-name": "Kara",
+        "avatar": "https://example.org/k.png"
+      }
+    },
+    {
+      "name": "an override can add something you do not carry everywhere",
+      "global": {
+        "display-name": "Kara"
+      },
+      "override": {
+        "status": "on call"
+      },
+      "result": {
+        "display-name": "Kara",
+        "status": "on call"
+      }
+    },
+    {
+      "name": "no profile at all is no profile",
+      "global": null,
+      "override": null,
+      "result": {}
+    },
+    {
+      "name": "a network's own profile stands without a global",
+      "global": null,
+      "override": {
+        "display-name": "Kara"
+      },
+      "result": {
+        "display-name": "Kara"
+      }
+    }
+  ],
+  "$override": "What to store against a network, given what somebody typed there. Anything the same as the global is not an override.",
+  "override": [
+    {
+      "name": "typing exactly your profile is not an override",
+      "global": {
+        "display-name": "Kara",
+        "pronouns": "she/her",
+        "avatar": "https://example.org/k.png"
+      },
+      "typed": {
+        "display-name": "Kara",
+        "pronouns": "she/her",
+        "avatar": "https://example.org/k.png"
+      },
+      "stored": null
+    },
+    {
+      "name": "one different field is stored, and only that one",
+      "global": {
+        "display-name": "Kara",
+        "pronouns": "she/her",
+        "avatar": "https://example.org/k.png"
+      },
+      "typed": {
+        "display-name": "kara@work",
+        "pronouns": "she/her"
+      },
+      "stored": {
+        "display-name": "kara@work"
+      }
+    },
+    {
+      "$comment": "Blank where the global has something is a choice, not an absence.",
+      "name": "clearing a field here is a difference worth keeping",
+      "global": {
+        "display-name": "Kara",
+        "pronouns": "she/her",
+        "avatar": "https://example.org/k.png"
+      },
+      "typed": {
+        "display-name": "Kara",
+        "pronouns": ""
+      },
+      "stored": {
+        "pronouns": ""
+      }
+    },
+    {
+      "name": "typing nothing at all is not an override",
+      "global": {
+        "display-name": "Kara",
+        "pronouns": "she/her",
+        "avatar": "https://example.org/k.png"
+      },
+      "typed": {},
+      "stored": null
+    },
+    {
+      "name": "whitespace is not a value",
+      "global": {
+        "display-name": "Kara",
+        "pronouns": "she/her",
+        "avatar": "https://example.org/k.png"
+      },
+      "typed": {
+        "display-name": "  Kara  "
+      },
+      "stored": null
+    }
+  ],
+  "$same": "Whether two profiles say the same thing, which is how a network seeded from the global is told from one somebody deliberately made different.",
+  "same": [
+    {
+      "name": "the same thing",
+      "a": {
+        "display-name": "Kara",
+        "pronouns": "she/her",
+        "avatar": "https://example.org/k.png"
+      },
+      "b": {
+        "display-name": "Kara",
+        "pronouns": "she/her",
+        "avatar": "https://example.org/k.png"
+      },
+      "same": true
+    },
+    {
+      "name": "order is not a difference",
+      "a": {
+        "pronouns": "she/her",
+        "display-name": "Kara"
+      },
+      "b": {
+        "display-name": "Kara",
+        "pronouns": "she/her"
+      },
+      "same": true
+    },
+    {
+      "name": "an empty field is no field",
+      "a": {
+        "display-name": "Kara",
+        "status": ""
+      },
+      "b": {
+        "display-name": "Kara"
+      },
+      "same": true
+    },
+    {
+      "name": "a different value is a difference",
+      "a": {
+        "display-name": "Kara"
+      },
+      "b": {
+        "display-name": "kara@work"
+      },
+      "same": false
+    },
+    {
+      "name": "an extra field is a difference",
+      "a": {
+        "display-name": "Kara",
+        "pronouns": "she/her",
+        "avatar": "https://example.org/k.png"
+      },
+      "b": {
+        "display-name": "Kara",
+        "pronouns": "she/her",
+        "avatar": "https://example.org/k.png",
+        "status": "here"
+      },
+      "same": false
+    },
+    {
+      "name": "nothing equals nothing",
+      "a": null,
+      "b": {},
+      "same": true
+    }
+  ],
+  "$clear": "Which fields a network is still wearing that we no longer say. Clearing one has to be published: a SET with no value is how draft/metadata-2 deletes a key, and without it a deleted display name lives on until something reconnects — or, where the server keeps metadata between sessions, for good.",
+  "clear": [
+    {
+      "name": "a field dropped from the profile is cleared on the network",
+      "keys": [
+        "avatar",
+        "display-name",
+        "homepage",
+        "pronouns",
+        "status",
+        "color"
+      ],
+      "published": {
+        "display-name": "Kara",
+        "pronouns": "she/her"
+      },
+      "next": {
+        "pronouns": "she/her"
+      },
+      "result": [
+        "display-name"
+      ]
+    },
+    {
+      "name": "nothing to clear on a fresh connection",
+      "keys": [
+        "avatar",
+        "display-name",
+        "homepage",
+        "pronouns",
+        "status",
+        "color"
+      ],
+      "published": {},
+      "next": {
+        "display-name": "Kara"
+      },
+      "result": []
+    },
+    {
+      "name": "a field that only changed is not cleared",
+      "keys": [
+        "avatar",
+        "display-name",
+        "homepage",
+        "pronouns",
+        "status",
+        "color"
+      ],
+      "published": {
+        "display-name": "Kara"
+      },
+      "next": {
+        "display-name": "kara@work"
+      },
+      "result": []
+    },
+    {
+      "name": "blanked is the same as dropped",
+      "keys": [
+        "avatar",
+        "display-name",
+        "homepage",
+        "pronouns",
+        "status",
+        "color"
+      ],
+      "published": {
+        "status": "away"
+      },
+      "next": {
+        "status": "   "
+      },
+      "result": [
+        "status"
+      ]
+    },
+    {
+      "name": "a key the network put on us is not ours to delete",
+      "keys": [
+        "avatar",
+        "display-name",
+        "homepage",
+        "pronouns",
+        "status",
+        "color"
+      ],
+      "published": {
+        "display-name": "Kara",
+        "bot": "yes"
+      },
+      "next": {},
+      "result": [
+        "display-name"
+      ]
+    },
+    {
+      "name": "whitespace was never published",
+      "keys": [
+        "avatar",
+        "display-name",
+        "homepage",
+        "pronouns",
+        "status",
+        "color"
+      ],
+      "published": {
+        "homepage": "  "
+      },
+      "next": {},
+      "result": []
+    },
+    {
+      "name": "everything goes when the profile is emptied",
+      "keys": [
+        "avatar",
+        "display-name",
+        "homepage",
+        "pronouns",
+        "status",
+        "color"
+      ],
+      "published": {
+        "avatar": "https://example.org/k.png",
+        "display-name": "Kara",
+        "color": "#89b4fa"
+      },
+      "next": {},
+      "result": [
+        "avatar",
+        "display-name",
+        "color"
+      ]
+    }
+  ]
+}

@@ -14,9 +14,14 @@ import { getAllServers, getServer, updateServer } from '../storage/models/server
 import { getJoinedChannels, markChannelJoined, markChannelParted } from '../storage/models/channel'
 import { subscribeToMetadata, metadataValueFits } from './features/metadata'
 import { serversChanged } from '../ipc/notify'
-import type { UserMetadata } from '@shared/types/metadata'
+import { METADATA_KEYS, type UserMetadata } from '@shared/types/metadata'
 import { v4 as uuid } from 'uuid'
 import { friendListKind, friendListLines, friendListStatusLine } from '@shared/friends'
+import { resolveProfile, keysToClear } from '@shared/profile'
+import { getSetting } from '../storage/models/settings'
+
+/** The vault key both clients keep the person's own profile under */
+const DEFAULT_PROFILE = 'profile'
 import { avatarUrl } from '@shared/avatar'
 
 /**
@@ -316,11 +321,34 @@ export class IRCManager {
    * first means the server then pushes other people's values for the channels
    * we are in, rather than us asking nick by nick.
    */
+  /**
+   * Say again who you are, because what you carry everywhere has changed.
+   *
+   * Called for every network that has no profile of its own when the global
+   * one is edited. Without it, changing your name changed it on the network
+   * you happened to be looking at and nowhere else until a reconnect.
+   */
+  refreshProfile(client: IRCClient): void {
+    this.publishProfile(client)
+  }
+
   private publishProfile(client: IRCClient): void {
+    // Your profile, with whatever this network was given of its own laid over
+    // it. A network with nothing of its own follows you everywhere; one with a
+    // profile of its own differs only in what it names — see `@shared/profile`.
     const profile: UserMetadata = {
       ...(client.config.avatarUrl ? { avatar: client.config.avatarUrl } : {}),
-      ...(client.config.profile ?? {})
+      ...resolveProfile(getSetting<UserMetadata>(DEFAULT_PROFILE), client.config.profile)
     }
+
+    // What we last put up here and are no longer saying. Clearing a field has
+    // to be published too: a `SET` with no value is how metadata is deleted,
+    // and without it, deleting your display name left every network still
+    // calling you by it until something reconnected — and on a server that
+    // keeps metadata across sessions, for good.
+    const own = client.state.casemap(client.state.nick)
+    const known = client.state.metadata.get(own) ?? {}
+    const stale = keysToClear(METADATA_KEYS, known, profile)
 
     // Show it to ourselves whatever the network can carry.
     //
@@ -329,18 +357,27 @@ export class IRCManager {
     // rendered name was the server echoing it back. A server without
     // `draft/metadata-2` never will, and one that has it may not until it
     // feels like it.
-    const own = client.state.casemap(client.state.nick)
-    const known = client.state.metadata.get(own) ?? {}
     const seeded: Record<string, string> = { ...known }
+    for (const key of stale) delete seeded[key]
     for (const [key, value] of Object.entries(profile)) {
-      if (value && !seeded[key]) seeded[key] = value
+      if (value) seeded[key] = value
     }
     if (Object.keys(seeded).length > 0) client.state.metadata.set(own, seeded)
+    else client.state.metadata.delete(own)
+
+    // Both windows, now, rather than on the echo — which for a cleared key on
+    // a server without metadata is never.
+    const serverId = client.config.id
+    for (const key of stale) this.announceMetadata(serverId, client.state.nick, key, '')
+    for (const [key, value] of Object.entries(profile)) {
+      if (value) this.announceMetadata(serverId, client.state.nick, key, value)
+    }
 
     if (!hasMetadata(client.state.capabilities)) return
 
     subscribeToMetadata(client)
 
+    for (const key of stale) client.connection.send('METADATA', '*', 'SET', key)
     for (const [key, value] of Object.entries(profile)) {
       if (!value) continue
       // Over the server's limit is refused outright, and one refused key must

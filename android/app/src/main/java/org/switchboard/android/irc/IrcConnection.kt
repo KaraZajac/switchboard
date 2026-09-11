@@ -35,8 +35,16 @@ import javax.net.ssl.SSLSocketFactory
 class IrcConnection(
     initialConfig: ServerConfig,
     private val scope: CoroutineScope,
+    /**
+     * Read, not copied: the profile you carry everywhere can be edited while
+     * this connection is up, and the copy taken when it was dialled would be
+     * the old one.
+     */
+    private val globalProfileOf: () -> Map<String, String> = { emptyMap() },
     private val emitEvent: (channel: String, data: JsonElement) -> Unit
 ) : IrcSession, IrcCommandTarget {
+
+    override val globalProfile: Map<String, String> get() = globalProfileOf()
 
     /**
      * The settings this connection dials with.
@@ -542,6 +550,21 @@ class IrcConnection(
         if (!Metadata.supported(this)) return
         if (value.isEmpty()) send("METADATA", "*", "SET", key)
         else send("METADATA", "*", "SET", key, value)
+    }
+
+    /**
+     * Say again who you are.
+     *
+     * For when the profile behind this connection changed while it was up —
+     * the one you carry everywhere, or this network's own. Publishes what is
+     * now true and clears what is not, and shows it to this device either way,
+     * because a server without metadata will never echo it back.
+     */
+    fun refreshProfile() = Metadata.publishProfile(this)
+
+    /** Take this network's own profile as it now stands in the config */
+    fun applyProfile(profile: Map<String, String>) {
+        config = config.copy(profile = profile)
     }
 
     override fun whois(nick: String) = send("WHOIS", nick)

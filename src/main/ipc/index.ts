@@ -28,6 +28,7 @@ import type { ServerConfig } from '@shared/types/server'
  * own idea of one.
  */
 const DEFAULT_PROFILE = 'profile'
+import { resolveProfile, overrideFrom } from '@shared/profile'
 import { secretsProtected, secretsBackendDescription } from '../storage/secrets'
 import { databaseIsEncrypted } from '../storage/database'
 import { serversChanged, monitorChanged, settingChanged, readMarkerChanged } from './notify'
@@ -463,26 +464,71 @@ export function registerIPCHandlers(): void {
    * common case and is not a failure the caller should have to infer from an
    * exception.
    */
-  handle('metadata:set', async (_event, serverId: string, key: string, value: string) => {
+  /**
+   * Change one field of a profile.
+   *
+   * @param scope `global` for the profile you carry everywhere, or a serverId
+   *   for one network only.
+   *
+   * These used to be the same write: editing a profile anywhere set the
+   * network's copy *and* the default, so you could not be called something
+   * different in one place without changing what you were called in all of
+   * them — and changing the default left every other network on the frozen
+   * copy it was seeded with.
+   */
+  handle('metadata:set', async (_event, scope: string, key: string, value: string) => {
     // Alphanumeric and dashes only — no spaces, no protocol characters
     if (!/^[a-zA-Z0-9_-]+$/.test(key)) throw new Error('Invalid metadata key')
 
+    const global: Record<string, string> = {
+      ...(getSetting<Record<string, string>>(DEFAULT_PROFILE) ?? {})
+    }
+
+    if (scope === 'global') {
+      if (value) global[key] = value
+      else delete global[key]
+      setSetting(DEFAULT_PROFILE, global)
+
+      // Every network that is not saying something else about this field is
+      // describing you, so they all say the new thing now rather than at their
+      // next reconnect.
+      //
+      // Per field, not per network: an override is field by field, so a
+      // network you gave a different display name still follows your pronouns
+      // — and skipping the whole network meant it followed them only until the
+      // next time anybody looked.
+      let published = false
+      for (const server of getAllServers()) {
+        if ((server.profile ?? {})[key as keyof typeof server.profile] !== undefined) continue
+        const client = ircManager.getClient(server.id)
+        if (!client) continue
+        ircManager.refreshProfile(client)
+        if (hasMetadata(client.state.capabilities)) published = true
+      }
+      resealVault()
+
+      // Saved either way — a profile is a thing about you, not about a
+      // network — but say so when there is nowhere it can be seen.
+      return {
+        saved: true,
+        published,
+        reason: published ? undefined : 'Saved. No connected network here can show it to anyone'
+      }
+    }
+
+    const serverId = scope
     const config = getServer(serverId)
     if (!config) throw new Error(`Server ${serverId} not found`)
 
-    const profile: Record<string, string> = { ...(config.profile ?? {}) }
-    if (value) profile[key] = value
-    else delete profile[key]
-    updateServer(serverId, { profile })
-
-    // And as the person's default, which is what a network added later starts
-    // from and what the phone reads when it has no server to ask.
-    const fallback: Record<string, string> = {
-      ...(getSetting<Record<string, string>>(DEFAULT_PROFILE) ?? {})
+    // Stored as a difference from your profile rather than a copy of it, so a
+    // network only stops following you where somebody meant it to.
+    const typed: Record<string, string> = {
+      ...resolveProfile(global, config.profile)
     }
-    if (value) fallback[key] = value
-    else delete fallback[key]
-    setSetting(DEFAULT_PROFILE, fallback)
+    if (value) typed[key] = value
+    else typed[key] = ''
+    const profile = overrideFrom(global, typed) ?? {}
+    updateServer(serverId, { profile })
 
     // The avatar has a column of its own, from before profiles were a thing
     if (key === 'avatar') updateServer(serverId, { avatarUrl: value || null })
@@ -539,6 +585,29 @@ export function registerIPCHandlers(): void {
       client.connection.sendRaw(`METADATA * SET ${key} ${value}`)
     }
     return { saved: true, published: true }
+  })
+
+  /**
+   * Give this network back the profile you carry.
+   *
+   * The counterpart to editing one field of a network's own profile: there has
+   * to be a way out of having one, and typing your global values back in field
+   * by field until the difference disappears is not it.
+   */
+  handle('metadata:reset', async (_event, serverId: string) => {
+    const config = getServer(serverId)
+    if (!config) throw new Error(`Server ${serverId} not found`)
+
+    updateServer(serverId, { profile: {} })
+    resealVault()
+
+    const client = ircManager.getClient(serverId)
+    if (!client) return
+    client.config.profile = {}
+    // Republishing is what clears the fields this network had of its own:
+    // `publishProfile` sends a valueless SET for anything it is no longer
+    // saying, so the old display name goes rather than lingering.
+    ircManager.refreshProfile(client)
   })
 
   // ── History ──────────────────────────────────────────────────────

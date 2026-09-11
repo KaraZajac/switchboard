@@ -151,6 +151,16 @@ data class UserMetadata(
     val homepage: String? = null,
     val color: String? = null
 ) {
+    /** By the registry's key names, which is how a profile is stored and sent */
+    fun asFields(): Map<String, String> = buildMap {
+        displayName?.let { put("display-name", it) }
+        avatar?.let { put("avatar", it) }
+        pronouns?.let { put("pronouns", it) }
+        status?.let { put("status", it) }
+        homepage?.let { put("homepage", it) }
+        color?.let { put("color", it) }
+    }
+
     fun with(key: String, value: String?): UserMetadata = when (key) {
         "display-name" -> copy(displayName = value)
         "avatar" -> copy(avatar = value)

@@ -121,14 +121,38 @@ internal object Metadata {
      * are seconds apart and anything in between comes back as 451.
      */
     fun publishProfile(session: IrcSession) {
+        // Your profile, with whatever this network was given of its own laid
+        // over it. A network with nothing of its own follows you everywhere;
+        // one with a profile of its own differs only in what it names — see
+        // [Profile] and `src/shared/profile.ts`.
+        val profile = buildMap {
+            session.config.avatarUrl?.takeIf { it.isNotBlank() }?.let { put("avatar", it) }
+            val resolved = Profile.resolve(session.globalProfile, session.config.profile)
+            putAll(resolved.filterValues { it.isNotBlank() })
+        }
+
+        // What we last put up here and are no longer saying. Clearing a field
+        // has to be published too: a SET with no value is how metadata is
+        // deleted, and without it, deleting your display name left every
+        // network still calling you by it until something reconnected.
+        val own = session.state.casemap(session.state.nick)
+        val known = session.state.metadata[own].orEmpty()
+        val stale = Profile.keysToClear(KEYS, known, profile)
+
+        // Show it to ourselves whatever the network can carry. Otherwise you
+        // set a display name and every window goes on calling you by your
+        // nick, because the only source of a rendered name was the server
+        // echoing it back — and a server without metadata never will.
+        for (key in stale) emitValue(session, session.state.nick, key, "")
+        for ((key, value) in profile) {
+            if (key in KEYS) emitValue(session, session.state.nick, key, value)
+        }
+
         if (!supported(session)) return
 
         subscribe(session)
 
-        val profile = buildMap {
-            session.config.avatarUrl?.takeIf { it.isNotBlank() }?.let { put("avatar", it) }
-            putAll(session.config.profile.filterValues { it.isNotBlank() })
-        }
+        for (key in stale) session.send("METADATA", "*", "SET", key)
         for ((key, value) in profile) {
             if (key !in KEYS) continue
             // Over the server's limit is refused outright, and one refused key
