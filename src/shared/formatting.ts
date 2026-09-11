@@ -299,3 +299,138 @@ export function readableOnDark(fg: string | null, bg: string | null): string | n
   const b = lift(n & 0xff, 45)
   return '#' + [r, g, b].map((c) => c.toString(16).padStart(2, '0')).join('')
 }
+
+// ── Writing it, not just reading it ──────────────────────────────────
+
+/** The control characters, by the name a person would use */
+export const FORMATTING_CODES = {
+  bold: '\x02',
+  italic: '\x1D',
+  underline: '\x1F',
+  strikethrough: '\x1E',
+  monospace: '\x11',
+  colour: '\x03',
+  reverse: '\x16',
+  reset: '\x0F'
+} as const
+
+export type FormattingMark = keyof typeof FORMATTING_CODES
+
+/** What a selection looks like after a formatting key is pressed */
+export interface Marked {
+  text: string
+  /** Where the cursor should end up, so typing carries on in the right place */
+  selectionStart: number
+  selectionEnd: number
+}
+
+/**
+ * Wrap a selection in a formatting code, or undo it.
+ *
+ * Both clients render mIRC formatting and neither could produce any, so bold
+ * was something other people's messages had. The rule every editor uses:
+ * pressing bold on something already bold takes it off.
+ *
+ * With nothing selected this inserts the pair and puts the cursor between
+ * them, which is what makes Ctrl+B usable while typing rather than only
+ * afterwards.
+ */
+export function mark(
+  text: string,
+  start: number,
+  end: number,
+  which: FormattingMark
+): Marked {
+  const code = FORMATTING_CODES[which]
+  ;[start, end] = clamp(text, start, end)
+  const before = text.slice(0, start)
+  const selected = text.slice(start, end)
+  const after = text.slice(end)
+
+  // Already wrapped, exactly — take it off rather than nesting a second pair
+  // that the receiving client would read as turning it back on.
+  if (before.endsWith(code) && after.startsWith(code)) {
+    return {
+      text: before.slice(0, -code.length) + selected + after.slice(code.length),
+      selectionStart: start - code.length,
+      selectionEnd: end - code.length
+    }
+  }
+
+  // Or the selection itself carries the pair
+  if (selected.startsWith(code) && selected.endsWith(code) && selected.length >= code.length * 2) {
+    const inner = selected.slice(code.length, -code.length)
+    return {
+      text: before + inner + after,
+      selectionStart: start,
+      selectionEnd: start + inner.length
+    }
+  }
+
+  return {
+    text: `${before}${code}${selected}${code}${after}`,
+    selectionStart: start + code.length,
+    selectionEnd: end + code.length
+  }
+}
+
+/**
+ * Put a colour on a selection.
+ *
+ * `\x03NN` needs its digits padded to two, because a server is free to pass
+ * `\x0341` through and the next client reads the `4` as the colour and `1` as
+ * text. `null` for the foreground removes colour from the selection instead.
+ */
+export function colourise(
+  text: string,
+  start: number,
+  end: number,
+  foreground: number | null,
+  background: number | null = null
+): Marked {
+  ;[start, end] = clamp(text, start, end)
+  const before = text.slice(0, start)
+  const selected = text.slice(start, end)
+  const after = text.slice(end)
+
+  if (foreground === null) {
+    const plain = stripColour(selected)
+    return { text: before + plain + after, selectionStart: start, selectionEnd: start + plain.length }
+  }
+
+  const pad = (value: number): string => String(value).padStart(2, '0')
+  const open =
+    FORMATTING_CODES.colour +
+    pad(foreground) +
+    (background === null ? '' : `,${pad(background)}`)
+  // Closed with a bare colour code, which means "back to the default" — not
+  // with a reset, which would also drop bold and italic the selection sits in.
+  const body = stripColour(selected)
+
+  return {
+    text: `${before}${open}${body}${FORMATTING_CODES.colour}${after}`,
+    selectionStart: start + open.length,
+    selectionEnd: start + open.length + body.length
+  }
+}
+
+/**
+ * Keep a selection inside the text.
+ *
+ * A composer can hand in a stale selection after an edit, and `slice` quietly
+ * tolerating that while Kotlin's `substring` throws is exactly the kind of
+ * split the shared corpus exists to catch.
+ */
+function clamp(text: string, start: number, end: number): [number, number] {
+  const from = Math.max(0, Math.min(start, text.length))
+  const to = Math.max(from, Math.min(end, text.length))
+  return [from, to]
+}
+
+/** Take colour codes out of a run of text, leaving other formatting alone */
+export function stripColour(text: string): string {
+  // Built rather than written as a literal, because the colour code *is* a
+  // control character and a linter is right to be suspicious of one sitting in
+  // a regular expression by accident. This one is on purpose.
+  return text.replace(new RegExp(`${FORMATTING_CODES.colour}(\\d{1,2}(,\\d{1,2})?)?`, 'g'), '')
+}

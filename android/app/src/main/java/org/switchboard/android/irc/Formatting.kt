@@ -239,3 +239,128 @@ object Formatting {
         )
     }
 }
+
+// ── Writing it, not just reading it ──────────────────────────────────
+
+/**
+ * Producing formatting, not only rendering it.
+ *
+ * The Kotlin half of the writing half of `src/shared/formatting.ts`, checked
+ * against `tests/fixtures/formatting.json`. Both clients rendered mIRC codes
+ * and neither could write one, so bold was something other people's messages
+ * had.
+ */
+object Formatter {
+
+    /** The control characters, by the name a person would use */
+    val CODES = mapOf(
+        "bold" to "\u0002",
+        "italic" to "\u001D",
+        "underline" to "\u001F",
+        "strikethrough" to "\u001E",
+        "monospace" to "\u0011",
+        "colour" to "\u0003",
+        "reverse" to "\u0016",
+        "reset" to "\u000F"
+    )
+
+    /**
+     * @param selectionStart where the cursor should end up, so typing carries
+     *   on in the right place
+     */
+    data class Marked(val text: String, val selectionStart: Int, val selectionEnd: Int)
+
+    /**
+     * Wrap a selection in a formatting code, or undo it.
+     *
+     * The rule every editor uses: pressing bold on something already bold takes
+     * it off. With nothing selected this inserts the pair and puts the cursor
+     * between them, which is what makes the button usable while typing rather
+     * than only afterwards.
+     */
+    fun mark(text: String, start: Int, end: Int, which: String): Marked {
+        val code = CODES[which] ?: return Marked(text, start, end)
+        val (from, to) = clamp(text, start, end)
+        val before = text.substring(0, from)
+        val selected = text.substring(from, to)
+        val after = text.substring(to)
+
+        // Already wrapped, exactly — take it off rather than nesting a second
+        // pair the receiving client would read as turning it back on.
+        if (before.endsWith(code) && after.startsWith(code)) {
+            return Marked(
+                before.dropLast(code.length) + selected + after.drop(code.length),
+                from - code.length,
+                to - code.length
+            )
+        }
+
+        if (selected.startsWith(code) && selected.endsWith(code) &&
+            selected.length >= code.length * 2
+        ) {
+            val inner = selected.substring(code.length, selected.length - code.length)
+            return Marked(before + inner + after, from, from + inner.length)
+        }
+
+        return Marked(
+            before + code + selected + code + after,
+            from + code.length,
+            to + code.length
+        )
+    }
+
+    /**
+     * Put a colour on a selection.
+     *
+     * Two digits always: a server is free to pass a one-digit code straight
+     * through, and the next client reads the digit after it as part of the
+     * colour rather than as text. Null for the foreground removes colour from
+     * the selection instead.
+     */
+    fun colourise(
+        text: String,
+        start: Int,
+        end: Int,
+        foreground: Int?,
+        background: Int? = null
+    ): Marked {
+        val (from, to) = clamp(text, start, end)
+        val before = text.substring(0, from)
+        val selected = text.substring(from, to)
+        val after = text.substring(to)
+
+        if (foreground == null) {
+            val plain = stripColour(selected)
+            return Marked(before + plain + after, from, from + plain.length)
+        }
+
+        fun pad(value: Int) = value.toString().padStart(2, '0')
+        val open = CODES["colour"] + pad(foreground) +
+            if (background == null) "" else ",${pad(background)}"
+        // Closed with a bare colour code, meaning "back to the default" — not a
+        // reset, which would also drop bold and italic the selection sits in.
+        val body = stripColour(selected)
+
+        return Marked(
+            before + open + body + CODES["colour"] + after,
+            from + open.length,
+            from + open.length + body.length
+        )
+    }
+
+    /**
+     * Keep a selection inside the text.
+     *
+     * A composer can hand in a stale selection after an edit, and the desktop's
+     * `slice` quietly tolerating that while `substring` throws is exactly the
+     * kind of split the shared corpus exists to catch.
+     */
+    private fun clamp(text: String, start: Int, end: Int): Pair<Int, Int> {
+        val from = start.coerceIn(0, text.length)
+        return from to end.coerceIn(from, text.length)
+    }
+
+    /** Take colour codes out of a run of text, leaving other formatting alone */
+    fun stripColour(text: String): String =
+        text.replace(Regex("\u0003(\\d{1,2}(,\\d{1,2})?)?"), "")
+}

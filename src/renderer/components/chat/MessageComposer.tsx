@@ -6,6 +6,7 @@ import { typingToSend, type TypingEvent } from '@shared/typing'
 import { GifPicker } from './GifPicker'
 import { useServerStore } from '../../stores/serverStore'
 import { completionSuffix } from '@shared/completion'
+import { mark, colourise, IRC_PALETTE, type FormattingMark } from '@shared/formatting'
 
 /** Composer grows with its content up to this height, then scrolls */
 const MAX_COMPOSER_HEIGHT = 320
@@ -32,6 +33,7 @@ export function MessageComposer({
 }: MessageComposerProps) {
   const [text, setText] = useState('')
   const [showGifPicker, setShowGifPicker] = useState(false)
+  const [showColours, setShowColours] = useState(false)
   const [uploading, setUploading] = useState(false)
   const hasFilehost = !!useServerStore((s) => s.filehostUrls[serverId])
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -102,8 +104,65 @@ export function MessageComposer({
     }, 0)
   }, [text, mentionStart])
 
+  /**
+   * Put a formatting code around the selection.
+   *
+   * Both clients rendered mIRC formatting and neither could produce any, so
+   * bold was something other people's messages had. The selection is restored
+   * afterwards so the next keystroke carries on inside the pair rather than
+   * at the end of the line.
+   */
+  const applyMark = useCallback((which: FormattingMark) => {
+    const field = inputRef.current
+    if (!field) return
+
+    const out = mark(text, field.selectionStart, field.selectionEnd, which)
+    setText(out.text)
+    // After React has written the new value, or the selection lands in the old
+    // one and jumps to the end.
+    setTimeout(() => {
+      field.focus()
+      field.setSelectionRange(out.selectionStart, out.selectionEnd)
+    }, 0)
+  }, [text])
+
+  const applyColour = useCallback((colour: number | null) => {
+    const field = inputRef.current
+    if (!field) return
+
+    const out = colourise(text, field.selectionStart, field.selectionEnd, colour)
+    setText(out.text)
+    setTimeout(() => {
+      field.focus()
+      field.setSelectionRange(out.selectionStart, out.selectionEnd)
+    }, 0)
+  }, [text])
+
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
+      // The shortcuts every client has used since mIRC. Before the mention
+      // popup, which does not care about Ctrl.
+      if (e.ctrlKey && !e.altKey && !e.metaKey) {
+        const shortcut: Record<string, FormattingMark> = {
+          b: 'bold',
+          i: 'italic',
+          u: 'underline',
+          s: 'strikethrough'
+        }
+        const which = shortcut[e.key.toLowerCase()]
+        if (which) {
+          e.preventDefault()
+          applyMark(which)
+          return
+        }
+        // Ctrl+O is "back to plain", the way it has always been
+        if (e.key.toLowerCase() === 'o') {
+          e.preventDefault()
+          applyMark('reset')
+          return
+        }
+      }
+
       // Handle mention popup navigation
       if (mentionCandidates.length > 0 && mentionQuery !== null) {
         if (e.key === 'ArrowDown') {
@@ -162,7 +221,7 @@ export function MessageComposer({
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [text, onSend, onSendReply, replyTarget, onCancelReply, disabled, users, channels, mentionCandidates, mentionQuery, mentionIndex, acceptMention]
+    [text, onSend, onSendReply, replyTarget, onCancelReply, disabled, users, channels, mentionCandidates, mentionQuery, mentionIndex, acceptMention, applyMark]
   )
 
   const handleTabCompletion = useCallback(
@@ -373,6 +432,39 @@ export function MessageComposer({
             style={{ maxHeight: `${MAX_COMPOSER_HEIGHT}px` }}
           />
 
+          {/*
+            Formatting. The keyboard shortcuts are the ones every client has
+            used since mIRC, but a shortcut nobody can see is barely a feature.
+          */}
+          <div className="mb-2 flex items-center">
+            {([
+              ['bold', 'B', 'font-bold', 'Bold (Ctrl+B)'],
+              ['italic', 'I', 'font-serif italic', 'Italic (Ctrl+I)'],
+              ['underline', 'U', 'underline', 'Underline (Ctrl+U)']
+            ] as [FormattingMark, string, string, string][]).map(([which, glyph, style, title]) => (
+              <button
+                key={which}
+                onClick={() => applyMark(which)}
+                disabled={disabled}
+                title={title}
+                className={`h-7 w-7 rounded text-sm text-gray-400 hover:bg-gray-600 hover:text-gray-200 disabled:opacity-50 ${style}`}
+              >
+                {glyph}
+              </button>
+            ))}
+
+            <button
+              onClick={() => setShowColours(!showColours)}
+              disabled={disabled}
+              title="Colour"
+              className="flex h-7 w-7 items-center justify-center rounded text-gray-400 hover:bg-gray-600 hover:text-gray-200 disabled:opacity-50"
+            >
+              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9c.83 0 1.5-.67 1.5-1.5 0-.39-.15-.74-.39-1.01a1.49 1.49 0 0 1 1.14-2.49H16c2.76 0 5-2.24 5-5 0-4.42-4.03-8-9-8zm-5.5 9a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm3-4a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm5 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm3 4a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3z" />
+              </svg>
+            </button>
+          </div>
+
           {/* GIF button */}
           <button
             onClick={() => setShowGifPicker(!showGifPicker)}
@@ -385,6 +477,37 @@ export function MessageComposer({
             </svg>
           </button>
         </div>
+
+        {/*
+          The sixteen every client agrees on. The extended palette exists but
+          nothing renders it consistently, and a colour nobody else can see is
+          a message nobody else can read.
+        */}
+        {showColours && (
+          <div className="absolute bottom-full right-2 mb-2 flex flex-wrap gap-1 rounded-lg bg-gray-900 p-2 shadow-xl ring-1 ring-gray-700">
+            {IRC_PALETTE.slice(0, 16).map((colour, index) => (
+              <button
+                key={index}
+                onClick={() => {
+                  applyColour(index)
+                  setShowColours(false)
+                }}
+                title={`Colour ${index}`}
+                className="h-5 w-5 rounded ring-1 ring-gray-700 hover:ring-gray-400"
+                style={{ backgroundColor: colour }}
+              />
+            ))}
+            <button
+              onClick={() => {
+                applyColour(null)
+                setShowColours(false)
+              }}
+              className="rounded px-2 text-xs text-gray-400 hover:text-gray-100"
+            >
+              None
+            </button>
+          </div>
+        )}
 
         {/* GIF picker panel */}
         {showGifPicker && (

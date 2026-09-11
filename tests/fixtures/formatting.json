@@ -1,6 +1,6 @@
 {
   "$comment": "mIRC formatting codes, shared by tests/shared/formatting.test.ts and the Android SharedCorpusTest. The desktop drew nine codes and the phone drew four, so the same line from the same channel looked like two different lines depending on which device you picked up. These cases are the agreement.",
-  "$cases": "`text` is the wire form. `plain` is what a reader sees once the control bytes are gone \u2014 the notifier, the search index and every offset measured into the message use it. `spans` is the run breakdown; absent keys mean false or null.",
+  "$cases": "`text` is the wire form. `plain` is what a reader sees once the control bytes are gone — the notifier, the search index and every offset measured into the message use it. `spans` is the run breakdown; absent keys mean false or null.",
   "cases": [
     {
       "name": "text with nothing in it stays one span",
@@ -385,7 +385,7 @@
       "out": null
     }
   ],
-  "$carried": "Formatting carried in from earlier in the same message. Only the desktop needs this: it pulls links, code and markdown out of a line and formats what is left between them, so each piece has to be told what was still open when it began. The phone parses the whole line and finds links inside it, so it never lost the state to begin with \u2014 this is how the two were made to agree.",
+  "$carried": "Formatting carried in from earlier in the same message. Only the desktop needs this: it pulls links, code and markdown out of a line and formats what is left between them, so each piece has to be told what was still open when it began. The phone parses the whole line and finds links inside it, so it never lost the state to begin with — this is how the two were made to agree.",
   "carried": [
     {
       "name": "bold from before carries into the next piece",
@@ -432,6 +432,146 @@
           "text": "more words"
         }
       ]
+    }
+  ],
+  "$writing": "Producing formatting, not only reading it. Both clients rendered mIRC codes and neither could write one, so bold was something other people's messages had. Read by tests/shared/formatting.test.ts and the Android SharedCorpusTest.",
+  "writing": [
+    {
+      "name": "wraps a selection",
+      "text": "make this bold",
+      "start": 5,
+      "end": 9,
+      "mark": "bold",
+      "result": "make \u0002this\u0002 bold",
+      "selectionStart": 6,
+      "selectionEnd": 10
+    },
+    {
+      "name": "with nothing selected, leaves the cursor between the pair",
+      "text": "type here",
+      "start": 5,
+      "end": 5,
+      "mark": "bold",
+      "result": "type \u0002\u0002here",
+      "selectionStart": 6,
+      "selectionEnd": 6
+    },
+    {
+      "name": "italic uses its own code",
+      "text": "ab",
+      "start": 0,
+      "end": 2,
+      "mark": "italic",
+      "result": "\u001dab\u001d",
+      "selectionStart": 1,
+      "selectionEnd": 3
+    },
+    {
+      "name": "underline too",
+      "text": "ab",
+      "start": 0,
+      "end": 2,
+      "mark": "underline",
+      "result": "\u001fab\u001f",
+      "selectionStart": 1,
+      "selectionEnd": 3
+    },
+    {
+      "name": "pressing it again takes it off, from inside the pair",
+      "text": "make \u0002this\u0002 bold",
+      "start": 6,
+      "end": 10,
+      "mark": "bold",
+      "result": "make this bold",
+      "selectionStart": 5,
+      "selectionEnd": 9
+    },
+    {
+      "name": "and from outside it",
+      "text": "make \u0002this\u0002 bold",
+      "start": 5,
+      "end": 11,
+      "mark": "bold",
+      "result": "make this bold",
+      "selectionStart": 5,
+      "selectionEnd": 9
+    },
+    {
+      "name": "the whole line",
+      "text": "everything",
+      "start": 0,
+      "end": 10,
+      "mark": "bold",
+      "result": "\u0002everything\u0002",
+      "selectionStart": 1,
+      "selectionEnd": 11
+    },
+    {
+      "name": "nesting a different mark is fine",
+      "text": "\u0002bold\u0002",
+      "start": 1,
+      "end": 5,
+      "mark": "italic",
+      "result": "\u0002\u001dbold\u001d\u0002",
+      "selectionStart": 2,
+      "selectionEnd": 6
+    }
+  ],
+  "$colour": "Putting a colour on a selection. Two digits always, because a server passing \\x0341 through leaves the next client reading the 1 as text.",
+  "colour": [
+    {
+      "name": "a single-digit colour is padded",
+      "text": "red text",
+      "start": 0,
+      "end": 3,
+      "fg": 4,
+      "bg": null,
+      "result": "\u000304red\u0003 text"
+    },
+    {
+      "name": "a two-digit colour is not",
+      "text": "grey text",
+      "start": 0,
+      "end": 4,
+      "fg": 14,
+      "bg": null,
+      "result": "\u000314grey\u0003 text"
+    },
+    {
+      "name": "a background too",
+      "text": "warn",
+      "start": 0,
+      "end": 4,
+      "fg": 0,
+      "bg": 4,
+      "result": "\u000300,04warn\u0003"
+    },
+    {
+      "name": "colouring something already coloured replaces it",
+      "text": "\u000304red\u0003",
+      "start": 0,
+      "end": 7,
+      "fg": 3,
+      "bg": null,
+      "result": "\u000303red\u0003"
+    },
+    {
+      "name": "no colour strips what is there",
+      "text": "a \u000304red\u0003 word",
+      "start": 2,
+      "end": 10,
+      "fg": null,
+      "bg": null,
+      "result": "a red word"
+    },
+    {
+      "name": "closing with a bare colour code, not a reset",
+      "text": "x",
+      "start": 0,
+      "end": 1,
+      "fg": 9,
+      "bg": null,
+      "result": "\u000309x\u0003"
     }
   ]
 }

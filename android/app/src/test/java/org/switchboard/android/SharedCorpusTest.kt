@@ -25,6 +25,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.switchboard.android.irc.Casemap
 import org.switchboard.android.irc.ConnectionState
+import org.switchboard.android.irc.Formatter
 import org.switchboard.android.irc.Ignore
 import org.switchboard.android.irc.Irc
 import org.switchboard.android.irc.Socks
@@ -881,6 +882,48 @@ class SharedCorpusTest {
                     mapOfOrNull(c["published"]),
                     mapOfOrNull(c["next"])
                 )
+            )
+        }
+    }
+
+    // ── writing formatting, not only reading it ──────────────────────
+
+    /**
+     * Bold typed on the phone and bold typed at the desk have to be the same
+     * bytes, or one client's message renders wrong in the other's window.
+     */
+    @Test
+    fun `writes the formatting the desktop writes`() {
+        val corpus = load("formatting.json")
+
+        for (case in corpus["writing"]!!.jsonArray) {
+            val c = case.jsonObject
+            val name = c["name"]!!.jsonPrimitive.content
+            val out = Formatter.mark(
+                c["text"]!!.jsonPrimitive.content,
+                c["start"]!!.jsonPrimitive.content.toInt(),
+                c["end"]!!.jsonPrimitive.content.toInt(),
+                c["mark"]!!.jsonPrimitive.content
+            )
+            assertEquals(name, c["result"]!!.jsonPrimitive.content, out.text)
+            assertEquals(name, c["selectionStart"]!!.jsonPrimitive.content.toInt(), out.selectionStart)
+            assertEquals(name, c["selectionEnd"]!!.jsonPrimitive.content.toInt(), out.selectionEnd)
+        }
+
+        for (case in corpus["colour"]!!.jsonArray) {
+            val c = case.jsonObject
+            val fg = c["fg"]!!.let { if (it is JsonNull) null else it.jsonPrimitive.content.toInt() }
+            val bg = c["bg"]!!.let { if (it is JsonNull) null else it.jsonPrimitive.content.toInt() }
+            assertEquals(
+                c["name"]!!.jsonPrimitive.content,
+                c["result"]!!.jsonPrimitive.content,
+                Formatter.colourise(
+                    c["text"]!!.jsonPrimitive.content,
+                    c["start"]!!.jsonPrimitive.content.toInt(),
+                    c["end"]!!.jsonPrimitive.content.toInt(),
+                    fg,
+                    bg
+                ).text
             )
         }
     }

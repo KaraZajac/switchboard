@@ -94,6 +94,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.ui.platform.LocalContext
+import org.switchboard.android.irc.Formatter
+import org.switchboard.android.irc.Formatting
 
 /**
  * The whole client, once it is running.
@@ -870,6 +872,36 @@ private fun Composer(
         note(Typing.Event.SENT)
     }
 
+    /**
+     * Put a formatting code around the selection.
+     *
+     * The desktop has Ctrl+B; a phone keyboard has no Ctrl, so these are
+     * buttons or they are nothing. The selection is restored afterwards so the
+     * next keystroke carries on inside the pair.
+     */
+    fun format(which: String) {
+        val out = Formatter.mark(
+            field.text,
+            field.selection.start,
+            field.selection.end,
+            which
+        )
+        field = TextFieldValue(out.text, TextRange(out.selectionStart, out.selectionEnd))
+    }
+
+    var showColours by remember { mutableStateOf(false) }
+
+    fun colour(index: Int?) {
+        val out = Formatter.colourise(
+            field.text,
+            field.selection.start,
+            field.selection.end,
+            index
+        )
+        field = TextFieldValue(out.text, TextRange(out.selectionStart, out.selectionEnd))
+        showColours = false
+    }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -877,6 +909,52 @@ private fun Composer(
             .navigationBarsPadding()
             .imePadding()
     ) {
+
+    // The sixteen colours every client agrees on. The extended palette exists
+    // but nothing renders it consistently, and a colour nobody else can see is
+    // a message nobody else can read.
+    if (showColours) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .padding(start = 12.dp, end = 12.dp, top = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            for (index in 0 until 16) {
+                Box(
+                    modifier = Modifier
+                        .size(26.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(Color(android.graphics.Color.parseColor(Formatting.PALETTE[index])))
+                        .clickable { colour(index) }
+                )
+            }
+            Text(
+                "None",
+                color = Subtext,
+                fontSize = 13.sp,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .clickable { colour(null) }
+                    .padding(horizontal = 10.dp, vertical = 5.dp)
+            )
+        }
+    }
+
+    // Bold, italic, underline and colour. The desktop reaches these with
+    // Ctrl+B and friends; a phone keyboard has no Ctrl.
+    if (enabled) {
+        Row(
+            modifier = Modifier.padding(start = 12.dp, top = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            FormatButton("B", FontWeight.Bold) { format("bold") }
+            FormatButton("I", FontWeight.Normal, italic = true) { format("italic") }
+            FormatButton("U", FontWeight.Normal, underline = true) { format("underline") }
+            FormatButton("A", FontWeight.Normal, tint = Blue) { showColours = !showColours }
+        }
+    }
 
     if (suggestions.isNotEmpty()) {
         Row(
@@ -1015,3 +1093,27 @@ internal fun completionsFor(partial: String, people: List<String>): List<String>
  */
 internal fun completedDraft(draft: String, nick: String): String =
     Completion.complete(draft, nick)
+
+/** One letter that turns a formatting code on or off */
+@Composable
+private fun FormatButton(
+    glyph: String,
+    weight: FontWeight,
+    italic: Boolean = false,
+    underline: Boolean = false,
+    tint: Color = Subtext,
+    onClick: () -> Unit
+) {
+    Text(
+        glyph,
+        color = tint,
+        fontSize = 15.sp,
+        fontWeight = weight,
+        fontStyle = if (italic) androidx.compose.ui.text.font.FontStyle.Italic else null,
+        textDecoration = if (underline) androidx.compose.ui.text.style.TextDecoration.Underline else null,
+        modifier = Modifier
+            .clip(RoundedCornerShape(6.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 4.dp)
+    )
+}
