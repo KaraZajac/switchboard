@@ -26,6 +26,17 @@ const DEFAULT_PROFILE = 'profile'
 
 /** And the one they keep the ignore list under */
 const IGNORE_LIST = 'ignores'
+
+/** Whether to go back to a channel after being kicked out of it */
+const REJOIN_ON_KICK = 'rejoinOnKick'
+
+/**
+ * How long to wait before doing so.
+ *
+ * Long enough not to race the `+b` that usually follows a kick, which would
+ * get the JOIN refused and report a failure the client caused itself.
+ */
+const REJOIN_DELAY_MS = 5_000
 import { avatarUrl } from '@shared/avatar'
 
 /**
@@ -109,6 +120,10 @@ export class IRCManager {
    * Disconnect from a server.
    */
   disconnect(serverId: string): void {
+    // Any rejoin still waiting is about a connection that is going away
+    for (const timer of this.rejoinTimers) clearTimeout(timer)
+    this.rejoinTimers.clear()
+
     const client = this.clients.get(serverId)
     if (client) {
       client.destroy()
@@ -120,6 +135,11 @@ export class IRCManager {
   /**
    * Get a client by server ID.
    */
+  /** Every connection, for the things that act on all of them at once */
+  connections(): Iterable<[string, IRCClient]> {
+    return this.clients
+  }
+
   getClient(serverId: string): IRCClient | undefined {
     return this.clients.get(serverId)
   }
@@ -236,6 +256,32 @@ export class IRCManager {
    * Live state of every registered connection, for a renderer that attached late
    * or reloaded and so missed the events that would have built this state.
    */
+  /**
+   * Go back to a channel we were kicked out of.
+   *
+   * Off unless somebody turns it on, and it should be: rejoining the instant
+   * an operator removes you is rude, and on some networks it is what turns a
+   * kick into a ban. The delay is not politeness theatre either — an immediate
+   * JOIN races the `+b` that usually follows and gets refused, so the client
+   * would announce a failure it caused itself.
+   */
+  private rejoinAfterKick(client: IRCClient, channel: string): void {
+    if (!getSetting<boolean>(REJOIN_ON_KICK)) return
+
+    const wait = setTimeout(() => {
+      this.rejoinTimers.delete(wait)
+      // Still connected, and not already back by hand
+      if (client.state.registrationState !== 'connected') return
+      if (client.state.channels.has(client.state.casemap(channel))) return
+      client.connection.send('JOIN', channel)
+    }, REJOIN_DELAY_MS)
+
+    this.rejoinTimers.add(wait)
+  }
+
+  /** Pending rejoins, so disconnecting does not leave one to fire into nothing */
+  private rejoinTimers = new Set<ReturnType<typeof setTimeout>>()
+
   /**
    * Whether this is somebody we have decided not to hear from.
    *
@@ -491,6 +537,7 @@ export class IRCManager {
     client.events.on('kick', (data) => {
       if (data.isMe) {
         markChannelParted(serverId, data.channel)
+        this.rejoinAfterKick(client, data.channel)
       }
       this.send('irc:kick', {
         serverId,

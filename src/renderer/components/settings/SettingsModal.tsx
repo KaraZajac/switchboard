@@ -289,6 +289,29 @@ function NotificationsTab() {
 
   const removeWord = async (word: string) => save(words.filter((one) => one !== word))
 
+  const [awayMinutes, setAwayMinutes] = useState(0)
+  const [awayMessage, setAwayMessage] = useState('')
+  const [rejoin, setRejoin] = useState(false)
+
+  useEffect(() => {
+    void window.switchboard
+      .invoke('settings:get', 'autoAwayMinutes')
+      .then((value) => setAwayMinutes(Number(value) || 0))
+    void window.switchboard
+      .invoke('settings:get', 'autoAwayMessage')
+      .then((value) => setAwayMessage(typeof value === 'string' ? value : ''))
+    void window.switchboard
+      .invoke('settings:get', 'rejoinOnKick')
+      .then((value) => setRejoin(value === true))
+  }, [])
+
+  const saveAway = async (minutes: number, message: string) => {
+    setAwayMinutes(minutes)
+    setAwayMessage(message)
+    await window.switchboard.invoke('settings:set', 'autoAwayMinutes', minutes)
+    await window.switchboard.invoke('settings:set', 'autoAwayMessage', message)
+  }
+
   return (
     <div className="space-y-4">
       <h3 className="text-sm font-semibold text-gray-300">Notifications</h3>
@@ -356,6 +379,67 @@ function NotificationsTab() {
             ))}
           </div>
         )}
+      </div>
+
+      {/*
+        Your away message is otherwise only ever what you last set by hand,
+        which for most people is nothing — so the network thinks you are at the
+        keyboard at four in the morning.
+      */}
+      <div className="space-y-2 border-t border-gray-800 pt-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="text-sm text-gray-200">Away when idle</div>
+            <div className="text-xs text-gray-500">
+              Mark yourself away after a while with no typing anywhere, and back when you return.
+            </div>
+          </div>
+          <ToggleSwitch
+            checked={awayMinutes > 0}
+            onChange={(on) => void saveAway(on ? 10 : 0, awayMessage)}
+          />
+        </div>
+
+        {awayMinutes > 0 && (
+          <div className="flex items-center gap-2">
+            <input
+              type="number"
+              min={1}
+              value={awayMinutes}
+              onChange={(e) => void saveAway(Number(e.target.value) || 1, awayMessage)}
+              className="w-20 rounded bg-gray-900 px-2 py-1.5 text-sm text-gray-100 outline-none ring-1 ring-gray-700 focus:ring-indigo-500"
+            />
+            <span className="text-xs text-gray-500">minutes</span>
+            <input
+              type="text"
+              value={awayMessage}
+              onChange={(e) => void saveAway(awayMinutes, e.target.value)}
+              placeholder="Away from the keyboard"
+              className="flex-1 rounded bg-gray-900 px-2 py-1.5 text-sm text-gray-100 outline-none ring-1 ring-gray-700 focus:ring-indigo-500"
+            />
+          </div>
+        )}
+      </div>
+
+      {/*
+        Off by default, and it should be. Rejoining the instant an operator
+        removes you is rude, and on some networks it is what turns a kick into
+        a ban.
+      */}
+      <div className="flex items-center justify-between border-t border-gray-800 pt-3">
+        <div>
+          <div className="text-sm text-gray-200">Rejoin after a kick</div>
+          <div className="text-xs text-gray-500">
+            Go back to a channel five seconds after being kicked out of it.
+          </div>
+        </div>
+        <ToggleSwitch
+          checked={rejoin}
+          onChange={(on) => {
+            setRejoin(on)
+            void window.switchboard.invoke('settings:set', 'rejoinOnKick', on)
+          }}
+        />
       </div>
 
       <div className="rounded bg-gray-900 p-3">

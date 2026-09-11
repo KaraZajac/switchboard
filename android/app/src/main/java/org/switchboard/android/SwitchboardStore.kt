@@ -728,7 +728,7 @@ class SwitchboardStore {
                 val current = messages[conversation] ?: emptyList()
                 if (current.none { it.id == message.id }) {
                     messages[conversation] =
-                        current.toMutableList().also { it.insertByTime(message) }
+                        current.toMutableList().also { it.insertByTime(message) }.capped()
                 }
 
                 // They have said their piece; stop showing them as typing
@@ -1090,7 +1090,10 @@ class SwitchboardStore {
             .filter { known.add(it.id) }
 
         if (older.isEmpty()) return 0
-        messages[conversation] = older + existing
+        // The same ceiling from the other end: reading far enough back drops
+        // the newest, which is still on the desktop and one scroll the other
+        // way from coming back.
+        messages[conversation] = (older + existing).take(SCROLLBACK_LIMIT)
         return older.size
     }
 
@@ -1312,6 +1315,20 @@ fun saysWatchedWord(text: String, words: List<String>): Boolean {
  */
 fun mentionsYou(text: String, nick: String, words: List<String> = emptyList()): Boolean =
     namesYou(text, nick) || saysWatchedWord(text, words)
+
+/**
+ * How many messages one conversation keeps in memory.
+ *
+ * Nothing trimmed this at all: a channel left open for a week grew until the
+ * phone noticed. What is kept is what somebody can scroll to in a sitting, and
+ * everything older comes back from history when they do. Generous on purpose —
+ * the point is a ceiling, not a small one. Matches the desktop.
+ */
+const val SCROLLBACK_LIMIT = 2000
+
+/** Keep the newest [SCROLLBACK_LIMIT], dropping the oldest */
+private fun List<Message>.capped(): List<Message> =
+    if (size <= SCROLLBACK_LIMIT) this else takeLast(SCROLLBACK_LIMIT)
 
 /** How long someone stays "typing" without saying so again */
 const val TYPING_TIMEOUT_MS = 6_000L

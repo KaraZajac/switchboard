@@ -15,6 +15,7 @@ import { encryptStoredCredentials, getAllServers, updateServer } from './storage
 import { getSetting } from './storage/models/settings'
 import { hasOverride, sameProfile, overrideFrom } from '@shared/profile'
 import { secretsBackendDescription } from './storage/secrets'
+import { watchIdleTime } from './irc/features/autoaway'
 
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
@@ -269,6 +270,9 @@ app.whenReady().then(async () => {
   // next connection rather than the next launch. Machine-local on purpose:
   // both of these describe where this computer is, not who you are, so
   // neither travels to a paired phone.
+  // Go away when the keyboard goes quiet, if that was asked for
+  watchIdleTime(ircManager)
+
   useNetworkSettings(() => ({
     proxy: getSetting<ProxySettings>('proxy') ?? null,
     caPath: getSetting<string>('customCaPath') ?? null

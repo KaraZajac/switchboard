@@ -39,6 +39,25 @@ function channelKey(serverId: string, channel: string): string {
   return `${serverId}:${channel.toLowerCase()}`
 }
 
+/**
+ * How many messages one conversation keeps in memory.
+ *
+ * Nothing trimmed this at all: a channel left open for a week grew until the
+ * window did. What is on screen is what the person can scroll to in a sitting,
+ * and everything older is in the database — `history:fetch` and
+ * `chathistory:request` are how it comes back, which is what scrolling up
+ * already does.
+ *
+ * Generous on purpose. The point is a ceiling, not a small one.
+ */
+export const SCROLLBACK_LIMIT = 2000
+
+/** Keep the newest [SCROLLBACK_LIMIT], dropping the oldest */
+function capped(messages: ChatMessage[]): ChatMessage[] {
+  if (messages.length <= SCROLLBACK_LIMIT) return messages
+  return messages.slice(messages.length - SCROLLBACK_LIMIT)
+}
+
 export const useMessageStore = create<MessageState>((set, get) => ({
   messages: {},
   typing: {},
@@ -55,7 +74,7 @@ export const useMessageStore = create<MessageState>((set, get) => ({
       return {
         messages: {
           ...state.messages,
-          [key]: [...existing, message]
+          [key]: capped([...existing, message])
         }
       }
     }),
@@ -75,7 +94,10 @@ export const useMessageStore = create<MessageState>((set, get) => ({
       return {
         messages: {
           ...state.messages,
-          [key]: [...messages, ...existing]
+          // The same ceiling from the other end: scrolling far enough back
+          // drops the newest, which is still in the database and one scroll
+          // the other way from coming back.
+          [key]: [...messages, ...existing].slice(0, SCROLLBACK_LIMIT)
         }
       }
     }),
