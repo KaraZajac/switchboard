@@ -297,7 +297,10 @@ function NetworkTab() {
   const [proxyType, setProxyType] = useState('none')
   const [proxyHost, setProxyHost] = useState('')
   const [proxyPort, setProxyPort] = useState('')
+  const [proxyUser, setProxyUser] = useState('')
+  const [proxyPass, setProxyPass] = useState('')
   const [customCaPath, setCustomCaPath] = useState('')
+  const [proxySaved, setProxySaved] = useState(false)
 
   // Load saved settings
   useEffect(() => {
@@ -306,6 +309,8 @@ function NetworkTab() {
         const p = v as Record<string, string>
         setProxyType(p.type || 'none')
         setProxyHost(p.host || '')
+        setProxyUser(p.username || '')
+        setProxyPass(p.password || '')
         setProxyPort(p.port || '')
       }
     })
@@ -322,8 +327,11 @@ function NetworkTab() {
     window.switchboard.invoke('settings:set', 'proxy', {
       type: proxyType,
       host: proxyHost,
-      port: proxyPort
+      port: proxyPort,
+      username: proxyUser,
+      password: proxyPass
     })
+    setProxySaved(true)
   }
 
   const handleSaveCa = () => {
@@ -377,31 +385,59 @@ function NetworkTab() {
         >
           <option value="none">No Proxy</option>
           <option value="socks5">SOCKS5</option>
-          <option value="http">HTTP/HTTPS</option>
+          <option value="socks4">SOCKS4a</option>
         </select>
 
         {proxyType !== 'none' && (
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={proxyHost}
-              onChange={(e) => setProxyHost(e.target.value)}
-              placeholder="Proxy host"
-              className="flex-1 rounded bg-gray-900 px-3 py-2 text-sm text-gray-100 outline-none ring-1 ring-gray-700 focus:ring-indigo-500"
-            />
-            <input
-              type="number"
-              value={proxyPort}
-              onChange={(e) => setProxyPort(e.target.value)}
-              placeholder="Port"
-              className="w-24 rounded bg-gray-900 px-3 py-2 text-sm text-gray-100 outline-none ring-1 ring-gray-700 focus:ring-indigo-500"
-            />
-            <button
-              onClick={handleSaveProxy}
-              className="rounded bg-indigo-500 px-3 py-2 text-sm text-white hover:bg-indigo-600"
-            >
-              Save
-            </button>
+          <div className="space-y-2">
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={proxyHost}
+                onChange={(e) => { setProxyHost(e.target.value); setProxySaved(false) }}
+                placeholder="Proxy host"
+                className="flex-1 rounded bg-gray-900 px-3 py-2 text-sm text-gray-100 outline-none ring-1 ring-gray-700 focus:ring-indigo-500"
+              />
+              <input
+                type="number"
+                value={proxyPort}
+                onChange={(e) => { setProxyPort(e.target.value); setProxySaved(false) }}
+                placeholder="Port"
+                className="w-24 rounded bg-gray-900 px-3 py-2 text-sm text-gray-100 outline-none ring-1 ring-gray-700 focus:ring-indigo-500"
+              />
+            </div>
+
+            {/* SOCKS5 can carry a password (RFC 1929); SOCKS4a only a name */}
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={proxyUser}
+                onChange={(e) => { setProxyUser(e.target.value); setProxySaved(false) }}
+                placeholder={proxyType === 'socks4' ? 'User name (optional)' : 'Username (optional)'}
+                className="flex-1 rounded bg-gray-900 px-3 py-2 text-sm text-gray-100 outline-none ring-1 ring-gray-700 focus:ring-indigo-500"
+              />
+              {proxyType === 'socks5' && (
+                <input
+                  type="password"
+                  value={proxyPass}
+                  onChange={(e) => { setProxyPass(e.target.value); setProxySaved(false) }}
+                  placeholder="Password (optional)"
+                  className="flex-1 rounded bg-gray-900 px-3 py-2 text-sm text-gray-100 outline-none ring-1 ring-gray-700 focus:ring-indigo-500"
+                />
+              )}
+              <button
+                onClick={handleSaveProxy}
+                className="rounded bg-indigo-500 px-3 py-2 text-sm text-white hover:bg-indigo-600"
+              >
+                Save
+              </button>
+            </div>
+
+            <div className="text-xs leading-relaxed text-gray-500">
+              {proxySaved
+                ? 'Saved. Networks you are already on stay where they are — reconnect to move them onto the proxy.'
+                : 'Host names are resolved by the proxy, not here, so a lookup does not go out from this machine. Applies to every network on the next connection.'}
+            </div>
           </div>
         )}
       </div>

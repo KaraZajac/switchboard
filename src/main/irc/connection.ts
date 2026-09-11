@@ -11,6 +11,79 @@ import { redactLine } from '@shared/redact'
 import { cmd } from './serializer'
 import { decodeLine } from '@shared/decoding'
 import { readCertificate } from '@shared/certfp'
+import {
+  proxyInUse,
+  socks5Greeting,
+  readSocks5Choice,
+  socks5AuthRequest,
+  readSocks5AuthReply,
+  socks5Connect,
+  readSocks5Reply,
+  socks4Connect,
+  readSocks4Reply,
+  AUTH_USERPASS,
+  AUTH_REJECTED,
+  type ProxySettings
+} from '@shared/socks'
+import { readFileSync } from 'fs'
+
+/** How far through the proxy conversation one connection has got */
+interface SocksProgress {
+  stage: 'greeting' | 'authenticating' | 'connecting'
+  proxy: ProxySettings
+  /** Proxy bytes seen but not yet making up a whole reply */
+  buffer: Buffer
+}
+
+/** How this machine reaches the internet, as the settings describe it */
+export interface NetworkSettings {
+  /** A SOCKS proxy to dial through, or null for straight out */
+  proxy: ProxySettings | null
+  /** A PEM file of extra certificate authorities to trust */
+  caPath: string | null
+}
+
+let networkSettings: () => NetworkSettings = () => ({ proxy: null, caPath: null })
+
+/**
+ * Where connections get the machine's network settings.
+ *
+ * Injected rather than read here, so the protocol layer does not depend on
+ * storage — which is what lets a connection be exercised without a database,
+ * and is the whole reason the transport has tests at all. Read on each dial:
+ * changing a proxy applies to the next connection, not the next launch.
+ */
+export function useNetworkSettings(source: () => NetworkSettings): void {
+  networkSettings = source
+}
+
+function proxySettings(): ProxySettings | null {
+  return networkSettings().proxy
+}
+
+/**
+ * An extra certificate authority to trust, where one is configured.
+ *
+ * Read on each dial rather than cached, so pointing at a new file takes effect
+ * on the next connection instead of the next launch. A path that cannot be
+ * read is worth saying out loud once rather than silently connecting without
+ * it and failing the handshake for a reason nobody could guess.
+ */
+let lastCaWarning = ''
+function extraCertificateAuthority(): string | null {
+  const path = networkSettings().caPath
+  if (!path || path.trim().length === 0) return null
+  try {
+    return readFileSync(path.trim(), 'utf8')
+  } catch (err) {
+    const message = `Could not read the certificate authority at ${path}: ${String(err)}`
+    if (message !== lastCaWarning) {
+      lastCaWarning = message
+      console.warn(message)
+    }
+    return null
+  }
+}
 
 export interface ConnectionEvents {
   raw: (direction: 'in' | 'out', line: string) => void
@@ -112,6 +185,15 @@ export class IRCConnection extends EventEmitter {
   private intentionalDisconnect = false
 
   /**
+   * Where we are in the proxy conversation, when there is one.
+   *
+   * `null` means there is no proxy, or it is done and the socket now carries
+   * nothing but IRC. Until then every byte that arrives belongs to the proxy
+   * and must not reach the line parser.
+   */
+  private socks: SocksProgress | null = null
+
+  /**
    * What the server said in its last ERROR, which is usually why it hung up.
    *
    * Kept because the reconnect decision needs it: "Throttled: Reconnecting too
@@ -160,28 +242,57 @@ export class IRCConnection extends EventEmitter {
       this.config.tls = true
     }
 
+    // Through a proxy, when one is configured. The TCP connection goes to the
+    // proxy and the proxy is asked for the server, so TLS — if any — is
+    // negotiated afterwards, over the tunnel, against the real host's name.
+    const proxy = proxySettings()
+    if (proxy && proxyInUse(proxy)) {
+      this.connectThroughProxy(proxy)
+      return
+    }
+
     const options = {
       host: this.config.host,
       port: this.config.port
     }
 
     if (this.config.tls) {
-      // A client certificate, where one is set up. SASL EXTERNAL has nothing to
-      // authenticate with unless the handshake presents it, which is why
-      // choosing that mechanism used to end in 904 every time.
-      const identity = readCertificate(this.config.clientCert)
-
-      this.socket = tls.connect({
-        ...options,
-        rejectUnauthorized: true,
-        servername: this.config.host,
-        ...(identity
-          ? { cert: identity.certificate, key: identity.privateKey }
-          : {})
-      })
+      this.socket = tls.connect(this.tlsOptions(options))
     } else {
       this.socket = net.connect(options)
     }
+
+    this.bindSocket()
+  }
+
+  /**
+   * What a TLS connection to this server should present and accept.
+   *
+   * Separated out because the proxy path needs the same answers a moment
+   * later, over a socket that is already open.
+   */
+  private tlsOptions(base: object): tls.ConnectionOptions {
+    // A client certificate, where one is set up. SASL EXTERNAL has nothing to
+    // authenticate with unless the handshake presents it, which is why
+    // choosing that mechanism used to end in 904 every time.
+    const identity = readCertificate(this.config.clientCert)
+
+    // A network running its own certificate authority — which is most private
+    // and mesh networks — is otherwise unreachable, and the setting that was
+    // meant to fix that was written down and never read by anything.
+    const extra = extraCertificateAuthority()
+
+    return {
+      ...base,
+      rejectUnauthorized: true,
+      servername: this.config.host,
+      ...(extra ? { ca: [...tls.rootCertificates, extra] } : {}),
+      ...(identity ? { cert: identity.certificate, key: identity.privateKey } : {})
+    }
+  }
+
+  private bindSocket(): void {
+    if (!this.socket) return
 
     // Deliberately no setEncoding: lines arrive as bytes so each can be
     // decoded on its own. See `decodeLine`.
@@ -191,7 +302,14 @@ export class IRCConnection extends EventEmitter {
     // 'secureConnect' once the handshake finishes. Registration must wait for the
     // handshake, so bind exactly one of them — binding both sends the whole
     // CAP LS / NICK / USER burst twice, which stalls or trips up strict servers.
-    if (this.config.tls) {
+    //
+    // Through a proxy neither applies to the socket we open: it is connected
+    // to the proxy, which is not the server. That path calls `onConnect` for
+    // itself once the tunnel is up and, where the server wants TLS, once the
+    // handshake over the tunnel has finished.
+    if (this.socks) {
+      // bound where the tunnel is opened
+    } else if (this.config.tls) {
       this.socket.once('secureConnect', () => this.onConnect())
     } else {
       this.socket.once('connect', () => this.onConnect())
@@ -201,6 +319,144 @@ export class IRCConnection extends EventEmitter {
     this.socket.on('error', (err: Error) => this.onError(err))
     this.socket.on('close', () => this.onClose())
     this.socket.on('end', () => this.onEnd())
+  }
+
+  /**
+   * Dial the proxy, then ask it for the server.
+   *
+   * The socket that opens is connected to the proxy, so nothing may be sent on
+   * it until the tunnel is up — and every byte that arrives before then is the
+   * proxy speaking, not the server. Both of those are why this is a small
+   * state machine rather than a few writes: the replies are variable length,
+   * they may arrive in pieces, and the byte after the last one is already the
+   * IRC server's greeting.
+   */
+  private connectThroughProxy(proxy: ProxySettings): void {
+    const port = Number(proxy.port)
+    this.socks = { stage: 'greeting', proxy, buffer: Buffer.alloc(0) }
+
+    this.socket = net.connect({ host: proxy.host.trim(), port })
+    this.bindSocket()
+
+    this.socket.once('connect', () => {
+      if (!this.socket || !this.socks) return
+      if (proxy.type === 'socks4') {
+        this.socks.stage = 'connecting'
+        this.socket.write(Buffer.from(socks4Connect(this.config.host, this.config.port, proxy.username ?? '')))
+        return
+      }
+      this.socket.write(Buffer.from(socks5Greeting(Boolean(proxy.username))))
+    })
+  }
+
+  /**
+   * One step of the proxy conversation.
+   *
+   * Returns the bytes that are not the proxy's — everything after the final
+   * reply, which is the server talking and belongs to the line parser. The
+   * proxy is finished the moment that happens and [socks] goes back to null.
+   */
+  private advanceProxy(data: Buffer): Buffer {
+    const state = this.socks
+    if (!state || !this.socket) return data
+
+    state.buffer = Buffer.concat([state.buffer, data])
+    const bytes = new Uint8Array(state.buffer)
+
+    if (state.stage === 'greeting') {
+      const method = readSocks5Choice(bytes)
+      if (method === null) return Buffer.alloc(0)
+
+      if (method === AUTH_REJECTED) {
+        this.failProxy('The proxy would not accept how we offered to authenticate')
+        return Buffer.alloc(0)
+      }
+      state.buffer = state.buffer.subarray(2)
+
+      if (method === AUTH_USERPASS) {
+        if (!state.proxy.username) {
+          this.failProxy('The proxy wants a username and password, and none is saved for it')
+          return Buffer.alloc(0)
+        }
+        state.stage = 'authenticating'
+        this.socket.write(
+          Buffer.from(socks5AuthRequest(state.proxy.username, state.proxy.password ?? ''))
+        )
+        return this.advanceProxy(Buffer.alloc(0))
+      }
+
+      state.stage = 'connecting'
+      this.socket.write(Buffer.from(socks5Connect(this.config.host, this.config.port)))
+      return this.advanceProxy(Buffer.alloc(0))
+    }
+
+    if (state.stage === 'authenticating') {
+      const ok = readSocks5AuthReply(new Uint8Array(state.buffer))
+      if (ok === null) return Buffer.alloc(0)
+      state.buffer = state.buffer.subarray(2)
+
+      if (!ok) {
+        this.failProxy('The proxy refused the username and password')
+        return Buffer.alloc(0)
+      }
+      state.stage = 'connecting'
+      this.socket.write(Buffer.from(socks5Connect(this.config.host, this.config.port)))
+      return this.advanceProxy(Buffer.alloc(0))
+    }
+
+    // 'connecting'
+    const reply =
+      state.proxy.type === 'socks4'
+        ? readSocks4Reply(new Uint8Array(state.buffer))
+        : readSocks5Reply(new Uint8Array(state.buffer))
+
+    if (reply.ok === null) return Buffer.alloc(0)
+    if (!reply.ok) {
+      this.failProxy(reply.error ?? 'The proxy refused the connection')
+      return Buffer.alloc(0)
+    }
+
+    // Anything past the reply is the server, which has not been introduced yet
+    // but may already be talking.
+    const rest = state.buffer.subarray(reply.length ?? state.buffer.length)
+    this.socks = null
+    this.openedThroughProxy(rest)
+    return Buffer.alloc(0)
+  }
+
+  /**
+   * The tunnel is up. From here it is an ordinary connection.
+   *
+   * With TLS the handshake happens now, over the tunnel and against the real
+   * server's name — so a proxy cannot stand in the middle of it, and a
+   * certificate for the proxy would be rejected the way it should be.
+   */
+  private openedThroughProxy(pending: Buffer): void {
+    const raw = this.socket
+    if (!raw) return
+
+    if (!this.config.tls) {
+      if (pending.length > 0) this.onData(pending)
+      this.onConnect()
+      return
+    }
+
+    // Whatever arrived early belongs to the TLS record layer, not to us
+    if (pending.length > 0) raw.unshift(pending)
+
+    const secure = tls.connect(this.tlsOptions({ socket: raw }))
+    this.socket = secure
+    this.bindSocket()
+    secure.once('secureConnect', () => this.onConnect())
+  }
+
+  private failProxy(reason: string): void {
+    this.socks = null
+    this.emit('error', new Error(reason))
+    // Closing here rather than waiting: a proxy that refused is not going to
+    // change its mind on this socket, and leaving it open means the reconnect
+    // ladder never starts.
+    this.socket?.destroy()
   }
 
   private connectWebSocket(url: string): void {
@@ -373,6 +629,13 @@ export class IRCConnection extends EventEmitter {
   }
 
   private onData(data: Buffer): void {
+    // While a proxy is still being talked to, none of this is IRC.
+    if (this.socks) {
+      const rest = this.advanceProxy(data)
+      if (rest.length === 0) return
+      data = rest
+    }
+
     this.buffer = this.buffer.length === 0 ? data : Buffer.concat([this.buffer, data])
 
     const lines: Buffer[] = []

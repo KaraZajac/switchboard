@@ -41,6 +41,11 @@ class IrcConnection(
      * the old one.
      */
     private val globalProfileOf: () -> Map<String, String> = { emptyMap() },
+    /**
+     * The proxy to dial through, read rather than copied: it is changed while
+     * connections are up, and it applies from the next dial onward.
+     */
+    private val proxyOf: () -> Socks.Settings? = { null },
     private val emitEvent: (channel: String, data: JsonElement) -> Unit
 ) : IrcSession, IrcCommandTarget {
 
@@ -249,8 +254,18 @@ class IrcConnection(
             config = config.copy(port = port, tls = true)
         }
 
+        // Through a proxy, when one is configured. The TCP connection goes to
+        // the proxy and the proxy is asked for the server, so TLS — if any — is
+        // negotiated afterwards over the tunnel, against the real host's name.
+        val proxy = proxyOf()
         val raw = Socket()
-        raw.connect(InetSocketAddress(config.host, config.port), 15_000)
+        if (Socks.inUse(proxy)) {
+            raw.connect(InetSocketAddress(proxy!!.host.trim(), proxy.port), 15_000)
+            raw.soTimeout = 30_000
+            openTunnel(raw, proxy)
+        } else {
+            raw.connect(InetSocketAddress(config.host, config.port), 15_000)
+        }
         raw.soTimeout = 0
 
         val connected = if (config.tls) {
@@ -276,6 +291,79 @@ class IrcConnection(
         config.password?.takeIf { it.isNotEmpty() }?.let { send("PASS", it) }
         send("NICK", config.nick)
         send("USER", config.ident, "0", "*", config.gecos)
+    }
+
+    /**
+     * Talk the proxy into connecting us to the server.
+     *
+     * Blocking and exact: every reply is read to its own length and no
+     * further, so nothing of the server's own greeting is swallowed. The bytes
+     * themselves come from [Socks], which both clients share — see
+     * `src/shared/socks.ts`.
+     */
+    private fun openTunnel(raw: Socket, proxy: Socks.Settings) {
+        val out = raw.getOutputStream()
+        val input = raw.getInputStream()
+
+        fun exactly(count: Int): ByteArray {
+            val bytes = ByteArray(count)
+            var got = 0
+            while (got < count) {
+                val read = input.read(bytes, got, count - got)
+                if (read <= 0) throw java.io.IOException("The proxy closed the connection")
+                got += read
+            }
+            return bytes
+        }
+
+        if (proxy.type == "socks4") {
+            out.write(Socks.connect4(config.host, config.port, proxy.username))
+            out.flush()
+            val reply = Socks.readReply4(exactly(8))
+            if (reply.ok != true) throw java.io.IOException(reply.error ?: "The proxy refused the connection")
+            return
+        }
+
+        out.write(Socks.greeting(proxy.username.isNotEmpty()))
+        out.flush()
+
+        when (Socks.readChoice(exactly(2))) {
+            Socks.AUTH_NONE -> Unit
+            Socks.AUTH_USERPASS -> {
+                if (proxy.username.isEmpty()) {
+                    throw java.io.IOException("The proxy wants a username and password, and none is saved for it")
+                }
+                out.write(Socks.authRequest(proxy.username, proxy.password))
+                out.flush()
+                if (Socks.readAuthReply(exactly(2)) != true) {
+                    throw java.io.IOException("The proxy refused the username and password")
+                }
+            }
+            else -> throw java.io.IOException("The proxy would not accept how we offered to authenticate")
+        }
+
+        out.write(Socks.connect5(config.host, config.port))
+        out.flush()
+
+        // Four bytes, then an address whose length depends on its type, then
+        // the port. Read in that order so the byte after it — already the IRC
+        // server talking — is left for the read loop.
+        val head = exactly(4)
+        val addressLength = when (head[3].toInt() and 0xff) {
+            0x01 -> 4
+            0x04 -> 16
+            0x03 -> (exactly(1)[0].toInt() and 0xff)
+            else -> throw java.io.IOException("The proxy answered with an address we cannot read")
+        }
+        val tail = exactly(addressLength + 2)
+
+        val whole = if ((head[3].toInt() and 0xff) == 0x03) {
+            head + byteArrayOf(addressLength.toByte()) + tail
+        } else {
+            head + tail
+        }
+        val reply = Socks.readReply5(whole)
+        if (reply.ok != true) throw java.io.IOException(reply.error ?: "The proxy refused the connection")
     }
 
     private suspend fun readLoop() = withContext(Dispatchers.IO) {

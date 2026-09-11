@@ -54,6 +54,10 @@ import org.switchboard.android.DozeWatch
 import org.switchboard.android.EngineMode
 import org.switchboard.android.SwitchboardEngine
 import org.switchboard.android.unwatchNicks
+import org.switchboard.android.irc.Socks
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.material3.OutlinedTextFieldDefaults
 
 /**
  * Settings: the shared config, and what this phone is currently doing.
@@ -131,6 +135,7 @@ fun SettingsScreen(
         }
 
         FriendsCard(engine)
+        ProxyCard(engine)
 
         Spacer(Modifier.height(8.dp))
         Text(
@@ -727,6 +732,160 @@ private fun FriendsCard(engine: SwitchboardEngine) {
             }
         }
     }
+}
+
+/**
+ * Dialling through a proxy.
+ *
+ * Kept on the device rather than in the shared config, unlike almost
+ * everything else here: a proxy describes where you are, not who you are, and
+ * the one a desktop uses at home is rarely the one a phone on mobile data
+ * should. The desktop keeps its own for the same reason.
+ *
+ * Host names are resolved by the proxy, never here — which is the whole point
+ * over Tor, and on an ordinary network is the difference between hiding where
+ * you connect and announcing it in a DNS lookup first.
+ */
+@Composable
+private fun ProxyCard(engine: SwitchboardEngine) {
+    val saved = remember { engine.savedProxy() }
+    var type by remember { mutableStateOf(saved?.type ?: "none") }
+    var host by remember { mutableStateOf(saved?.host.orEmpty()) }
+    var port by remember { mutableStateOf(saved?.port?.takeIf { it > 0 }?.toString().orEmpty()) }
+    var user by remember { mutableStateOf(saved?.username.orEmpty()) }
+    var pass by remember { mutableStateOf(saved?.password.orEmpty()) }
+    var note by remember { mutableStateOf<String?>(null) }
+
+    Spacer(Modifier.height(8.dp))
+    Text(
+        "Proxy",
+        color = Overlay,
+        fontSize = 11.sp,
+        fontWeight = FontWeight.Bold,
+        modifier = Modifier.padding(start = 20.dp, bottom = 6.dp)
+    )
+    Card {
+        Row(modifier = Modifier.fillMaxWidth()) {
+            for (option in listOf("none" to "Off", "socks5" to "SOCKS5", "socks4" to "SOCKS4a")) {
+                val picked = type == option.first
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(end = 6.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (picked) Surface1 else Surface0)
+                        .clickable { type = option.first; note = null }
+                        .padding(vertical = 10.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        option.second,
+                        color = if (picked) Text0 else Overlay,
+                        fontSize = 13.sp,
+                        fontWeight = if (picked) FontWeight.Bold else FontWeight.Normal
+                    )
+                }
+            }
+        }
+
+        if (type != "none") {
+            Spacer(Modifier.height(12.dp))
+            Row(modifier = Modifier.fillMaxWidth()) {
+                SettingField(
+                    value = host,
+                    onChange = { host = it; note = null },
+                    hint = "Proxy host",
+                    modifier = Modifier.weight(2f).padding(end = 8.dp)
+                )
+                SettingField(
+                    value = port,
+                    onChange = { port = it.filter { c -> c.isDigit() }; note = null },
+                    hint = "Port",
+                    numeric = true,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+            Row(modifier = Modifier.fillMaxWidth()) {
+                SettingField(
+                    value = user,
+                    onChange = { user = it; note = null },
+                    hint = "Username (optional)",
+                    modifier = Modifier.weight(1f).padding(end = if (type == "socks5") 8.dp else 0.dp)
+                )
+                // SOCKS5 can carry a password (RFC 1929); SOCKS4a only a name
+                if (type == "socks5") {
+                    SettingField(
+                        value = pass,
+                        onChange = { pass = it; note = null },
+                        hint = "Password",
+                        secret = true,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+        }
+
+        Spacer(Modifier.height(12.dp))
+        Text(
+            note
+                ?: if (type == "none") "Connections go straight out from this phone."
+                else "Host names are resolved by the proxy, not here. Applies to every network on its next connection.",
+            color = if (note != null) Green else Subtext,
+            fontSize = 12.sp,
+            lineHeight = 17.sp
+        )
+
+        Spacer(Modifier.height(12.dp))
+        Button(
+            onClick = {
+                engine.saveProxy(
+                    Socks.Settings(
+                        type = type,
+                        host = host.trim(),
+                        port = port.toIntOrNull() ?: 0,
+                        username = user.trim(),
+                        password = pass
+                    )
+                )
+                note = if (type == "none") "Saved. Reconnect to stop using the proxy."
+                else "Saved. Networks you are already on stay where they are — reconnect to move them onto the proxy."
+            },
+            colors = ButtonDefaults.buttonColors(containerColor = Surface0, contentColor = Blue),
+            shape = RoundedCornerShape(8.dp)
+        ) {
+            Text("Save", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+        }
+    }
+}
+
+@Composable
+private fun SettingField(
+    value: String,
+    onChange: (String) -> Unit,
+    hint: String,
+    modifier: Modifier = Modifier,
+    numeric: Boolean = false,
+    secret: Boolean = false
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onChange,
+        singleLine = true,
+        placeholder = { Text(hint, color = Overlay, fontSize = 13.sp) },
+        textStyle = androidx.compose.ui.text.TextStyle(color = Text0, fontSize = 14.sp),
+        visualTransformation = if (secret) PasswordVisualTransformation() else VisualTransformation.None,
+        keyboardOptions = KeyboardOptions(
+            keyboardType = if (numeric) KeyboardType.Number else KeyboardType.Text
+        ),
+        shape = RoundedCornerShape(8.dp),
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedBorderColor = Blue,
+            unfocusedBorderColor = Surface1,
+            cursorColor = Blue
+        ),
+        modifier = modifier
+    )
 }
 
 @Composable

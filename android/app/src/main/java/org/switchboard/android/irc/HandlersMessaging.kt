@@ -316,6 +316,20 @@ internal object Whox {
 private val CTCP_ANSWERS = listOf("CLIENTINFO", "PING", "SOURCE", "TIME", "VERSION")
 
 /**
+ * What we say we are, when asked.
+ *
+ * Set once at startup from the packaged version, in the same shape the desktop
+ * answers with — "Switchboard <version> (<platform>)" — so the two do not
+ * describe the same client differently.
+ */
+private var appVersion = "Switchboard"
+
+/** Tell the protocol layer what to answer CTCP VERSION with */
+fun setAppVersion(version: String, platform: String) {
+    appVersion = "Switchboard $version ($platform)"
+}
+
+/**
  * Answer a CTCP question.
  *
  * Everything outside the list goes unanswered, which is the polite reading of
@@ -327,7 +341,7 @@ private fun answerCtcp(session: IrcSession, from: String, body: String) {
     val args = if (space == -1) "" else body.substring(space + 1)
 
     val reply = when (verb) {
-        "VERSION" -> "VERSION Switchboard for Android"
+        "VERSION" -> "VERSION $appVersion"
         "TIME" -> "TIME " + Instant.now().toString()
         "PING" -> "PING $args"
         "SOURCE" -> "SOURCE https://github.com/KaraZajac/switchboard"

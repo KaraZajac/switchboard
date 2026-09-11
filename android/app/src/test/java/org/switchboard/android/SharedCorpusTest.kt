@@ -3,6 +3,7 @@ package org.switchboard.android
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.boolean
@@ -25,6 +26,7 @@ import org.junit.Test
 import org.switchboard.android.irc.Casemap
 import org.switchboard.android.irc.ConnectionState
 import org.switchboard.android.irc.Irc
+import org.switchboard.android.irc.Socks
 import org.switchboard.android.vault.VaultEnvelope
 import org.switchboard.android.vault.VaultKdf
 import org.switchboard.android.vault.VaultPayload
@@ -877,6 +879,125 @@ class SharedCorpusTest {
                     c["keys"]!!.jsonArray.map { it.jsonPrimitive.content },
                     mapOfOrNull(c["published"]),
                     mapOfOrNull(c["next"])
+                )
+            )
+        }
+    }
+
+    // ── SOCKS, byte for byte ─────────────────────────────────────────
+
+    /**
+     * A proxy is bytes on a wire, and the two clients have to produce the same
+     * ones. A phone that greets a proxy slightly differently from the desktop
+     * is a phone that cannot reach a network the desktop can.
+     */
+    @Test
+    fun `speaks SOCKS the way the desktop speaks it`() {
+        val corpus = load("socks.json")
+
+        fun bytesOf(e: JsonElement?): ByteArray =
+            e!!.jsonArray.map { (it.jsonPrimitive.content.toInt() and 0xff).toByte() }.toByteArray()
+
+        fun expect(name: String, wanted: JsonElement?, got: ByteArray) =
+            assertEquals(name, bytesOf(wanted).toList(), got.toList())
+
+        for (case in corpus["greeting"]!!.jsonArray) {
+            val c = case.jsonObject
+            expect(
+                c["name"]!!.jsonPrimitive.content,
+                c["bytes"],
+                Socks.greeting(c["hasCredentials"]!!.jsonPrimitive.content == "true")
+            )
+        }
+
+        for (case in corpus["choice"]!!.jsonArray) {
+            val c = case.jsonObject
+            val wanted = c["method"]!!.let { if (it is JsonNull) null else it.jsonPrimitive.content.toInt() }
+            assertEquals(
+                c["name"]!!.jsonPrimitive.content,
+                wanted,
+                Socks.readChoice(bytesOf(c["bytes"]))
+            )
+        }
+
+        for (case in corpus["auth"]!!.jsonArray) {
+            val c = case.jsonObject
+            expect(
+                c["name"]!!.jsonPrimitive.content,
+                c["bytes"],
+                Socks.authRequest(
+                    c["username"]!!.jsonPrimitive.content,
+                    c["password"]!!.jsonPrimitive.content
+                )
+            )
+        }
+
+        for (case in corpus["authReply"]!!.jsonArray) {
+            val c = case.jsonObject
+            val wanted = c["ok"]!!.let { if (it is JsonNull) null else it.jsonPrimitive.content == "true" }
+            assertEquals(
+                c["name"]!!.jsonPrimitive.content,
+                wanted,
+                Socks.readAuthReply(bytesOf(c["bytes"]))
+            )
+        }
+
+        for (case in corpus["connect5"]!!.jsonArray) {
+            val c = case.jsonObject
+            expect(
+                c["name"]!!.jsonPrimitive.content,
+                c["bytes"],
+                Socks.connect5(
+                    c["host"]!!.jsonPrimitive.content,
+                    c["port"]!!.jsonPrimitive.content.toInt()
+                )
+            )
+        }
+
+        for (case in corpus["reply5"]!!.jsonArray) {
+            val c = case.jsonObject
+            val name = c["name"]!!.jsonPrimitive.content
+            val reply = Socks.readReply5(bytesOf(c["bytes"]))
+            val wanted = c["ok"]!!.let { if (it is JsonNull) null else it.jsonPrimitive.content == "true" }
+            assertEquals(name, wanted, reply.ok)
+            c["error"]?.let { assertEquals(name, it.jsonPrimitive.content, reply.error) }
+            c["length"]?.let { assertEquals(name, it.jsonPrimitive.content.toInt(), reply.length) }
+        }
+
+        for (case in corpus["connect4"]!!.jsonArray) {
+            val c = case.jsonObject
+            expect(
+                c["name"]!!.jsonPrimitive.content,
+                c["bytes"],
+                Socks.connect4(
+                    c["host"]!!.jsonPrimitive.content,
+                    c["port"]!!.jsonPrimitive.content.toInt(),
+                    c["username"]!!.jsonPrimitive.content
+                )
+            )
+        }
+
+        for (case in corpus["reply4"]!!.jsonArray) {
+            val c = case.jsonObject
+            val name = c["name"]!!.jsonPrimitive.content
+            val reply = Socks.readReply4(bytesOf(c["bytes"]))
+            val wanted = c["ok"]!!.let { if (it is JsonNull) null else it.jsonPrimitive.content == "true" }
+            assertEquals(name, wanted, reply.ok)
+            c["error"]?.let { assertEquals(name, it.jsonPrimitive.content, reply.error) }
+        }
+
+        for (case in corpus["inUse"]!!.jsonArray) {
+            val c = case.jsonObject
+            val p = c["proxy"]!!.jsonObject
+            assertEquals(
+                c["name"]!!.jsonPrimitive.content,
+                c["used"]!!.jsonPrimitive.content == "true",
+                Socks.inUse(
+                    Socks.Settings(
+                        type = p["type"]!!.jsonPrimitive.content,
+                        host = p["host"]!!.jsonPrimitive.content,
+                        port = p["port"]!!.jsonPrimitive.content.toInt()
+                    )
                 )
             )
         }

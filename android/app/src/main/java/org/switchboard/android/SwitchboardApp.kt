@@ -8,6 +8,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import org.switchboard.android.irc.Sts
+import org.switchboard.android.irc.setAppVersion
 import org.switchboard.android.irc.StsStore
 
 /**
@@ -39,6 +40,9 @@ class SwitchboardApp : Application(), ImageLoaderFactory {
         // loaded until later protects nothing on the connection that matters
         // most — the first one after a restart.
         Sts.useStore(StsStore(applicationContext))
+
+        // What a CTCP VERSION gets told, before anything can be asked
+        setAppVersion(BuildConfig.VERSION_NAME, "Android")
     }
 
     /**

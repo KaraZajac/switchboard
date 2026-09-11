@@ -29,6 +29,7 @@ import kotlinx.serialization.json.put
 import org.switchboard.android.irc.ChatHistory
 import org.switchboard.android.irc.IrcConnection
 import org.switchboard.android.irc.Profile
+import org.switchboard.android.irc.Socks
 import org.switchboard.android.irc.Reconnect
 import org.switchboard.android.pairing.DeviceIdentity
 import org.switchboard.android.irc.ServerConfig
@@ -968,7 +969,7 @@ class SwitchboardEngine(
         if (connections.containsKey(config.id)) return
         Log.i(TAG, "connecting to ${config.host}:${config.port} as ${config.nick}")
         seedServer(config)
-        val connection = IrcConnection(config, scope, { vault.defaultProfile() }) { channel, data ->
+        val connection = IrcConnection(config, scope, { vault.defaultProfile() }, { savedProxy() }) { channel, data ->
             store.handleEvent(channel, data)
 
             // Notifying was wired only to the desktop's relay, so a phone
@@ -1035,6 +1036,36 @@ class SwitchboardEngine(
 
     /** The server list out of the vault, whatever mode we are in */
     internal fun vaultServers(): List<ServerConfig> = vault.servers()
+
+    /**
+     * The proxy this phone dials through, if any.
+     *
+     * Kept on the device rather than in the shared config: a proxy describes
+     * where you are, not who you are, and the desktop's is almost never the
+     * one a phone on mobile data should use.
+     */
+    internal fun savedProxy(): Socks.Settings? {
+        val type = prefs.getString(PROXY_TYPE, "none").orEmpty()
+        if (type != "socks5" && type != "socks4") return null
+        return Socks.Settings(
+            type = type,
+            host = prefs.getString(PROXY_HOST, "").orEmpty(),
+            port = prefs.getInt(PROXY_PORT, 0),
+            username = prefs.getString(PROXY_USER, "").orEmpty(),
+            password = prefs.getString(PROXY_PASS, "").orEmpty()
+        )
+    }
+
+    /** Remember a proxy, for the next dial */
+    internal fun saveProxy(proxy: Socks.Settings) {
+        prefs.edit()
+            .putString(PROXY_TYPE, proxy.type)
+            .putString(PROXY_HOST, proxy.host)
+            .putInt(PROXY_PORT, proxy.port)
+            .putString(PROXY_USER, proxy.username)
+            .putString(PROXY_PASS, proxy.password)
+            .apply()
+    }
 
     /**
      * We changed the shared config ourselves.
@@ -1410,6 +1441,15 @@ class SwitchboardEngine(
 
         /** The shared setting both clients keep mutes in */
         const val MUTES_KEY = "mutes"
+
+        // Where this phone's proxy is kept. On the device, not in the shared
+        // config: a proxy describes where you are, and the desktop's is almost
+        // never the one a phone on mobile data should use.
+        const val PROXY_TYPE = "proxy.type"
+        const val PROXY_HOST = "proxy.host"
+        const val PROXY_PORT = "proxy.port"
+        const val PROXY_USER = "proxy.username"
+        const val PROXY_PASS = "proxy.password"
     }
 }
 

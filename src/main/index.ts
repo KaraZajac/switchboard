@@ -1,4 +1,7 @@
 import { app, BrowserWindow, Menu, Tray, session, shell, nativeImage } from 'electron'
+import { setAppVersion } from './irc/handlers/message'
+import { useNetworkSettings } from './irc/connection'
+import type { ProxySettings } from '@shared/socks'
 import { setNotifier } from './ipc/notify'
 import { join } from 'path'
 import { autoUpdater } from 'electron-updater'
@@ -258,6 +261,19 @@ setNotifier(sendToRenderer)
 let isQuitting = false
 
 app.whenReady().then(async () => {
+  // What a CTCP VERSION gets told, before anything can be asked
+  setAppVersion(app.getVersion(), process.platform)
+
+  // Where connections dial through, and what they will trust. Read on each
+  // dial rather than captured, so a proxy typed into settings applies to the
+  // next connection rather than the next launch. Machine-local on purpose:
+  // both of these describe where this computer is, not who you are, so
+  // neither travels to a paired phone.
+  useNetworkSettings(() => ({
+    proxy: getSetting<ProxySettings>('proxy') ?? null,
+    caPath: getSetting<string>('customCaPath') ?? null
+  }))
+
   // Initialize database
   try {
     await initDatabase()

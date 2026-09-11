@@ -1,0 +1,586 @@
+{
+  "$comment": "SOCKS, byte for byte. Read by tests/shared/socks.test.ts and the Android SharedCorpusTest. SOCKS5 is RFC 1928 and its authentication RFC 1929; SOCKS4a is the extension that added hostnames. Both clients have to produce identical bytes or one of them talks to a proxy the other cannot.",
+  "$greeting": "The opening hello. No authentication is always offered; a proxy wanting a password picks the other method.",
+  "greeting": [
+    {
+      "name": "no credentials offers only 'none'",
+      "hasCredentials": false,
+      "bytes": [
+        5,
+        1,
+        0
+      ]
+    },
+    {
+      "name": "credentials offer both, in preference order",
+      "hasCredentials": true,
+      "bytes": [
+        5,
+        2,
+        0,
+        2
+      ]
+    }
+  ],
+  "$choice": "Which method the proxy picked. Null means the two bytes have not both arrived.",
+  "choice": [
+    {
+      "name": "no authentication wanted",
+      "bytes": [
+        5,
+        0
+      ],
+      "method": 0
+    },
+    {
+      "name": "password wanted",
+      "bytes": [
+        5,
+        2
+      ],
+      "method": 2
+    },
+    {
+      "name": "nothing we offered is acceptable",
+      "bytes": [
+        5,
+        255
+      ],
+      "method": 255
+    },
+    {
+      "name": "one byte is not an answer yet",
+      "bytes": [
+        5
+      ],
+      "method": null
+    },
+    {
+      "name": "a version we do not speak is a refusal",
+      "bytes": [
+        4,
+        0
+      ],
+      "method": 255
+    }
+  ],
+  "$auth": "RFC 1929: username and password, each length-prefixed.",
+  "auth": [
+    {
+      "name": "a plain username and password",
+      "username": "kara",
+      "password": "hunter2",
+      "bytes": [
+        1,
+        4,
+        107,
+        97,
+        114,
+        97,
+        7,
+        104,
+        117,
+        110,
+        116,
+        101,
+        114,
+        50
+      ]
+    },
+    {
+      "name": "an empty password is still a length",
+      "username": "kara",
+      "password": "",
+      "bytes": [
+        1,
+        4,
+        107,
+        97,
+        114,
+        97,
+        0
+      ]
+    },
+    {
+      "name": "counted in bytes, not characters",
+      "username": "kára",
+      "password": "x",
+      "bytes": [
+        1,
+        5,
+        107,
+        195,
+        161,
+        114,
+        97,
+        1,
+        120
+      ]
+    }
+  ],
+  "$authReply": "Whether the password was accepted.",
+  "authReply": [
+    {
+      "name": "accepted",
+      "bytes": [
+        1,
+        0
+      ],
+      "ok": true
+    },
+    {
+      "name": "refused",
+      "bytes": [
+        1,
+        1
+      ],
+      "ok": false
+    },
+    {
+      "name": "not yet",
+      "bytes": [
+        1
+      ],
+      "ok": null
+    }
+  ],
+  "$connect5": "CONNECT, with the host as a name so the proxy resolves it rather than us.",
+  "connect5": [
+    {
+      "name": "a hostname and the usual TLS port",
+      "host": "irc.example.org",
+      "port": 6697,
+      "bytes": [
+        5,
+        1,
+        0,
+        3,
+        15,
+        105,
+        114,
+        99,
+        46,
+        101,
+        120,
+        97,
+        109,
+        112,
+        108,
+        101,
+        46,
+        111,
+        114,
+        103,
+        26,
+        41
+      ]
+    },
+    {
+      "name": "an onion address goes as a name like any other",
+      "host": "abc.onion",
+      "port": 6667,
+      "bytes": [
+        5,
+        1,
+        0,
+        3,
+        9,
+        97,
+        98,
+        99,
+        46,
+        111,
+        110,
+        105,
+        111,
+        110,
+        26,
+        11
+      ]
+    },
+    {
+      "name": "a literal address is still sent as a name",
+      "host": "127.0.0.1",
+      "port": 16667,
+      "bytes": [
+        5,
+        1,
+        0,
+        3,
+        9,
+        49,
+        50,
+        55,
+        46,
+        48,
+        46,
+        48,
+        46,
+        49,
+        65,
+        27
+      ]
+    }
+  ],
+  "$reply5": "The answer to CONNECT. Variable length, because it echoes a bound address — and the byte after it is already the IRC server talking.",
+  "reply5": [
+    {
+      "name": "granted, with an IPv4 bound address",
+      "bytes": [
+        5,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "ok": true,
+      "length": 10
+    },
+    {
+      "name": "granted, with an IPv6 bound address",
+      "bytes": [
+        5,
+        0,
+        0,
+        4,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "ok": true,
+      "length": 22
+    },
+    {
+      "name": "granted, with a name bound address",
+      "bytes": [
+        5,
+        0,
+        0,
+        3,
+        3,
+        97,
+        98,
+        99,
+        0,
+        0
+      ],
+      "ok": true,
+      "length": 10
+    },
+    {
+      "name": "refused by the proxy's own rules",
+      "bytes": [
+        5,
+        2,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "ok": false,
+      "error": "The proxy refused the connection by its own rules",
+      "length": 10
+    },
+    {
+      "name": "host unreachable from the proxy",
+      "bytes": [
+        5,
+        4,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "ok": false,
+      "error": "The host is unreachable from the proxy",
+      "length": 10
+    },
+    {
+      "name": "a code nobody defined still says something",
+      "bytes": [
+        5,
+        99,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "ok": false,
+      "error": "The proxy refused the connection (99)",
+      "length": 10
+    },
+    {
+      "name": "half a reply is not a refusal",
+      "bytes": [
+        5,
+        0,
+        0,
+        1,
+        0,
+        0
+      ],
+      "ok": null
+    },
+    {
+      "name": "and neither is four bytes",
+      "bytes": [
+        5,
+        0,
+        0,
+        1
+      ],
+      "ok": null
+    },
+    {
+      "name": "the wrong version is",
+      "bytes": [
+        4,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "ok": false,
+      "error": "Not a SOCKS5 proxy"
+    },
+    {
+      "name": "an address type we cannot read is",
+      "bytes": [
+        5,
+        0,
+        0,
+        9,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "ok": false,
+      "error": "The proxy answered with an address we cannot read"
+    }
+  ],
+  "$connect4": "SOCKS4a CONNECT. The 0.0.0.1 address is the flag that a name follows.",
+  "connect4": [
+    {
+      "name": "a hostname with no user name",
+      "host": "irc.example.org",
+      "port": 6667,
+      "username": "",
+      "bytes": [
+        4,
+        1,
+        26,
+        11,
+        0,
+        0,
+        0,
+        1,
+        0,
+        105,
+        114,
+        99,
+        46,
+        101,
+        120,
+        97,
+        109,
+        112,
+        108,
+        101,
+        46,
+        111,
+        114,
+        103,
+        0
+      ]
+    },
+    {
+      "name": "a user name goes before the host",
+      "host": "abc.org",
+      "port": 6697,
+      "username": "kara",
+      "bytes": [
+        4,
+        1,
+        26,
+        41,
+        0,
+        0,
+        0,
+        1,
+        107,
+        97,
+        114,
+        97,
+        0,
+        97,
+        98,
+        99,
+        46,
+        111,
+        114,
+        103,
+        0
+      ]
+    }
+  ],
+  "$reply4": "The answer to a SOCKS4 CONNECT: always eight bytes.",
+  "reply4": [
+    {
+      "name": "granted",
+      "bytes": [
+        0,
+        90,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "ok": true,
+      "length": 8
+    },
+    {
+      "name": "refused",
+      "bytes": [
+        0,
+        91,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "ok": false,
+      "error": "The proxy refused the connection",
+      "length": 8
+    },
+    {
+      "name": "no identd",
+      "bytes": [
+        0,
+        92,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "ok": false,
+      "error": "The proxy could not reach an identd on this machine",
+      "length": 8
+    },
+    {
+      "name": "seven bytes is not an answer",
+      "bytes": [
+        0,
+        90,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "ok": null
+    }
+  ],
+  "$inUse": "Whether settings name a proxy worth dialling through.",
+  "inUse": [
+    {
+      "name": "none is not a proxy",
+      "proxy": {
+        "type": "none",
+        "host": "localhost",
+        "port": "9050"
+      },
+      "used": false
+    },
+    {
+      "name": "a socks5 proxy with a host and port",
+      "proxy": {
+        "type": "socks5",
+        "host": "localhost",
+        "port": "9050"
+      },
+      "used": true
+    },
+    {
+      "name": "a socks4 proxy with a host and port",
+      "proxy": {
+        "type": "socks4",
+        "host": "localhost",
+        "port": "1080"
+      },
+      "used": true
+    },
+    {
+      "name": "a type with no host is a half-filled form",
+      "proxy": {
+        "type": "socks5",
+        "host": "",
+        "port": "9050"
+      },
+      "used": false
+    },
+    {
+      "name": "and a type with no port is too",
+      "proxy": {
+        "type": "socks5",
+        "host": "localhost",
+        "port": "0"
+      },
+      "used": false
+    },
+    {
+      "name": "whitespace is not a host",
+      "proxy": {
+        "type": "socks5",
+        "host": "   ",
+        "port": "9050"
+      },
+      "used": false
+    }
+  ]
+}

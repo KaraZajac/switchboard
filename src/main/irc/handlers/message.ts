@@ -3,13 +3,25 @@ import { operFrom, relayedBy } from '@shared/tags'
 import { isServerSource } from '@shared/source'
 import { statusTarget } from '@shared/isupport'
 
-/** App name and version for CTCP VERSION replies */
-const APP_VERSION = 'Switchboard IRC Client 1.0'
+/**
+ * What we say we are, when asked.
+ *
+ * Set once at startup from the packaged version. Not read from `electron`
+ * here, because these handlers are exercised in plain Node — and the string
+ * was hardcoded as "1.0" for long enough that every CTCP VERSION reply this
+ * client has ever sent named a version it has not been since.
+ */
+let appVersion = 'Switchboard'
+
+/** Tell the protocol layer what to answer CTCP VERSION with */
+export function setAppVersion(version: string, platform: string): void {
+  appVersion = `Switchboard ${version} (${platform})`
+}
 
 /**
  * What we answer, and what we say we answer.
  *
- * The same four as the phone, with the same wording, so a person who
+ * The same five as the phone, with the same wording, so a person who
  * CTCP-VERSIONs someone running Switchboard gets the same reply whichever
  * device they happen to be holding. CLIENTINFO is how the convention says to
  * ask what the rest of the list is, so it names them rather than being a
@@ -20,7 +32,7 @@ const CTCP_ANSWERS = ['CLIENTINFO', 'PING', 'SOURCE', 'TIME', 'VERSION']
 function ctcpAnswer(verb: string, args: string): string | null {
   switch (verb) {
     case 'VERSION':
-      return `VERSION ${APP_VERSION}`
+      return `VERSION ${appVersion}`
     case 'TIME':
       return `TIME ${new Date().toISOString()}`
     case 'PING':
