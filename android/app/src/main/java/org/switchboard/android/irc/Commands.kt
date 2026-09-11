@@ -269,6 +269,18 @@ object Commands {
                 }
             }
 
+            /**
+             * Send text as a message, whatever it starts with.
+             *
+             * What makes an alias able to produce a line beginning with a
+             * slash, and the reason `//` exists as an escape in the first
+             * place.
+             */
+            "say" -> {
+                if (rest.isEmpty()) Result(true, error = "/say needs something to say")
+                else Result(false, message = rest)
+            }
+
             "raw", "quote" -> {
                 if (rest.isEmpty()) Result(true, error = "Usage: /raw <IRC line>")
                 else {

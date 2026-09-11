@@ -92,7 +92,7 @@ describe('which settings are shared at all', () => {
     // And the ignore list: silencing somebody at the desk and being messaged
     // by them in your pocket is not a working ignore list.
     expect([...SHARED_SETTINGS]).toEqual([
-      'theme', 'mutes', 'profile', 'ignores', 'highlights'
+      'theme', 'mutes', 'profile', 'ignores', 'highlights', 'aliases'
     ])
     expect(SHARED_SETTINGS as readonly string[]).not.toContain('proxy')
     expect(SHARED_SETTINGS as readonly string[]).not.toContain('customCaPath')

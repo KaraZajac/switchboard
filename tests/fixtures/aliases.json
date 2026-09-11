@@ -1,0 +1,200 @@
+{
+  "$comment": "Commands you make up yourself. Read by tests/shared/aliases.test.ts and the Android SharedCorpusTest. Deliberately text substitution rather than a scripting language: it covers what people actually write and cannot loop, read a file, or be a security question.",
+  "aliases": [
+    {
+      "name": "j",
+      "expansion": "/join $1"
+    },
+    {
+      "name": "wii",
+      "expansion": "/whois $1 $1"
+    },
+    {
+      "name": "shrug",
+      "expansion": "¯\\_(ツ)_/¯"
+    },
+    {
+      "name": "away2",
+      "expansion": "/away $*"
+    },
+    {
+      "name": "greet",
+      "expansion": "/msg $1 hello\n/msg $1 how are you"
+    },
+    {
+      "name": "rest",
+      "expansion": "/say $2-"
+    },
+    {
+      "name": "loop",
+      "expansion": "/loop"
+    },
+    {
+      "name": "ping",
+      "expansion": "/pong"
+    },
+    {
+      "name": "pong",
+      "expansion": "/ping"
+    },
+    {
+      "name": "price",
+      "expansion": "it costs $$5"
+    }
+  ],
+  "$cases": "What a typed line becomes. `error` means it was refused rather than run.",
+  "cases": [
+    {
+      "name": "a simple substitution",
+      "input": "/j #test",
+      "lines": [
+        "/join #test"
+      ]
+    },
+    {
+      "name": "the same word twice",
+      "input": "/wii kara",
+      "lines": [
+        "/whois kara kara"
+      ]
+    },
+    {
+      "name": "an alias that is not a command sends text",
+      "input": "/shrug",
+      "lines": [
+        "¯\\_(ツ)_/¯"
+      ]
+    },
+    {
+      "name": "everything after the name",
+      "input": "/away2 back in ten",
+      "lines": [
+        "/away back in ten"
+      ]
+    },
+    {
+      "name": "from the second word onwards",
+      "input": "/rest one two three",
+      "lines": [
+        "/say two three"
+      ]
+    },
+    {
+      "name": "several lines from one alias",
+      "input": "/greet kara",
+      "lines": [
+        "/msg kara hello",
+        "/msg kara how are you"
+      ]
+    },
+    {
+      "name": "a missing parameter becomes nothing, not a literal",
+      "input": "/j",
+      "lines": [
+        "/join"
+      ]
+    },
+    {
+      "name": "a doubled dollar is one dollar",
+      "input": "/price",
+      "lines": [
+        "it costs $5"
+      ]
+    },
+    {
+      "name": "an unknown command is left alone",
+      "input": "/quit bye",
+      "lines": [
+        "/quit bye"
+      ]
+    },
+    {
+      "name": "ordinary text is left alone",
+      "input": "hello there",
+      "lines": [
+        "hello there"
+      ]
+    },
+    {
+      "name": "an escaped slash is left alone",
+      "input": "//j #test",
+      "lines": [
+        "//j #test"
+      ]
+    },
+    {
+      "name": "the name is matched case-insensitively",
+      "input": "/J #test",
+      "lines": [
+        "/join #test"
+      ]
+    },
+    {
+      "name": "an alias that calls itself is refused",
+      "input": "/loop",
+      "error": "That alias expands into itself"
+    },
+    {
+      "name": "and so is a ring of two",
+      "input": "/ping",
+      "error": "That alias expands into itself"
+    }
+  ],
+  "$perform": "The lines to send when a connection is ready. Blank lines and comments are dropped so the box can be annotated.",
+  "perform": [
+    {
+      "name": "one command",
+      "script": "/msg NickServ IDENTIFY hunter2",
+      "lines": [
+        "/msg NickServ IDENTIFY hunter2"
+      ]
+    },
+    {
+      "name": "several, in order",
+      "script": "/join #one\n/join #two",
+      "lines": [
+        "/join #one",
+        "/join #two"
+      ]
+    },
+    {
+      "name": "raw IRC without a slash",
+      "script": "MODE kara +i",
+      "lines": [
+        "MODE kara +i"
+      ]
+    },
+    {
+      "name": "blank lines are dropped",
+      "script": "/join #one\n\n\n/join #two",
+      "lines": [
+        "/join #one",
+        "/join #two"
+      ]
+    },
+    {
+      "name": "comments are dropped",
+      "script": "# log in first\n/msg NickServ IDENTIFY x",
+      "lines": [
+        "/msg NickServ IDENTIFY x"
+      ]
+    },
+    {
+      "name": "whitespace is trimmed",
+      "script": "  /join #one  ",
+      "lines": [
+        "/join #one"
+      ]
+    },
+    {
+      "name": "nothing is nothing",
+      "script": "",
+      "lines": []
+    },
+    {
+      "name": "only comments is nothing",
+      "script": "# nothing to do",
+      "lines": []
+    }
+  ]
+}

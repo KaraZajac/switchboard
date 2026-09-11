@@ -26,6 +26,7 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
+import org.switchboard.android.irc.Aliases
 import org.switchboard.android.irc.ChatHistory
 import org.switchboard.android.irc.IrcConnection
 import org.switchboard.android.irc.Profile
@@ -623,6 +624,7 @@ class SwitchboardEngine(
         (vault.setting(HIGHLIGHTS_KEY) as? JsonArray)?.let { array ->
             store.highlightWords = array.mapNotNull { (it as? JsonPrimitive)?.content }
         }
+        (vault.setting(ALIASES_KEY) as? JsonArray)?.let { aliases = readAliases(it) }
 
         for (server in vault.servers()) {
             val watched = vault.watched(server.id)
@@ -926,6 +928,42 @@ class SwitchboardEngine(
         vault.setSharedSetting(HIGHLIGHTS_KEY, encoded)
         vaultVersion = vault.version
         scope.launch { ask("settings:set", JsonPrimitive(HIGHLIGHTS_KEY), encoded) }
+    }
+
+    /**
+     * Commands somebody made up themselves.
+     *
+     * Shared with the desktop: an alias that works at the desk and not in your
+     * pocket is two clients, and the whole point of one is that it is shorter
+     * than what it stands for.
+     */
+    @Volatile
+    private var aliases: List<Aliases.Alias> = emptyList()
+
+    internal fun savedAliases(): List<Aliases.Alias> = aliases
+
+    /** Change them, and seal them for the other device */
+    fun setAliases(next: List<Aliases.Alias>) {
+        aliases = next
+        val encoded = JsonArray(
+            next.map {
+                buildJsonObject {
+                    put("name", it.name)
+                    put("expansion", it.expansion)
+                }
+            }
+        )
+        vault.setSharedSetting(ALIASES_KEY, encoded)
+        vaultVersion = vault.version
+        scope.launch { ask("settings:set", JsonPrimitive(ALIASES_KEY), encoded) }
+    }
+
+    private fun readAliases(array: JsonArray): List<Aliases.Alias> = array.mapNotNull { element ->
+        val row = element as? JsonObject ?: return@mapNotNull null
+        Aliases.Alias(
+            name = (row["name"] as? JsonPrimitive)?.content ?: return@mapNotNull null,
+            expansion = (row["expansion"] as? JsonPrimitive)?.content ?: return@mapNotNull null
+        )
     }
 
     /** Stop hearing from whoever matches this mask */
@@ -1595,6 +1633,9 @@ class SwitchboardEngine(
 
         /** And the words that ring the same bell your nick does */
         const val HIGHLIGHTS_KEY = "highlights"
+
+        /** And the commands somebody made up themselves */
+        const val ALIASES_KEY = "aliases"
 
         // Where this phone's proxy is kept. On the device, not in the shared
         // config: a proxy describes where you are, and the desktop's is almost

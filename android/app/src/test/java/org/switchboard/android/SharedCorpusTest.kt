@@ -23,6 +23,7 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.switchboard.android.irc.Aliases
 import org.switchboard.android.irc.Casemap
 import org.switchboard.android.irc.ConnectionState
 import org.switchboard.android.irc.Formatter
@@ -882,6 +883,53 @@ class SharedCorpusTest {
                     mapOfOrNull(c["published"]),
                     mapOfOrNull(c["next"])
                 )
+            )
+        }
+    }
+
+    // ── commands you make up yourself ────────────────────────────────
+
+    /**
+     * An alias that means one thing at the desk and another in your pocket is
+     * two clients — and the depth limit in particular has to match, because
+     * without it one of them hangs on a line the other refuses.
+     */
+    @Test
+    fun `expands aliases the way the desktop expands them`() {
+        val corpus = load("aliases.json")
+        val aliases = corpus["aliases"]!!.jsonArray.map {
+            val o = it.jsonObject
+            Aliases.Alias(
+                o["name"]!!.jsonPrimitive.content,
+                o["expansion"]!!.jsonPrimitive.content
+            )
+        }
+
+        for (case in corpus["cases"]!!.jsonArray) {
+            val c = case.jsonObject
+            val name = c["name"]!!.jsonPrimitive.content
+            val out = Aliases.expand(c["input"]!!.jsonPrimitive.content, aliases)
+
+            val error = c["error"]?.jsonPrimitive?.content
+            if (error != null) {
+                assertEquals(name, error, out.error)
+                assertEquals(name, emptyList<String>(), out.lines)
+            } else {
+                assertEquals(name, null, out.error)
+                assertEquals(
+                    name,
+                    c["lines"]!!.jsonArray.map { it.jsonPrimitive.content },
+                    out.lines
+                )
+            }
+        }
+
+        for (case in corpus["perform"]!!.jsonArray) {
+            val c = case.jsonObject
+            assertEquals(
+                c["name"]!!.jsonPrimitive.content,
+                c["lines"]!!.jsonArray.map { it.jsonPrimitive.content },
+                Aliases.performLines(c["script"]!!.jsonPrimitive.content)
             )
         }
     }

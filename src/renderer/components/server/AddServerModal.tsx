@@ -41,6 +41,7 @@ export function AddServerModal({ editServer }: AddServerModalProps = {}) {
   const [autoConnect, setAutoConnect] = useState(editServer?.autoConnect ?? false)
   const [autoJoin, setAutoJoin] = useState(editServer?.autoJoin?.join(', ') ?? '')
   const [identifyCommand, setIdentifyCommand] = useState(editServer?.identifyCommand ?? '')
+  const [performOnConnect, setPerformOnConnect] = useState(editServer?.performOnConnect ?? '')
   const [clientCert, setClientCert] = useState(editServer?.clientCert ?? '')
   const [websocketUrl, setWebsocketUrl] = useState(editServer?.websocketUrl ?? '')
   const [showAdvanced, setShowAdvanced] = useState(isEdit)
@@ -91,6 +92,7 @@ export function AddServerModal({ editServer }: AddServerModalProps = {}) {
         .map((ch) => ch.trim())
         .filter(Boolean),
       identifyCommand: identifyCommand.trim() || null,
+      performOnConnect: performOnConnect.trim() || null,
       clientCert: clientCert.trim() || null,
       websocketUrl: websocketUrl.trim() || null
     }
@@ -337,6 +339,28 @@ export function AddServerModal({ editServer }: AddServerModalProps = {}) {
               />
               <p className="mt-1 text-xs text-gray-500">
                 Runs after connecting. For servers that don't support SASL.
+              </p>
+            </div>
+
+            {/*
+              The rest of what to do on arrival. Separate from the identify
+              command because that one is a credential — encrypted, and
+              stripped on the way to a paired device — and these are not.
+            */}
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-300">
+                On connect
+              </label>
+              <textarea
+                value={performOnConnect}
+                onChange={(e) => setPerformOnConnect(e.target.value)}
+                rows={3}
+                placeholder={'/join #channel\nMODE $nick +i\n# lines starting with # are ignored'}
+                className="w-full resize-y rounded bg-gray-900 px-3 py-2 font-mono text-sm text-gray-100 outline-none ring-1 ring-gray-700 focus:ring-indigo-500"
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                One per line, once this network is ready. A leading slash is a command; anything
+                else is sent as raw IRC.
               </p>
             </div>
 

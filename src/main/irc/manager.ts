@@ -18,6 +18,8 @@ import { METADATA_KEYS, type UserMetadata } from '@shared/types/metadata'
 import { v4 as uuid } from 'uuid'
 import { friendListKind, friendListLines, friendListStatusLine } from '@shared/friends'
 import { resolveProfile, keysToClear } from '@shared/profile'
+import { performLines } from '@shared/aliases'
+import { runCommand } from './commands'
 import { isIgnored, type IgnoreEntry, type IgnoreScope } from '@shared/ignore'
 import { getSetting } from '../storage/models/settings'
 
@@ -257,6 +259,41 @@ export class IRCManager {
    * or reloaded and so missed the events that would have built this state.
    */
   /**
+   * Whatever this network was told to run on connect.
+   *
+   * A leading slash means a command and anything else is raw IRC, which is
+   * what every other client's "perform" does. After the profile and the friend
+   * list rather than before, so a `/join` here lands with everything else
+   * already in place.
+   *
+   * Not redacted out of the raw log by accident: `redactLine` already blanks a
+   * NickServ password wherever it appears, and this is the most likely place
+   * for one to be.
+   */
+  private runPerform(client: IRCClient, serverId: string): void {
+    const config = getServer(serverId)
+    const lines = performLines(config?.performOnConnect)
+    if (lines.length === 0) return
+
+    for (const line of lines) {
+      if (line.startsWith('/')) {
+        // Through the ordinary command path, so `/msg` means what it means
+        // everywhere else — including keeping a password out of a channel.
+        const result = runCommand(client, '*', line)
+        if (result.error) {
+          client.events.emit('error', {
+            code: 'PERFORM',
+            command: line.split(' ')[0],
+            message: result.error
+          })
+        }
+        continue
+      }
+      client.connection.sendRaw(line)
+    }
+  }
+
+  /**
    * Go back to a channel we were kicked out of.
    *
    * Off unless somebody turns it on, and it should be: rejoining the instant
@@ -492,6 +529,8 @@ export class IRCManager {
         // Request current status
         client.connection.sendRaw(friendListStatusLine(kind))
       }
+
+      this.runPerform(client, serverId)
     })
 
     client.events.on('disconnected', (reason) => {

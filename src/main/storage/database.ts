@@ -365,6 +365,15 @@ function runMigrations(): void {
     db.run('ALTER TABLE servers ADD COLUMN client_cert TEXT DEFAULT NULL')
     db.run("INSERT INTO migrations (name) VALUES ('013_client_cert')")
   }
+
+  // Lines to send once a network is ready. `identifyCommand` is one such line
+  // and has been there all along, but it is exactly one, it is a credential,
+  // and it is stripped on the way to a paired device — none of which suits
+  // "join these two channels and set +i".
+  if (!applied.has('014_perform_on_connect')) {
+    db.run('ALTER TABLE servers ADD COLUMN perform_on_connect TEXT DEFAULT NULL')
+    db.run("INSERT INTO migrations (name) VALUES ('014_perform_on_connect')")
+  }
 }
 
 /** Whether the search index exists — it does not on a build without FTS5 */

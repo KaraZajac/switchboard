@@ -16,6 +16,7 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
+import org.switchboard.android.irc.Aliases
 import org.switchboard.android.irc.Commands
 import org.switchboard.android.irc.ServerConfig
 import java.time.Instant
@@ -53,12 +54,23 @@ import org.switchboard.android.irc.dialChanged
  */
 fun SwitchboardEngine.say(serverId: String, target: String, text: String) =
     act(serverId, "message:send", JsonPrimitive(target), JsonPrimitive(text)) { connection ->
-        val command = Commands.run(connection, target, text)
-        when {
-            !command.handled -> connection.say(target, command.message ?: text)
-            // No subject: the message already names the command, and the
-            // banner would otherwise read "Unknown command: /x — /x".
-            command.error != null -> store.noteRefusal(command.error)
+        // Aliases first, because one may turn a line into several — and each
+        // still goes through the ordinary command path, or `/j` would reach
+        // the channel as text.
+        val expanded = Aliases.expand(text, savedAliases())
+        if (expanded.error != null) {
+            store.noteRefusal(expanded.error)
+            return@act
+        }
+
+        for (line in expanded.lines) {
+            val command = Commands.run(connection, target, line)
+            when {
+                !command.handled -> connection.say(target, command.message ?: line)
+                // No subject: the message already names the command, and the
+                // banner would otherwise read "Unknown command: /x — /x".
+                command.error != null -> store.noteRefusal(command.error)
+            }
         }
     }
 

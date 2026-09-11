@@ -936,7 +936,15 @@ data class ServerConfig(
      * A credential. It belongs to this phone: the desktop never sends its own,
      * and this one never goes the other way either.
      */
-    val clientCert: String? = null
+    val clientCert: String? = null,
+    /**
+     * Lines to send once this network is ready, one per line.
+     *
+     * A leading slash means a command and anything else is raw IRC, which is
+     * what every other client's "perform" does. Separate from
+     * [identifyCommand] because that one is a credential and these are not.
+     */
+    val performOnConnect: String? = null
 ) {
     /** Falls back to the nick, the way every client does */
     val ident: String get() = username.ifBlank { nick }

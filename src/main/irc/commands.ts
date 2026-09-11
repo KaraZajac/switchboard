@@ -65,6 +65,17 @@ export function runCommand(client: IRCClient, target: string, text: string): Com
   }
 
   switch (name) {
+    /**
+     * Send text as a message, whatever it starts with.
+     *
+     * What makes an alias able to produce a line beginning with a slash, and
+     * the reason `//` exists as an escape in the first place.
+     */
+    case 'say': {
+      if (!rest) return { handled: true, error: '/say needs something to say' }
+      return { handled: false, message: rest }
+    }
+
     case 'me': {
       if (!rest) return { handled: true, error: '/me needs something to do' }
       client.action(target, rest)

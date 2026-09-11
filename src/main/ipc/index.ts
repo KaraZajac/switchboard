@@ -9,6 +9,8 @@ import http from 'node:http'
 import { autoUpdater } from 'electron-updater'
 import { ircManager } from '../irc/manager'
 import { runCommand } from '../irc/commands'
+import { expandAliases, type Alias } from '@shared/aliases'
+import type { IRCClient } from '../irc/client'
 import {
   getAllServers,
   getServer,
@@ -31,6 +33,9 @@ const DEFAULT_PROFILE = 'profile'
 
 /** Where the ignore list lives, shared between the two devices */
 const IGNORE_LIST = 'ignores'
+
+/** Where the commands somebody made up themselves are kept */
+const ALIASES = 'aliases'
 import { resolveProfile, overrideFrom } from '@shared/profile'
 import {
   toMask,
@@ -261,6 +266,38 @@ export function registerIPCHandlers(): void {
     const client = ircManager.getClient(serverId)
     if (!client) throw new Error('Not connected')
 
+    // Aliases first, because an alias may turn one line into several — and
+    // each of those still has to go through the ordinary command path, or
+    // `/j` would reach the channel as text.
+    const expanded = expandAliases(text, getSetting<Alias[]>(ALIASES) ?? [])
+    if (expanded.error) {
+      client.events.emit('error', {
+        code: 'ALIAS',
+        command: text.split(' ')[0],
+        message: expanded.error
+      })
+      return
+    }
+
+    // More than one line means the alias produced them; run them in order and
+    // stop at the first that fails, the way a script would.
+    if (expanded.lines.length > 1 || expanded.lines[0] !== text) {
+      for (const line of expanded.lines) {
+        await sendOne(client, serverId, channel, line)
+      }
+      return
+    }
+
+    await sendOne(client, serverId, channel, text)
+  })
+
+  /** One line, after aliases: a command if it is one, a message otherwise */
+  async function sendOne(
+    client: IRCClient,
+    serverId: string,
+    channel: string,
+    text: string
+  ): Promise<void> {
     // Slash commands run instead of being sent — an unrecognised one must never
     // reach the channel as a message.
     const command = runCommand(client, channel, text)
@@ -288,7 +325,7 @@ export function registerIPCHandlers(): void {
     // message that had to be split, rather than two messages.
     const { sendMultilineMessage } = await import('../irc/features/multiline')
     sendMultilineMessage(client, channel, body.split('\n'))
-  })
+  }
 
   handle('message:reply', async (_event, serverId: string, channel: string, text: string, replyTo: string) => {
     const client = ircManager.getClient(serverId)

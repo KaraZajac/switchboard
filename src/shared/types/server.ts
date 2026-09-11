@@ -19,6 +19,15 @@ export interface ServerConfig {
   autoJoin: string[]
   /** Command to run after connecting, e.g. "/msg NickServ IDENTIFY user pass" */
   identifyCommand: string | null
+  /**
+   * Lines to send once this network is ready, one per line.
+   *
+   * A leading slash means a command and anything else is raw IRC, which is
+   * what every other client's "perform" does. Separate from `identifyCommand`
+   * because that one is a credential — encrypted, and stripped on the way to a
+   * paired device — and these are not.
+   */
+  performOnConnect: string | null
   sortOrder: number
   /** WebSocket URL (ws:// or wss://) — if set, connect via WebSocket instead of TCP */
   websocketUrl: string | null

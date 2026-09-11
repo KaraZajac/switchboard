@@ -255,6 +255,21 @@ internal fun registerRegistrationHandlers() {
         // and anything sent between comes back as 451 and is lost.
         Metadata.publishProfile(session)
         for (channel in session.config.autoJoin) session.send("JOIN", channel)
+
+        // Then whatever this network was told to run. After the joins rather
+        // than before, so a `/mode` here lands with everything else in place.
+        // A leading slash is a command; anything else is raw IRC.
+        for (line in Aliases.performLines(session.config.performOnConnect)) {
+            if (line.startsWith("/")) {
+                // Through the ordinary command path, so `/msg` means what it
+                // means everywhere else — including keeping a password out of
+                // a channel.
+                (session as? IrcCommandTarget)?.let { Commands.run(it, "*", line) }
+                    ?: session.sendRaw(line.removePrefix("/"))
+            } else {
+                session.sendRaw(line)
+            }
+        }
     }
 
     Handlers.on("002") { session, message -> session.state.serverName = message.prefix.orEmpty() }

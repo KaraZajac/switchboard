@@ -98,6 +98,7 @@ export function updateServer(id: string, updates: Partial<ServerConfig>): void {
   if (updates.sortOrder !== undefined) { fields.push('sort_order = ?'); values.push(updates.sortOrder) }
   if (updates.websocketUrl !== undefined) { fields.push('websocket_url = ?'); values.push(updates.websocketUrl) }
   if (updates.identifyCommand !== undefined) { fields.push('identify_command = ?'); values.push(encryptSecret(updates.identifyCommand)) }
+  if (updates.performOnConnect !== undefined) { fields.push('perform_on_connect = ?'); values.push(updates.performOnConnect) }
   if (updates.avatarUrl !== undefined) { fields.push('avatar_url = ?'); values.push(updates.avatarUrl) }
   if (updates.preAwayMessage !== undefined) { fields.push('pre_away_message = ?'); values.push(updates.preAwayMessage) }
   if (updates.profile !== undefined) { fields.push('profile_metadata = ?'); values.push(JSON.stringify(updates.profile)) }
@@ -195,8 +196,9 @@ function rowToConfig(row: unknown[]): ServerConfig {
     avatarUrl: (row[19] as string) || null,
     preAwayMessage: (row[20] as string) || null,
     profile: parseProfile(row[21] as string | null),
-    // Added last, by migration 013, so it is the last column SELECT * returns
-    clientCert: decryptSecret(row[22] as string | null)
+    clientCert: decryptSecret(row[22] as string | null),
+    // Added last, by migration 014, so it is the last column SELECT * returns
+    performOnConnect: (row[23] as string) || null
   }
 }
 
@@ -222,7 +224,8 @@ function objectToConfig(row: Record<string, unknown>): ServerConfig {
     avatarUrl: (row['avatar_url'] as string) || null,
     preAwayMessage: (row['pre_away_message'] as string) || null,
     profile: parseProfile(row['profile_metadata'] as string | null),
-    clientCert: decryptSecret(row['client_cert'] as string | null)
+    clientCert: decryptSecret(row['client_cert'] as string | null),
+    performOnConnect: (row['perform_on_connect'] as string) || null
   }
 }
 

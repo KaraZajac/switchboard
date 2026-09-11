@@ -6,14 +6,16 @@ import type { Theme } from '../../stores/uiStore'
 import { useServerStore } from '../../stores/serverStore'
 import type { StorageProtection } from '@shared/types/ipc'
 import { toMask, DEFAULT_SCOPE, EVERYWHERE, type IgnoreEntry, type IgnoreScope } from '@shared/ignore'
+import { validAliasName, type Alias } from '@shared/aliases'
 
-type Tab = 'servers' | 'appearance' | 'notifications' | 'ignored' | 'devices' | 'network' | 'shortcuts'
+type Tab = 'servers' | 'appearance' | 'notifications' | 'ignored' | 'aliases' | 'devices' | 'network' | 'shortcuts'
 
 const TABS: { key: Tab; label: string }[] = [
   { key: 'servers', label: 'Servers' },
   { key: 'appearance', label: 'Appearance' },
   { key: 'notifications', label: 'Notifications' },
   { key: 'ignored', label: 'Ignored' },
+  { key: 'aliases', label: 'Aliases' },
   { key: 'devices', label: 'Devices' },
   { key: 'network', label: 'Network' },
   { key: 'shortcuts', label: 'Shortcuts' }
@@ -51,6 +53,7 @@ export function SettingsModal() {
           {activeTab === 'appearance' && <AppearanceTab />}
           {activeTab === 'notifications' && <NotificationsTab />}
           {activeTab === 'ignored' && <IgnoredTab />}
+          {activeTab === 'aliases' && <AliasesTab />}
           {activeTab === 'devices' && <DevicesTab />}
           {activeTab === 'network' && <NetworkTab />}
           {activeTab === 'shortcuts' && <ShortcutsTab />}
@@ -811,6 +814,122 @@ function IgnoredTab() {
                     </label>
                   ))}
                 </div>
+              </div>
+            ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+
+/**
+ * Commands you make up yourself.
+ *
+ * Deliberately text substitution rather than a scripting language: it covers
+ * what people actually write and cannot loop, read a file, or be a security
+ * question. An alias that calls itself is refused rather than run, because a
+ * client that hangs on something the user typed is worse than one that says no.
+ */
+function AliasesTab() {
+  const [aliases, setAliases] = useState<Alias[]>([])
+  const [name, setName] = useState('')
+  const [expansion, setExpansion] = useState('')
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    void window.switchboard.invoke('settings:get', 'aliases').then((value) => {
+      if (Array.isArray(value)) setAliases(value as Alias[])
+    })
+  }, [])
+
+  const save = async (next: Alias[]) => {
+    setAliases(next)
+    await window.switchboard.invoke('settings:set', 'aliases', next)
+  }
+
+  const add = async () => {
+    setError(null)
+    const wanted = name.trim().replace(/^\//, '')
+    if (!validAliasName(wanted)) {
+      setError('A name can only be letters, digits, dashes and underscores.')
+      return
+    }
+    if (!expansion.trim()) {
+      setError('An alias needs something to expand into.')
+      return
+    }
+    await save([
+      ...aliases.filter((one) => one.name.toLowerCase() !== wanted.toLowerCase()),
+      { name: wanted, expansion: expansion.trim() }
+    ])
+    setName('')
+    setExpansion('')
+  }
+
+  return (
+    <div className="space-y-4">
+      <h3 className="text-sm font-semibold text-gray-300">Aliases</h3>
+      <p className="text-xs leading-relaxed text-gray-500">
+        A command of your own. <span className="font-mono">$1</span> is the first word after it,
+        <span className="font-mono"> $*</span> is all of them, <span className="font-mono">$2-</span>
+        {' '}is the second onwards. Several lines run in order. One alias may use another, but not
+        itself.
+      </p>
+
+      <div className="space-y-2">
+        <div className="flex gap-2">
+          <span className="py-2 text-sm text-gray-500">/</span>
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="j"
+            className="w-32 rounded bg-gray-900 px-3 py-2 font-mono text-sm text-gray-100 outline-none ring-1 ring-gray-700 focus:ring-indigo-500"
+          />
+          <input
+            type="text"
+            value={expansion}
+            onChange={(e) => setExpansion(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') void add()
+            }}
+            placeholder="/join $1"
+            className="flex-1 rounded bg-gray-900 px-3 py-2 font-mono text-sm text-gray-100 outline-none ring-1 ring-gray-700 focus:ring-indigo-500"
+          />
+          <button
+            onClick={() => void add()}
+            className="rounded bg-indigo-500 px-3 py-2 text-sm text-white hover:bg-indigo-600"
+          >
+            Add
+          </button>
+        </div>
+        {error && <div className="rounded bg-red-900/50 px-2 py-1.5 text-xs text-red-300">{error}</div>}
+      </div>
+
+      {aliases.length === 0 ? (
+        <p className="text-sm text-gray-500">None yet.</p>
+      ) : (
+        <div className="space-y-1">
+          {[...aliases]
+            .sort((a, b) => a.name.localeCompare(b.name))
+            .map((alias) => (
+              <div
+                key={alias.name}
+                className="flex items-center gap-2 rounded bg-gray-900/60 px-3 py-2 ring-1 ring-gray-800"
+              >
+                <span className="shrink-0 font-mono text-sm text-indigo-300">/{alias.name}</span>
+                <span className="min-w-0 flex-1 truncate font-mono text-xs text-gray-400">
+                  {alias.expansion.split('\n').join(' ; ')}
+                </span>
+                <button
+                  onClick={() =>
+                    void save(aliases.filter((one) => one.name !== alias.name))
+                  }
+                  className="shrink-0 rounded px-2 py-1 text-xs text-gray-400 hover:bg-gray-700 hover:text-gray-100"
+                >
+                  Remove
+                </button>
               </div>
             ))}
         </div>
