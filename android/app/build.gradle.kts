@@ -13,13 +13,42 @@ android {
         applicationId = "org.switchboard.android"
         minSdk = 26
         targetSdk = 35
-        versionCode = 6
-        versionName = "2.1.3-beta"
+        versionCode = 7
+        versionName = "2.2.0-beta"
+    }
+
+    /**
+     * One signing key, in the repository.
+     *
+     * Every build used to be signed with whatever throwaway debug key the
+     * machine happened to have, so no released APK could ever upgrade another
+     * — installing a new one meant uninstalling the old one and losing its
+     * data. A fixed key fixes that, and this one is deliberately public.
+     *
+     * What that costs: anybody can build an APK that Android will accept as an
+     * upgrade to this one. It is the right trade for a client people sideload
+     * from GitHub releases, where the download is already only as trustworthy
+     * as the place it came from — but it is a trade, and the day this ships
+     * through a store it needs a private key in CI secrets instead.
+     */
+    signingConfigs {
+        create("shared") {
+            storeFile = rootProject.file("keystore/switchboard-shared.jks")
+            storePassword = "switchboard"
+            keyAlias = "switchboard"
+            keyPassword = "switchboard"
+        }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("shared")
+        }
+        // The same key, so an APK pushed over adb during development and one
+        // downloaded from a release can replace each other.
+        debug {
+            signingConfig = signingConfigs.getByName("shared")
         }
     }
 
