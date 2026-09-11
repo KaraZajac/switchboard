@@ -142,7 +142,28 @@ class SwitchboardStore {
 
     val servers = mutableStateMapOf<String, Server>()
     val channels = mutableStateMapOf<String, MutableList<Channel>>()          // serverId -> channels
-    val messages = mutableStateMapOf<String, MutableList<Message>>()          // "serverId:#chan" -> messages
+    /**
+     * Everything said, per conversation.
+     *
+     * `List` rather than `MutableList` on purpose. The value used to be a
+     * mutable list that arriving messages were appended to in place, followed
+     * by a write of an equal list to "publish" the change — and neither half
+     * of that notifies Compose. A plain list mutated in place is not snapshot
+     * state, and a map write whose value is structurally equal to what is
+     * already there is a no-op, so the write did not even replace the plain
+     * list with the state list it was trying to.
+     *
+     * The result was a conversation that stopped updating after its first
+     * message and only caught up when something else forced a recomposition —
+     * changing channel and coming back. It showed up on servers without
+     * `draft/chathistory` and nowhere else, because a history load replaces
+     * this value wholesale and papered over it.
+     *
+     * Held as an unmodifiable type so that "append to what is there" is not
+     * something anybody can write by accident. Every change builds a new list,
+     * which is what makes the map notice it.
+     */
+    val messages = mutableStateMapOf<String, List<Message>>()                 // "serverId:#chan" -> messages
     val members = mutableStateMapOf<String, MutableList<Member>>()            // "serverId:#chan" -> members
     val metadata = mutableStateMapOf<String, UserMetadata>()                  // "serverId:nick" -> profile
 
@@ -405,7 +426,6 @@ class SwitchboardStore {
     fun setHistory(serverId: String, channel: String, history: JsonElement) {
         messages[key(serverId, channel)] = history.jsonArray
             .map { it.jsonObject.toMessage() }
-            .toMutableStateList()
     }
 
     // ── Live events, mirroring the desktop's own handlers ─────────────
@@ -523,9 +543,11 @@ class SwitchboardStore {
                 // notices go — but it is listed as the console, not as a DM.
                 if (!isChannel(channel)) openConversation(serverId, channel)
 
-                val list = messages.getOrPut(conversation) { mutableListOf() }
-                if (list.none { it.id == message.id }) list.insertByTime(message)
-                messages[conversation] = list.toMutableStateList()
+                val current = messages[conversation] ?: emptyList()
+                if (current.none { it.id == message.id }) {
+                    messages[conversation] =
+                        current.toMutableList().also { it.insertByTime(message) }
+                }
 
                 // They have said their piece; stop showing them as typing
                 typing[conversation]?.let { who ->
@@ -868,7 +890,7 @@ class SwitchboardStore {
      */
     fun prependHistory(serverId: String, channel: String, history: JsonElement): Int {
         val conversation = key(serverId, channel)
-        val existing = messages[conversation] ?: mutableListOf()
+        val existing = messages[conversation] ?: emptyList()
         val known = existing.map { it.id }.toHashSet()
 
         val older = history.jsonArray
@@ -876,7 +898,7 @@ class SwitchboardStore {
             .filter { known.add(it.id) }
 
         if (older.isEmpty()) return 0
-        messages[conversation] = (older + existing).toMutableStateList()
+        messages[conversation] = older + existing
         return older.size
     }
 
@@ -911,9 +933,7 @@ class SwitchboardStore {
         val conversation = key(serverId, channel)
         val list = messages[conversation] ?: return
         if (list.none { it.id == messageId }) return
-        messages[conversation] = list
-            .map { if (it.id == messageId) change(it) else it }
-            .toMutableStateList()
+        messages[conversation] = list.map { if (it.id == messageId) change(it) else it }
     }
 
     /**

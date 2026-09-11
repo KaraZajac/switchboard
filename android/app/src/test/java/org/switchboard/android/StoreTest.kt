@@ -8,6 +8,8 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotSame
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -376,6 +378,69 @@ class StoreTest {
         assertEquals("#lounge", store.activeChannel)
     }
 
+
+    // ── a conversation that keeps up with itself ─────────────────────
+
+    /**
+     * Arriving messages have to *replace* the list, never edit it in place.
+     *
+     * The list used to be appended to and then "published" by writing a copy
+     * back to the map. Neither half of that tells Compose anything: a plain
+     * list mutated in place is not snapshot state, and a map write whose value
+     * is equal to what is already there is a no-op — so the write did not even
+     * replace the plain list with the state list it meant to.
+     *
+     * What it looked like: a channel froze after its first message and caught
+     * up only when something else forced a redraw, which for a person meant
+     * leaving the channel and coming back. It hid on every server with
+     * `draft/chathistory`, because loading history replaces this value
+     * wholesale and reset the conditions.
+     *
+     * So this asserts the property rather than the symptom: the list handed
+     * out before a message arrives is not the list handed out after.
+     */
+    @Test
+    fun `an arriving message replaces the list rather than editing it`() {
+        store.handleEvent("irc:message", incoming("#lounge", "m1", "robin", "first"))
+        val afterFirst = store.messagesFor(server, "#lounge")
+        assertEquals(1, afterFirst.size)
+
+        store.handleEvent("irc:message", incoming("#lounge", "m2", "robin", "second"))
+        val afterSecond = store.messagesFor(server, "#lounge")
+
+        assertEquals(2, afterSecond.size)
+        // The one the screen was already holding must not have grown under it:
+        // if it did, nothing told the screen anything.
+        assertEquals(1, afterFirst.size)
+        assertNotSame(afterFirst, afterSecond)
+    }
+
+    /** And it keeps doing it, however many arrive */
+    @Test
+    fun `a conversation keeps up over a run of messages`() {
+        val seen = mutableListOf<List<Message>>()
+        for (i in 1..5) {
+            store.handleEvent("irc:message", incoming("#lounge", "m$i", "robin", "line $i"))
+            seen.add(store.messagesFor(server, "#lounge"))
+        }
+
+        assertEquals(listOf(1, 2, 3, 4, 5), seen.map { it.size })
+        // Five distinct lists, not one list five times
+        assertEquals(5, seen.distinctBy { System.identityHashCode(it) }.size)
+    }
+
+    /** The same message twice is still one message, and changes nothing */
+    @Test
+    fun `a message that is already there does not replace anything`() {
+        store.handleEvent("irc:message", incoming("#lounge", "m1", "robin", "first"))
+        val before = store.messagesFor(server, "#lounge")
+
+        store.handleEvent("irc:message", incoming("#lounge", "m1", "robin", "first"))
+        val after = store.messagesFor(server, "#lounge")
+
+        assertEquals(1, after.size)
+        assertSame(before, after)
+    }
 }
 
 private fun kotlinx.serialization.json.JsonArrayBuilder.add(element: JsonElement) {
