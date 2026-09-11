@@ -277,6 +277,66 @@ class SwitchboardStore {
     val watchedOnline = mutableStateMapOf<String, Boolean>()                // "serverId:nick" -> online
 
     /** Conversations with one person rather than a channel */
+    /**
+     * One conversation with one person, on one network.
+     *
+     * The network is part of the identity rather than a label on it: `robin`
+     * on Libera and `robin` on OFTC are two people, and a list that merges
+     * them is a list that puts a message in front of the wrong one.
+     */
+    data class DirectMessage(
+        val serverId: String,
+        val serverName: String,
+        val nick: String,
+        val unread: Int,
+        val mentions: Int
+    )
+
+    /**
+     * Everybody who has written to you, across every network.
+     *
+     * The desktop has had this behind one button since it had a server rail;
+     * the phone listed them per network, buried under that network's channels,
+     * so a message from someone on a network you were not looking at was
+     * somewhere you had to already know to look. Same model on both now.
+     *
+     * Ordered by unread first and then by name, so the ones wanting an answer
+     * are at the top and the rest do not move around underneath them.
+     */
+    fun allDirectMessages(): List<DirectMessage> =
+        servers.values
+            .sortedBy { it.name.lowercase() }
+            .flatMap { server ->
+                channels[server.id].orEmpty()
+                    .filterNot { isChannel(it.name) || isConsole(it.name) }
+                    .filterNot { Services.isServices(it.name) }
+                    .map {
+                        DirectMessage(
+                            serverId = server.id,
+                            serverName = server.name,
+                            nick = it.name,
+                            unread = it.unread,
+                            mentions = it.mentions
+                        )
+                    }
+            }
+            .sortedWith(
+                compareByDescending<DirectMessage> { it.unread > 0 }
+                    .thenBy { it.nick.lowercase() }
+            )
+
+    /** For the badge on the rail: everything unanswered, everywhere */
+    fun directMessageUnread(): Int = allDirectMessages().sumOf { it.unread }
+
+    /**
+     * Whether the conversation list is showing people rather than a network.
+     *
+     * The rail's top item, the way every app of this shape does it. Kept here
+     * rather than in the screen so that opening a notification can put the
+     * phone straight into the conversation it is about.
+     */
+    var dmMode by mutableStateOf(false)
+
     fun directMessages(serverId: String): List<String> =
         channels[serverId].orEmpty()
             .filterNot { isChannel(it.name) || isConsole(it.name) }

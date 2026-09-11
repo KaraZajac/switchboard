@@ -5,6 +5,7 @@
 
 package org.switchboard.android.ui
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -33,6 +34,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
@@ -46,6 +48,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -94,7 +100,8 @@ fun Navigator(
     Row(modifier = Modifier.fillMaxSize().background(Mantle)) {
         ServerRail(
             store = store,
-            onSelect = onSelectServer,
+            onSelect = { id -> store.dmMode = false; onSelectServer(id) },
+            onOpenMessages = { store.dmMode = true },
             onManageServers = onManageServers,
             onEditServer = onEditServer,
             onOpenAccount = onOpenAccount,
@@ -104,16 +111,24 @@ fun Navigator(
         )
 
         Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
-            ChannelList(
-                store = store,
-                onSelect = onSelect,
-                onJoin = onJoin,
-                onBrowse = onBrowse,
-                onLeave = onLeave,
-                isChannelMuted = isChannelMuted,
-                onToggleChannelMute = onToggleChannelMute,
-                modifier = Modifier.weight(1f)
-            )
+            if (store.dmMode) {
+                DirectMessageList(
+                    store = store,
+                    onSelect = onSelect,
+                    modifier = Modifier.weight(1f)
+                )
+            } else {
+                ChannelList(
+                    store = store,
+                    onSelect = onSelect,
+                    onJoin = onJoin,
+                    onBrowse = onBrowse,
+                    onLeave = onLeave,
+                    isChannelMuted = isChannelMuted,
+                    onToggleChannelMute = onToggleChannelMute,
+                    modifier = Modifier.weight(1f)
+                )
+            }
             UserPanel(
                 store, mode, modeDetail, takingOver, pairedWithDesktop, vaultUnlocked,
                 onOpenSettings, onEditProfile, onToggleAway
@@ -133,6 +148,7 @@ fun Navigator(
 private fun ServerRail(
     store: SwitchboardStore,
     onSelect: (String) -> Unit,
+    onOpenMessages: () -> Unit,
     onManageServers: () -> Unit,
     onEditServer: (String) -> Unit,
     onOpenAccount: (String) -> Unit,
@@ -156,6 +172,64 @@ private fun ServerRail(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
+        // People first, networks under it — the shape every app of this kind
+        // has, and the one the desktop already had. A message from someone on
+        // a network you are not looking at used to be filed under that
+        // network, which is somewhere you have to already know to look.
+        val dmUnread = store.directMessageUnread()
+        Box(
+            modifier = Modifier.fillMaxWidth().height(52.dp),
+            contentAlignment = Alignment.CenterStart
+        ) {
+            Box(
+                modifier = Modifier
+                    .width(4.dp)
+                    .height(if (store.dmMode) 40.dp else if (dmUnread > 0) 10.dp else 0.dp)
+                    .clip(RoundedCornerShape(topEnd = 4.dp, bottomEnd = 4.dp))
+                    .background(Text0)
+            )
+
+            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(RoundedCornerShape(if (store.dmMode) 16.dp else 24.dp))
+                        .background(if (store.dmMode) Blue else Surface0)
+                        .clickable { onOpenMessages() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    MessagesIcon(
+                        tint = if (store.dmMode) Crust else Text0,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+
+                if (dmUnread > 0 && !store.dmMode) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(end = 6.dp)
+                            .size(18.dp)
+                            .clip(RoundedCornerShape(9.dp))
+                            .background(Red),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            if (dmUnread > 9) "9+" else "$dmUnread",
+                            color = Crust,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+        }
+
+        HorizontalDivider(
+            modifier = Modifier.width(28.dp).padding(vertical = 2.dp),
+            color = Surface0
+        )
+
         for (server in servers) {
             val active = store.activeServerId == server.id
             val unread = store.channelsFor(server.id).sumOf { it.unread }
@@ -208,6 +282,40 @@ private fun ServerRail(
         ) {
             Text("+", color = Green, fontSize = 24.sp, fontWeight = FontWeight.Bold)
         }
+    }
+}
+
+/**
+ * A speech bubble, drawn.
+ *
+ * The one glyph this screen wants lives in `material-icons-extended`, which is
+ * a few megabytes and a slower build for a rounded rectangle and a triangle.
+ */
+@Composable
+private fun MessagesIcon(tint: Color, modifier: Modifier = Modifier) {
+    Canvas(modifier = modifier) {
+        val w = size.width
+        val h = size.height
+        val body = h * 0.72f
+        val radius = body * 0.28f
+
+        drawRoundRect(
+            color = tint,
+            topLeft = Offset(0f, 0f),
+            size = Size(w, body),
+            cornerRadius = CornerRadius(radius, radius)
+        )
+
+        // The tail, tucked under the left third the way a chat bubble sits
+        drawPath(
+            path = Path().apply {
+                moveTo(w * 0.22f, body - 1f)
+                lineTo(w * 0.22f, h)
+                lineTo(w * 0.46f, body - 1f)
+                close()
+            },
+            color = tint
+        )
     }
 }
 
@@ -523,45 +631,99 @@ private fun ChannelList(
             }
         }
 
-        val conversations = serverId?.let { store.directMessages(it) }.orEmpty()
-        if (conversations.isNotEmpty()) {
-            Spacer(Modifier.height(16.dp))
-            SectionHeader("Direct messages — ${conversations.size}")
+        Spacer(Modifier.height(16.dp))
+    }
+}
 
-            for (who in conversations) {
-                val entry = store.channelsFor(serverId!!).first { it.name.equals(who, true) }
-                val selected = store.activeChannel.equals(who, true)
-                val unread = entry.unread > 0
-                val profile = store.metadataFor(serverId, who)
+/**
+ * Everybody who has written to you, across every network, behind one button.
+ *
+ * The desktop has had this since it had a rail: people are not a property of a
+ * network you happen to be looking at. The phone used to list them under that
+ * network's channels, so a message from somebody on a network you were not
+ * looking at was filed somewhere you had to already know to check — which for
+ * a direct message is exactly backwards.
+ *
+ * The network is still shown against each name, because it is part of who they
+ * are: `robin` on Libera and `robin` on OFTC are two people, and a row that
+ * omits it is a row you can answer wrongly.
+ */
+@Composable
+private fun DirectMessageList(
+    store: SwitchboardStore,
+    onSelect: (serverId: String, channel: String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val conversations = store.allDirectMessages()
 
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 8.dp, vertical = 1.dp)
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(if (selected) Surface0 else Color.Transparent)
-                        .clickable { onSelect(serverId, who) }
-                        .padding(horizontal = 8.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Avatar(
-                        who,
-                        24.dp,
-                        metadataColor(profile.color) ?: nickColor(who),
-                        avatar = profile.avatar
-                    )
-                    Spacer(Modifier.width(8.dp))
+    Column(modifier = modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                "Messages",
+                color = Text0,
+                fontSize = 17.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+
+        if (conversations.isEmpty()) {
+            Text(
+                "Nobody has written to you yet. When somebody does, the " +
+                    "conversation shows up here whichever network it is on.",
+                color = Subtext,
+                fontSize = 13.sp,
+                lineHeight = 18.sp,
+                modifier = Modifier.padding(horizontal = 16.dp)
+            )
+            return@Column
+        }
+
+        for (dm in conversations) {
+            val selected = store.activeServerId == dm.serverId &&
+                store.activeChannel.equals(dm.nick, true)
+            val unread = dm.unread > 0
+            val profile = store.metadataFor(dm.serverId, dm.nick)
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 1.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(if (selected) Surface0 else Color.Transparent)
+                    .clickable { onSelect(dm.serverId, dm.nick) }
+                    .padding(horizontal = 8.dp, vertical = 7.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Avatar(
+                    dm.nick,
+                    32.dp,
+                    metadataColor(profile.color) ?: nickColor(dm.nick),
+                    avatar = profile.avatar
+                )
+                Spacer(Modifier.width(10.dp))
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        profile.displayName?.takeIf { it.isNotBlank() } ?: who,
+                        profile.displayName?.takeIf { it.isNotBlank() } ?: dm.nick,
                         color = if (selected || unread) Text0 else Subtext,
                         fontWeight = if (unread) FontWeight.SemiBold else FontWeight.Normal,
                         fontSize = 15.sp,
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f)
+                        overflow = TextOverflow.Ellipsis
                     )
-                    if (entry.unread > 0) CountBadge(entry.unread)
+                    Text(
+                        dm.serverName,
+                        color = Overlay,
+                        fontSize = 11.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
+                if (dm.unread > 0) CountBadge(dm.unread)
             }
         }
 
