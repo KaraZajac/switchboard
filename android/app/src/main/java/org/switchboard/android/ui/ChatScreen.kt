@@ -168,9 +168,13 @@ fun ChatScreen(
                                 },
                                 onSelectServer = { serverId ->
                                     store.activeServerId = serverId
-                                    store.channelsFor(serverId).firstOrNull()?.let {
-                                        store.select(serverId, it.name)
-                                        onLoadHistory(serverId, it.name)
+                                    // Where you left this network, not whatever
+                                    // is first in its list — which is the
+                                    // console, because that exists before any
+                                    // channel does.
+                                    store.channelToOpen(serverId)?.let { channel ->
+                                        store.select(serverId, channel)
+                                        onLoadHistory(serverId, channel)
                                     }
                                 },
                                 onEditServer = { serverId ->

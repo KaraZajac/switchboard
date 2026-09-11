@@ -388,9 +388,41 @@ class SwitchboardStore {
 
     fun channelsFor(serverId: String): List<Channel> = channels[serverId] ?: emptyList()
 
+    /**
+     * Where you were last looking, per network.
+     *
+     * Switching networks used to open whichever conversation happened to be
+     * first in the list — and the console is created during registration,
+     * before any JOIN, so it usually was. Coming back to a network you had
+     * been reading put you in its server messages every time.
+     *
+     * The desktop has always kept this per server; the phone had one active
+     * channel for everything.
+     */
+    private val lastChannel = mutableStateMapOf<String, String>()
+
+    /**
+     * The conversation to open when a network is chosen.
+     *
+     * Where you left it, if that is still somewhere you can be. Otherwise the
+     * first real conversation — a console is what a network says to you, not
+     * somewhere you were reading, so it is the last resort rather than the
+     * first.
+     */
+    fun channelToOpen(serverId: String): String? {
+        val here = channels[serverId].orEmpty()
+        lastChannel[serverId]?.let { remembered ->
+            if (here.any { it.name.equals(remembered, true) }) return remembered
+        }
+        return here.firstOrNull { isChannel(it.name) }?.name
+            ?: here.firstOrNull { !isConsole(it.name) }?.name
+            ?: here.firstOrNull()?.name
+    }
+
     fun select(serverId: String, channel: String) {
         activeServerId = serverId
         activeChannel = channel
+        lastChannel[serverId] = channel
         val list = channels[serverId] ?: return
         channels[serverId] = list.map {
             if (it.name.equals(channel, true)) it.copy(unread = 0, mentions = 0) else it

@@ -629,6 +629,81 @@ class StoreTest {
         assertNull(store.servers[server]?.icon)
     }
 
+
+    // ── coming back to a network ─────────────────────────────────────
+
+    /**
+     * Switching networks used to open whichever conversation was first in the
+     * list, and the console is created during registration — before any JOIN —
+     * so it usually was. Coming back to a network you had been reading put you
+     * in its server messages, every time.
+     */
+    @Test
+    fun `coming back to a network opens where you left it`() {
+        store.channels[server] = listOf(Channel(SERVER_CONSOLE), Channel("#lounge"), Channel("#hall"))
+
+        store.select(server, "#hall")
+        assertEquals("#hall", store.channelToOpen(server))
+    }
+
+    /** With nowhere remembered, a real conversation beats the console */
+    @Test
+    fun `a network never visited opens a channel rather than its console`() {
+        store.channels[server] = listOf(Channel(SERVER_CONSOLE), Channel("#lounge"))
+
+        assertEquals("#lounge", store.channelToOpen(server))
+    }
+
+    /** The console is where you land only when it is all there is */
+    @Test
+    fun `a network with nothing joined opens its console`() {
+        store.channels[server] = listOf(Channel(SERVER_CONSOLE))
+
+        assertEquals(SERVER_CONSOLE, store.channelToOpen(server))
+    }
+
+    /** A conversation you left is not somewhere to put you back */
+    @Test
+    fun `a remembered channel that has gone falls back`() {
+        store.channels[server] = listOf(Channel(SERVER_CONSOLE), Channel("#lounge"), Channel("#hall"))
+        store.select(server, "#hall")
+
+        store.channels[server] = listOf(Channel(SERVER_CONSOLE), Channel("#lounge"))
+        assertEquals("#lounge", store.channelToOpen(server))
+    }
+
+    /** Each network remembers its own */
+    @Test
+    fun `two networks each remember where you were`() {
+        val other = "s2"
+        store.servers[other] = Server(id = other, name = "Other", host = "h2", nick = "me")
+        store.channels[server] = listOf(Channel("#lounge"), Channel("#hall"))
+        store.channels[other] = listOf(Channel("#one"), Channel("#two"))
+
+        store.select(server, "#hall")
+        store.select(other, "#two")
+
+        assertEquals("#hall", store.channelToOpen(server))
+        assertEquals("#two", store.channelToOpen(other))
+    }
+
+    /** A person you were talking to counts as where you were */
+    @Test
+    fun `a direct message is somewhere you can come back to`() {
+        store.channels[server] = listOf(Channel(SERVER_CONSOLE), Channel("#lounge"), Channel("robin"))
+        store.select(server, "robin")
+
+        assertEquals("robin", store.channelToOpen(server))
+    }
+
+    /** And a network with nothing at all has nowhere to open */
+    @Test
+    fun `a network with no conversations opens nothing`() {
+        store.channels[server] = emptyList()
+
+        assertNull(store.channelToOpen(server))
+    }
+
 }
 
 private fun kotlinx.serialization.json.JsonArrayBuilder.add(element: JsonElement) {
