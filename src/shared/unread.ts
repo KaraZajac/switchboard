@@ -53,6 +53,32 @@ export function rowBadge(
   return { count: conversation.mentions, muted: conversation.muted }
 }
 
+/**
+ * What a count says, and how wide the circle around it has to be.
+ *
+ * Capped, because a number wider than the icon it sits on stops being a badge.
+ * The desktop's channel rows had no cap at all — every other badge in both
+ * clients stopped at 99 — so one busy channel could stretch a row.
+ *
+ * The diameter is here rather than in each client's styling so the two draw
+ * the same circle: a badge that is a circle at one digit and an oval at two is
+ * the thing this replaced.
+ */
+export function badgeLabel(count: number): string {
+  if (count > 99) return '99+'
+  return String(Math.max(0, Math.trunc(count)))
+}
+
+/** Circle sizes, by how much has to fit inside one */
+export const BADGE_DIAMETERS = { one: 18, two: 22, wide: 26 } as const
+
+export function badgeDiameter(count: number): number {
+  const label = badgeLabel(count)
+  if (label.length <= 1) return BADGE_DIAMETERS.one
+  if (label.length === 2) return BADGE_DIAMETERS.two
+  return BADGE_DIAMETERS.wide
+}
+
 export interface RailLook {
   /**
    * The pill on the left edge: tall for the network you are looking at, short

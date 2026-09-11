@@ -736,6 +736,14 @@ class SharedCorpusTest {
             }
         }
 
+        for (case in corpus["badges"]!!.jsonArray) {
+            val c = case.jsonObject
+            val name = c["name"]!!.jsonPrimitive.content
+            val count = c["count"]!!.jsonPrimitive.int
+            assertEquals(name, c["label"]!!.jsonPrimitive.content, Unread.badgeLabel(count))
+            assertEquals(name, c["diameter"]!!.jsonPrimitive.int, Unread.badgeDiameter(count))
+        }
+
         for (case in corpus["rails"]!!.jsonArray) {
             val c = case.jsonObject
             val name = c["name"]!!.jsonPrimitive.content

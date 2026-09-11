@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -458,9 +459,23 @@ private fun ServerBadge(
         // A muted network still counts its mentions; it just does not shout
         // about them. Grey rather than red says which of the two is happening —
         // a rail with no badge at all reads as a quiet evening instead.
+        //
+        // Hung off the corner rather than tucked inside it: a badge that sits
+        // within the icon's outline competes with whatever the icon is, and a
+        // network picture is exactly the sort of busy thing it disappears
+        // into. The ring is the rail's own colour, so it reads as sitting on
+        // top rather than as part of the picture.
         if (mentions > 0) {
-            Box(modifier = Modifier.align(Alignment.TopEnd)) {
-                CountBadge(mentions, background = if (muted) Overlay else Red)
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .offset(x = 7.dp, y = (-7).dp)
+            ) {
+                CountBadge(
+                    mentions,
+                    background = if (muted) Overlay else Red,
+                    ring = Crust
+                )
             }
         }
     }

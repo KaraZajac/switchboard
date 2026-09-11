@@ -43,6 +43,23 @@ object Unread {
     fun rowBadge(mentions: Int, muted: Boolean): Badge? =
         if (mentions <= 0) null else Badge(mentions, muted)
 
+    /**
+     * What a count says, and how wide the circle around it has to be.
+     *
+     * Capped, because a number wider than the icon it sits on stops being a
+     * badge. The diameter lives here rather than in each client's styling so
+     * the two draw the same circle: one that is round at a single digit and an
+     * oval at two is the thing this replaced.
+     */
+    fun badgeLabel(count: Int): String =
+        if (count > 99) "99+" else maxOf(0, count).toString()
+
+    fun badgeDiameter(count: Int): Int = when (badgeLabel(count).length) {
+        0, 1 -> 18
+        2 -> 22
+        else -> 26
+    }
+
     /** The pill on the left edge of the rail */
     enum class Chip { TALL, SHORT, NONE }
 

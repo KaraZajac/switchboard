@@ -7,7 +7,7 @@ import { ChannelBrowser } from '../channel/ChannelBrowser'
 import { UserProfilePanel } from '../user/UserProfilePanel'
 import { FriendList } from './FriendList'
 import { isChannelName } from '@shared/constants'
-import { rowLook, rowBadge } from '@shared/unread'
+import { rowLook, rowBadge, badgeLabel, badgeDiameter } from '@shared/unread'
 
 const EMPTY_CHANNELS: { name: string; serverId: string; topic: string | null; topicSetBy: string | null; unreadCount: number; mentionCount: number; muted: boolean }[] = []
 
@@ -187,11 +187,16 @@ export function ChannelSidebar() {
                   )}
                   {badge && (
                     <span
-                      className={`flex h-4 min-w-[16px] shrink-0 items-center justify-center rounded-full px-1 text-xs font-bold text-white ${
+                      style={{
+                        width: badgeDiameter(badge.count),
+                        height: badgeDiameter(badge.count),
+                        fontSize: badgeDiameter(badge.count) > 22 ? 10 : 11
+                      }}
+                      className={`flex shrink-0 items-center justify-center rounded-full font-bold leading-none text-white ${
                         badge.muted ? 'bg-gray-600' : 'bg-red-500'
                       }`}
                     >
-                      {badge.count}
+                      {badgeLabel(badge.count)}
                     </span>
                   )}
                 </button>

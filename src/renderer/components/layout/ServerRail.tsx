@@ -5,7 +5,7 @@ import { useUIStore } from '../../stores/uiStore'
 import { SwitchboardIcon } from '../common/SwitchboardIcon'
 import { ServerMenu } from '../server/ServerMenu'
 import { isChannelName } from '@shared/constants'
-import { railLook } from '@shared/unread'
+import { railLook, badgeLabel, badgeDiameter } from '@shared/unread'
 import { nickColor } from '../../utils/nickColor'
 
 type ConnectionStatus = 'connected' | 'connecting' | 'disconnected'
@@ -238,11 +238,27 @@ function RailItem({
       {/* Mention badge */}
       {badge > 0 && (
         <span
-          className={`pointer-events-none absolute -bottom-0.5 -right-0.5 flex h-5 min-w-[20px] items-center justify-center rounded-full border-[3px] border-gray-950 px-1 text-[11px] font-bold leading-none text-white ${
+          // Hung off the corner rather than tucked inside it: a badge within
+          // the icon's outline competes with whatever the icon is, and a
+          // network picture is exactly the sort of busy thing it disappears
+          // into. The ring is the rail's own colour, so it reads as sitting on
+          // top rather than as part of the picture.
+          //
+          // Square, so it is a circle at every length. `min-w` with padding
+          // made it a circle at one digit and a lozenge at two.
+          // The ring sits outside the circle rather than eating into it —
+          // `border-box` would otherwise leave a 12px red dot inside an 18px
+          // box, where the phone draws the full 18 with its ring around it.
+          style={{
+            width: badgeDiameter(badge) + 6,
+            height: badgeDiameter(badge) + 6,
+            fontSize: badgeDiameter(badge) > 22 ? 10 : 11
+          }}
+          className={`pointer-events-none absolute -bottom-1.5 -right-1.5 flex items-center justify-center rounded-full border-[3px] border-gray-950 font-bold leading-none text-white ${
             badgeMuted ? 'bg-gray-600' : 'bg-red-500'
           }`}
         >
-          {badge > 99 ? '99+' : badge}
+          {badgeLabel(badge)}
         </span>
       )}
 

@@ -250,5 +250,51 @@
       "mentions": 0,
       "mentionsMuted": false
     }
+  ],
+  "$badges": "What a count reads as, and the diameter of the circle around it. A badge that is a circle at one digit and an oval at two is what this replaced, so the size is part of the shared answer rather than each client's styling.",
+  "badges": [
+    {
+      "name": "one digit",
+      "count": 1,
+      "label": "1",
+      "diameter": 18
+    },
+    {
+      "name": "nine",
+      "count": 9,
+      "label": "9",
+      "diameter": 18
+    },
+    {
+      "name": "two digits need a wider circle",
+      "count": 12,
+      "label": "12",
+      "diameter": 22
+    },
+    {
+      "name": "ninety-nine still fits in two",
+      "count": 99,
+      "label": "99",
+      "diameter": 22
+    },
+    {
+      "$comment": "A number wider than the icon it sits on stops being a badge. The desktop's channel rows had no cap at all.",
+      "name": "past that it stops counting",
+      "count": 100,
+      "label": "99+",
+      "diameter": 26
+    },
+    {
+      "name": "however far past",
+      "count": 4821,
+      "label": "99+",
+      "diameter": 26
+    },
+    {
+      "name": "zero is not a badge, but it reads as itself",
+      "count": 0,
+      "label": "0",
+      "diameter": 18
+    }
   ]
 }

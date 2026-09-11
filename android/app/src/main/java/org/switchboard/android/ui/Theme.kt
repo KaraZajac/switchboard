@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import org.switchboard.android.irc.Unread
 import androidx.compose.ui.unit.sp
 import java.time.Instant
 import java.time.ZoneId
@@ -167,20 +168,41 @@ fun Avatar(
     }
 }
 
-/** A count badge: mentions in red, plain unread in grey */
+/**
+ * A count badge: mentions in red, and a circle rather than an oval.
+ *
+ * It used to be a rounded rectangle with horizontal padding, which is a circle
+ * at one digit and a lozenge at two — so the same badge changed shape as a
+ * conversation got busier. The diameter comes from [Unread.badgeDiameter] so
+ * the desktop draws the same one.
+ *
+ * @param ring a colour to outline it with, for a badge that overlaps whatever
+ *   it is sitting on and needs an edge to be legible against it
+ */
 @Composable
-fun CountBadge(count: Int, background: Color = Red, modifier: Modifier = Modifier) {
+fun CountBadge(
+    count: Int,
+    background: Color = Red,
+    modifier: Modifier = Modifier,
+    ring: Color? = null
+) {
+    val diameter = Unread.badgeDiameter(count).dp
+    val outline = if (ring != null) 2.dp else 0.dp
+
     Box(
         modifier = modifier
-            .background(background, RoundedCornerShape(10.dp))
-            .padding(horizontal = 6.dp, vertical = 1.dp),
+            .size(diameter + outline * 2)
+            .then(if (ring != null) Modifier.background(ring, CircleShape) else Modifier)
+            .padding(outline)
+            .background(background, CircleShape),
         contentAlignment = Alignment.Center
     ) {
         Text(
-            if (count > 99) "99+" else count.toString(),
+            Unread.badgeLabel(count),
             color = Crust,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Bold
+            fontSize = if (diameter > 22.dp) 10.sp else 11.sp,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1
         )
     }
 }
