@@ -19,6 +19,9 @@ import kotlinx.serialization.json.JsonPrimitive
 import android.util.Log
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonPrimitive
@@ -166,6 +169,9 @@ class SwitchboardEngine(
                     .onFailure { Log.e(TAG, "could not hand back", it) }
             }
             override fun vaultVersion(): Int = vault.version
+
+            /** What this phone has open, so a returning desktop dials the same */
+            override fun holding(): List<String> = connections.keys.toList()
         },
         AndroidClock()
     )
@@ -615,8 +621,29 @@ class SwitchboardEngine(
     /** Whether this phone has a config of its own, desktop or no desktop */
     val hasOwnConfig: Boolean get() = vault.exists
 
-    /** How many networks this phone knows about, its own or a desktop's */
-    val knownServers: Int get() = if (vault.isUnlocked) vault.servers().size else store.servers.size
+    /**
+     * Whether the config we hold is one worth unlocking.
+     *
+     * The placeholder this phone makes for itself on first launch is not: it
+     * is already open, nobody chose it, and there is nothing in it. Anything
+     * else — a config shared from a desktop, or one made here and given a
+     * passphrase — is.
+     */
+    val holdsSharedConfig: Boolean get() = vault.exists && !vault.isPlaceholder
+
+    /**
+     * How many networks this phone knows about, its own or a desktop's.
+     *
+     * The config first, then whatever a desktop has relayed. Reading only the
+     * config meant a phone following a desktop — showing that desktop's
+     * channel, on that desktop's network, with the network's name in the
+     * header — was told "No networks yet", and offered an Add button that
+     * would have made a second one nobody wanted.
+     */
+    val knownServers: Int get() {
+        val configured = if (vault.isUnlocked) vault.servers().size else 0
+        return if (configured > 0) configured else store.servers.size
+    }
 
     /** Whether the config carries a passphrase, which is what sharing it needs */
     val configHasPassphrase: Boolean get() = vault.hasPassphrase
@@ -826,10 +853,20 @@ class SwitchboardEngine(
      */
     private fun takeConnections() {
         Log.i(TAG, "taking over: vault=${if (vault.isUnlocked) "unlocked" else "locked"}, " +
-            "servers=${vault.servers().size}, already=${connections.size}")
+            "servers=${vault.servers().size}, desktopHeld=${store.heldByDesktop.size}, " +
+            "already=${connections.size}")
 
         if (vault.isUnlocked) {
-            for (config in vault.servers().filter { it.autoConnect }) openConnection(config)
+            // What the desktop was holding, as well as what this phone would
+            // open on its own. `autoConnect` answers "dial this when the app
+            // starts", which is not the question here: standing in for a
+            // desktop means taking the networks it actually had — and a
+            // network somebody connected by hand is still a network they are
+            // in the middle of using. A phone that took over and connected to
+            // nothing looked exactly like one that had taken over correctly.
+            for (config in vault.servers()) {
+                if (config.autoConnect || config.id in store.heldByDesktop) openConnection(config)
+            }
         }
         recomputeMode()
     }
@@ -956,11 +993,16 @@ class SwitchboardEngine(
             if (store.servers.containsKey(config.id)) continue
             seedServer(config)
         }
+        // Never the config this phone made for itself: nobody chose it, there
+        // is nothing in it, and a desktop that adopted it would be left with
+        // an empty server list.
+        if (vault.isPlaceholder) return
         scope.launch {
             runCatching {
                 remote.sendPeerFrame(buildJsonObject {
                     put("t", JsonPrimitive("vault-offer"))
                     put("version", JsonPrimitive(vault.version))
+                    put("updatedAt", JsonPrimitive(vault.sealedEnvelope()?.updatedAt.orEmpty()))
                 })
             }
         }
@@ -1058,9 +1100,16 @@ class SwitchboardEngine(
         isTakingOver = dialling
         // A config that arrived from a desktop and has not been opened. A
         // config made here is open already, so this is never about that.
-        needsPassphrase = primary && !vault.isUnlocked && !remote.isLinked
+        //
+        // Not gated on the desktop being away. Knowing the passphrase before
+        // the desktop stops is exactly what makes taking over instant — asking
+        // for it afterwards means the handover waits on somebody typing.
+        needsPassphrase = !vault.isUnlocked && holdsSharedConfig
         needsPairing = false
-        needsSharedConfig = pairedWithDesktop && !vault.isUnlocked
+        // And only where there is genuinely nothing to open. The phone used to
+        // say this while holding the desktop's config, because locked and
+        // absent were the same test.
+        needsSharedConfig = pairedWithDesktop && !vault.isUnlocked && !holdsSharedConfig
 
         modeDetail = when {
             state.claiming -> "Asking the desktop to hand over…"
@@ -1131,7 +1180,10 @@ class SwitchboardEngine(
                         },
                         priority = frame["priority"]?.jsonPrimitive?.int ?: 0,
                         since = frame["since"]?.jsonPrimitive?.contentOrNull(),
-                        vaultVersion = frame["vaultVersion"]?.jsonPrimitive?.int ?: 0
+                        vaultVersion = frame["vaultVersion"]?.jsonPrimitive?.int ?: 0,
+                        holding = frame["holding"]?.jsonArray
+                            ?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull() }
+                            .orEmpty()
                     )
                 )
 
@@ -1156,12 +1208,21 @@ class SwitchboardEngine(
             }
 
             "vault-offer" -> {
+                // Ask whenever theirs might win, which is the adopter's rule
+                // and not a stricter one. It used to be `>`, so two configs at
+                // the same version never spoke — and the tiebreak both devices
+                // implement for exactly that case could never be reached.
                 val offered = frame["version"]?.jsonPrimitive?.int ?: 0
-                if (offered > vault.version) requestVault()
+                val sealedAt = frame["updatedAt"]?.jsonPrimitive?.contentOrNull().orEmpty()
+                if (vault.mightAdopt(offered, sealedAt)) requestVault()
             }
 
             "vault-request" -> {
-                // The desktop is behind us — offer what we hold
+                // The desktop is behind us — offer what we hold. Never the
+                // config this phone made for itself: nobody chose it, there is
+                // nothing in it, and handing it to a desktop that adopted it
+                // would empty that desktop's server list.
+                if (vault.isPlaceholder) return
                 val envelope = vault.sealedEnvelope() ?: return
                 scope.launch {
                     runCatching {
@@ -1199,6 +1260,7 @@ class SwitchboardEngine(
             put("priority", JsonPrimitive(frame.priority))
             put("since", frame.since?.let { JsonPrimitive(it) } ?: kotlinx.serialization.json.JsonNull)
             put("vaultVersion", JsonPrimitive(frame.vaultVersion))
+            put("holding", buildJsonArray { frame.holding.forEach { add(JsonPrimitive(it)) } })
         }
 
         is SessionFrame.Claim -> buildJsonObject {

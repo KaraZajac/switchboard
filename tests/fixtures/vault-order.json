@@ -1,7 +1,7 @@
 {
   "$comment": "Which of two sealed configs to keep, read by tests/main/vaultorder.test.ts and the Android SharedCorpusTest. Both devices have to answer this identically or they trade vaults forever, or worse, one of them quietly rolls the other back.",
 
-  "$cases": "`current` is what this device holds — null for a device with no vault yet. `adopt` is whether the incoming one replaces it.",
+  "$cases": "`current` is what this device holds — null for a device with no vault yet. `currentIsPlaceholder` says that config was made automatically rather than chosen, and defaults to false. `adopt` is whether the incoming one replaces it.",
   "cases": [
     {
       "name": "a device with no config takes whatever it is offered",
@@ -53,6 +53,30 @@
       "incoming": { "version": 7, "updatedAt": "2026-09-10T06:00:00.000Z" },
       "current": { "version": 7, "updatedAt": null },
       "adopt": false
+    },
+    {
+      "$comment": "A phone makes itself a config on first launch so that adding a server is not gated on owning a desktop. That config is a placeholder: nobody chose it, nothing is in it, and it is sealed with a random key rather than a passphrase. Before this case it outranked the desktop's real config on the timestamp tiebreak — because a phone is always set up after the desktop it pairs to — and pairing then succeeded while quietly sharing nothing.",
+      "name": "a config nobody chose yields to one somebody did",
+      "incoming": { "version": 1, "updatedAt": "2026-09-10T05:00:00.000Z" },
+      "current": { "version": 1, "updatedAt": "2026-09-10T06:00:00.000Z" },
+      "currentIsPlaceholder": true,
+      "adopt": true
+    },
+    {
+      "$comment": "Even an older one. There is nothing in a placeholder to roll back.",
+      "name": "even an older config, since a placeholder holds nothing to lose",
+      "incoming": { "version": 3, "updatedAt": "2026-09-10T05:00:00.000Z" },
+      "current": { "version": 9, "updatedAt": "2026-09-10T06:00:00.000Z" },
+      "currentIsPlaceholder": true,
+      "adopt": true
+    },
+    {
+      "$comment": "Whether the other device holds a placeholder is not asked and could not be trusted if it were: the envelope's visible fields are authenticated, so adding a claim there would mean a format change, and a claim from a peer is the wrong thing to weigh anyway. A device that holds a placeholder does not offer it — see the vault-offer gate — so this direction never arises on the wire.",
+      "name": "the flag describes only the device asking, never the one offering",
+      "incoming": { "version": 1, "updatedAt": "2026-09-10T06:00:00.000Z" },
+      "current": { "version": 1, "updatedAt": "2026-09-10T05:00:00.000Z" },
+      "currentIsPlaceholder": false,
+      "adopt": true
     }
   ]
 }

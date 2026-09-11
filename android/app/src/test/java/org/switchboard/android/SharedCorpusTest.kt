@@ -567,10 +567,13 @@ class SharedCorpusTest {
             val incoming = envelope(c["incoming"]!!.jsonObject)!!
             val current = envelope(c["current"] as? JsonObject)
 
+            val placeholder =
+                (c["currentIsPlaceholder"] as? JsonPrimitive)?.content == "true"
+
             assertEquals(
                 c["name"]!!.jsonPrimitive.content,
                 c["adopt"]!!.jsonPrimitive.content == "true",
-                shouldAdoptVault(incoming, current)
+                shouldAdoptVault(incoming, current, placeholder)
             )
         }
     }

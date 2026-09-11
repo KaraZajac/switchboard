@@ -23,7 +23,15 @@ function harness() {
   const deaf = new Set<string>()
 
   const make = (id: string, priority: number) => {
-    const state = { resumed: 0, released: 0 }
+    // `holds` is the networks this device has open, which is what a heartbeat
+    // advertises and what the other device has to dial when it takes over.
+    // `resumedWith` records what it was told to take, at the moment it took it.
+    const state = {
+      resumed: 0,
+      released: 0,
+      holds: new Set<string>(),
+      resumedWith: [] as string[]
+    }
     const peer = {
       id,
       state,
@@ -46,13 +54,17 @@ function harness() {
         resume: () => {
           running.add(id)
           state.resumed++
+          state.resumedWith = peer.coordinator.heldByPeers()
+          for (const serverId of state.resumedWith) state.holds.add(serverId)
           events.push(`${id} took the connections`)
         },
         release: () => {
           state.released++
+          state.holds.clear()
           events.push(`${id} released the connections`)
         },
-        vaultVersion: () => 3
+        vaultVersion: () => 3,
+        holding: () => [...state.holds]
       }
     )
     return peer
@@ -389,5 +401,73 @@ describe('leaving on purpose', () => {
     vi.advanceTimersByTime(HEARTBEAT_INTERVAL_MS * 4)
 
     expect(events.filter((e) => e.startsWith('desktop →'))).toEqual([])
+  })
+})
+
+/**
+ * What each device has open, and who dials it after a handover.
+ *
+ * The two halves of this were separately broken and each looked fine from the
+ * device it was broken on. The phone took over from a desktop and connected to
+ * nothing, because it dialled only networks marked "connect automatically" —
+ * and the one in use was not, having been connected by hand. Then the desktop
+ * came back, the phone dutifully released a working connection, and the
+ * desktop showed "Not connected": it had restarted in the meantime, so its own
+ * record of what it had released was gone with the process that held it.
+ *
+ * Between them, a conversation that was live on one device could end up live
+ * on neither, with both devices showing exactly what a correct handover looks
+ * like.
+ */
+describe('taking over what the other device actually had', () => {
+  it('tells a device taking over which networks the other one was holding', () => {
+    const { desktop, phone, cut } = harness()
+
+    desktop.coordinator.start()
+    phone.coordinator.start()
+    vi.advanceTimersByTime(DISCOVERY_MS + HEARTBEAT_INTERVAL_MS)
+
+    // The desktop is holding one network, which nothing here calls autoConnect
+    desktop.state.holds.add('ergo')
+    vi.advanceTimersByTime(HEARTBEAT_INTERVAL_MS)
+
+    cut()
+    vi.advanceTimersByTime(HEARTBEAT_TIMEOUT_MS + HEARTBEAT_INTERVAL_MS)
+
+    expect(phone.coordinator.state().role).toBe('primary')
+    expect(phone.state.resumedWith).toEqual(['ergo'])
+  })
+
+  it('and remembers it after that device is gone, which is when it is needed', () => {
+    const { desktop, phone, cut } = harness()
+
+    desktop.coordinator.start()
+    phone.coordinator.start()
+    vi.advanceTimersByTime(DISCOVERY_MS + HEARTBEAT_INTERVAL_MS)
+    desktop.state.holds.add('ergo')
+    vi.advanceTimersByTime(HEARTBEAT_INTERVAL_MS)
+
+    cut()
+    vi.advanceTimersByTime(HEARTBEAT_TIMEOUT_MS + HEARTBEAT_INTERVAL_MS)
+
+    // Long after the desktop stopped beating, the answer is still there
+    vi.advanceTimersByTime(HEARTBEAT_INTERVAL_MS * 20)
+    expect(phone.coordinator.heldByPeers()).toEqual(['ergo'])
+  })
+
+  it('a follower is not asked what it is holding, because it is holding nothing', () => {
+    const { desktop, phone } = harness()
+
+    desktop.coordinator.start()
+    phone.coordinator.start()
+    vi.advanceTimersByTime(DISCOVERY_MS + HEARTBEAT_INTERVAL_MS)
+
+    // A follower that still had a stale set would hand the desktop a list of
+    // networks nobody is on
+    phone.state.holds.add('stale')
+    vi.advanceTimersByTime(HEARTBEAT_INTERVAL_MS * 2)
+
+    expect(phone.coordinator.state().role).toBe('follower')
+    expect(desktop.coordinator.heldByPeers()).toEqual([])
   })
 })

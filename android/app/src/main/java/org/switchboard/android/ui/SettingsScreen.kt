@@ -91,9 +91,16 @@ fun SettingsScreen(
         }
 
         SessionCard(engine)
+
+        // A locked config is the one thing on this page that stops the phone
+        // working, and the banner that sends people here says "Unlock" — so it
+        // goes first when it is locked rather than fourth, behind a list of
+        // fourteen colour schemes somebody has to scroll past to reach it.
+        val locked = !engine.isVaultUnlocked
+        if (locked) VaultCard(engine)
         AppearanceCard(engine)
         BatteryCard(engine)
-        VaultCard(engine)
+        if (!locked) VaultCard(engine)
 
         Spacer(Modifier.height(8.dp))
         Text(

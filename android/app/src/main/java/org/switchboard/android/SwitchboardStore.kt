@@ -323,6 +323,16 @@ class SwitchboardStore {
      */
     val capabilityValues = mutableStateMapOf<String, Map<String, String>>()
 
+    /**
+     * Which networks the desktop was last seen holding.
+     *
+     * Its own fact rather than a read of `servers[…].connected`, because that
+     * is cleared the moment the link drops — which is exactly the moment this
+     * is needed. What the desktop had open is what this phone should open when
+     * it stands in for it.
+     */
+    val heldByDesktop = mutableSetOf<String>()
+
     fun applySnapshot(snapshot: JsonElement, serverList: JsonElement) {
         serverList.jsonArray.forEach { entry ->
             val server = entry.jsonObject
@@ -335,9 +345,12 @@ class SwitchboardStore {
             )
         }
 
+        heldByDesktop.clear()
+
         snapshot.jsonArray.forEach { entry ->
             val live = entry.jsonObject
             val id = live["serverId"]?.str() ?: return@forEach
+            heldByDesktop.add(id)
             servers[id]?.let {
                 servers[id] = it.copy(
                     connected = true,

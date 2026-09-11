@@ -13,6 +13,8 @@ interface Case {
   name: string
   incoming: { version: number; updatedAt: string | null }
   current: { version: number; updatedAt: string | null } | null
+  /** Whether the config this device holds is the one it made for itself */
+  currentIsPlaceholder?: boolean
   adopt: boolean
 }
 
@@ -22,6 +24,9 @@ const corpus: { cases: Case[] } = JSON.parse(
 
 describe('deciding which config is the one to keep', () => {
   for (const c of corpus.cases) {
-    it(c.name, () => expect(shouldAdoptVault(c.incoming, c.current)).toBe(c.adopt))
+    it(c.name, () =>
+      expect(shouldAdoptVault(c.incoming, c.current, c.currentIsPlaceholder ?? false)).toBe(
+        c.adopt
+      ))
   }
 })

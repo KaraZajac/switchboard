@@ -6,6 +6,17 @@ export interface ConnectionControl {
   release: () => void
   /** Current vault version, advertised in heartbeats */
   vaultVersion: () => number
+  /**
+   * The networks this device is holding right now, advertised in heartbeats.
+   *
+   * Taking over is not a cold start. Whichever device wins has to dial what
+   * the other one actually had, and neither can work that out alone: a device
+   * that has just restarted has no memory of it, and `autoConnect` answers a
+   * different question — "dial this on launch" — so a network somebody
+   * connected by hand was dropped by whoever took over and never dialled
+   * again. Both sides looked like they had handed over correctly.
+   */
+  holding: () => string[]
 }
 
 /**
@@ -74,7 +85,15 @@ export interface CoordinatorTransport {
 }
 
 export type SessionFrame =
-  | { t: 'heartbeat'; role: SessionRole; priority: number; since: string | null; vaultVersion: number }
+  | {
+      t: 'heartbeat'
+      role: SessionRole
+      priority: number
+      since: string | null
+      vaultVersion: number
+      /** Optional: a peer on an older build does not send it */
+      holding?: string[]
+    }
   | { t: 'claim'; priority: number }
   | { t: 'yielded' }
   | { t: 'goodbye' }
@@ -89,6 +108,9 @@ export class SessionCoordinator {
     string,
     { role: SessionRole; priority: number; lastSeen: number }
   >()
+
+  /** What each peer last said it was holding, kept after the peer is gone */
+  private readonly peerHolding = new Map<string, string[]>()
 
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null
   private readonly listeners = new Set<Listener>()
@@ -160,6 +182,11 @@ export class SessionCoordinator {
           priority: frame.priority,
           lastSeen: Date.now()
         })
+        // Remembered past the peer going away, which is when it is needed:
+        // the whole point is to dial what it had once it is gone.
+        if (frame.holding && frame.role === 'primary') {
+          this.peerHolding.set(peerId, frame.holding)
+        }
         this.evaluate()
         break
       }
@@ -324,6 +351,20 @@ export class SessionCoordinator {
     this.becomePrimary()
   }
 
+  /**
+   * Everything any peer was last seen holding.
+   *
+   * What to dial on taking over, when this device has no memory of its own —
+   * which is every time it has restarted since the handover.
+   */
+  heldByPeers(): string[] {
+    const all = new Set<string>()
+    for (const held of this.peerHolding.values()) {
+      for (const serverId of held) all.add(serverId)
+    }
+    return [...all]
+  }
+
   private becomePrimary(): void {
     this.endDiscovery()
     this.role = 'primary'
@@ -348,7 +389,8 @@ export class SessionCoordinator {
         role: this.role,
         priority: this.priority,
         since: this.since,
-        vaultVersion: this.connections.vaultVersion()
+        vaultVersion: this.connections.vaultVersion(),
+        holding: this.connections.holding()
       },
       peerId
     )

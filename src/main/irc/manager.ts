@@ -182,13 +182,29 @@ export class IRCManager {
    * would drop the user off the network and bring them back under a `nick_`
    * the server hands out because their real one is still in the ping timeout.
    */
-  resumeConnections(): void {
+  /** The networks this device is holding, for a peer deciding what to take over */
+  connectedServerIds(): string[] {
+    return [...this.clients.keys()]
+  }
+
+  /**
+   * Take the connections back.
+   *
+   * @param alsoWanted what a peer said it was holding. A desktop that handed
+   *   over and then restarted has no `released` list of its own — it is in
+   *   memory — and falling through to `autoConnect` dialled nothing, because
+   *   that setting answers "connect on launch" rather than "this network is in
+   *   use". The phone released its connection to a desktop that then sat there
+   *   saying "Not connected", and the conversation was simply over.
+   */
+  resumeConnections(alsoWanted: string[] = []): void {
     const released = this.released
     this.released = []
 
+    const asked = [...new Set([...released, ...alsoWanted])]
     const wanted =
-      released.length > 0
-        ? released
+      asked.length > 0
+        ? asked
         : getAllServers()
             .filter((server) => server.autoConnect)
             .map((server) => server.id)

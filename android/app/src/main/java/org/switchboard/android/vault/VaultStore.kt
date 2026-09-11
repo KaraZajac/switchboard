@@ -113,6 +113,22 @@ class VaultStore(context: Context) {
             runCatching { envelope = VaultCrypto.decode(file.readText()) }
         }
 
+        // A config written before the flag existed. Recognise the one this
+        // phone made for itself: version 1, sealed here, never given a
+        // passphrase. Without this, a phone that paired under the old rule
+        // keeps the placeholder it should have given up and stays in the state
+        // that made the flag necessary.
+        if (!prefs.contains(PLACEHOLDER)) {
+            val existing = envelope
+            prefs.edit().putBoolean(
+                PLACEHOLDER,
+                existing != null &&
+                    existing.version == 1 &&
+                    existing.updatedBy == "phone" &&
+                    !prefs.getBoolean(HAS_PASSPHRASE, false)
+            ).apply()
+        }
+
         // If the user asked us to stay open, this is what makes a standby phone
         // able to take over after the system restarts it in the night.
         // No config yet means a fresh install, not a locked one. Make one, so
@@ -155,6 +171,17 @@ class VaultStore(context: Context) {
     val hasPassphrase: Boolean get() = prefs.getBoolean(HAS_PASSPHRASE, false)
 
     /**
+     * Whether this config is the one made automatically on first launch.
+     *
+     * A fact about this phone, kept here rather than in the envelope. The
+     * envelope's visible fields are authenticated so that neither device can
+     * edit them, which makes adding one a format change — and a peer's claim
+     * about its own config is not something to weigh anyway. What this decides
+     * is only ever whether *we* yield: see [shouldAdoptVault].
+     */
+    val isPlaceholder: Boolean get() = envelope != null && prefs.getBoolean(PLACEHOLDER, false)
+
+    /**
      * Make a config for this phone, now, with nothing to type.
      *
      * The app used to have no way to make one at all — a config could only
@@ -169,7 +196,7 @@ class VaultStore(context: Context) {
         if (envelope != null) return false
 
         val generated = ByteArray(32).also { java.security.SecureRandom().nextBytes(it) }
-        write(VaultPayload(version = 1), generated, VaultCrypto.generateSalt())
+        write(VaultPayload(version = 1), generated, VaultCrypto.generateSalt(), placeholder = true)
         keeper.keep(generated)
         prefs.edit().putBoolean(HAS_PASSPHRASE, false).apply()
         return true
@@ -194,7 +221,12 @@ class VaultStore(context: Context) {
     }
 
     /** Seal a payload under a key and make it the one we hold */
-    private fun write(next: VaultPayload, underKey: ByteArray, salt: ByteArray) {
+    private fun write(
+        next: VaultPayload,
+        underKey: ByteArray,
+        salt: ByteArray,
+        placeholder: Boolean = false
+    ) {
         val sealed = VaultCrypto.seal(
             payloadJson = json.encodeToString(VaultPayload.serializer(), next),
             key = underKey,
@@ -208,6 +240,7 @@ class VaultStore(context: Context) {
         payload = next
         key = underKey
         file.writeText(VaultCrypto.encode(sealed))
+        prefs.edit().putBoolean(PLACEHOLDER, placeholder).apply()
     }
 
     fun unlock(passphrase: String, keepOpen: Boolean = false): Boolean {
@@ -252,7 +285,8 @@ class VaultStore(context: Context) {
      * same decision the desktop makes or the two trade vaults forever.
      */
     fun accept(incoming: VaultEnvelope): Import {
-        if (!shouldAdoptVault(incoming, envelope)) {
+        val yielding = isPlaceholder
+        if (!shouldAdoptVault(incoming, envelope, yielding)) {
             return Import(false, "Ignored vault v${incoming.version}; this phone has v$version")
         }
 
@@ -266,20 +300,49 @@ class VaultStore(context: Context) {
                     VaultCrypto.open(incoming, currentKey)
                 )
             } catch (e: VaultLockedException) {
-                return Import(false, "That device is using a different passphrase")
+                // A config made here is sealed with a random key, and a
+                // desktop's with a passphrase, so the two never open each
+                // other. Refusing left the phone holding an empty config it
+                // had no reason to keep and no way to replace. Take theirs and
+                // ask for the passphrase — which is what the shared config
+                // needs anyway, and what the banner already offers.
+                if (!yielding) {
+                    return Import(false, "That device is using a different passphrase")
+                }
+                adopt(incoming, opened = null)
+                keeper.forget()
+                return Import(true, "Adopted vault v${incoming.version}; unlock to apply it")
             }
 
-            envelope = incoming
-            payload = opened
-            file.writeText(VaultCrypto.encode(incoming))
+            adopt(incoming, opened)
             return Import(true, "Adopted vault v${incoming.version}")
         }
 
         // Locked: we cannot check it opens, but storing it is still right — the
         // user may unlock later, and refusing would leave the devices apart.
-        envelope = incoming
-        file.writeText(VaultCrypto.encode(incoming))
+        adopt(incoming, opened = null)
         return Import(true, "Stored vault v${incoming.version}; unlock to apply it")
+    }
+
+    /**
+     * Make an incoming envelope the one we hold.
+     *
+     * Whatever else it is, it is not the config this phone made for itself, so
+     * the placeholder flag goes with it — otherwise a phone that has adopted a
+     * desktop's config would go on yielding to anything at all.
+     */
+    private fun adopt(incoming: VaultEnvelope, opened: VaultPayload?) {
+        envelope = incoming
+        payload = opened
+        if (opened == null) key = null
+        file.writeText(VaultCrypto.encode(incoming))
+        // Nothing that is offered is a placeholder, and every config another
+        // device shares is sealed with a passphrase somebody chose — so this
+        // one can be shared on again.
+        prefs.edit()
+            .putBoolean(PLACEHOLDER, false)
+            .putBoolean(HAS_PASSPHRASE, true)
+            .apply()
     }
 
     /**
@@ -320,11 +383,26 @@ class VaultStore(context: Context) {
 
     private companion object {
         const val HAS_PASSPHRASE = "hasPassphrase"
+        const val PLACEHOLDER = "placeholder"
         const val PROFILE_KEY = "profile"
     }
 
     /** The sealed envelope, for handing to another device */
     fun sealedEnvelope(): VaultEnvelope? = envelope
+
+    /**
+     * Whether a config described this way could replace ours.
+     *
+     * What the gate in front of asking for one should use, so that asking and
+     * adopting agree. An empty `sealedAt` is a peer that does not send one:
+     * the comparison then falls back to versions alone, which is what that
+     * peer itself does.
+     */
+    fun mightAdopt(offeredVersion: Int, sealedAt: String): Boolean {
+        val current = envelope ?: return true
+        val described = current.copy(version = offeredVersion, updatedAt = sealedAt)
+        return shouldAdoptVault(described, current, isPlaceholder)
+    }
 }
 
 /**
@@ -368,9 +446,27 @@ data class VaultPayload(
  * until somebody edits again, which is a strange thing to ask of a user who has
  * no idea anything is wrong. The later edit wins.
  *
+ * Before any of that: a config nobody chose is not one to defend. This phone
+ * makes itself one on first launch, so that adding a server is not gated on
+ * owning a desktop — and that placeholder used to win the tiebreak against a
+ * desktop's real config, because a phone is always set up after the desktop it
+ * pairs to. Pairing succeeded, following worked, and the config silently never
+ * arrived; the one thing the vault exists for — this phone being able to take
+ * over when the desktop stops — was dead and nothing said so.
+ *
+ * The flag describes the device asking and never the one offering. The
+ * envelope's visible fields are authenticated, so a claim carried there would
+ * mean a format change — and a peer's claim about itself is the wrong thing to
+ * weigh in any case. A device holding a placeholder simply does not offer it.
+ *
  * Kept alongside `src/shared/vaultorder.ts` and held to the same cases.
  */
-fun shouldAdoptVault(incoming: VaultEnvelope, current: VaultEnvelope?): Boolean {
+fun shouldAdoptVault(
+    incoming: VaultEnvelope,
+    current: VaultEnvelope?,
+    currentIsPlaceholder: Boolean = false
+): Boolean {
+    if (currentIsPlaceholder) return true
     if (current == null) return true
     if (incoming.version > current.version) return true
     if (incoming.version < current.version) return false

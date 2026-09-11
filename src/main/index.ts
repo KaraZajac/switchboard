@@ -7,7 +7,7 @@ import { ircManager } from './irc/manager'
 import { initDatabase, closeDatabase } from './storage/database'
 import { loadSTSPolicies, persistSTSPoliciesWith } from './irc/features/sts'
 import { allSTSPolicies, saveSTSPolicy, forgetSTSPolicy } from './storage/models/sts'
-import { stopRemoteLink } from './remote/link'
+import { resumeRemoteLink, stopRemoteLink } from './remote/link'
 import { encryptStoredCredentials } from './storage/models/server'
 import { secretsBackendDescription } from './storage/secrets'
 
@@ -281,6 +281,10 @@ app.whenReady().then(async () => {
 
   // Register IPC handlers
   registerIPCHandlers()
+
+  // A paired phone should be able to reach this desktop the moment it is
+  // running, not only after somebody visits Settings.
+  void resumeRemoteLink()
 
   // Set CSP for production
   if (app.isPackaged) {

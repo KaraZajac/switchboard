@@ -12,6 +12,7 @@ import {
   touchDevice,
   type PairedDevice
 } from '../storage/models/device'
+import { getSetting, setSetting } from '../storage/models/settings'
 import {
   encodeFrame,
   generatePairingCode,
@@ -30,6 +31,7 @@ import {
   type SessionState
 } from '../session/coordinator'
 import { exportVault, importVault, onVaultChanged, vaultStatus } from '../vault/vault'
+import { shouldAdoptVault } from '@shared/vaultorder'
 import type { VaultEnvelope } from '../vault/crypto'
 
 /**
@@ -115,9 +117,12 @@ export const session = new SessionCoordinator(
     hasPeers: () => clients.size > 0 || getPairedDevices().length > 0
   },
   {
-    resume: () => ircManager.resumeConnections(),
+    // Whatever the phone was holding as well as whatever this desktop
+    // released, because a desktop that has restarted remembers neither.
+    resume: () => ircManager.resumeConnections(session.heldByPeers()),
     release: () => ircManager.releaseConnections(),
-    vaultVersion: () => vaultStatus().version
+    vaultVersion: () => vaultStatus().version,
+    holding: () => ircManager.connectedServerIds()
   }
 )
 
@@ -141,7 +146,36 @@ async function loadSecretKey(): Promise<number[]> {
   return Array.from(key)
 }
 
+/**
+ * The setting that says this desktop is one a phone may reach.
+ *
+ * Pairing is a durable relationship — the endpoint's secret key is kept on
+ * disk precisely so the ticket a phone saved stays dialable across restarts —
+ * but the listener in front of it was not. Quit the desktop and reopen it and
+ * the phone could no longer reach it at all, silently, until somebody went
+ * back into Settings and flipped the toggle again.
+ */
+const LINK_ENABLED = 'remoteLinkEnabled'
+
+/**
+ * Start the link again if it was running when the desktop last closed.
+ *
+ * An unset setting means a build from before this was remembered. Having
+ * paired a device is what somebody meant by turning it on, so that is what it
+ * falls back to; an explicit `false` is honoured, because a user who switched
+ * it off did so with the phone still paired.
+ */
+export async function resumeRemoteLink(): Promise<void> {
+  const chosen = getSetting<boolean>(LINK_ENABLED)
+  const wanted = chosen === null ? getPairedDevices().length > 0 : chosen === true
+  if (!wanted) return
+
+  const status = await startRemoteLink()
+  if (status.error) console.warn(`Remote link did not resume: ${status.error}`)
+}
+
 export async function startRemoteLink(): Promise<RemoteStatus> {
+  setSetting(LINK_ENABLED, true)
   if (endpoint) return remoteStatus()
 
   stopping = false
@@ -176,7 +210,10 @@ export async function startRemoteLink(): Promise<RemoteStatus> {
 
   // A config change on this device is offered to the others straight away
   onVaultChanged((version) => {
-    for (const client of clients.values()) client.send({ t: 'vault-offer', version })
+    const updatedAt = exportVault()?.updatedAt
+    for (const client of clients.values()) {
+      client.send({ t: 'vault-offer', version, updatedAt })
+    }
   })
 
   acceptLoop = runAcceptLoop()
@@ -186,6 +223,7 @@ export async function startRemoteLink(): Promise<RemoteStatus> {
 }
 
 export async function stopRemoteLink(): Promise<RemoteStatus> {
+  setSetting(LINK_ENABLED, false)
   stopping = true
   pairing = null
 
@@ -349,7 +387,9 @@ async function handleConnection(connection: IrohConnection): Promise<void> {
           // Say who is holding the connections, and what config we have
           session.peerConnected(endpointId)
           const vault = exportVault()
-          if (vault) send({ t: 'vault-offer', version: vault.version })
+          if (vault) {
+            send({ t: 'vault-offer', version: vault.version, updatedAt: vault.updatedAt })
+          }
           continue
         }
 
@@ -418,8 +458,14 @@ function handlePeerFrame(
       return
 
     case 'vault-offer': {
-      // Only ask for it if theirs is newer than ours
-      if (frame.version > vaultStatus().version) send({ t: 'vault-request' })
+      // Ask whenever theirs might win, which is the adopter's rule and not a
+      // stricter one. It used to be `>`, which meant two configs at the same
+      // version never even spoke — so the tiebreak both devices implement for
+      // exactly that case could never be reached over the wire.
+      const current = exportVault()
+      if (shouldAdoptVault({ version: frame.version, updatedAt: frame.updatedAt }, current)) {
+        send({ t: 'vault-request' })
+      }
       return
     }
 

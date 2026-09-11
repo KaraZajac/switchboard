@@ -46,7 +46,15 @@ sealed interface SessionFrame {
         val role: SessionRole,
         val priority: Int,
         val since: String?,
-        val vaultVersion: Int
+        val vaultVersion: Int,
+        /**
+         * The networks this device is holding right now.
+         *
+         * Taking over is not a cold start: whichever device wins has to dial
+         * what the other one actually had. Empty from a peer on an older
+         * build, which reads the same as holding nothing.
+         */
+        val holding: List<String> = emptyList()
     ) : SessionFrame
 
     data class Claim(val priority: Int) : SessionFrame
@@ -70,6 +78,9 @@ interface ConnectionControl {
     fun release()
     /** Current vault version, advertised in heartbeats */
     fun vaultVersion(): Int
+
+    /** The networks this device is holding, so the other one can take them over */
+    fun holding(): List<String> = emptyList()
 }
 
 interface CoordinatorTransport {
@@ -328,7 +339,13 @@ class SessionCoordinator(
 
     private fun sendHeartbeat(peerId: String? = null) {
         transport.send(
-            SessionFrame.Heartbeat(role, priority, since, connections.vaultVersion()),
+            SessionFrame.Heartbeat(
+                role,
+                priority,
+                since,
+                connections.vaultVersion(),
+                connections.holding()
+            ),
             peerId
         )
     }

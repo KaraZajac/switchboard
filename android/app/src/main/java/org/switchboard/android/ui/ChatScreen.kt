@@ -304,7 +304,11 @@ private fun Conversation(
             )
 
             engine.needsPassphrase -> Banner(
-                text = "Unlock the shared config so this phone can connect",
+                text = if (pairedWithDesktop) {
+                    "Unlock the shared config so this phone can take over"
+                } else {
+                    "Unlock the shared config so this phone can connect"
+                },
                 color = Yellow,
                 action = "Unlock",
                 onClick = onOpenSettings

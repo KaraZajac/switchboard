@@ -36,7 +36,18 @@ export type PeerFrame =
    */
   | { t: 'goodbye' }
   /** "I have vault vN" — the other side asks for it if theirs is older */
-  | { t: 'vault-offer'; version: number }
+  | {
+      t: 'vault-offer'
+      version: number
+      /**
+       * Sealed when, so the receiver can run the same rule the adopter runs.
+       *
+       * Optional because a peer on an older build does not send it — and
+       * without it the rule falls back to comparing versions alone, which is
+       * exactly what that peer already does.
+       */
+      updatedAt?: string
+    }
   | { t: 'vault-request' }
   | { t: 'vault-payload'; envelope: unknown }
 
