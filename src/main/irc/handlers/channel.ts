@@ -156,10 +156,20 @@ registerHandler('332', (client, msg) => {
  */
 registerHandler('324', (client, msg) => {
   // params: <nick> <channel> <modes> [params...]
-  const ch = client.state.channels.get(client.state.casemap(msg.params[1]))
+  const channel = msg.params[1]
+  const ch = client.state.channels.get(client.state.casemap(channel))
   if (!ch) return
 
   applyChannelModes(ch, msg.params[2] || '', msg.params.slice(3), client)
+
+  // Say so, or a settings panel that asked has no way to learn the answer —
+  // this numeric is the only reply to a `MODE #channel` query.
+  client.events.emit('mode', {
+    channel,
+    mode: msg.params[2] || '',
+    params: msg.params.slice(3),
+    setBy: null
+  })
 })
 
 /**

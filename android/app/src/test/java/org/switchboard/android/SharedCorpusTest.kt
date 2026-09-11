@@ -24,6 +24,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.switchboard.android.irc.Aliases
+import org.switchboard.android.irc.ChanModes
 import org.switchboard.android.irc.Casemap
 import org.switchboard.android.irc.ConnectionState
 import org.switchboard.android.irc.Formatter
@@ -883,6 +884,84 @@ class SharedCorpusTest {
                     mapOfOrNull(c["published"]),
                     mapOfOrNull(c["next"])
                 )
+            )
+        }
+    }
+
+    // ── what a channel is set to ─────────────────────────────────────
+
+    /**
+     * Which letters a network has is its own answer; what they mean is
+     * convention. Both clients have to agree on both, or a checkbox at the desk
+     * sets something different from the one in your pocket.
+     */
+    @Test
+    fun `reads channel settings the way the desktop reads them`() {
+        val corpus = load("chanmodes.json")
+
+        fun kindOf(name: String) = when (name) {
+            "param" -> ChanModes.Kind.PARAM
+            "paramOnSet" -> ChanModes.Kind.PARAM_ON_SET
+            else -> ChanModes.Kind.FLAG
+        }
+
+        for (case in corpus["modes"]!!.jsonArray) {
+            val c = case.jsonObject
+            val name = c["name"]!!.jsonPrimitive.content
+            val chanmodes = c["chanmodes"]!!.let { if (it is JsonNull) null else it.jsonPrimitive.content }
+            val modes = ChanModes.settingsFor(chanmodes, c["prefix"]!!.jsonPrimitive.content)
+
+            c["letters"]?.let { wanted ->
+                assertEquals(
+                    name,
+                    wanted.jsonArray.map { it.jsonPrimitive.content },
+                    modes.map { it.letter }
+                )
+            }
+            c["kinds"]?.let { wanted ->
+                assertEquals(
+                    name,
+                    wanted.jsonArray.map { kindOf(it.jsonPrimitive.content) },
+                    modes.map { it.kind }
+                )
+            }
+            c["excludes"]?.jsonArray?.forEach { letter ->
+                assertEquals(
+                    "$name — ${letter.jsonPrimitive.content} is not a setting",
+                    false,
+                    modes.any { it.letter == letter.jsonPrimitive.content }
+                )
+            }
+        }
+
+        for (case in corpus["labels"]!!.jsonArray) {
+            val c = case.jsonObject
+            val mode = ChanModes.settingsFor(
+                c["chanmodes"]!!.jsonPrimitive.content,
+                c["prefix"]!!.jsonPrimitive.content
+            ).firstOrNull { it.letter == c["letter"]!!.jsonPrimitive.content }
+            assertEquals(
+                c["name"]!!.jsonPrimitive.content,
+                c["label"]!!.jsonPrimitive.content,
+                mode?.label
+            )
+        }
+
+        for (case in corpus["changes"]!!.jsonArray) {
+            val c = case.jsonObject
+            val mode = ChanModes.Mode(
+                c["letter"]!!.jsonPrimitive.content,
+                kindOf(c["kind"]!!.jsonPrimitive.content),
+                "x", "y"
+            )
+            val value = c["value"]!!.let { if (it is JsonNull) null else it.jsonPrimitive.content }
+            val wanted = c["args"]!!.let {
+                if (it is JsonNull) null else it.jsonArray.map { arg -> arg.jsonPrimitive.content }
+            }
+            assertEquals(
+                c["name"]!!.jsonPrimitive.content,
+                wanted,
+                ChanModes.change(mode, c["on"]!!.jsonPrimitive.content == "true", value)
             )
         }
     }

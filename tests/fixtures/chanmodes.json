@@ -1,0 +1,234 @@
+{
+  "$comment": "What a channel is set to, in words. Read by tests/shared/chanmodes.test.ts and the Android SharedCorpusTest. Which letters a network has is its own answer from ISUPPORT; what they mean is convention, and both clients have to agree on both.",
+  "$modes": "Which modes are offered as settings, and of what kind. List modes are collections rather than settings and have a panel of their own; a letter that is also a rank is not a setting at all.",
+  "modes": [
+    {
+      "name": "a small network's settings",
+      "chanmodes": "b,k,l,imnpst",
+      "prefix": "(ov)@+",
+      "letters": [
+        "k",
+        "l",
+        "i",
+        "m",
+        "n",
+        "p",
+        "s",
+        "t"
+      ],
+      "kinds": [
+        "param",
+        "paramOnSet",
+        "flag",
+        "flag",
+        "flag",
+        "flag",
+        "flag",
+        "flag"
+      ]
+    },
+    {
+      "name": "bans are not a setting",
+      "chanmodes": "b,k,l,imnpst",
+      "prefix": "(ov)@+",
+      "excludes": [
+        "b"
+      ]
+    },
+    {
+      "name": "and neither are the other lists",
+      "chanmodes": "eIbq,k,flj,CFLMPQScgimnprstz",
+      "prefix": "(ohv)@%+",
+      "excludes": [
+        "e",
+        "I",
+        "b",
+        "q"
+      ]
+    },
+    {
+      "name": "nor is a rank, where the letter is also a list elsewhere",
+      "chanmodes": "beI,kLf,l,psmntirzMQNRTOVKDdGPZSCc",
+      "prefix": "(qaohv)~&@%+",
+      "excludes": [
+        "q",
+        "a",
+        "o",
+        "h",
+        "v"
+      ]
+    },
+    {
+      "name": "no CHANMODES means nothing to offer",
+      "chanmodes": null,
+      "prefix": "(ov)@+",
+      "letters": [],
+      "kinds": []
+    }
+  ],
+  "$labels": "What each one is called. The ones every ircd agrees on, and a plain +x for the rest.",
+  "labels": [
+    {
+      "name": "invite only",
+      "chanmodes": "b,k,l,imnpst",
+      "prefix": "(ov)@+",
+      "letter": "i",
+      "label": "Invite only"
+    },
+    {
+      "name": "moderated",
+      "chanmodes": "b,k,l,imnpst",
+      "prefix": "(ov)@+",
+      "letter": "m",
+      "label": "Moderated"
+    },
+    {
+      "name": "no outside messages",
+      "chanmodes": "b,k,l,imnpst",
+      "prefix": "(ov)@+",
+      "letter": "n",
+      "label": "No outside messages"
+    },
+    {
+      "name": "topic locked",
+      "chanmodes": "b,k,l,imnpst",
+      "prefix": "(ov)@+",
+      "letter": "t",
+      "label": "Topic locked"
+    },
+    {
+      "name": "a password",
+      "chanmodes": "b,k,l,imnpst",
+      "prefix": "(ov)@+",
+      "letter": "k",
+      "label": "Password"
+    },
+    {
+      "name": "a limit",
+      "chanmodes": "b,k,l,imnpst",
+      "prefix": "(ov)@+",
+      "letter": "l",
+      "label": "Limit"
+    },
+    {
+      "name": "anything else is named after itself",
+      "chanmodes": "eIbq,k,flj,CFLMPQScgimnprstz",
+      "prefix": "(ohv)@%+",
+      "letter": "z",
+      "label": "+z"
+    }
+  ],
+  "$changes": "The MODE arguments for turning one setting on or off. Null means there is nothing to send.",
+  "changes": [
+    {
+      "name": "a flag on",
+      "letter": "i",
+      "kind": "flag",
+      "on": true,
+      "value": null,
+      "args": [
+        "+i"
+      ]
+    },
+    {
+      "name": "a flag off",
+      "letter": "i",
+      "kind": "flag",
+      "on": false,
+      "value": null,
+      "args": [
+        "-i"
+      ]
+    },
+    {
+      "name": "a flag ignores a value it cannot use",
+      "letter": "i",
+      "kind": "flag",
+      "on": true,
+      "value": "x",
+      "args": [
+        "+i"
+      ]
+    },
+    {
+      "name": "a password on",
+      "letter": "k",
+      "kind": "param",
+      "on": true,
+      "value": "hunter2",
+      "args": [
+        "+k",
+        "hunter2"
+      ]
+    },
+    {
+      "name": "a password off carries the password",
+      "letter": "k",
+      "kind": "param",
+      "on": false,
+      "value": "hunter2",
+      "args": [
+        "-k",
+        "hunter2"
+      ]
+    },
+    {
+      "name": "a password off without one still tries",
+      "letter": "k",
+      "kind": "param",
+      "on": false,
+      "value": null,
+      "args": [
+        "-k"
+      ]
+    },
+    {
+      "name": "a limit on",
+      "letter": "l",
+      "kind": "paramOnSet",
+      "on": true,
+      "value": "50",
+      "args": [
+        "+l",
+        "50"
+      ]
+    },
+    {
+      "name": "a limit off takes no number",
+      "letter": "l",
+      "kind": "paramOnSet",
+      "on": false,
+      "value": "50",
+      "args": [
+        "-l"
+      ]
+    },
+    {
+      "name": "turning on a value mode with nothing to set sends nothing",
+      "letter": "l",
+      "kind": "paramOnSet",
+      "on": true,
+      "value": "",
+      "args": null
+    },
+    {
+      "name": "nor with whitespace",
+      "letter": "k",
+      "kind": "param",
+      "on": true,
+      "value": "   ",
+      "args": null
+    },
+    {
+      "name": "a value is trimmed",
+      "letter": "k",
+      "kind": "param",
+      "on": true,
+      "value": "  hunter2  ",
+      "args": [
+        "+k",
+        "hunter2"
+      ]
+    }
+  ]
+}

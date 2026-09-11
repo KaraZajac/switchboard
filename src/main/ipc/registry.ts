@@ -67,6 +67,8 @@ export const REMOTE_ALLOWED = new Set([
   'monitor:remove',
   'user:kick',
   'user:mode',
+  'channel:modes',
+  'channel:set-mode',
   'masklist:fetch',
   'masklist:set',
   'ignore:list',

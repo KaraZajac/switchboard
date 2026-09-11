@@ -272,6 +272,17 @@ export interface RendererToMainInvocations {
   ) => Promise<{ saved: boolean; published: boolean; reason?: string } | void>
   /** Drop this network's own profile, so it follows the one you carry again */
   'metadata:reset': (serverId: string) => Promise<void>
+  /** What a channel is currently set to, as the connection has tracked it */
+  'channel:modes': (serverId: string, channel: string) => Promise<Record<string, string | true>>
+  /**
+   * Change one of a channel's settings.
+   *
+   * Takes the MODE arguments as `@shared/chanmodes` produced them, rather than
+   * a change and a target the way `user:mode` does — a flag has no target, and
+   * sending an empty one makes `MODE #chan +m :`, which is not the command
+   * anybody meant.
+   */
+  'channel:set-mode': (serverId: string, channel: string, args: string[]) => Promise<void>
   /** Ask the server for one of a channel's mask lists — bans and the rest */
   'masklist:fetch': (serverId: string, channel: string, mode: string) => Promise<MaskEntry[]>
   /** Everyone this client has been told not to hear from */

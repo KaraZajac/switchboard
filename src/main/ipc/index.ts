@@ -658,6 +658,33 @@ export function registerIPCHandlers(): void {
   })
 
   /**
+   * What a channel is currently set to.
+   *
+   * Tracked by the connection as MODE lines arrive, so this is a read rather
+   * than a question for the server — and a `MODE #channel` query goes out
+   * alongside, because a channel joined before this client started has modes
+   * nobody has seen yet.
+   */
+  handle('channel:modes', async (_event, serverId: string, channel: string) => {
+    const client = ircManager.getClient(serverId)
+    if (!client) return {}
+
+    const ch = client.state.channels.get(client.state.casemap(channel))
+    if (!ch) return {}
+
+    client.connection.send('MODE', channel)
+    return { ...ch.modes }
+  })
+
+  handle('channel:set-mode', async (_event, serverId: string, channel: string, args: string[]) => {
+    const client = ircManager.getClient(serverId)
+    if (!client) throw new Error('Not connected')
+    if (args.length === 0) return
+
+    client.connection.send('MODE', channel, ...args)
+  })
+
+  /**
    * Ask for one of a channel's mask lists.
    *
    * Answers with what is already known and asks the server in the background,

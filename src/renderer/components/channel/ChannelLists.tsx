@@ -5,10 +5,11 @@ import { useServerStore } from '../../stores/serverStore'
 import { useChannelStore } from '../../stores/channelStore'
 import { useUserStore } from '../../stores/userStore'
 import { maskListsFor, maskToSet, type MaskEntry } from '@shared/masklists'
+import { channelModesFor, modeChange, type ChannelMode } from '@shared/chanmodes'
 import { parsePrefix, rankOf } from '@shared/powers'
 
 /**
- * What a channel is keeping: bans, quiets, exceptions, invites.
+ * A channel's settings, and the lists it keeps.
  *
  * We shipped the ability to ban somebody with nowhere to see who is banned —
  * so a ban could be set and never found again, and a mask that matched nothing
@@ -38,6 +39,7 @@ export function ChannelLists() {
     [tokens.CHANMODES, tokens.PREFIX]
   )
 
+  const [tab, setTab] = useState<'settings' | 'lists'>('settings')
   const [mode, setMode] = useState(() => lists[0]?.mode ?? 'b')
   const [entries, setEntries] = useState<MaskEntry[]>([])
   const [loading, setLoading] = useState(false)
@@ -119,8 +121,28 @@ export function ChannelLists() {
   }
 
   return (
-    <Modal title={`${channel} — lists`} onClose={closeModal} width="max-w-xl">
+    <Modal title={channel} onClose={closeModal} width="max-w-xl">
       <div className="space-y-3 p-4">
+        <div className="flex gap-1 rounded bg-gray-800 p-0.5 text-xs">
+          {(['settings', 'lists'] as const).map((which) => (
+            <button
+              key={which}
+              onClick={() => setTab(which)}
+              className={`flex-1 rounded px-2 py-1 font-medium capitalize transition-colors ${
+                tab === which ? 'bg-gray-600 text-white' : 'text-gray-400 hover:text-gray-200'
+              }`}
+            >
+              {which}
+            </button>
+          ))}
+        </div>
+
+        {tab === 'settings' && (
+          <ChannelSettings serverId={serverId} channel={channel} canChange={canChange} />
+        )}
+
+        {tab === 'lists' && (
+        <div className="space-y-3">
         {/* Only the lists this network actually keeps */}
         <div className="flex gap-1 rounded bg-gray-800 p-0.5 text-xs">
           {lists.map((one) => (
@@ -207,7 +229,144 @@ export function ChannelLists() {
         {error && (
           <div className="rounded bg-red-900/50 px-2 py-1.5 text-xs text-red-300">{error}</div>
         )}
+        </div>
+        )}
       </div>
     </Modal>
+  )
+}
+
+/**
+ * What this channel is set to.
+ *
+ * `CHANMODES` has been parsed since the beginning and there has never been
+ * anywhere to see the answer, let alone change one — the only way to make a
+ * channel invite-only was `/mode #channel +i`, which means knowing that `i` is
+ * the letter.
+ *
+ * Read-only where you could not change it. A setting is not a secret, and
+ * knowing that a channel is moderated explains why your message went nowhere.
+ */
+function ChannelSettings({
+  serverId,
+  channel,
+  canChange
+}: {
+  serverId: string
+  channel: string
+  canChange: boolean
+}) {
+  const isupport = useServerStore((s) => s.isupport)
+  const tokens = isupport[serverId] ?? {}
+
+  /**
+   * What the connection has tracked, rather than a copy kept here.
+   *
+   * The main process already applies every MODE line to the channel it names;
+   * a second implementation in the renderer would be a second thing to get
+   * wrong. Refetched whenever a MODE arrives, which includes the reply to the
+   * query this fetch sends.
+   */
+  const [set, setSet] = useState<Record<string, string | true>>({})
+
+  useEffect(() => {
+    const load = () => {
+      void window.switchboard.invoke('channel:modes', serverId, channel).then(setSet)
+    }
+    load()
+
+    const off = window.switchboard.on('irc:mode', (data) => {
+      const change = data as { serverId: string; channel: string }
+      if (change.serverId !== serverId) return
+      if (change.channel.toLowerCase() !== channel.toLowerCase()) return
+      load()
+    })
+    return off
+  }, [serverId, channel])
+
+  const modes = useMemo(
+    () => channelModesFor(tokens.CHANMODES, tokens.PREFIX),
+    [tokens.CHANMODES, tokens.PREFIX]
+  )
+  // What is typed into a value box before it is applied, so a half-written
+  // password is not sent a character at a time.
+  const [typed, setTyped] = useState<Record<string, string>>({})
+
+  const apply = (mode: ChannelMode, on: boolean, value?: string): void => {
+    const args = modeChange(mode, on, value ?? typed[mode.letter] ?? String(set[mode.letter] ?? ''))
+    if (!args) return
+    void window.switchboard.invoke('channel:set-mode', serverId, channel, args)
+  }
+
+  if (modes.length === 0) {
+    return <p className="p-2 text-sm text-gray-500">This network states no channel modes.</p>
+  }
+
+  return (
+    <div className="space-y-1">
+      {modes.map((mode) => {
+        const current = set[mode.letter]
+        const on = current !== undefined
+        const value = typed[mode.letter] ?? (typeof current === 'string' ? current : '')
+
+        return (
+          <div key={mode.letter} className="rounded bg-gray-900/60 px-3 py-2 ring-1 ring-gray-800">
+            <div className="flex items-center gap-2">
+              <div className="min-w-0 flex-1">
+                <div className="text-sm text-gray-100">
+                  {mode.label} <span className="font-mono text-xs text-gray-500">+{mode.letter}</span>
+                </div>
+                <div className="text-xs text-gray-500">{mode.hint}</div>
+              </div>
+              <input
+                type="checkbox"
+                checked={on}
+                // A mode that takes a value cannot be turned *on* by a
+                // checkbox — there would be nothing to set it to — so the box
+                // only turns those off, and the Set button turns them on.
+                disabled={!canChange || (mode.kind !== 'flag' && !on)}
+                onChange={(e) => apply(mode, e.target.checked)}
+                className="h-4 w-4 shrink-0 accent-indigo-500 disabled:opacity-40"
+              />
+            </div>
+
+            {/*
+              Always, not only once it is set: a mode that takes a value can
+              only be turned on by giving one, so hiding the box until it was
+              already on made setting a limit impossible.
+            */}
+            {mode.kind !== 'flag' && (canChange || on) && (
+              <div className="mt-1.5 flex gap-2">
+                <input
+                  type="text"
+                  value={value}
+                  disabled={!canChange}
+                  onChange={(e) => setTyped((t) => ({ ...t, [mode.letter]: e.target.value }))}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') apply(mode, true)
+                  }}
+                  placeholder={mode.placeholder}
+                  className="flex-1 rounded bg-gray-800 px-2 py-1 text-xs text-gray-100 outline-none ring-1 ring-gray-700 focus:ring-indigo-500 disabled:opacity-50"
+                />
+                {canChange && (
+                  <button
+                    onClick={() => apply(mode, true)}
+                    className="rounded bg-gray-700 px-2 py-1 text-xs text-gray-200 hover:bg-gray-600"
+                  >
+                    Set
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        )
+      })}
+
+      {!canChange && (
+        <p className="pt-1 text-xs text-gray-500">
+          You would need to be an operator here to change these.
+        </p>
+      )}
+    </div>
   )
 }
