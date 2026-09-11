@@ -15,6 +15,7 @@ import { MessageItem } from '../chat/MessageItem'
 import { MessageComposer } from '../chat/MessageComposer'
 import { TypingIndicator } from '../chat/TypingIndicator'
 import type { ChatMessage } from '@shared/types/message'
+import { Transfers } from '../chat/Transfers'
 
 const EMPTY_MESSAGES: ChatMessage[] = []
 const EMPTY_NICKS: string[] = []
@@ -397,6 +398,15 @@ export function ChatArea() {
           </svg>
           Jump to present
         </button>
+      )}
+
+      {/*
+        Files somebody is offering, in the conversation they offered them in.
+        Only in a direct message: DCC is between two people, and an offer made
+        to a channel is not how anybody sends a file to a person.
+      */}
+      {activeServerId && activeChannel && !isChannelName(activeChannel) && activeChannel !== '*' && (
+        <Transfers serverId={activeServerId} peer={activeChannel} />
       )}
 
       {/* Typing indicator */}

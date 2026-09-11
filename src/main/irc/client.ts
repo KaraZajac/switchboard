@@ -30,6 +30,10 @@ export interface ClientEvents {
   names: (data: { channel: string; users: ChannelUser[] }) => void
   mode: (data: { channel: string; mode: string; params: string[]; setBy: string | null }) => void
   invite: (data: { channel: string; by: string; target: string; isMe: boolean }) => void
+  /** Somebody typed `/dcc send`, and a file picker has to happen in the window */
+  dccOfferWanted: (data: { nick: string }) => void
+  /** Somebody offered us a file, or something else DCC can carry */
+  dcc: (data: { nick: string; body: string }) => void
   /** One of the channel's mask lists, whole */
   masklist: (data: {
     channel: string

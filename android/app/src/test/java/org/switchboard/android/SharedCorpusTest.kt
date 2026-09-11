@@ -27,6 +27,7 @@ import org.switchboard.android.irc.Aliases
 import org.switchboard.android.irc.ChanModes
 import org.switchboard.android.irc.Casemap
 import org.switchboard.android.irc.ConnectionState
+import org.switchboard.android.irc.Dcc
 import org.switchboard.android.irc.Formatter
 import org.switchboard.android.irc.Ignore
 import org.switchboard.android.irc.Irc
@@ -885,6 +886,66 @@ class SharedCorpusTest {
                     mapOfOrNull(c["published"]),
                     mapOfOrNull(c["next"])
                 )
+            )
+        }
+    }
+
+    // ── DCC, where the address is an integer ─────────────────────────
+
+    /**
+     * A wrong address is not a failed transfer — it is a connection somewhere
+     * else entirely. Both clients have to read and write that number the same
+     * way, and the high bit is where a naive implementation goes wrong.
+     */
+    @Test
+    fun `reads and writes DCC the way the desktop does`() {
+        val corpus = load("dcc.json")
+
+        fun offerOf(e: JsonElement): Dcc.Offer {
+            val o = e.jsonObject
+            return Dcc.Offer(
+                kind = o["kind"]!!.jsonPrimitive.content,
+                filename = o["filename"]!!.jsonPrimitive.content,
+                address = o["address"]!!.jsonPrimitive.content,
+                port = o["port"]!!.jsonPrimitive.content.toInt(),
+                size = o["size"]!!.jsonPrimitive.content.toLong(),
+                token = o["token"]?.jsonPrimitive?.content
+            )
+        }
+
+        for (case in corpus["parse"]!!.jsonArray) {
+            val c = case.jsonObject
+            val name = c["name"]!!.jsonPrimitive.content
+            val got = Dcc.parse(c["body"]!!.jsonPrimitive.content)
+
+            if (c["offer"]!! is JsonNull) {
+                assertEquals(name, null, got)
+                continue
+            }
+            val wanted = offerOf(c["offer"]!!)
+            assertEquals(name, wanted.kind, got?.kind)
+            assertEquals(name, wanted.filename, got?.filename)
+            assertEquals(name, wanted.address, got?.address)
+            assertEquals(name, wanted.port, got?.port)
+            assertEquals(name, wanted.size, got?.size)
+            if (wanted.token != null) assertEquals(name, wanted.token, got?.token)
+        }
+
+        for (case in corpus["format"]!!.jsonArray) {
+            val c = case.jsonObject
+            assertEquals(
+                c["name"]!!.jsonPrimitive.content,
+                c["line"]!!.jsonPrimitive.content,
+                Dcc.format(offerOf(c["offer"]!!))
+            )
+        }
+
+        for (case in corpus["names"]!!.jsonArray) {
+            val c = case.jsonObject
+            assertEquals(
+                c["name"]!!.jsonPrimitive.content,
+                c["safe"]!!.jsonPrimitive.content,
+                Dcc.safeFilename(c["offered"]!!.jsonPrimitive.content)
             )
         }
     }

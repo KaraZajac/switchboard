@@ -16,6 +16,7 @@ import { getSetting } from './storage/models/settings'
 import { hasOverride, sameProfile, overrideFrom } from '@shared/profile'
 import { secretsBackendDescription } from './storage/secrets'
 import { watchIdleTime } from './irc/features/autoaway'
+import { onTransferChange } from './irc/features/dcc'
 
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
@@ -272,6 +273,11 @@ app.whenReady().then(async () => {
   // neither travels to a paired phone.
   // Go away when the keyboard goes quiet, if that was asked for
   watchIdleTime(ircManager)
+
+  // A transfer starting, moving or finishing. One event rather than a poll:
+  // a progress bar that only moves when something else happens is worse than
+  // no progress bar.
+  onTransferChange((transfer) => sendToRenderer('dcc:transfer', transfer))
 
   useNetworkSettings(() => ({
     proxy: getSetting<ProxySettings>('proxy') ?? null,

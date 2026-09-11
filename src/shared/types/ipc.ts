@@ -9,6 +9,7 @@ import type { ChannelUser } from './channel'
 import type { UserMetadata } from './metadata'
 import type { MaskEntry } from '../masklists'
 import type { IgnoreEntry, IgnoreScope } from '../ignore'
+import type { DccTransfer } from '../dcc'
 
 /**
  * Live state of one connected server, handed to the renderer when it attaches.
@@ -126,6 +127,10 @@ export interface MainToRendererEvents {
   'irc:topic': { serverId: string; channel: string; topic: string; setBy: string | null }
   'irc:mode': { serverId: string; channel: string; mode: string; params: string[] }
   /** One of a channel's mask lists, whole — bans, quiets, exceptions, invites */
+  /** A transfer started, moved or finished */
+  'dcc:transfer': DccTransfer
+  /** `/dcc send` was typed; the window has to open a file picker */
+  'dcc:offer-wanted': { serverId: string; nick: string }
   'irc:masklist': {
     serverId: string
     channel: string
@@ -283,6 +288,14 @@ export interface RendererToMainInvocations {
     serverId: string,
     channel: string
   ) => Promise<{ path: string; messages: number } | null>
+  /** Files being offered, sent or received */
+  'dcc:list': () => Promise<DccTransfer[]>
+  /** Take a file somebody offered, into a folder the person picks */
+  'dcc:accept': (id: string) => Promise<boolean>
+  /** Refuse one */
+  'dcc:decline': (id: string) => Promise<void>
+  /** Offer a file to somebody */
+  'dcc:offer': (serverId: string, nick: string) => Promise<boolean>
   /** What a channel is currently set to, as the connection has tracked it */
   'channel:modes': (serverId: string, channel: string) => Promise<Record<string, string | true>>
   /**

@@ -1,0 +1,275 @@
+{
+  "$comment": "DCC — files and chat, directly between two clients. Read by tests/shared/dcc.test.ts and the Android SharedCorpusTest. The address is a 32-bit integer in decimal, not a dotted quad, which is the single most common thing to get wrong — and getting it wrong means connecting somewhere else entirely.",
+  "$parse": "Reading an offer. Null means it was not one, which must never be treated as an offer with empty fields.",
+  "parse": [
+    {
+      "name": "a plain file offer",
+      "body": "DCC SEND notes.txt 3232235777 5000 1024",
+      "offer": {
+        "kind": "send",
+        "filename": "notes.txt",
+        "address": "192.168.1.1",
+        "port": 5000,
+        "size": 1024
+      }
+    },
+    {
+      "name": "a quoted filename with a space in it",
+      "body": "DCC SEND \"my notes.txt\" 3232235777 5000 1024",
+      "offer": {
+        "kind": "send",
+        "filename": "my notes.txt",
+        "address": "192.168.1.1",
+        "port": 5000,
+        "size": 1024
+      }
+    },
+    {
+      "name": "a public address",
+      "body": "DCC SEND x 1234567890 6000 10",
+      "offer": {
+        "kind": "send",
+        "filename": "x",
+        "address": "73.150.2.210",
+        "port": 6000,
+        "size": 10
+      }
+    },
+    {
+      "name": "the lowest address",
+      "body": "DCC SEND x 16777217 1 1",
+      "offer": {
+        "kind": "send",
+        "filename": "x",
+        "address": "1.0.0.1",
+        "port": 1,
+        "size": 1
+      }
+    },
+    {
+      "name": "the highest",
+      "body": "DCC SEND x 4294967295 1 1",
+      "offer": {
+        "kind": "send",
+        "filename": "x",
+        "address": "255.255.255.255",
+        "port": 1,
+        "size": 1
+      }
+    },
+    {
+      "name": "reverse DCC, where the sender cannot listen",
+      "body": "DCC SEND notes.txt 3232235777 0 1024 4711",
+      "offer": {
+        "kind": "send",
+        "filename": "notes.txt",
+        "address": "192.168.1.1",
+        "port": 0,
+        "size": 1024,
+        "token": "4711"
+      }
+    },
+    {
+      "name": "no size, which some clients leave out",
+      "body": "DCC SEND notes.txt 3232235777 5000",
+      "offer": {
+        "kind": "send",
+        "filename": "notes.txt",
+        "address": "192.168.1.1",
+        "port": 5000,
+        "size": 0
+      }
+    },
+    {
+      "name": "a chat offer",
+      "body": "DCC CHAT chat 3232235777 5000",
+      "offer": {
+        "kind": "chat",
+        "filename": "",
+        "address": "192.168.1.1",
+        "port": 5000,
+        "size": 0
+      }
+    },
+    {
+      "name": "resuming an interrupted transfer",
+      "body": "DCC RESUME notes.txt 3232235777 5000 512",
+      "offer": {
+        "kind": "resume",
+        "filename": "notes.txt",
+        "address": "192.168.1.1",
+        "port": 5000,
+        "size": 512
+      }
+    },
+    {
+      "name": "the answer to a resume",
+      "body": "DCC ACCEPT notes.txt 3232235777 5000 512",
+      "offer": {
+        "kind": "accept",
+        "filename": "notes.txt",
+        "address": "192.168.1.1",
+        "port": 5000,
+        "size": 512
+      }
+    },
+    {
+      "name": "the verb is not case sensitive",
+      "body": "dcc send x 3232235777 1 1",
+      "offer": {
+        "kind": "send",
+        "filename": "x",
+        "address": "192.168.1.1",
+        "port": 1,
+        "size": 1
+      }
+    },
+    {
+      "name": "a dotted quad is passed through rather than mangled",
+      "body": "DCC SEND x 192.168.1.1 5000 10",
+      "offer": {
+        "kind": "send",
+        "filename": "x",
+        "address": "192.168.1.1",
+        "port": 5000,
+        "size": 10
+      }
+    },
+    {
+      "name": "not a DCC line at all",
+      "body": "VERSION",
+      "offer": null
+    },
+    {
+      "name": "a verb nobody defined",
+      "body": "DCC TELEPORT x 1 1 1",
+      "offer": null
+    },
+    {
+      "name": "DCC with nothing after it",
+      "body": "DCC",
+      "offer": null
+    },
+    {
+      "name": "a send with no port",
+      "body": "DCC SEND x 3232235777",
+      "offer": null
+    },
+    {
+      "name": "a chat with no port",
+      "body": "DCC CHAT chat 3232235777",
+      "offer": null
+    }
+  ],
+  "$format": "Writing one. The address goes as an integer, because a client that sends a dotted quad is one older clients cannot read.",
+  "format": [
+    {
+      "name": "a file offer",
+      "offer": {
+        "kind": "send",
+        "filename": "notes.txt",
+        "address": "192.168.1.1",
+        "port": 5000,
+        "size": 1024
+      },
+      "line": "DCC SEND notes.txt 3232235777 5000 1024"
+    },
+    {
+      "name": "a name with a space is quoted",
+      "offer": {
+        "kind": "send",
+        "filename": "my notes.txt",
+        "address": "192.168.1.1",
+        "port": 5000,
+        "size": 1024
+      },
+      "line": "DCC SEND \"my notes.txt\" 3232235777 5000 1024"
+    },
+    {
+      "name": "reverse DCC carries its token",
+      "offer": {
+        "kind": "send",
+        "filename": "x",
+        "address": "192.168.1.1",
+        "port": 0,
+        "size": 10,
+        "token": "4711"
+      },
+      "line": "DCC SEND x 3232235777 0 10 4711"
+    },
+    {
+      "name": "a chat offer",
+      "offer": {
+        "kind": "chat",
+        "filename": "",
+        "address": "192.168.1.1",
+        "port": 5000,
+        "size": 0
+      },
+      "line": "DCC CHAT chat 3232235777 5000"
+    }
+  ],
+  "$names": "What to call the file on disk. The name came from whoever sent it, so it is input rather than a name.",
+  "names": [
+    {
+      "name": "an ordinary name",
+      "offered": "notes.txt",
+      "safe": "notes.txt"
+    },
+    {
+      "name": "a path is reduced to its last part",
+      "offered": "/etc/passwd",
+      "safe": "passwd"
+    },
+    {
+      "name": "a traversal is too",
+      "offered": "../../etc/passwd",
+      "safe": "passwd"
+    },
+    {
+      "name": "and a Windows one",
+      "offered": "..\\..\\windows\\system32\\cmd.exe",
+      "safe": "cmd.exe"
+    },
+    {
+      "name": "a bare parent reference is nothing usable",
+      "offered": "..",
+      "safe": "received-file"
+    },
+    {
+      "name": "a dotfile does not stay hidden",
+      "offered": ".bashrc",
+      "safe": "bashrc"
+    },
+    {
+      "name": "a reserved device name is prefixed",
+      "offered": "CON",
+      "safe": "_CON"
+    },
+    {
+      "name": "with an extension too",
+      "offered": "nul.txt",
+      "safe": "_nul.txt"
+    },
+    {
+      "name": "punctuation a filesystem refuses is dropped",
+      "offered": "a:b*c?d\"e|f.txt",
+      "safe": "abcdef.txt"
+    },
+    {
+      "name": "an empty name gets one",
+      "offered": "",
+      "safe": "received-file"
+    },
+    {
+      "name": "whitespace is not a name",
+      "offered": "   ",
+      "safe": "received-file"
+    },
+    {
+      "name": "spaces inside are kept",
+      "offered": "my notes.txt",
+      "safe": "my notes.txt"
+    }
+  ]
+}

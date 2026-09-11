@@ -381,6 +381,25 @@ export function runCommand(client: IRCClient, target: string, text: string): Com
       return { handled: true }
     }
 
+    /**
+     * Offer somebody a file.
+     *
+     * `/dcc send <nick>` opens a file picker rather than taking a path,
+     * because a path typed into a chat box is a path typed wrong — and because
+     * the picker is the moment a person chooses what leaves their machine.
+     */
+    case 'dcc': {
+      const [verb, who] = args
+      if ((verb || '').toLowerCase() !== 'send') {
+        return { handled: true, error: 'Usage: /dcc send <nick>' }
+      }
+      const peer = who || (isChannel(target) ? '' : target)
+      if (!peer) return { handled: true, error: 'Usage: /dcc send <nick>' }
+
+      client.events.emit('dccOfferWanted', { nick: peer })
+      return { handled: true }
+    }
+
     // ── The server ─────────────────────────────────────────────────
 
     case 'motd':

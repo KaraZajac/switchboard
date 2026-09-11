@@ -1,6 +1,12 @@
 import { BrowserWindow, Notification, app, net, dialog, type IpcMainInvokeEvent } from 'electron'
 import { hasMetadata } from '@shared/metadata'
 import { transcript, transcriptFilename } from '@shared/transcript'
+import {
+  listTransfers,
+  acceptTransfer,
+  declineTransfer,
+  offerFile
+} from '../irc/features/dcc'
 import { handle } from './registry'
 import { readFile, writeFile } from 'fs/promises'
 import { userInfo } from 'os'
@@ -724,6 +730,51 @@ export function registerIPCHandlers(): void {
       'utf8'
     )
     return { path: chosen.filePath, messages: messages.length }
+  })
+
+  // ── Files, directly between two clients ──────────────────────────
+  //
+  // Nothing here is automatic. An offer arrives, it is shown, and a transfer
+  // starts only when a person says so — auto-accepting a DCC is how the
+  // protocol got its reputation, and no setting turns that on.
+
+  handle('dcc:list', async () => listTransfers())
+
+  handle('dcc:accept', async (event, id: string) => {
+    const window = event ? BrowserWindow.fromWebContents(event.sender) : null
+    const chosen = await (window
+      ? dialog.showOpenDialog(window, { properties: ['openDirectory', 'createDirectory'] })
+      : dialog.showOpenDialog({ properties: ['openDirectory'] }))
+
+    if (chosen.canceled || chosen.filePaths.length === 0) return false
+
+    acceptTransfer(id, chosen.filePaths[0])
+    return true
+  })
+
+  handle('dcc:decline', async (_event, id: string) => declineTransfer(id))
+
+  handle('dcc:offer', async (event, serverId: string, nick: string) => {
+    const client = ircManager.getClient(serverId)
+    if (!client) throw new Error('Not connected')
+
+    const window = event ? BrowserWindow.fromWebContents(event.sender) : null
+    const chosen = await (window
+      ? dialog.showOpenDialog(window, { properties: ['openFile'] })
+      : dialog.showOpenDialog({ properties: ['openFile'] }))
+
+    if (chosen.canceled || chosen.filePaths.length === 0) return false
+
+    // The address this machine reaches the server from. Honest, and wrong
+    // behind a NAT — there is no way to know the outside address without
+    // asking something, and guessing would be worse than a transfer the
+    // recipient can watch fail.
+    const local = client.connection.localAddress()
+    if (!local) throw new Error('Could not work out this machine\'s address')
+
+    const { line } = await offerFile(serverId, nick, chosen.filePaths[0], local)
+    client.connection.sendRaw(`PRIVMSG ${nick} :\u0001${line}\u0001`)
+    return true
   })
 
   handle('channel:set-mode', async (_event, serverId: string, channel: string, args: string[]) => {

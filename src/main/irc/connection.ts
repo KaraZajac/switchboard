@@ -211,6 +211,23 @@ export class IRCConnection extends EventEmitter {
     this.config = config
   }
 
+  /**
+   * The address this machine reached the server from.
+   *
+   * What a DCC offer has to carry. Taken from the socket rather than guessed:
+   * a machine with several interfaces reaches different servers from different
+   * addresses, and the one that matters is the one this connection is using.
+   */
+  localAddress(): string | null {
+    const socket = this.socket
+    if (!socket || !socket.localAddress) return null
+
+    // Node reports an IPv4 address on a dual-stack socket as ::ffff:1.2.3.4,
+    // and DCC has no way to carry that — the four octets are what it wants.
+    const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/.exec(socket.localAddress)
+    return mapped ? mapped[1] : socket.localAddress
+  }
+
   get connected(): boolean {
     return this._connected
   }

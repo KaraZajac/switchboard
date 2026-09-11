@@ -20,6 +20,7 @@ import { friendListKind, friendListLines, friendListStatusLine } from '@shared/f
 import { resolveProfile, keysToClear } from '@shared/profile'
 import { performLines } from '@shared/aliases'
 import { logMessage } from '../storage/logfile'
+import { noteDccOffer } from './features/dcc'
 import { runCommand } from './commands'
 import { isIgnored, type IgnoreEntry, type IgnoreScope } from '@shared/ignore'
 import { getSetting } from '../storage/models/settings'
@@ -626,6 +627,43 @@ export class IRCManager {
         entries: data.entries,
         done: data.done
       })
+    })
+
+    // `/dcc send` typed in the composer. The picker belongs to the window, so
+    // this is a request rather than an action.
+    client.events.on('dccOfferWanted', (data) => {
+      this.send('dcc:offer-wanted', { serverId, nick: data.nick })
+    })
+
+    // Somebody offering a file. Recorded and shown; nothing connects until a
+    // person says so — auto-accepting a DCC is how the protocol got its
+    // reputation.
+    client.events.on('dcc', (data) => {
+      if (this.ignored(serverId, data.nick, null, 'requests')) return
+      const transfer = noteDccOffer(serverId, data.nick, data.body)
+      if (!transfer) return
+
+      // Say so in the conversation it belongs to. An offer from somebody you
+      // have never messaged otherwise has nowhere to appear — and a line
+      // saying what was offered is worth having afterwards either way.
+      const said: ChatMessage = {
+        id: uuid(),
+        serverId,
+        channel: data.nick,
+        nick: '',
+        userHost: null,
+        content: `${data.nick} is offering you ${transfer.filename}`,
+        type: 'system',
+        tags: {},
+        replyTo: null,
+        timestamp: new Date().toISOString(),
+        account: null,
+        pending: false,
+        reactions: {},
+        channelContext: null
+      }
+      storeMessage(said)
+      this.send('irc:message', { serverId, channel: data.nick, message: said })
     })
 
     // Invite notifications

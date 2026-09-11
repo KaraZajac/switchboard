@@ -64,7 +64,17 @@ internal fun registerMessagingHandlers() {
                 // name — and gets the clients killed for it on networks that
                 // watch for exactly this.
                 if (state.isMe(target)) {
-                    answerCtcp(session, from, text.substring(1, text.length - 1))
+                    val body = text.substring(1, text.length - 1)
+
+                    // DCC is an offer rather than a question, so it gets no
+                    // NOTICE back — and only ever from somebody talking to us
+                    // directly, which the check above already settles.
+                    val offer = Dcc.parse(body)
+                    if (offer != null) {
+                        emitDccOffer(session, from, offer)
+                    } else {
+                        answerCtcp(session, from, body)
+                    }
                 }
                 return@on
             }
@@ -369,4 +379,28 @@ internal fun registerChatHistoryTargetHandler() {
             put("timestamp", timestamp)
         })
     }
+}
+
+
+/**
+ * Somebody offered us a file.
+ *
+ * Recorded and shown; nothing connects until a person says so. Auto-accepting
+ * a DCC is how the protocol got its reputation, and nothing here turns that on.
+ *
+ * Only SEND, and only forward SEND. Reverse DCC asks this phone to open a
+ * listening socket, which behind mobile NAT nothing can reach — the failure
+ * would be a transfer that hangs rather than one that is refused.
+ */
+private fun emitDccOffer(session: IrcSession, from: String, offer: Dcc.Offer) {
+    if (offer.kind != "send" || Dcc.isReverse(offer)) return
+
+    session.emit("dcc:offer", buildJsonObject {
+        put("serverId", session.state.serverId)
+        put("peer", from)
+        put("filename", Dcc.safeFilename(offer.filename))
+        put("address", offer.address)
+        put("port", offer.port)
+        put("size", offer.size)
+    })
 }

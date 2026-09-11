@@ -66,6 +66,16 @@ registerHandler('PRIVMSG', (client, msg) => {
     // privately is the flood that got CTCP a bad name — and gets the clients
     // killed for it on networks that watch for exactly this.
     const askedOfUs = client.state.casemap(target) === client.state.casemap(client.state.nick)
+
+    // DCC is an offer rather than a question, so it gets no NOTICE back — and
+    // only ever from somebody talking to us directly. A DCC sent to a channel
+    // is an offer made to everyone at once, which is not how anybody sends a
+    // file to a person.
+    if (askedOfUs && ctcpCommand.toUpperCase() === 'DCC') {
+      client.events.emit('dcc', { nick, body: ctcpContent })
+      return
+    }
+
     if (askedOfUs) {
       const answer = ctcpAnswer(ctcpCommand.toUpperCase(), ctcpArgs)
       if (answer) client.connection.sendRaw(`NOTICE ${nick} :\x01${answer}\x01`)

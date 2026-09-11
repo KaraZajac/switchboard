@@ -966,6 +966,46 @@ class SwitchboardEngine(
         )
     }
 
+    /**
+     * Somebody offered a file.
+     *
+     * Recorded and shown; nothing connects until a person presses Accept.
+     * Somebody on the ignore list is offering nothing, as far as this client
+     * is concerned — an unsolicited file is exactly the sort of thing an
+     * ignore is for.
+     */
+    private fun noteDccOffer(data: JsonElement) {
+        val row = data as? JsonObject ?: return
+        val serverId = (row["serverId"] as? JsonPrimitive)?.content ?: return
+        val peer = (row["peer"] as? JsonPrimitive)?.content ?: return
+        if (isIgnored(serverId, peer, null, "requests")) return
+
+        val filename = (row["filename"] as? JsonPrimitive)?.content ?: return
+        dcc.offered(
+            serverId = serverId,
+            peer = peer,
+            filename = filename,
+            address = (row["address"] as? JsonPrimitive)?.content ?: return,
+            port = (row["port"] as? JsonPrimitive)?.content?.toIntOrNull() ?: return,
+            size = (row["size"] as? JsonPrimitive)?.content?.toLongOrNull() ?: 0
+        )
+
+        // Say so in the conversation it belongs to. An offer from somebody you
+        // have never messaged otherwise has nowhere to appear — and a line
+        // saying what was offered is worth having afterwards either way.
+        store.handleEvent("irc:message", buildJsonObject {
+            put("serverId", serverId)
+            put("channel", peer)
+            put("message", buildJsonObject {
+                put("id", java.util.UUID.randomUUID().toString())
+                put("nick", "")
+                put("content", "$peer is offering you $filename")
+                put("type", "system")
+                put("timestamp", java.time.Instant.now().toString())
+            })
+        })
+    }
+
     /** Stop hearing from whoever matches this mask */
     fun addIgnore(mask: String, network: String, scope: Ignore.Scope = Ignore.Scope()) {
         val wanted = Ignore.toMask(mask)
@@ -1156,6 +1196,10 @@ class SwitchboardEngine(
             // UI: an ignored message that is kept still counts towards a badge
             // and still wakes the phone up.
             if (silenced(channel, data)) return@IrcConnection
+            if (channel == "dcc:offer") {
+                noteDccOffer(data)
+                return@IrcConnection
+            }
             store.handleEvent(channel, data)
 
             // Notifying was wired only to the desktop's relay, so a phone
@@ -1221,6 +1265,15 @@ class SwitchboardEngine(
     }
 
     /** The server list out of the vault, whatever mode we are in */
+    /**
+     * Files somebody has offered over DCC.
+     *
+     * Receiving only: sending needs a listening socket the other side can
+     * reach, which behind mobile NAT it almost never can, and offering a
+     * transfer that cannot complete is worse than not offering one.
+     */
+    val dcc = DccTransfers(context, scope)
+
     internal fun vaultServers(): List<ServerConfig> = vault.servers()
 
     /**

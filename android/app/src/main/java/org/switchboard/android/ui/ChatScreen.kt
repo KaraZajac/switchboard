@@ -454,6 +454,15 @@ private fun Conversation(
             }
         }
 
+        // Files somebody is offering, in the conversation they offered them in.
+        // Only in a direct message: DCC is between two people, and an offer
+        // made to a channel is not how anybody sends a file to a person.
+        val serverNow = store.activeServerId
+        val channelNow = store.activeChannel
+        if (serverNow != null && channelNow != null && !isChannel(channelNow)) {
+            TransfersStrip(engine, serverNow, channelNow)
+        }
+
         Composer(
             channel = store.activeChannel,
             enabled = store.activeServerId != null &&
@@ -1170,4 +1179,104 @@ private fun shareTranscript(
             android.content.Intent.createChooser(intent, "Share $channel")
         )
     }
+}
+
+
+/**
+ * Files somebody is sending you.
+ *
+ * A strip above the composer rather than a screen of its own: an offer is
+ * something happening right now in this conversation, and a transfer nobody
+ * notices is one nobody accepts.
+ *
+ * Nothing starts on its own. An offer sits here until somebody presses a
+ * button, which is the whole reason DCC has the reputation it does.
+ */
+@Composable
+private fun TransfersStrip(engine: SwitchboardEngine, serverId: String, peer: String) {
+    // Read so Compose redraws when a transfer moves; the list itself is not
+    // snapshot state all the way down.
+    @Suppress("UNUSED_VARIABLE")
+    val revision = engine.dcc.revision
+
+    val mine = engine.dcc.transfers.filter {
+        it.serverId == serverId && it.peer.equals(peer, ignoreCase = true)
+    }
+    if (mine.isEmpty()) return
+
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp)) {
+        for (transfer in mine) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        transfer.filename,
+                        color = Text0,
+                        fontSize = 13.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        when (transfer.state) {
+                            "offered" -> "${transfer.peer} is offering it — ${sizeOf(transfer.size)}"
+                            "active" ->
+                                if (transfer.size > 0)
+                                    "${transfer.transferred * 100 / transfer.size}%"
+                                else sizeOf(transfer.transferred)
+                            "done" -> "Saved to ${transfer.savedTo}"
+                            else -> transfer.error ?: "It did not work"
+                        },
+                        color = when (transfer.state) {
+                            "done" -> Green
+                            "failed" -> Red
+                            else -> Subtext
+                        },
+                        fontSize = 11.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+
+                // The person who sent it does not get to decide that this
+                // phone connects to theirs.
+                if (transfer.state == "offered") {
+                    Text(
+                        "Accept",
+                        color = Blue,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .clickable { engine.dcc.accept(transfer.id) }
+                            .padding(horizontal = 10.dp, vertical = 4.dp)
+                    )
+                    Text(
+                        "Decline",
+                        color = Subtext,
+                        fontSize = 13.sp,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .clickable { engine.dcc.decline(transfer.id) }
+                            .padding(horizontal = 10.dp, vertical = 4.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** Bytes, in the units a person reads */
+private fun sizeOf(bytes: Long): String {
+    if (bytes <= 0) return "unknown size"
+    val units = listOf("B", "KB", "MB", "GB")
+    var value = bytes.toDouble()
+    var unit = 0
+    while (value >= 1024 && unit < units.size - 1) {
+        value /= 1024
+        unit++
+    }
+    return if (value < 10 && unit > 0) "%.1f %s".format(value, units[unit])
+    else "${value.toInt()} ${units[unit]}"
 }
