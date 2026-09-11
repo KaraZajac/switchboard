@@ -237,6 +237,20 @@ class SwitchboardEngine(
     }
 
     fun start() {
+        // Everything in the config that is not a server: the theme, the mutes,
+        // the ignore list, the words that ring a bell, the aliases, how long of
+        // nothing counts as away.
+        //
+        // This only ever ran when a passphrase was typed or a desktop handed
+        // over a vault, so a phone whose config stays unlocked in its keystore
+        // — which is most of them, and every phone with no desktop — came back
+        // from a restart having forgotten all of it. An alias made yesterday
+        // was gone this morning, and so was everyone you had ignored.
+        //
+        // Not in `init`: the properties it writes are declared further down,
+        // and their own initialisers would run afterwards and overwrite it.
+        applySharedState()
+
         watchTheNetwork()
         coordinator.start()
 
@@ -655,6 +669,10 @@ class SwitchboardEngine(
             val watched = vault.watched(server.id)
             if (watched.isNotEmpty()) store.setWatched(server.id, watched)
         }
+
+        // The config we have just opened, or just been handed, is the whole
+        // list — not only the part of it that dials on its own.
+        seedKnownServers()
     }
 
     fun lockVault() {
@@ -1437,10 +1455,7 @@ class SwitchboardEngine(
         // Credentials a network will accept are exactly the sort of thing that
         // turns its "no" into a "yes", so a config change is worth another try.
         refusedToShare.clear()
-        for (config in vault.servers()) {
-            if (store.servers.containsKey(config.id)) continue
-            seedServer(config)
-        }
+        seedKnownServers()
         // Never the config this phone made for itself: nobody chose it, there
         // is nothing in it, and a desktop that adopted it would be left with
         // an empty server list.
@@ -1617,6 +1632,25 @@ class SwitchboardEngine(
      * has never heard of and is dropped, and the user watches an empty screen
      * while the connection is in fact working.
      */
+    /**
+     * Every network in the config on the rail, connected or not.
+     *
+     * The rail used to be built out of the connections, so a network with
+     * "connect automatically" off was invisible on this phone — configured,
+     * shared, and nowhere to be seen or tapped. It showed up if you had just
+     * added it here, because that path seeded it, and vanished at the next
+     * restart.
+     *
+     * Never over the top of a row already there: seeding writes it as
+     * disconnected, and that row is where the green dot is read from.
+     */
+    private fun seedKnownServers() {
+        for (config in vault.servers()) {
+            if (store.servers.containsKey(config.id)) continue
+            seedServer(config)
+        }
+    }
+
     private fun seedServer(config: ServerConfig) {
         store.servers[config.id] = Server(
             id = config.id,
