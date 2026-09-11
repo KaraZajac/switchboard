@@ -992,6 +992,40 @@ class SharedCorpusTest {
         }
     }
 
+    /**
+     * Who may change a channel, which both panels ask and neither should
+     * answer for itself. It was answered by hand twice and backwards both
+     * times — `rankOf` returns 0 for the most privileged.
+     */
+    @Test
+    fun `agrees with the desktop about who may change a channel`() {
+        val schemes = listOf("(ohv)@%+", "(qaohv)~&@%+", "(ov)@+")
+
+        for (prefix in schemes) {
+            // Operator and above, always
+            for (mine in listOf("@", "&", "~").filter { prefix.contains(it) }) {
+                assertEquals("$prefix / $mine", true, Powers.canModerate(prefix, mine))
+            }
+            // Half-operator where the network has one
+            if (prefix.contains('%')) {
+                assertEquals("$prefix / %", true, Powers.canModerate(prefix, "%"))
+            }
+            // Voice is not moderation, and neither is nothing
+            assertEquals("$prefix / +", false, Powers.canModerate(prefix, "+"))
+            assertEquals("$prefix / none", false, Powers.canModerate(prefix, ""))
+
+            // And it draws the same line the member menu does
+            for (mine in listOf("", "+", "%", "@", "&", "~")) {
+                assertEquals(
+                    "$prefix / $mine agrees with the menu",
+                    Powers.actionsFor(prefix, "beI,k,l,imnst", mine, "", false)
+                        .contains(Powers.Action.KICK),
+                    Powers.canModerate(prefix, mine)
+                )
+            }
+        }
+    }
+
     // ── what a channel is set to ─────────────────────────────────────
 
     /**

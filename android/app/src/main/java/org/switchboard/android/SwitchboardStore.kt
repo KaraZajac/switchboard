@@ -19,6 +19,8 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.switchboard.android.irc.Formatting
 import org.switchboard.android.irc.Services
+import org.switchboard.android.irc.MaskLists
+import org.switchboard.android.irc.Powers
 
 /**
  * The phone's copy of what the desktop knows.
@@ -619,6 +621,35 @@ class SwitchboardStore {
                 if (activeServerId == null) activeServerId = serverId
             }
 
+            // One of a channel's mask lists, whole. Sent as one event rather
+            // than a line at a time: a busy channel's ban list is hundreds of
+            // entries, and an event each would be hundreds of redraws.
+            "irc:masklist" -> {
+                val channel = data["channel"]?.str() ?: return
+                val mode = data["mode"]?.str() ?: return
+                val entries = (data["entries"] as? JsonArray).orEmpty().mapNotNull { row ->
+                    val o = row as? JsonObject ?: return@mapNotNull null
+                    MaskLists.Entry(
+                        mask = o["mask"]?.str() ?: return@mapNotNull null,
+                        setBy = o["setBy"]?.str(),
+                        setAt = (o["setAt"] as? JsonPrimitive)?.content?.toLongOrNull()
+                    )
+                }
+                maskLists["${key(serverId, channel)}:$mode"] = entries
+            }
+
+            // What a channel is set to. Tracked here so a settings panel can
+            // show the answer without asking the server every time it opens.
+            "irc:mode" -> {
+                val channel = data["channel"]?.str() ?: return
+                // A user mode on ourselves comes through here too; it is not a
+                // channel and has no settings panel.
+                if (!isChannel(channel)) return
+                val modes = data["mode"]?.str() ?: return
+                val params = (data["params"] as? JsonArray).orEmpty().map { it.str().orEmpty() }
+                applyModeChange(serverId, channel, modes, params)
+            }
+
             "irc:isupport" -> {
                 val token = data["token"]?.str() ?: return
                 val value = data["value"]?.str() ?: return
@@ -1034,6 +1065,86 @@ class SwitchboardStore {
     private var activeListServer: String? = null
 
     fun watchedFor(serverId: String): List<String> = watched[serverId].orEmpty()
+
+    /**
+     * The mask lists a channel keeps, by `server:channel:mode`.
+     *
+     * Filled from `irc:masklist`, which arrives whole. Held here rather than
+     * asked for on every glance: a busy channel's ban list is hundreds of
+     * lines and the server should be asked once.
+     */
+    val maskLists = mutableStateMapOf<String, List<MaskLists.Entry>>()
+
+    fun maskListFor(serverId: String, channel: String, mode: String): List<MaskLists.Entry> =
+        maskLists["${key(serverId, channel)}:$mode"].orEmpty()
+
+    /** What each channel is set to, by `server:channel` */
+    val channelModes = mutableStateMapOf<String, Map<String, String?>>()
+
+    fun modesFor(serverId: String, channel: String): Map<String, String?> =
+        channelModes[key(serverId, channel)].orEmpty()
+
+    /**
+     * Apply a MODE line to what we hold.
+     *
+     * The same arithmetic the protocol layer does, because the store is fed by
+     * events rather than by the connection — a phone following a desktop never
+     * sees the line itself, only this.
+     */
+    private fun applyModeChange(
+        serverId: String,
+        channel: String,
+        modes: String,
+        params: List<String>
+    ) {
+        val tokens = isupport[serverId].orEmpty()
+        val prefixModes = Powers.parsePrefix(tokens["PREFIX"]).modes
+        val chanmodes = (tokens["CHANMODES"] ?: "").split(',')
+        val typeA = chanmodes.getOrElse(0) { "" }
+        val typeB = chanmodes.getOrElse(1) { "" }
+        val typeC = chanmodes.getOrElse(2) { "" }
+
+        val current = modesFor(serverId, channel).toMutableMap()
+        var adding = true
+        var at = 0
+
+        for (char in modes) {
+            when (char) {
+                '+' -> { adding = true; continue }
+                '-' -> { adding = false; continue }
+            }
+            val mode = char.toString()
+
+            // A rank consumes a parameter but is not a setting
+            if (prefixModes.contains(mode)) { at++; continue }
+
+            // A mask list is not a setting either, but it *is* a list — and
+            // nothing else would tell the panel it changed. A MODE produces no
+            // 367, so without this, banning somebody and opening the list
+            // shows it as it was before, which reads as the ban not working.
+            if (typeA.contains(mode)) {
+                val mask = params.getOrNull(at++) ?: continue
+                val key = "${key(serverId, channel)}:$mode"
+                val entries = maskLists[key].orEmpty().toMutableList()
+                if (adding) {
+                    if (entries.none { it.mask == mask }) {
+                        entries += MaskLists.Entry(mask, servers[serverId]?.nick, System.currentTimeMillis() / 1000)
+                    }
+                } else {
+                    entries.removeAll { it.mask == mask }
+                }
+                maskLists[key] = entries
+                continue
+            }
+
+            val takesOne = typeB.contains(mode) || (adding && typeC.contains(mode))
+            val value = if (takesOne) params.getOrNull(at++) else null
+
+            if (adding) current[mode] = value else current.remove(mode)
+        }
+
+        channelModes[key(serverId, channel)] = current
+    }
 
     /**
      * Words that ring the same bell your nick does.

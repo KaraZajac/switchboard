@@ -26,6 +26,14 @@ export function handle(channel: string, handler: Handler): void {
  * Deliberately a list of what is allowed rather than what is blocked: a new
  * handler is unreachable from a phone until someone thinks about it.
  */
+/**
+ * Deliberately absent: `transcript:save`, and every `dcc:` handler.
+ *
+ * Each of those opens a native dialog on *this* machine and writes a file to
+ * *this* disk. A phone calling one would pop a save dialog on somebody's
+ * desktop and produce a file it can never reach. The phone has its own share
+ * sheet and its own DCC; neither is this one.
+ */
 export const REMOTE_ALLOWED = new Set([
   // read the world
   'server:list',
@@ -67,11 +75,6 @@ export const REMOTE_ALLOWED = new Set([
   'monitor:remove',
   'user:kick',
   'user:mode',
-  'transcript:save',
-  'dcc:list',
-  'dcc:accept',
-  'dcc:decline',
-  'dcc:offer',
   'channel:modes',
   'channel:set-mode',
   'masklist:fetch',

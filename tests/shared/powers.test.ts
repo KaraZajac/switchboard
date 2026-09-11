@@ -8,6 +8,7 @@ import {
   quietMode,
   banMask,
   maskIsWeak,
+  canModerate,
   type MemberAction
 } from '@shared/powers'
 
@@ -121,5 +122,80 @@ describe('what to ban somebody with', () => {
     const withHost = banMask({ nick: 'robin', host: 'example.org' })
     expect(withHost).not.toContain('robin')
     expect(withHost).toContain('example.org')
+  })
+})
+
+/**
+ * Whether you could change a channel's settings and lists.
+ *
+ * Drawn by hand in two panels and backwards in both: `rankOf` returns 0 for
+ * the most privileged, so `>= 2` meant "voiced or nothing". One of those
+ * panels appeared to work only because its roster lookup was also failing.
+ */
+describe('who may change a channel', () => {
+  const RIRCD = '(ohv)@%+'
+  const UNREAL = '(qaohv)~&@%+'
+  const SIMPLE = '(ov)@+'
+
+  it('lets an operator through', () => {
+    expect(canModerate(RIRCD, '@')).toBe(true)
+    expect(canModerate(UNREAL, '@')).toBe(true)
+    expect(canModerate(SIMPLE, '@')).toBe(true)
+  })
+
+  it('and anybody above one', () => {
+    expect(canModerate(UNREAL, '~')).toBe(true)
+    expect(canModerate(UNREAL, '&')).toBe(true)
+  })
+
+  it('lets a half-operator through where the network has them', () => {
+    expect(canModerate(RIRCD, '%')).toBe(true)
+    expect(canModerate(UNREAL, '%')).toBe(true)
+  })
+
+  /** The case that was inverted: voice is not moderation */
+  it('does not let a voiced user through', () => {
+    expect(canModerate(RIRCD, '+')).toBe(false)
+    expect(canModerate(UNREAL, '+')).toBe(false)
+    expect(canModerate(SIMPLE, '+')).toBe(false)
+  })
+
+  /** Nor somebody with nothing — which the backwards test let through */
+  it('does not let somebody with no rank through', () => {
+    expect(canModerate(RIRCD, '')).toBe(false)
+    expect(canModerate(UNREAL, '')).toBe(false)
+    expect(canModerate(SIMPLE, '')).toBe(false)
+  })
+
+  it('takes the highest of several prefixes', () => {
+    expect(canModerate(RIRCD, '+@')).toBe(true)
+    expect(canModerate(RIRCD, '@+')).toBe(true)
+  })
+
+  /**
+   * A network that states no PREFIX still has operators — `parsePrefix` falls
+   * back to the common scheme, which is what every client does. Somebody
+   * wearing `@` is an operator whatever ISUPPORT left out.
+   */
+  it('falls back to the usual ranks when the network states none', () => {
+    expect(canModerate('', '@')).toBe(true)
+    expect(canModerate(null, '@')).toBe(true)
+    expect(canModerate(null, '')).toBe(false)
+    expect(canModerate(null, '+')).toBe(false)
+  })
+
+  /**
+   * The same line `actionsFor` draws. If these two ever disagree, one of the
+   * panels is offering a button the menu would have hidden.
+   */
+  it('agrees with what the member menu offers', () => {
+    for (const prefix of [RIRCD, UNREAL, SIMPLE]) {
+      for (const mine of ['', '+', '%', '@', '&', '~']) {
+        const offered = actionsFor({
+          prefix, chanmodes: 'beI,k,l,imnst', mine, theirs: '', isSelf: false
+        })
+        expect(canModerate(prefix, mine)).toBe(offered.includes('kick'))
+      }
+    }
   })
 })

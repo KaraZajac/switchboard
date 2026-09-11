@@ -879,4 +879,141 @@ class IrcHandlersTest {
         assertEquals(emptyList<Any>(), session.eventsOn("irc:network-icon"))
     }
 
+
+    // ── the lists a channel keeps ────────────────────────────────────
+
+    /**
+     * A ban list arrives as a numeric per entry and one to close it. Neither
+     * client handled any of these, so a client that could set a ban had no way
+     * to show one.
+     */
+    @Test
+    fun `collects a ban list and says so when it ends`() {
+        feed(":irc.test 001 kara :Welcome")
+        feed(":kara!u@h JOIN #test")
+
+        feed(":irc.test 367 kara #test *!*@bad.example op!u@h 1700000000")
+        feed(":irc.test 367 kara #test *!*@worse.example")
+        feed(":irc.test 368 kara #test :End of channel ban list")
+
+        val sent = session.events.filter { it.first == "irc:masklist" }
+        assertEquals(1, sent.size)
+
+        val event = sent.single().second
+        assertEquals("#test", event["channel"]!!.jsonPrimitive.content)
+        assertEquals("b", event["mode"]!!.jsonPrimitive.content)
+
+        val masks = event["entries"]!!.jsonArray.map { it.jsonObject["mask"]!!.jsonPrimitive.content }
+        assertEquals(listOf("*!*@bad.example", "*!*@worse.example"), masks)
+
+        // Who set it, where the server said
+        val first = event["entries"]!!.jsonArray.first().jsonObject
+        assertEquals("op!u@h", first["setBy"]!!.jsonPrimitive.content)
+        assertEquals("1700000000", first["setAt"]!!.jsonPrimitive.content)
+    }
+
+    /**
+     * The quiet list names its own mode one parameter along. Reading it as a
+     * ban list would put the letter `q` in the list as though somebody had
+     * banned it.
+     */
+    @Test
+    fun `reads the quiet list without mistaking the mode for a mask`() {
+        feed(":irc.test 001 kara :Welcome")
+        feed(":kara!u@h JOIN #test")
+
+        feed(":irc.test 728 kara #test q *!*@loud.example op!u@h 1700000000")
+        feed(":irc.test 729 kara #test q :End of channel quiet list")
+
+        val event = session.events.last { it.first == "irc:masklist" }.second
+        assertEquals("q", event["mode"]!!.jsonPrimitive.content)
+        assertEquals(
+            listOf("*!*@loud.example"),
+            event["entries"]!!.jsonArray.map { it.jsonObject["mask"]!!.jsonPrimitive.content }
+        )
+    }
+
+    /** A list for a channel we are not in is not ours to file */
+    @Test
+    fun `ignores a list for a channel we are not in`() {
+        feed(":irc.test 001 kara :Welcome")
+        feed(":irc.test 367 kara #elsewhere *!*@x")
+        feed(":irc.test 368 kara #elsewhere :End of channel ban list")
+
+        assertTrue(session.events.none { it.first == "irc:masklist" })
+    }
+
+    /**
+     * Fetching again replaces rather than appends — but only when the fetch
+     * says it is one. A list is sent whole, so an answer that merely adds to
+     * what we had leaves an entry somebody else lifted on the list for good.
+     *
+     * The marker is what makes the first line of an answer a fresh start;
+     * `fetchMaskList` sets it before asking.
+     */
+    @Test
+    fun `a marked fetch replaces what was there`() {
+        feed(":irc.test 001 kara :Welcome")
+        feed(":kara!u@h JOIN #test")
+
+        feed(":irc.test 367 kara #test *!*@one.example")
+        feed(":irc.test 368 kara #test :End of channel ban list")
+
+        // What `fetchMaskList` does before sending the MODE
+        session.state.findChannel("#test")!!.loadingLists.add("b")
+
+        feed(":irc.test 367 kara #test *!*@two.example")
+        feed(":irc.test 368 kara #test :End of channel ban list")
+
+        val event = session.events.last { it.first == "irc:masklist" }.second
+        val masks = event["entries"]!!.jsonArray.map { it.jsonObject["mask"]!!.jsonPrimitive.content }
+        assertEquals(listOf("*!*@two.example"), masks)
+    }
+
+    /**
+     * The phone's events have to be shaped like the desktop's.
+     *
+     * [org.switchboard.android.irc.IrcConnection] promises exactly that — the
+     * same names with identical JSON — because one store renders both. This
+     * one emitted `target` and `modes` joined into a string for as long as
+     * nothing read it; the moment a settings panel did, it read null and the
+     * panel silently showed a channel as having no modes at all.
+     */
+    @Test
+    fun `a mode change is shaped the way the desktop shapes it`() {
+        feed(":irc.test 001 kara :Welcome")
+        feed(":kara!u@h JOIN #test")
+        feed(":op!u@h MODE #test +mb *!*@bad.example")
+
+        val event = session.events.last { it.first == "irc:mode" }.second
+
+        // The desktop sends serverId, channel, mode and params — see
+        // `src/shared/types/ipc.ts`.
+        assertEquals("#test", event["channel"]!!.jsonPrimitive.content)
+        assertEquals("+mb", event["mode"]!!.jsonPrimitive.content)
+        assertEquals(
+            listOf("*!*@bad.example"),
+            event["params"]!!.jsonArray.map { it.jsonPrimitive.content }
+        )
+
+        // And not the names this used to use
+        assertNull(event["target"])
+        assertNull(event["modes"])
+    }
+
+    /**
+     * RPL_CHANNELMODEIS is the only answer to a `MODE #channel` query, so a
+     * panel that asked has no other way to learn what came back.
+     */
+    @Test
+    fun `answering a mode query says so`() {
+        feed(":irc.test 001 kara :Welcome")
+        feed(":kara!u@h JOIN #test")
+        feed(":irc.test 324 kara #test +ntl 50")
+
+        val event = session.events.last { it.first == "irc:mode" }.second
+        assertEquals("#test", event["channel"]!!.jsonPrimitive.content)
+        assertEquals("+ntl", event["mode"]!!.jsonPrimitive.content)
+        assertEquals(listOf("50"), event["params"]!!.jsonArray.map { it.jsonPrimitive.content })
+    }
 }

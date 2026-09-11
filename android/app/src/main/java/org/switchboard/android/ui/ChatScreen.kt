@@ -98,6 +98,9 @@ import org.switchboard.android.irc.Formatter
 import org.switchboard.android.irc.Formatting
 import androidx.compose.material.icons.filled.Share
 import org.switchboard.android.irc.Transcript
+import org.switchboard.android.irc.ChanModes
+import org.switchboard.android.irc.MaskLists
+import androidx.compose.material.icons.filled.Lock
 
 /**
  * The whole client, once it is running.
@@ -294,9 +297,21 @@ private fun Conversation(
     onOpenAccount: (serverId: String) -> Unit
 ) {
     val store = engine.store
+    var viewingChannelSettings by remember { mutableStateOf(false) }
+
+    // Bans and what the channel is set to. A sheet rather than a screen: it is
+    // about the conversation on screen, and coming back should not be a
+    // navigation step.
+    val settingsServer = store.activeServerId
+    val settingsChannel = store.activeChannel
+    if (viewingChannelSettings && settingsServer != null && settingsChannel != null) {
+        ChannelSheet(engine, settingsServer, settingsChannel) { viewingChannelSettings = false }
+    }
 
     Column(modifier = Modifier.fillMaxSize().background(Base)) {
-        ChannelHeader(engine, onOpenChannels, onOpenMembers, onOpenSearch)
+        ChannelHeader(engine, onOpenChannels, onOpenMembers, onOpenSearch) {
+            viewingChannelSettings = true
+        }
 
         // A banner only when something has changed or needs doing. Repeating
         // the header's own subtitle back at the reader is noise.
@@ -657,7 +672,8 @@ private fun ChannelHeader(
     engine: SwitchboardEngine,
     onOpenChannels: () -> Unit,
     onOpenMembers: () -> Unit,
-    onOpenSearch: () -> Unit
+    onOpenSearch: () -> Unit,
+    onOpenChannelSettings: () -> Unit
 ) {
     val store = engine.store
     val serverId = store.activeServerId
@@ -742,6 +758,30 @@ private fun ChannelHeader(
             tint = Subtext,
             modifier = Modifier.size(40.dp).clickable(onClick = onOpenSearch).padding(10.dp)
         )
+
+        // Bans and what the channel is set to. Only in a channel, and only
+        // where the network states any modes at all — a shield that opens an
+        // empty box is worse than no shield.
+        if (serverId != null && channel != null && isChannel(channel)) {
+            val tokens = store.isupport[serverId].orEmpty()
+            val hasAny = ChanModes.settingsFor(tokens["CHANMODES"], tokens["PREFIX"]).isNotEmpty() ||
+                MaskLists.listsFor(tokens["CHANMODES"], tokens["PREFIX"]).isNotEmpty()
+
+            if (hasAny) {
+                Icon(
+                    // A padlock rather than the desktop's shield: the
+                    // extended icon set is a megabyte this app does not ship,
+                    // and "restricted" is the same idea.
+                    Icons.Filled.Lock,
+                    contentDescription = "Bans and channel settings",
+                    tint = Subtext,
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clickable { onOpenChannelSettings() }
+                        .padding(10.dp)
+                )
+            }
+        }
 
         // Everything said is in the store and nothing could get it out. The
         // desktop writes a file; a phone shares, which is the same thing in the

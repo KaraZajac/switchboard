@@ -73,6 +73,32 @@ export function rankOf(symbols: string, scheme: PrefixScheme): number {
   return best
 }
 
+/**
+ * Whether you could change a channel's settings and lists.
+ *
+ * Half-operator upwards where the network has one, operator upwards where it
+ * does not — the same line `actionsFor` draws before offering a kick, and here
+ * so that a panel does not draw it again by hand.
+ *
+ * It was drawn by hand twice, and both times backwards: `rankOf` returns 0 for
+ * the *most* privileged, so a `>= 2` test meant "voiced or nothing". On the
+ * desktop that was hidden by a second bug — the roster lookup failed, `rankOf`
+ * of an empty string returned one-past-the-end, and the backwards test turned
+ * that into a yes. The panel appeared to work and would have offered Lift and
+ * Add to somebody with no rank at all.
+ */
+export function canModerate(
+  prefix: string | undefined | null,
+  mine: string
+): boolean {
+  const scheme = parsePrefix(prefix)
+  const opRank = rankOfMode('o', scheme)
+  if (opRank === null) return false
+
+  const halfopRank = rankOfMode('h', scheme)
+  return rankOf(mine, scheme) <= (halfopRank ?? opRank)
+}
+
 /** The rank a given mode letter confers, or null where the network has no such role */
 function rankOfMode(mode: string, scheme: PrefixScheme): number | null {
   const at = scheme.modes.indexOf(mode)

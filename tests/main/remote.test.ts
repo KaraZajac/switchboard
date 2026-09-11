@@ -179,3 +179,37 @@ describe('what a paired device may reach', () => {
     expect(sanitizeForRemote('history:fetch', messages)).toBe(messages)
   })
 })
+
+/**
+ * What a paired device may ask this machine to do.
+ *
+ * The list is an allowlist so a new handler is unreachable until somebody
+ * thinks about it — and this guards the thinking. Every one of these opens a
+ * native dialog on the desktop and writes to the desktop's disk: a phone
+ * calling one would pop a save dialog on somebody's screen and produce a file
+ * it can never reach.
+ */
+describe('handlers a phone must not be able to call', () => {
+  it('keeps the ones that open a dialog on this machine off the list', async () => {
+    const { isRemoteAllowed } = await import('../../src/main/ipc/registry')
+
+    for (const channel of [
+      'transcript:save',
+      'dcc:list',
+      'dcc:accept',
+      'dcc:decline',
+      'dcc:offer'
+    ]) {
+      expect(isRemoteAllowed(channel)).toBe(false)
+    }
+  })
+
+  /** And the ones that are genuinely about the network stay reachable */
+  it('still allows what the phone legitimately needs', async () => {
+    const { isRemoteAllowed } = await import('../../src/main/ipc/registry')
+
+    for (const channel of ['masklist:fetch', 'masklist:set', 'channel:modes', 'channel:set-mode']) {
+      expect(isRemoteAllowed(channel)).toBe(true)
+    }
+  })
+})

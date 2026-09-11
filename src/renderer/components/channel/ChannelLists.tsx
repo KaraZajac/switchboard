@@ -6,7 +6,7 @@ import { useChannelStore } from '../../stores/channelStore'
 import { useUserStore } from '../../stores/userStore'
 import { maskListsFor, maskToSet, type MaskEntry } from '@shared/masklists'
 import { channelModesFor, modeChange, type ChannelMode } from '@shared/chanmodes'
-import { parsePrefix, rankOf } from '@shared/powers'
+import { canModerate } from '@shared/powers'
 
 /**
  * A channel's settings, and the lists it keeps.
@@ -55,12 +55,9 @@ export function ChannelLists() {
    * a different hat.
    */
   const canChange = useMemo(() => {
-    const scheme = parsePrefix(tokens.PREFIX)
     const users = usersByChannel[`${serverId}:${channel.toLowerCase()}`] ?? []
     const me = users.find((u) => u.nick.toLowerCase() === myNick.toLowerCase())
-    const mine = rankOf((me?.prefixes ?? []).join(''), scheme)
-    // Rank 2 is halfop where one exists, op where it does not — see `powers`.
-    return mine >= 2
+    return canModerate(tokens.PREFIX, (me?.prefixes ?? []).join(''))
   }, [tokens.PREFIX, usersByChannel, serverId, channel, myNick])
 
   const list = lists.find((l) => l.mode === mode) ?? lists[0]

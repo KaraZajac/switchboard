@@ -247,33 +247,46 @@ internal fun registerChannelHandlers() {
         val target = message.param(0) ?: return@on
         val channel = state.findChannel(target)
 
+        // The desktop's shape, exactly: `channel`, `mode` and `params` as a
+        // list. This used to emit `target` and `modes` joined into one string,
+        // which nothing consumed — until something did, and read null.
+        // `IrcConnection` promises these events are identical to the
+        // desktop's, and a field name is part of that.
+        fun emitMode(name: String) = session.emit("irc:mode", buildJsonObject {
+            put("serverId", state.serverId)
+            put("channel", name)
+            put("mode", message.param(1).orEmpty())
+            put("params", JsonArray(message.params.drop(2).map { JsonPrimitive(it) }))
+            put("by", message.nick)
+        })
+
         if (channel == null) {
             // A user mode on ourselves
-            session.emit("irc:mode", buildJsonObject {
-                put("serverId", state.serverId)
-                put("target", target)
-                put("modes", message.params.drop(1).joinToString(" "))
-                put("by", message.nick)
-            })
+            emitMode(target)
             return@on
         }
 
         applyChannelModes(state, channel, message.params.drop(1))
-
-        session.emit("irc:mode", buildJsonObject {
-            put("serverId", state.serverId)
-            put("target", channel.name)
-            put("modes", message.params.drop(1).joinToString(" "))
-            put("by", message.nick)
-        })
+        emitMode(channel.name)
         // The roster's prefixes have changed, so redraw it
         emitNames(session, channel)
     }
 
     // RPL_CHANNELMODEIS
     Handlers.on("324") { session, message ->
-        val channel = session.state.findChannel(message.param(1)) ?: return@on
+        val name = message.param(1) ?: return@on
+        val channel = session.state.findChannel(name) ?: return@on
         applyChannelModes(session.state, channel, message.params.drop(2))
+
+        // Say so, or a settings panel that asked has no way to learn the
+        // answer — this numeric is the only reply to a `MODE #channel` query.
+        // The desktop does the same, for the same reason.
+        session.emit("irc:mode", buildJsonObject {
+            put("serverId", session.state.serverId)
+            put("channel", channel.name)
+            put("mode", message.param(2).orEmpty())
+            put("params", JsonArray(message.params.drop(3).map { JsonPrimitive(it) }))
+        })
     }
 
     // ── The lists a channel keeps ────────────────────────────────

@@ -27,6 +27,7 @@ import android.provider.OpenableColumns
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.switchboard.android.irc.Filehost
+import org.switchboard.android.irc.MaskLists
 import org.switchboard.android.irc.Profile
 import org.switchboard.android.irc.dialChanged
 
@@ -226,6 +227,56 @@ fun SwitchboardEngine.setAway(serverId: String, message: String?) =
  * that is no reason to throw them away. Saying so is the caller's job.
  */
 data class ProfileSaved(val saved: Boolean, val published: Boolean, val reason: String?)
+
+// ── what a channel keeps, and what it is set to ──────────────────────
+
+/**
+ * Ask the server for one of a channel's mask lists.
+ *
+ * The answer arrives as `irc:masklist` and fills the store. Asking again while
+ * one is still coming would interleave two copies of the same list, which the
+ * protocol layer guards against.
+ */
+fun SwitchboardEngine.fetchMaskList(serverId: String, channel: String, mode: String) =
+    act(serverId, "masklist:fetch", JsonPrimitive(channel), JsonPrimitive(mode)) {
+        // Marked as loading before asking, so the first line of the answer
+        // replaces what we had rather than adding to it. Without this, an
+        // entry somebody else lifted stays on the list until the app restarts.
+        it.state.findChannel(channel)?.loadingLists?.add(mode)
+        it.setMode(channel, "+$mode")
+    }
+
+/** Put something on one of those lists, or take it off */
+fun SwitchboardEngine.setMaskListEntry(
+    serverId: String,
+    channel: String,
+    mode: String,
+    mask: String,
+    adding: Boolean
+) = act(
+    serverId, "masklist:set",
+    JsonPrimitive(channel), JsonPrimitive(mode), JsonPrimitive(mask), JsonPrimitive(adding)
+) {
+    it.setMode(channel, (if (adding) "+" else "-") + mode, MaskLists.maskToSet(mask))
+}
+
+/**
+ * Ask what a channel is set to.
+ *
+ * A channel joined before this client started has modes nobody has seen, and
+ * RPL_CHANNELMODEIS is the only answer to the question.
+ */
+fun SwitchboardEngine.fetchChannelModes(serverId: String, channel: String) =
+    act(serverId, "channel:modes", JsonPrimitive(channel)) { it.send("MODE", channel) }
+
+/** Turn one of those settings on or off */
+fun SwitchboardEngine.setChannelMode(serverId: String, channel: String, args: List<String>) =
+    act(
+        serverId, "channel:set-mode",
+        JsonPrimitive(channel), JsonArray(args.map { JsonPrimitive(it) })
+    ) {
+        if (args.isNotEmpty()) it.setMode(channel, args[0], *args.drop(1).toTypedArray())
+    }
 
 /**
  * Which profile is being edited.
