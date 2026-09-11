@@ -1,0 +1,267 @@
+{
+  "$comment": "What a member menu may offer, read by tests/shared/powers.test.ts and the Android SharedCorpusTest. There is no IRCv3 specification for this: no extension tells a client whether it may kick. ISUPPORT gives the roles a network has (PREFIX) and which modes take a mask (CHANMODES), and the rest is inference \u2014 so this errs toward offering something a network might refuse and never toward hiding something it would have allowed, except where there is no rank at all and we can be sure. Ignoring somebody is a decision about your own client rather than the channel and belongs in this menu, but neither client keeps an ignore list yet; it goes in when the list behind it does.",
+  "$cases": "`mine` and `theirs` are the prefix symbols each person is wearing in the channel. `actions` is the menu, in order.",
+  "cases": [
+    {
+      "name": "somebody with no rank is offered nothing to do to anybody",
+      "prefix": "(ohv)@%+",
+      "chanmodes": "beIq,k,l,imnstpRcC",
+      "mine": "",
+      "theirs": "",
+      "isSelf": false,
+      "actions": [
+        "whois",
+        "message"
+      ],
+      "$comment": "The case that prompted this. Both clients showed Kick to everybody and let the server answer 482, which teaches people that half the menu is a lie."
+    },
+    {
+      "name": "and nothing to do to themselves either",
+      "prefix": "(ohv)@%+",
+      "chanmodes": "beIq,k,l,imnstpRcC",
+      "mine": "",
+      "theirs": "",
+      "isSelf": true,
+      "actions": [
+        "whois"
+      ]
+    },
+    {
+      "name": "an op gets the lot",
+      "prefix": "(ohv)@%+",
+      "chanmodes": "beIq,k,l,imnstpRcC",
+      "mine": "@",
+      "theirs": "",
+      "isSelf": false,
+      "actions": [
+        "whois",
+        "message",
+        "voice",
+        "halfop",
+        "op",
+        "kick",
+        "mute",
+        "ban"
+      ]
+    },
+    {
+      "name": "taking back what has been given",
+      "prefix": "(ohv)@%+",
+      "chanmodes": "beIq,k,l,imnstpRcC",
+      "mine": "@",
+      "theirs": "@%+",
+      "isSelf": false,
+      "actions": [
+        "whois",
+        "message",
+        "devoice",
+        "dehalfop",
+        "deop",
+        "kick",
+        "mute",
+        "ban"
+      ],
+      "$comment": "Each one reads as its opposite when they already have it, so the menu never offers to give somebody something they have."
+    },
+    {
+      "name": "a halfop may moderate but not appoint",
+      "prefix": "(ohv)@%+",
+      "chanmodes": "beIq,k,l,imnstpRcC",
+      "mine": "%",
+      "theirs": "",
+      "isSelf": false,
+      "actions": [
+        "whois",
+        "message",
+        "voice",
+        "kick",
+        "mute"
+      ],
+      "$comment": "Where the networks disagree. rIRCd refuses a halfop's kick and InspIRCd allows it; offered, because a network with the role usually means it to moderate, and a refusal costs one line where hiding costs the feature."
+    },
+    {
+      "name": "a voiced user is not staff",
+      "prefix": "(ohv)@%+",
+      "chanmodes": "beIq,k,l,imnstpRcC",
+      "mine": "+",
+      "theirs": "",
+      "isSelf": false,
+      "actions": [
+        "whois",
+        "message"
+      ]
+    },
+    {
+      "name": "nobody acts on somebody standing above them",
+      "prefix": "(ohv)@%+",
+      "chanmodes": "beIq,k,l,imnstpRcC",
+      "mine": "%",
+      "theirs": "@",
+      "isSelf": false,
+      "actions": [
+        "whois",
+        "message"
+      ],
+      "$comment": "The one permission rule every ircd agrees on."
+    },
+    {
+      "name": "an op may act on another op",
+      "prefix": "(ohv)@%+",
+      "chanmodes": "beIq,k,l,imnstpRcC",
+      "mine": "@",
+      "theirs": "@",
+      "isSelf": false,
+      "actions": [
+        "whois",
+        "message",
+        "voice",
+        "halfop",
+        "deop",
+        "kick",
+        "mute",
+        "ban"
+      ]
+    },
+    {
+      "name": "an owner outranks an op",
+      "prefix": "(qaohv)~&@%+",
+      "chanmodes": "beI,fkL,lH,psmntirzMQNRTOVKDdGPZSCc",
+      "mine": "@",
+      "theirs": "~",
+      "isSelf": false,
+      "actions": [
+        "whois",
+        "message"
+      ]
+    },
+    {
+      "name": "and is outranked by nobody",
+      "prefix": "(qaohv)~&@%+",
+      "chanmodes": "beI,fkL,lH,psmntirzMQNRTOVKDdGPZSCc",
+      "mine": "~",
+      "theirs": "@",
+      "isSelf": false,
+      "actions": [
+        "whois",
+        "message",
+        "voice",
+        "halfop",
+        "deop",
+        "kick",
+        "ban"
+      ],
+      "$comment": "No mute here: on UnrealIRCd `q` is the owner prefix, not a quiet mode, so offering one would be offering to make somebody the owner."
+    },
+    {
+      "name": "a network with only ops and voice has no halfop to give",
+      "prefix": "(ov)@+",
+      "chanmodes": "b,k,l,imnpst",
+      "mine": "@",
+      "theirs": "",
+      "isSelf": false,
+      "actions": [
+        "whois",
+        "message",
+        "voice",
+        "op",
+        "kick",
+        "ban"
+      ]
+    },
+    {
+      "name": "an op can take their own badge off",
+      "prefix": "(ohv)@%+",
+      "chanmodes": "beIq,k,l,imnstpRcC",
+      "mine": "@",
+      "theirs": "@",
+      "isSelf": true,
+      "actions": [
+        "whois",
+        "deop"
+      ],
+      "$comment": "Standing down is something you do to yourself, so the rank rule does not block it. Only the taking-off half is offered: giving yourself a badge you lack is something the server refuses, and offering halfop to somebody who is already op is noise."
+    },
+    {
+      "name": "a network that sends no PREFIX still works",
+      "prefix": "",
+      "chanmodes": "",
+      "mine": "@",
+      "theirs": "",
+      "isSelf": false,
+      "actions": [
+        "whois",
+        "message",
+        "voice",
+        "op",
+        "kick"
+      ],
+      "$comment": "Falling back to the pair every ircd has had since before ISUPPORT existed. No ban, because nothing said there is a ban list."
+    },
+    {
+      "name": "a network with no ban list is not offered one",
+      "prefix": "(ohv)@%+",
+      "chanmodes": "eIq,k,l,imnst",
+      "mine": "@",
+      "theirs": "",
+      "isSelf": false,
+      "actions": [
+        "whois",
+        "message",
+        "voice",
+        "halfop",
+        "op",
+        "kick",
+        "mute"
+      ]
+    },
+    {
+      "name": "and an op who is also voiced can take both off",
+      "prefix": "(ohv)@%+",
+      "chanmodes": "beIq,k,l,imnstpRcC",
+      "mine": "@+",
+      "theirs": "@+",
+      "isSelf": true,
+      "actions": [
+        "whois",
+        "devoice",
+        "deop"
+      ]
+    }
+  ],
+  "$masks": "What to ban somebody with. A ban on a nick is undone by changing it, which takes one command and no privileges, so the host is what gets banned when it is known.",
+  "masks": [
+    {
+      "name": "the host, where it is known",
+      "nick": "robin",
+      "user": "~rob",
+      "host": "example.org",
+      "mask": "*!*@example.org",
+      "weak": false
+    },
+    {
+      "name": "a cloak is still a host",
+      "nick": "kara",
+      "user": "~k",
+      "host": "15B02D0B.705DFACC.IP",
+      "mask": "*!*@15B02D0B.705DFACC.IP",
+      "weak": false
+    },
+    {
+      "$comment": "Weaker, and worth saying so in the menu: one NICK undoes it.",
+      "name": "the nick, when there is nothing better",
+      "nick": "robin",
+      "user": null,
+      "host": null,
+      "mask": "robin!*@*",
+      "weak": true
+    },
+    {
+      "name": "an empty host is no host",
+      "nick": "robin",
+      "user": "~rob",
+      "host": "",
+      "mask": "robin!*@*",
+      "weak": true
+    }
+  ]
+}

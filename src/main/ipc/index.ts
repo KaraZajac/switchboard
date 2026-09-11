@@ -386,6 +386,30 @@ export function registerIPCHandlers(): void {
     client.kick(channel, nick, reason)
   })
 
+  /**
+   * Give or take a channel mode against one person.
+   *
+   * One call for op, halfop, voice, ban and quiet alike, because they are the
+   * same line on the wire — `MODE #channel +o nick` — and what may be asked
+   * for is decided in `@shared/powers` rather than here. The server is still
+   * the authority: this only stops a client offering what it can already tell
+   * will be refused.
+   */
+  handle(
+    'user:mode',
+    async (
+      _event,
+      serverId: string,
+      channel: string,
+      change: string,
+      target: string
+    ) => {
+      const client = ircManager.getClient(serverId)
+      if (!client) throw new Error('Not connected')
+      client.connection.send('MODE', channel, change, target)
+    }
+  )
+
   handle('user:nick', async (_event, serverId: string, nick: string) => {
     const client = ircManager.getClient(serverId)
     if (!client) throw new Error('Not connected')

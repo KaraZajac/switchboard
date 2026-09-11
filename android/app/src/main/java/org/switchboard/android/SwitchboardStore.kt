@@ -109,7 +109,15 @@ data class Member(
     val nick: String,
     val prefixes: List<String> = emptyList(),
     val away: Boolean = false,
-    val isBot: Boolean = false
+    val isBot: Boolean = false,
+    /**
+     * Where they are connecting from, when the network said.
+     *
+     * Carried so a ban can name the host rather than the nick: a ban on a nick
+     * is undone by changing it, which takes one command and no privileges. The
+     * IRC layer has always sent this; the store used to drop it on the floor.
+     */
+    val host: String? = null
 )
 
 /** Something the server declined to do, in words worth showing */
@@ -467,6 +475,16 @@ class SwitchboardStore {
     val capabilityValues = mutableStateMapOf<String, Map<String, String>>()
 
     /**
+     * ISUPPORT, per network.
+     *
+     * `PREFIX` says which roles this network has and in what order, and
+     * `CHANMODES` says which modes take a mask. Between them they decide what
+     * a member menu may offer — see [Powers] — and nothing in the UI could
+     * see either before this.
+     */
+    val isupport = mutableStateMapOf<String, Map<String, String>>()
+
+    /**
      * Which networks the desktop was last seen holding.
      *
      * Its own fact rather than a read of `servers[…].connected`, because that
@@ -509,6 +527,12 @@ class SwitchboardStore {
             // Following a desktop this is the only way to know: there is no
             // connection here to ask, and a screen that guesses offers forms
             // the network will refuse.
+            live["isupport"]?.jsonObject?.let { values ->
+                isupport[id] = values.mapValues { (_, value) ->
+                    (value as? JsonPrimitive)?.contentOrNull.orEmpty()
+                }
+            }
+
             live["capabilityValues"]?.jsonObject?.let { values ->
                 capabilityValues[id] = values.mapValues { (_, value) ->
                     (value as? JsonPrimitive)?.contentOrNull.orEmpty()
@@ -583,6 +607,12 @@ class SwitchboardStore {
                 // "nothing joined yet" while the desktop fills up, and only a
                 // restart puts it right.
                 if (activeServerId == null) activeServerId = serverId
+            }
+
+            "irc:isupport" -> {
+                val token = data["token"]?.str() ?: return
+                val value = data["value"]?.str() ?: return
+                isupport[serverId] = (isupport[serverId] ?: emptyMap()) + (token to value)
             }
 
             "irc:network-icon" -> {
@@ -1122,7 +1152,8 @@ private fun JsonObject.toMember(): Member = Member(
     nick = this["nick"]?.str() ?: "",
     prefixes = this["prefixes"]?.jsonArray?.mapNotNull { it.str() } ?: emptyList(),
     away = this["away"]?.jsonPrimitive?.booleanOrNull ?: false,
-    isBot = this["isBot"]?.jsonPrimitive?.booleanOrNull ?: false
+    isBot = this["isBot"]?.jsonPrimitive?.booleanOrNull ?: false,
+    host = this["host"]?.str()
 )
 
 private fun JsonObject.toMessage(): Message = Message(

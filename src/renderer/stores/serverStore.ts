@@ -18,6 +18,14 @@ interface ServerState {
    * difference between a form that works and a form the server refuses.
    */
   capabilityValues: Record<string, Record<string, string>>
+  /**
+   * ISUPPORT, per server.
+   *
+   * `PREFIX` says which roles this network has and in what order, and
+   * `CHANMODES` says which modes take a mask — between them they decide what
+   * a member menu may offer. The renderer could not see either before this.
+   */
+  isupport: Record<string, Record<string, string>>
   /** Our current nick per server */
   currentNick: Record<string, string>
   /** User avatars from metadata: `${serverId}:${nick}` -> URL */
@@ -62,6 +70,7 @@ interface ServerState {
   setCurrentNick: (id: string, nick: string) => void
   setUserMetadata: (serverId: string, nick: string, key: string, value: string) => void
   setNetworkIcon: (serverId: string, url: string) => void
+  setIsupport: (serverId: string, tokens: Record<string, string>) => void
   /** A services bot has spoken on this network, so it has one */
   noteService: (serverId: string, nick: string) => void
   setFilehostUrl: (serverId: string, url: string) => void
@@ -80,6 +89,7 @@ export const useServerStore = create<ServerState>((set, get) => ({
   connectionStatus: {},
   capabilities: {},
   capabilityValues: {},
+  isupport: {},
   currentNick: {},
   userMetadata: {},
   mutedServers: {},
@@ -111,6 +121,11 @@ export const useServerStore = create<ServerState>((set, get) => ({
     })),
 
   setActiveServer: (id) => set({ activeServerId: id }),
+
+  setIsupport: (serverId, tokens) =>
+    set((state) => ({
+      isupport: { ...state.isupport, [serverId]: { ...state.isupport[serverId], ...tokens } }
+    })),
 
   noteService: (serverId, nick) =>
     set((state) => {

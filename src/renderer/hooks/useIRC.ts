@@ -409,6 +409,13 @@ export function useIRCEvents(): void {
       })
     )
 
+    // ISUPPORT, which decides what a member menu may offer
+    cleanups.push(
+      api.on('irc:isupport', ({ serverId, tokens }) => {
+        useServerStore.getState().setIsupport(serverId, tokens)
+      })
+    )
+
     // Network icon (ISUPPORT draft/ICON)
     cleanups.push(
       api.on('irc:network-icon', ({ serverId, url }) => {

@@ -16,6 +16,8 @@ import type { UserMetadata } from './metadata'
  * reload) is gone. The renderer asks for this snapshot on mount to catch up.
  */
 export interface ConnectionSnapshot {
+  /** ISUPPORT, so a following device can decide a member menu the same way */
+  isupport?: Record<string, string>
   serverId: string
   nick: string
   /** The account this connection is logged in to, if any */
@@ -166,6 +168,8 @@ export interface MainToRendererEvents {
     message: string
   }
   'irc:channel-rename': { serverId: string; oldName: string; newName: string; reason: string | null }
+  /** ISUPPORT as the server sent it: PREFIX and CHANMODES decide a member menu */
+  'irc:isupport': { serverId: string; tokens: Record<string, string> }
   'irc:network-icon': { serverId: string; url: string }
   'irc:filehost': { serverId: string; url: string }
   'irc:monitor-online': { serverId: string; nick: string; user: string | null; host: string | null }
@@ -239,6 +243,13 @@ export interface RendererToMainInvocations {
   'message:search': (serverId: string, query: string, channel?: string) => Promise<ChatMessage[]>
   'user:whois': (serverId: string, nick: string) => Promise<Record<string, string>>
   'user:kick': (serverId: string, channel: string, nick: string, reason?: string) => Promise<void>
+  /** One channel mode against one person: op, halfop, voice, ban, quiet */
+  'user:mode': (
+    serverId: string,
+    channel: string,
+    change: string,
+    target: string
+  ) => Promise<void>
   'user:nick': (serverId: string, nick: string) => Promise<void>
   'user:setname': (serverId: string, realname: string) => Promise<void>
   'user:away': (serverId: string, message?: string) => Promise<void>

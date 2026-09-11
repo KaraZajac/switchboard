@@ -40,6 +40,7 @@ import org.switchboard.android.irc.Friends
 import org.switchboard.android.irc.Isupport
 import org.switchboard.android.irc.ServerConfig
 import org.switchboard.android.irc.Reconnect
+import org.switchboard.android.irc.Powers
 import org.switchboard.android.irc.Redact
 import org.switchboard.android.irc.Unread
 import org.switchboard.android.irc.Services
@@ -769,6 +770,52 @@ class SharedCorpusTest {
                 name,
                 c["mentionsMuted"]!!.jsonPrimitive.content == "true",
                 look.mentionsMuted
+            )
+        }
+    }
+
+    // ── what you may do to somebody ──────────────────────────────────
+
+    /**
+     * There is no IRCv3 specification for this, so both clients infer it the
+     * same way or they offer different menus for the same channel. Both
+     * showed Kick to everybody before this and let the server answer 482.
+     */
+    @Test
+    fun `offers the actions the desktop offers`() {
+        for (case in load("powers.json")["cases"]!!.jsonArray) {
+            val c = case.jsonObject
+            val actions = Powers.actionsFor(
+                prefix = c["prefix"]!!.jsonPrimitive.content,
+                chanmodes = c["chanmodes"]!!.jsonPrimitive.content,
+                mine = c["mine"]!!.jsonPrimitive.content,
+                theirs = c["theirs"]!!.jsonPrimitive.content,
+                isSelf = c["isSelf"]!!.jsonPrimitive.content == "true",
+                ignored = (c["ignored"] as? JsonPrimitive)?.content == "true"
+            )
+            assertEquals(
+                c["name"]!!.jsonPrimitive.content,
+                c["actions"]!!.jsonArray.map { it.jsonPrimitive.content },
+                actions.map { it.name.lowercase() }
+            )
+        }
+    }
+
+    /** The mask a ban names, which is the host wherever the network gave one */
+    @Test
+    fun `bans what the desktop bans`() {
+        for (case in load("powers.json")["masks"]!!.jsonArray) {
+            val c = case.jsonObject
+            val host = (c["host"] as? JsonPrimitive)?.contentOrNull
+            assertEquals(
+                c["name"]!!.jsonPrimitive.content,
+                c["mask"]!!.jsonPrimitive.content,
+                Powers.banMask(c["nick"]!!.jsonPrimitive.content, host)
+            )
+            assertEquals(
+                c["name"]!!.jsonPrimitive.content,
+                c["weak"]!!.jsonPrimitive.content == "true",
+                Powers.maskIsWeak(host)
             )
         }
     }

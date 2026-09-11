@@ -127,6 +127,24 @@ fun SwitchboardEngine.kick(serverId: String, channel: String, nick: String, reas
         reason?.let { JsonPrimitive(it) } ?: JsonNull
     ) { it.kick(channel, nick, reason) }
 
+/**
+ * Give or take a channel mode against one person.
+ *
+ * One call for op, halfop, voice, ban and quiet alike: they are the same line
+ * on the wire, and which of them may be asked for is decided in [Powers]
+ * rather than here. Relayed through the desktop when this phone is following
+ * one, like every other action.
+ */
+fun SwitchboardEngine.setMemberMode(
+    serverId: String,
+    channel: String,
+    change: String,
+    target: String
+) = act(
+    serverId, "user:mode",
+    JsonPrimitive(channel), JsonPrimitive(change), JsonPrimitive(target)
+) { it.send("MODE", channel, change, target) }
+
 /** One channel on the network, as LIST describes it */
 data class ChannelListing(val name: String, val users: Int, val topic: String)
 

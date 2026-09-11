@@ -252,6 +252,11 @@ export class IRCManager {
           Array.from(client.state.availableCapabilities).map(([name, value]) => [name, value ?? ''])
         ),
         metadata: Object.fromEntries(client.state.metadata),
+        // A following phone decides its member menu from PREFIX and CHANMODES
+        // like the desktop does, and has no connection of its own to ask.
+        isupport: Object.fromEntries(
+          Object.entries(client.state.isupport).map(([k, v]) => [k, v === true ? '' : v])
+        ),
         channels: Array.from(client.state.channels.values()).map((channel) => ({
           name: channel.name,
           topic: channel.topic,
@@ -770,6 +775,10 @@ export class IRCManager {
     })
 
     client.events.on('isupport', (tokens) => {
+      // The whole set, because what a member menu may offer is decided from
+      // PREFIX and CHANMODES and the renderer had no way to see either.
+      this.send('irc:isupport', { serverId, tokens })
+
       // Held to the same rule as a user's avatar, because it is the same
       // thing: a URL a server handed us that this client is about to fetch.
       // `^https?://` let a network point the client at plaintext http, which

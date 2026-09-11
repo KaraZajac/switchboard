@@ -45,6 +45,9 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 import org.switchboard.android.SwitchboardEngine
 import org.switchboard.android.UserMetadata
+import org.switchboard.android.irc.Powers
+import org.switchboard.android.isChannel
+import org.switchboard.android.setMemberMode
 import org.switchboard.android.kick
 import org.switchboard.android.unwatchNicks
 import org.switchboard.android.watchNicks
@@ -125,6 +128,107 @@ fun ProfileSheet(
                 Text("Message $nick", fontWeight = FontWeight.Bold, fontSize = 15.sp)
             }
 
+            // What you may do to them here, if anything.
+            //
+            // Decided by [Powers] from what this network's ISUPPORT says its
+            // roles are and what the two of you are wearing in this channel.
+            // Nothing is offered to somebody with no rank: the desktop used to
+            // show Kick to everybody and let the server answer 482, which
+            // teaches people that half a menu is a lie.
+            val channel = store.activeChannel
+            if (serverId != null && channel != null && isChannel(channel)) {
+                val tokens = store.isupport[serverId].orEmpty()
+                val here = store.membersFor(serverId, channel)
+                val them = here.firstOrNull { it.nick.equals(nick, true) }
+                val me = here.firstOrNull { it.nick.equals(store.servers[serverId]?.nick, true) }
+                val isSelf = nick.equals(store.servers[serverId]?.nick, true)
+
+                val offered = Powers.actionsFor(
+                    prefix = tokens["PREFIX"],
+                    chanmodes = tokens["CHANMODES"],
+                    mine = me?.prefixes?.joinToString("").orEmpty(),
+                    theirs = them?.prefixes?.joinToString("").orEmpty(),
+                    isSelf = isSelf
+                ).filter { it != Powers.Action.WHOIS && it != Powers.Action.MESSAGE }
+
+                if (offered.isNotEmpty()) {
+                    Spacer(Modifier.height(18.dp))
+                    Text(
+                        "IN ${channel.uppercase()}",
+                        color = Overlay,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(Modifier.height(6.dp))
+
+                    val mask = Powers.banMask(nick, them?.host)
+                    val weak = Powers.maskIsWeak(them?.host)
+                    val quiet = Powers.quietMode(
+                        tokens["CHANMODES"],
+                        Powers.parsePrefix(tokens["PREFIX"])
+                    )
+
+                    for (action in offered) {
+                        val (label, colour) = when (action) {
+                            Powers.Action.VOICE -> "Give voice" to Green
+                            Powers.Action.DEVOICE -> "Take voice" to Subtext
+                            Powers.Action.HALFOP -> "Make half-operator" to Green
+                            Powers.Action.DEHALFOP -> "Remove half-operator" to Subtext
+                            Powers.Action.OP -> "Make operator" to Green
+                            Powers.Action.DEOP -> "Remove operator" to Subtext
+                            Powers.Action.KICK -> "Kick from $channel" to Red
+                            // Names the mask, because banning a nick is undone
+                            // by changing it and that is worth knowing before
+                            // pressing the button rather than after.
+                            Powers.Action.BAN ->
+                                (if (weak) "Ban $mask (nick only)" else "Ban $mask") to Red
+                            Powers.Action.MUTE ->
+                                (if (weak) "Mute $mask (nick only)" else "Mute $mask") to Yellow
+                            else -> continue
+                        }
+
+                        val destructive =
+                            action == Powers.Action.KICK || action == Powers.Action.BAN
+                        var confirming by remember(nick, action) { mutableStateOf(false) }
+
+                        // Kicking and banning are not undone by pressing again,
+                        // so they ask twice. Giving somebody voice is.
+                        SecondaryAction(
+                            if (destructive && confirming) "Tap again to confirm" else label,
+                            colour
+                        ) {
+                            if (destructive && !confirming) {
+                                confirming = true
+                                return@SecondaryAction
+                            }
+                            when (action) {
+                                Powers.Action.VOICE ->
+                                    engine.setMemberMode(serverId, channel, "+v", nick)
+                                Powers.Action.DEVOICE ->
+                                    engine.setMemberMode(serverId, channel, "-v", nick)
+                                Powers.Action.HALFOP ->
+                                    engine.setMemberMode(serverId, channel, "+h", nick)
+                                Powers.Action.DEHALFOP ->
+                                    engine.setMemberMode(serverId, channel, "-h", nick)
+                                Powers.Action.OP ->
+                                    engine.setMemberMode(serverId, channel, "+o", nick)
+                                Powers.Action.DEOP ->
+                                    engine.setMemberMode(serverId, channel, "-o", nick)
+                                Powers.Action.KICK ->
+                                    engine.kick(serverId, channel, nick, null)
+                                Powers.Action.BAN ->
+                                    engine.setMemberMode(serverId, channel, "+b", mask)
+                                Powers.Action.MUTE ->
+                                    engine.setMemberMode(serverId, channel, "+${quiet ?: 'q'}", mask)
+                                else -> {}
+                            }
+                            onDismiss()
+                        }
+                        Spacer(Modifier.height(6.dp))
+                    }
+                }
+            }
+
             // MONITOR: the server tells us when they come and go, so this works
             // while the app is asleep in a way that polling never could.
             Spacer(Modifier.height(10.dp))
@@ -138,28 +242,6 @@ fun ProfileSheet(
                 else engine.watchNicks(serverId, listOf(nick))
             }
 
-            // Only where it could work: a channel we are in, and someone who is
-            // not us. Whether we hold ops is the server's call, and it says so
-            // by refusing — offering the option is not the same as promising it.
-            val channel = store.activeChannel
-            val me = serverId?.let { store.servers[it]?.nick }
-            if (serverId != null && channel != null && channel.startsWith("#") &&
-                !nick.equals(me, true)
-            ) {
-                var confirming by remember(nick) { mutableStateOf(false) }
-                Spacer(Modifier.height(2.dp))
-                SecondaryAction(
-                    if (confirming) "Tap again to kick $nick from $channel" else "Kick from $channel",
-                    Red
-                ) {
-                    if (confirming) {
-                        engine.kick(serverId, channel, nick, null)
-                        onDismiss()
-                    } else {
-                        confirming = true
-                    }
-                }
-            }
         }
     }
 }

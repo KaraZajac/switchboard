@@ -65,6 +65,7 @@ export const REMOTE_ALLOWED = new Set([
   'monitor:add',
   'monitor:remove',
   'user:kick',
+  'user:mode',
   // Registering an account is a thing you do from whichever device is in your
   // hand, and the second half of it arrives by email — often on the phone.
   'account:register',

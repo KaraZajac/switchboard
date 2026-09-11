@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useMemo } from 'react'
 import { useServerStore } from '../../stores/serverStore'
 import { useChannelStore } from '../../stores/channelStore'
 import { useUserStore } from '../../stores/userStore'
@@ -6,6 +6,14 @@ import { useUIStore } from '../../stores/uiStore'
 import { nickColor } from '../../utils/nickColor'
 import { displayNameFor, metadataColor, type UserMetadata } from '@shared/types/metadata'
 import { ContextMenu, type ContextMenuItem } from '../common/ContextMenu'
+import {
+  actionsFor,
+  parsePrefix,
+  quietMode,
+  banMask,
+  maskIsWeak,
+  type MemberAction
+} from '@shared/powers'
 import type { ChannelUser } from '@shared/types/channel'
 import { PREFIX_RANKS } from '@shared/types/channel'
 import { avatarUrl as safeAvatarUrl } from '@shared/avatar'
@@ -28,6 +36,11 @@ export function UserList() {
     ? `${activeServerId}:${activeChannel.toLowerCase()}`
     : null
   const users = useUserStore((s) => (key ? s.users[key] ?? EMPTY_USERS : EMPTY_USERS))
+  const isupport = useServerStore((s) => s.isupport)
+  // What *you* are wearing in this channel is the whole of what you may do
+  const myNick = useServerStore((s) =>
+    activeServerId ? s.currentNick[activeServerId] || '' : ''
+  )
 
   // Group users by highest prefix
   const groups = groupUsersByPrefix(users)
@@ -55,12 +68,86 @@ export function UserList() {
     window.switchboard.invoke('user:kick', activeServerId, activeChannel, nick)
   }, [activeServerId, activeChannel])
 
-  const contextMenuItems: ContextMenuItem[] = contextMenu ? [
-    { label: 'User Info (WHOIS)', onClick: () => handleWhois(contextMenu.user.nick) },
-    { label: 'Message', onClick: () => handleMessage(contextMenu.user.nick) },
-    { label: '', onClick: () => {}, separator: true },
-    { label: 'Kick', onClick: () => handleKick(contextMenu.user.nick), danger: true }
-  ] : []
+  const handleMode = useCallback((change: string, target: string) => {
+    if (!activeServerId || !activeChannel) return
+    window.switchboard.invoke('user:mode', activeServerId, activeChannel, change, target)
+  }, [activeServerId, activeChannel])
+
+  /**
+   * The menu for one person, from `@shared/powers`.
+   *
+   * Kick used to be on it unconditionally, so somebody with no rank in the
+   * channel could press it and read `482 You're not channel operator`. What a
+   * client can work out, it should: there is no IRCv3 extension that says
+   * whether you may kick, but ISUPPORT says which roles this network has and
+   * what you are wearing says where you stand among them.
+   */
+  const contextMenuItems: ContextMenuItem[] = useMemo(() => {
+    if (!contextMenu) return []
+
+    const tokens = activeServerId ? isupport[activeServerId] || {} : {}
+    const scheme = parsePrefix(tokens.PREFIX)
+    const quiet = quietMode(tokens.CHANMODES, scheme)
+    const target = contextMenu.user
+    const me = users.find((u) => u.nick.toLowerCase() === myNick.toLowerCase())
+    const isSelf = target.nick.toLowerCase() === myNick.toLowerCase()
+
+    const offered = actionsFor({
+      prefix: tokens.PREFIX,
+      chanmodes: tokens.CHANMODES,
+      mine: (me?.prefixes || []).join(''),
+      theirs: (target.prefixes || []).join(''),
+      isSelf
+    })
+
+    const mask = banMask(target)
+    const weak = maskIsWeak(target)
+    const modeOf = (letter: string | null | undefined): string => letter || 'o'
+
+    const label: Partial<Record<MemberAction, string>> = {
+      whois: 'User info (WHOIS)',
+      message: 'Message',
+      voice: 'Give voice',
+      devoice: 'Take voice',
+      halfop: 'Make half-operator',
+      dehalfop: 'Remove half-operator',
+      op: 'Make operator',
+      deop: 'Remove operator',
+      kick: 'Kick',
+      // Says which mask it will use, because banning the nick is undone by
+      // changing it and somebody should know that before pressing it.
+      ban: weak ? `Ban ${mask} (nick only)` : `Ban ${mask}`,
+      mute: weak ? `Mute ${mask} (nick only)` : `Mute ${mask}`
+    }
+
+    const run: Partial<Record<MemberAction, () => void>> = {
+      whois: () => handleWhois(target.nick),
+      message: () => handleMessage(target.nick),
+      voice: () => handleMode('+v', target.nick),
+      devoice: () => handleMode('-v', target.nick),
+      halfop: () => handleMode('+h', target.nick),
+      dehalfop: () => handleMode('-h', target.nick),
+      op: () => handleMode('+o', target.nick),
+      deop: () => handleMode('-o', target.nick),
+      kick: () => handleKick(target.nick),
+      ban: () => handleMode('+b', mask),
+      mute: () => handleMode(`+${modeOf(quiet)}`, mask)
+    }
+
+    const items: ContextMenuItem[] = []
+    let lastWasTalk = false
+    for (const action of offered) {
+      const isTalk = action === 'whois' || action === 'message'
+      if (lastWasTalk && !isTalk) items.push({ label: '', onClick: () => {}, separator: true })
+      lastWasTalk = isTalk
+      items.push({
+        label: label[action] || action,
+        onClick: run[action] || (() => {}),
+        danger: action === 'kick' || action === 'ban'
+      })
+    }
+    return items
+  }, [contextMenu, activeServerId, isupport, users, myNick, handleWhois, handleMessage, handleKick, handleMode])
 
   return (
     <div className="w-60 shrink-0 overflow-y-auto bg-gray-900 px-2 py-3 no-select">

@@ -350,6 +350,14 @@ internal fun registerRegistrationHandlers() {
                 // Held to the same rule as a user's avatar — https, a real
                 // host, nothing absurd — because it is the same thing: a URL a
                 // server handed us that this client is about to fetch.
+                // What a member menu may offer is decided from these two, and
+                // the UI had no way to see either.
+                "PREFIX", "CHANMODES" -> session.emit("irc:isupport", buildJsonObject {
+                    put("serverId", state.serverId)
+                    put("token", key)
+                    put("value", value)
+                })
+
                 "ICON", "draft/ICON" -> avatarUrl(value)?.let { url ->
                     session.emit("irc:network-icon", buildJsonObject {
                         put("serverId", state.serverId)
