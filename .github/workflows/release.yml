@@ -146,19 +146,10 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release upload '${{ github.ref_name }}' artifacts/*.apk --clobber
 
-      - name: Take it live
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          git tag -l --format='%(contents)' '${{ github.ref_name }}' > notes.md
-          gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/${{ steps.release.outputs.id }}" \
-            -F draft=false \
-            -F prerelease=${{ contains(github.ref_name, 'beta') || contains(github.ref_name, 'alpha') || contains(github.ref_name, 'rc') }} \
-            -f body@notes.md \
-            --jq '"published \(.html_url) with \(.assets|length) assets"'
-
-      # A release with nothing on it is the failure this job exists to prevent,
-      # and it is invisible unless something looks.
+      # Before taking it live rather than after. A release with nothing on it
+      # is the failure this job exists to prevent, and checking afterwards
+      # checks nothing: on v2.1.0-beta the step before this one failed, so this
+      # was skipped — and the release was already public by then anyway.
       - name: Check it actually has the artifacts
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -166,3 +157,35 @@ jobs:
           count=$(gh api "repos/$GITHUB_REPOSITORY/releases/${{ steps.release.outputs.id }}" --jq '.assets|length')
           echo "$count assets on ${{ github.ref_name }}"
           [ "$count" -ge 8 ] || { echo "::error::only $count assets — expected the desktop builds and the APKs"; exit 1; }
+
+      - name: Take it live
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # The notes are the tag's own message. `git tag -a` strips lines
+          # beginning with `#` as comments unless the tag was made with
+          # --cleanup=verbatim, which would quietly eat every markdown heading.
+          git tag -l --format='%(contents)' '${{ github.ref_name }}' > notes.md
+          [ -s notes.md ] || { echo "::error::no message on ${{ github.ref_name }} — annotate the tag"; exit 1; }
+
+          # `-F key=@file` reads a file; `-f` does not, and takes the whole
+          # thing as a literal key name. It was `-f body@notes.md`, which gh
+          # rejected as `invalid key: "body@notes.md"` — so v2.1.0-beta went
+          # out with no release notes and not marked as a prerelease.
+          gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/${{ steps.release.outputs.id }}" \
+            -F draft=false \
+            -F prerelease=${{ contains(github.ref_name, 'beta') || contains(github.ref_name, 'alpha') || contains(github.ref_name, 'rc') }} \
+            -F body=@notes.md \
+            --jq '"published \(.html_url) with \(.assets|length) assets"'
+
+      # Whoever publishes first wins, and it is not always this job: the draft
+      # was already live before the APKs finished uploading. Say so rather than
+      # leave a release that looks complete and is not.
+      - name: Confirm what went out
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/releases/${{ steps.release.outputs.id }}" \
+            --jq '"draft=\(.draft) prerelease=\(.prerelease) assets=\(.assets|length) notes=\(.body|length) bytes"'
+          empty=$(gh api "repos/$GITHUB_REPOSITORY/releases/${{ steps.release.outputs.id }}" --jq '.body|length')
+          [ "$empty" -gt 0 ] || { echo "::error::published with no release notes"; exit 1; }
