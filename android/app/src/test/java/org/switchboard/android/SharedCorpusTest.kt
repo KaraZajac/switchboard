@@ -14,6 +14,7 @@ import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.long
 import kotlinx.serialization.json.put
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -39,6 +40,7 @@ import org.switchboard.android.irc.Friends
 import org.switchboard.android.irc.Isupport
 import org.switchboard.android.irc.ServerConfig
 import org.switchboard.android.irc.Services
+import org.switchboard.android.irc.Typing
 import org.switchboard.android.irc.LineLength
 import org.switchboard.android.irc.IrcMessage
 import org.switchboard.android.irc.Metadata
@@ -576,6 +578,50 @@ class SharedCorpusTest {
                 shouldAdoptVault(incoming, current, placeholder)
             )
         }
+    }
+
+    // ── saying somebody is typing ────────────────────────────────────
+
+    /**
+     * The phone ran this on a timer and the desktop ran it on keystrokes, so a
+     * message typed in one go cost three `active` notices from one client and
+     * one from the other — and the phone said `done` twice at the end. All of
+     * it was visible on the wire the first time anyone watched a send from
+     * outside both clients.
+     */
+    @Test
+    fun `says somebody is typing when the desktop would`() {
+        for (case in load("typing.json")["cases"]!!.jsonArray) {
+            val c = case.jsonObject
+            val event = when (c["event"]!!.jsonPrimitive.content) {
+                "typed" -> Typing.Event.TYPED
+                "cleared" -> Typing.Event.CLEARED
+                else -> Typing.Event.SENT
+            }
+
+            val decision = Typing.toSend(
+                event,
+                c["lastActiveAt"]!!.jsonPrimitive.long,
+                c["now"]!!.jsonPrimitive.long
+            )
+
+            val name = c["name"]!!.jsonPrimitive.content
+            assertEquals(name, (c["send"] as? JsonPrimitive)?.contentOrNull, decision.send)
+            assertEquals(
+                name,
+                c["nextLastActiveAt"]!!.jsonPrimitive.long,
+                decision.lastActiveAt
+            )
+        }
+    }
+
+    /** The throttle the corpus was written against is the one in force */
+    @Test
+    fun `holds the typing rate the corpus assumes`() {
+        assertEquals(
+            load("typing.json")["throttleMs"]!!.jsonPrimitive.long,
+            Typing.THROTTLE_MS
+        )
     }
 
     // ── knowing NickServ when you see it ─────────────────────────────

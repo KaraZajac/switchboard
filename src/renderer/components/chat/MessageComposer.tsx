@@ -1,7 +1,8 @@
 import { useState, useRef, useCallback, useEffect, type KeyboardEvent } from 'react'
 import type { ReplyTarget } from '../../stores/messageStore'
 import type { ChannelUser } from '@shared/types/channel'
-import { IRC_COMMANDS, TYPING_THROTTLE_MS } from '@shared/constants'
+import { IRC_COMMANDS } from '@shared/constants'
+import { typingToSend, type TypingEvent } from '@shared/typing'
 import { GifPicker } from './GifPicker'
 import { useServerStore } from '../../stores/serverStore'
 import { completionSuffix } from '@shared/completion'
@@ -136,7 +137,7 @@ export function MessageComposer({
             onSend(text.trim())
           }
           setText('')
-          sendTypingDone()
+          noteTyping('sent')
           onCancelReply?.()
           completionState.current.active = false
           setMentionQuery(null)
@@ -233,23 +234,27 @@ export function MessageComposer({
     [text, users, channels]
   )
 
-  const sendTyping = useCallback(() => {
-    if (disabled) return
-    const now = Date.now()
-    if (now - lastTypingSent.current > TYPING_THROTTLE_MS) {
-      lastTypingSent.current = now
-      window.switchboard.invoke('message:typing', serverId, channel, 'active')
-    }
-  }, [serverId, channel, disabled])
+  /**
+   * Put the composer's event to the shared rule and say whatever it returns.
+   *
+   * The decision lives in `@shared/typing` so the phone answers it the same
+   * way — it used to run the notice on a timer instead, and announced `done`
+   * twice for every message.
+   */
+  const noteTyping = useCallback(
+    (event: TypingEvent) => {
+      if (disabled) return
+      const decision = typingToSend(event, lastTypingSent.current, Date.now())
+      lastTypingSent.current = decision.lastActiveAt
+      if (decision.send) {
+        window.switchboard.invoke('message:typing', serverId, channel, decision.send)
+      }
+    },
+    [serverId, channel, disabled]
+  )
 
-  const sendTypingDone = useCallback(() => {
-    if (disabled) return
-    // Only send done if we actually sent an active recently
-    if (lastTypingSent.current > 0) {
-      lastTypingSent.current = 0
-      window.switchboard.invoke('message:typing', serverId, channel, 'done')
-    }
-  }, [serverId, channel, disabled])
+  const sendTyping = useCallback(() => noteTyping('typed'), [noteTyping])
+  const sendTypingDone = useCallback(() => noteTyping('cleared'), [noteTyping])
 
   return (
     <div className="px-4 pb-6 pt-0">

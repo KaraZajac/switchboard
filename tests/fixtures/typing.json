@@ -1,0 +1,84 @@
+{
+  "$comment": "When to put +typing on the wire, read by tests/shared/typing.test.ts and the Android SharedCorpusTest. Both clients hold the same one number \u2014 when the last active went out, 0 for nothing outstanding \u2014 and ask this the same question.",
+  "$cases": "`event` is what happened in the composer: typed (a keystroke with something left in the box), cleared (emptied by hand), sent. `send` is what goes on the wire, null for nothing. `nextLastActiveAt` is the state to hold until the next event.",
+  "throttleMs": 3000,
+  "cases": [
+    {
+      "$comment": "The first keystroke in a quiet composer. Nothing is outstanding, so this is the one that has to go.",
+      "name": "the first keystroke says active",
+      "event": "typed",
+      "lastActiveAt": 0,
+      "now": 1000,
+      "send": "active",
+      "nextLastActiveAt": 1000
+    },
+    {
+      "$comment": "The spec's one hard rule: at most one active per three seconds.",
+      "name": "a keystroke inside the three seconds says nothing",
+      "event": "typed",
+      "lastActiveAt": 1000,
+      "now": 3500,
+      "send": null,
+      "nextLastActiveAt": 1000
+    },
+    {
+      "name": "exactly three seconds is still inside it",
+      "event": "typed",
+      "lastActiveAt": 1000,
+      "now": 4000,
+      "send": null,
+      "nextLastActiveAt": 1000
+    },
+    {
+      "name": "a keystroke after it renews the notice",
+      "event": "typed",
+      "lastActiveAt": 1000,
+      "now": 4001,
+      "send": "active",
+      "nextLastActiveAt": 4001
+    },
+    {
+      "$comment": "The phone used to run this on a timer rather than on keystrokes, so a half-written message left on screen told the channel you were typing for as long as it sat there. Nothing here fires without a keystroke; a receiver stops showing the notice after six seconds of silence, which says 'stopped' without spending a line.",
+      "name": "nothing is sent without a keystroke, however long the box sits",
+      "event": "typed",
+      "lastActiveAt": 1000,
+      "now": 1500,
+      "send": null,
+      "nextLastActiveAt": 1000
+    },
+    {
+      "name": "sending takes back the outstanding active",
+      "event": "sent",
+      "lastActiveAt": 4001,
+      "now": 4500,
+      "send": "done",
+      "nextLastActiveAt": 0
+    },
+    {
+      "$comment": "The phone announced done twice for one message \u2014 once from the send, once from the box emptying behind it. The second had nothing left to take back.",
+      "name": "and the box emptying behind it says nothing more",
+      "event": "cleared",
+      "lastActiveAt": 0,
+      "now": 4500,
+      "send": null,
+      "nextLastActiveAt": 0
+    },
+    {
+      "name": "emptying the box by hand takes it back too",
+      "event": "cleared",
+      "lastActiveAt": 4001,
+      "now": 4500,
+      "send": "done",
+      "nextLastActiveAt": 0
+    },
+    {
+      "$comment": "Saying you have stopped doing something you never said you were doing is noise, and on a network that counts lines it is noise with a cost.",
+      "name": "sending without ever having said active says nothing",
+      "event": "sent",
+      "lastActiveAt": 0,
+      "now": 4500,
+      "send": null,
+      "nextLastActiveAt": 0
+    }
+  ]
+}

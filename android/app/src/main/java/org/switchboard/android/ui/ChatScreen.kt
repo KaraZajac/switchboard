@@ -66,6 +66,7 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.LaunchedEffect
 import org.switchboard.android.irc.Completion
+import org.switchboard.android.irc.Typing
 import org.switchboard.android.EngineMode
 import org.switchboard.android.Message
 import org.switchboard.android.SwitchboardStore
@@ -837,17 +838,24 @@ private fun Composer(
         field = TextFieldValue(next, TextRange(next.length))
     }
 
-    // Say we are typing when there is something to type, and stop when the box
-    // empties or a few seconds pass without a keystroke.
-    LaunchedEffect(draft.isNotEmpty()) {
-        if (draft.isEmpty()) {
-            onTyping(false)
-            return@LaunchedEffect
+    // Say we are typing on a keystroke, and take it back when the message goes
+    // or the box is emptied. Not on a timer: a half-written message left on
+    // screen is not somebody typing, and a receiver stops showing the notice
+    // after six seconds of silence anyway. [Typing] decides; this only holds
+    // the one number it needs.
+    var lastTypingAt by remember { mutableStateOf(0L) }
+
+    fun note(event: Typing.Event) {
+        val decision = Typing.toSend(event, lastTypingAt, System.currentTimeMillis())
+        lastTypingAt = decision.lastActiveAt
+        when (decision.send) {
+            "active" -> onTyping(true)
+            "done" -> onTyping(false)
         }
-        while (draft.isNotEmpty()) {
-            onTyping(true)
-            kotlinx.coroutines.delay(3_000)
-        }
+    }
+
+    LaunchedEffect(draft) {
+        note(if (draft.isEmpty()) Typing.Event.CLEARED else Typing.Event.TYPED)
     }
 
     fun send() {
@@ -855,7 +863,7 @@ private fun Composer(
         if (text.isEmpty()) return
         onSend(text)
         field = TextFieldValue("")
-        onTyping(false)
+        note(Typing.Event.SENT)
     }
 
     Column(
