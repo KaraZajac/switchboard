@@ -215,6 +215,11 @@ internal fun registerRegistrationHandlers() {
         state.registered = true
         state.serverName = message.prefix ?: state.serverName
 
+        // Being let in is what makes the last attempt a success. Opening a
+        // socket is not: a throttle, a ban, a full server and a TLS-only port
+        // all accept the connection first and close it after.
+        state.closingMessage = null
+
         // We are called something, and it is not always what was asked for.
         // Say so now, once it is settled — being quietly renamed and left to
         // notice is how someone spends an evening wondering why nobody
@@ -382,9 +387,14 @@ internal fun registerRegistrationHandlers() {
     }
 
     Handlers.on("ERROR") { session, message ->
+        val said = message.params.lastOrNull() ?: "Server closed the connection"
+        // Kept for the reconnect decision: a server that says it is throttling
+        // us has told us how long to stay away, and the answer to that is not
+        // another dial two seconds later.
+        session.state.closingMessage = said
         session.emit("irc:error", buildJsonObject {
             put("serverId", session.state.serverId)
-            put("message", message.params.lastOrNull() ?: "Server closed the connection")
+            put("message", said)
         })
     }
 }

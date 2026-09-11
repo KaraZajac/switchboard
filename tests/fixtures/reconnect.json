@@ -1,0 +1,127 @@
+{
+  "$comment": "How long to wait before dialling a server again, read by tests/shared/reconnect.test.ts and the Android SharedCorpusTest. Both clients ran their own ladder with different constants, and neither ever climbed its own, because both reset the attempt counter when the socket opened rather than when the server accepted them.",
+  "baseMs": 2000,
+  "maxMs": 300000,
+  "throttledFloorMs": 60000,
+  "$slowDown": "Lines real servers send as they close the connection. `slowDown` is whether this is the server telling us to come back less often.",
+  "slowDown": [
+    {
+      "$comment": "The line that started this, from irc.d0ll.link, verbatim off the phone's screen.",
+      "name": "InspIRCd's connect throttle",
+      "text": "Closing Link: [10.89.1.2] (Throttled: Reconnecting too fast - Email operators@invalid.example for more information.)",
+      "slowDown": true
+    },
+    {
+      "name": "solanum and charybdis",
+      "text": "Trying to reconnect too fast.",
+      "slowDown": true
+    },
+    {
+      "name": "UnrealIRCd",
+      "text": "Closing Link: [1.2.3.4] (Throttled: Reconnecting too fast)",
+      "slowDown": true
+    },
+    {
+      "name": "too many from one address",
+      "text": "Closing Link: [1.2.3.4] (Too many connections from your IP)",
+      "slowDown": true
+    },
+    {
+      "name": "a server asking for later",
+      "text": "Server is full, try again later",
+      "slowDown": true
+    },
+    {
+      "name": "case is not a signal",
+      "text": "ERROR :THROTTLED: RECONNECTING TOO FAST",
+      "slowDown": true
+    },
+    {
+      "$comment": "A ban is not a throttle. Backing off further would be defensible, but it is a different decision with a different answer \u2014 and quietly treating one as the other hides which happened.",
+      "name": "a ban is not this",
+      "text": "Closing Link: [1.2.3.4] (K-Lined: You are banned from this server)",
+      "slowDown": false
+    },
+    {
+      "name": "an ordinary goodbye",
+      "text": "Closing Link: [1.2.3.4] (Quit: leaving)",
+      "slowDown": false
+    },
+    {
+      "name": "a server going down",
+      "text": "Closing Link: [1.2.3.4] (Server shutting down)",
+      "slowDown": false
+    },
+    {
+      "name": "nothing said at all",
+      "text": "",
+      "slowDown": false
+    }
+  ],
+  "$delays": "`attempt` is how many attempts have already failed; 1 is the first retry. `lastError` is what the server said as it closed, or null.",
+  "delays": [
+    {
+      "name": "the first retry is soon, because most failures are a blip",
+      "attempt": 1,
+      "lastError": null,
+      "delayMs": 2000
+    },
+    {
+      "name": "and each one after it is twice the last",
+      "attempt": 2,
+      "lastError": null,
+      "delayMs": 4000
+    },
+    {
+      "name": "",
+      "attempt": 3,
+      "lastError": null,
+      "delayMs": 8000
+    },
+    {
+      "name": "",
+      "attempt": 6,
+      "lastError": null,
+      "delayMs": 64000
+    },
+    {
+      "$comment": "A client that gives up entirely is one that silently stops being the connection, so this is a ceiling rather than a limit on attempts.",
+      "name": "up to five minutes and no further",
+      "attempt": 20,
+      "lastError": null,
+      "delayMs": 300000
+    },
+    {
+      "$comment": "This is the case both clients got wrong for as long as they have existed. The counter reset on every socket that opened, so a server closing the connection after accepting it pinned `attempt` at 1 \u2014 a dial every two seconds, for ever.",
+      "name": "a throttled first retry waits out the window instead of the ladder",
+      "attempt": 1,
+      "lastError": "Closing Link: [10.89.1.2] (Throttled: Reconnecting too fast)",
+      "delayMs": 60000
+    },
+    {
+      "name": "and still does several attempts in",
+      "attempt": 4,
+      "lastError": "Trying to reconnect too fast.",
+      "delayMs": 60000
+    },
+    {
+      "$comment": "The floor never shortens a wait that has already grown past it.",
+      "name": "once the ladder is longer than the floor, the ladder wins",
+      "attempt": 8,
+      "lastError": "Throttled: Reconnecting too fast",
+      "delayMs": 256000
+    },
+    {
+      "name": "an ordinary close climbs the ordinary ladder",
+      "attempt": 1,
+      "lastError": "Closing Link: [1.2.3.4] (Quit: leaving)",
+      "delayMs": 2000
+    },
+    {
+      "name": "attempt 0 is treated as the first retry rather than no wait at all",
+      "attempt": 0,
+      "lastError": null,
+      "delayMs": 2000
+    }
+  ]
+}

@@ -3,6 +3,7 @@ import { EventEmitter } from 'events'
 import { parseMessage } from '../../src/main/irc/parser'
 import { ConnectionState } from '../../src/main/irc/state'
 import { dispatchMessage } from '../../src/main/irc/handlers/registry'
+import { reconnectDelay, saysSlowDown, THROTTLED_FLOOR_MS } from '@shared/reconnect'
 
 // Import handler modules to register them (side-effect imports)
 import '../../src/main/irc/handlers/registration'
@@ -40,12 +41,24 @@ function createMockClient(overrides: Partial<{
   const events = new EventEmitter()
 
   const sentLines: string[] = []
+  // `registered` and `closing` are what the reconnect ladder is built on: 001
+  // clears the attempt count, and an ERROR is remembered so that a server
+  // saying "reconnecting too fast" is answered with a wait rather than another
+  // dial. See `@shared/reconnect`.
+  const reconnect = { registered: 0, closing: null as string | null }
   const connection = {
     send: (...args: string[]) => {
       sentLines.push(args.join(' '))
     },
     sendRaw: (line: string) => {
       sentLines.push(line)
+    },
+    onRegistered: () => {
+      reconnect.registered++
+      reconnect.closing = null
+    },
+    noteClosingMessage: (message: string) => {
+      reconnect.closing = message
     }
   }
 
@@ -67,6 +80,7 @@ function createMockClient(overrides: Partial<{
       state,
       events,
       connection,
+      reconnect,
       config,
       startNickRecovery: () => nickRecovery.push('start'),
       stopNickRecovery: () => nickRecovery.push('stop')
@@ -74,7 +88,8 @@ function createMockClient(overrides: Partial<{
     events,
     state,
     sentLines,
-    nickRecovery
+    nickRecovery,
+    reconnect
   }
 }
 
@@ -1269,5 +1284,63 @@ describe('catching up on conversations', () => {
     dispatchMessage(client, parseMessage(':irc.test CHATHISTORY TARGETS mara'))
 
     expect(seen).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * What counts as having connected.
+ *
+ * Both clients reset the reconnect ladder when the socket opened, which meant
+ * a server that accepts the connection and then closes it — a connect
+ * throttle, a full server, a ban, a TLS-only port — reset it too. The counter
+ * never left its first rung, so the client redialled at the base delay for
+ * ever, and against a server that throttles on exactly that it could never get
+ * back in.
+ */
+describe('when the reconnect ladder starts over', () => {
+  it('starts over on 001, because that is being let in', () => {
+    const { client, reconnect } = createMockClient()
+    expect(reconnect.registered).toBe(0)
+
+    dispatchMessage(client, parseMessage(':irc.example.org 001 kara :Welcome'))
+    expect(reconnect.registered).toBe(1)
+  })
+
+  it('remembers what the server said as it hung up', () => {
+    const { client, events, reconnect } = createMockClient()
+    events.on('error', () => {})
+
+    dispatchMessage(
+      client,
+      parseMessage(
+        'ERROR :Closing Link: [10.89.1.2] (Throttled: Reconnecting too fast - ' +
+          'Email operators@invalid.example for more information.)'
+      )
+    )
+
+    expect(reconnect.closing).toContain('Throttled: Reconnecting too fast')
+    expect(saysSlowDown(reconnect.closing)).toBe(true)
+    expect(reconnectDelay(1, reconnect.closing)).toBe(THROTTLED_FLOOR_MS)
+  })
+
+  it('forgets it once the server lets us in', () => {
+    const { client, events, reconnect } = createMockClient()
+    events.on('error', () => {})
+
+    dispatchMessage(client, parseMessage('ERROR :Closing Link: [1.2.3.4] (Throttled)'))
+    expect(reconnect.closing).not.toBeNull()
+
+    dispatchMessage(client, parseMessage(':irc.example.org 001 kara :Welcome'))
+    expect(reconnect.closing).toBeNull()
+  })
+
+  it('takes the reason from the trailing parameter, not the first one', () => {
+    // `ERROR :text` parses to one param, but a server that sends a target
+    // first would have put the reason in the last — and the old handler read
+    // params[0], which would have been the target.
+    const { client, events, reconnect } = createMockClient()
+    events.on('error', () => {})
+    dispatchMessage(client, parseMessage('ERROR kara :Trying to reconnect too fast.'))
+    expect(reconnect.closing).toBe('Trying to reconnect too fast.')
   })
 })

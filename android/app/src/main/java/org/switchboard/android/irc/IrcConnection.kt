@@ -89,6 +89,16 @@ class IrcConnection(
     val currentNick: String get() = state.nick
     val isConnected: Boolean get() = state.registered
 
+    /**
+     * When the next attempt is due, or 0 while one is actually in flight.
+     *
+     * A client waiting out a backoff is not connecting, and telling somebody it
+     * is leaves them watching a spinner that will not move for a minute.
+     */
+    @Volatile
+    var waitingUntil: Long = 0L
+        private set
+
     init {
         Handlers.installAll()
     }
@@ -160,7 +170,12 @@ class IrcConnection(
         while (!stopping) {
             try {
                 connectOnce()
-                attempt = 0
+                // Deliberately not resetting `attempt` here. A socket that
+                // opens is not a server that let us in: a connect throttle, a
+                // full server, a ban and a TLS-only port all accept the
+                // connection and then close it. Resetting here pinned the
+                // counter at its first value and dialled every two seconds for
+                // ever. [HandlersRegistration] resets it on 001.
                 pingJob = scope.launch(Dispatchers.IO) { keepalive() }
                 readLoop()
             } catch (e: Exception) {
@@ -181,8 +196,19 @@ class IrcConnection(
             // that silently stops being the connection. Cut short the moment
             // the network comes back.
             attempt++
-            val backoff = minOf(60_000L, 2_000L * (1L shl minOf(attempt - 1, 5)))
+            val backoff = Reconnect.delay(attempt, state.closingMessage)
+            // Deliberately idle, which is not the same as dialling. Saying
+            // "Connecting" through a minute of waiting is how a client that is
+            // behaving correctly looks broken.
+            waitingUntil = System.currentTimeMillis() + backoff
+            if (backoff >= Reconnect.THROTTLED_FLOOR_MS) {
+                android.util.Log.i(
+                    "SwitchboardIrc",
+                    "${config.host}: waiting ${backoff / 1000}s — ${state.closingMessage}"
+                )
+            }
             withTimeoutOrNull(backoff) { retryNow.receive() }
+            waitingUntil = 0L
         }
     }
 
@@ -238,7 +264,13 @@ class IrcConnection(
             if (read <= 0) break
             lastHeard = System.currentTimeMillis()
 
-            for (line in lines.feed(chunk, read)) handle(line)
+            for (line in lines.feed(chunk, read)) {
+                handle(line)
+                // Registered is what a successful connection means, so it is
+                // what starts the ladder over. Anything short of it — a
+                // throttle, a ban, a full server — closed a socket that opened.
+                if (attempt != 0 && state.registered) attempt = 0
+            }
         }
     }
 

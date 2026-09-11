@@ -9,6 +9,11 @@ registerHandler('001', (client, msg) => {
   client.state.registrationState = 'connected'
   client.state.serverName = msg.prefix || ''
 
+  // Being let in is what makes the last attempt a success, and what starts the
+  // reconnect ladder over. Opening a socket is not: a throttle, a ban, a full
+  // server and a TLS-only port all accept the connection and close it after.
+  client.connection.onRegistered()
+
   // We are called something, and it is not always what was asked for. Say so
   // now, once it is settled — being quietly renamed and left to notice is how
   // someone spends an evening wondering why nobody answers them.

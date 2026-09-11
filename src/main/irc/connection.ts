@@ -6,6 +6,7 @@ import WebSocket from 'ws'
 import type { IRCMessage } from '@shared/types/irc'
 import type { ServerConfig } from '@shared/types/server'
 import { parseMessage } from './parser'
+import { reconnectDelay, THROTTLED_FLOOR_MS } from '@shared/reconnect'
 import { cmd } from './serializer'
 import { decodeLine } from '@shared/decoding'
 import { readCertificate } from '@shared/certfp'
@@ -109,10 +110,14 @@ export class IRCConnection extends EventEmitter {
   private lastPongAt = 0
   private intentionalDisconnect = false
 
-  /** Max reconnect delay in ms */
-  private static readonly MAX_RECONNECT_DELAY = 300_000 // 5 minutes
-  /** Base reconnect delay in ms */
-  private static readonly BASE_RECONNECT_DELAY = 1_000
+  /**
+   * What the server said in its last ERROR, which is usually why it hung up.
+   *
+   * Kept because the reconnect decision needs it: "Throttled: Reconnecting too
+   * fast" is the server saying how to behave, and answering it with another
+   * dial a second later is how a client stays throttled indefinitely.
+   */
+  private closingMessage: string | null = null
   /** Ping interval in ms */
   private static readonly PING_INTERVAL = 60_000
   /** Ping timeout in ms — disconnect if no PONG received */
@@ -354,7 +359,11 @@ export class IRCConnection extends EventEmitter {
     }
 
     this._connected = true
-    this.reconnectAttempts = 0
+    // Deliberately not clearing `reconnectAttempts` here. A socket that opens
+    // is not a server that let us in: a connect throttle, a full server, a ban
+    // and a TLS-only port all accept the connection and then close it.
+    // Resetting here pinned the counter at zero and redialled at the base
+    // delay for ever. `registered` is what clears it — see onRegistered().
     this.lastPongAt = Date.now()
     this.startPingTimer()
     this.emit('connected')
@@ -421,14 +430,32 @@ export class IRCConnection extends EventEmitter {
 
   // ── Reconnection ─────────────────────────────────────────────────
 
+  /**
+   * The server let us in, so the last attempt worked.
+   *
+   * Called on 001 rather than on the socket opening, which is the whole of
+   * this fix — see `@shared/reconnect`.
+   */
+  onRegistered(): void {
+    this.reconnectAttempts = 0
+    this.closingMessage = null
+  }
+
+  /** What the server said as it closed, for the reconnect decision */
+  noteClosingMessage(message: string): void {
+    this.closingMessage = message
+  }
+
   private scheduleReconnect(): void {
     if (this.reconnectTimer) return
 
-    const delay = Math.min(
-      IRCConnection.BASE_RECONNECT_DELAY * Math.pow(2, this.reconnectAttempts),
-      IRCConnection.MAX_RECONNECT_DELAY
-    )
     this.reconnectAttempts++
+    const delay = reconnectDelay(this.reconnectAttempts, this.closingMessage)
+    if (delay >= THROTTLED_FLOOR_MS) {
+      console.info(
+        `${this.config.host}: waiting ${Math.round(delay / 1000)}s — ${this.closingMessage}`
+      )
+    }
 
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null

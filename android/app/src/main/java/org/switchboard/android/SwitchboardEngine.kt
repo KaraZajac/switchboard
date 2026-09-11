@@ -28,6 +28,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import org.switchboard.android.irc.ChatHistory
 import org.switchboard.android.irc.IrcConnection
+import org.switchboard.android.irc.Reconnect
 import org.switchboard.android.pairing.DeviceIdentity
 import org.switchboard.android.irc.ServerConfig
 import org.switchboard.android.session.Cancellable
@@ -1097,6 +1098,17 @@ class SwitchboardEngine(
         // none of these messages were written for.
         pairedWithDesktop = hasPairedDesktop() || remote.isLinked
 
+        // Sitting out a backoff is not dialling. The two look identical from
+        // here and read completely differently to somebody watching: a client
+        // that has been told to slow down and is doing so says so, rather than
+        // showing "Connecting" for the minute it has been asked to wait.
+        val waitingFor = connections.values
+            .map { it.waitingUntil }
+            .filter { it > 0 }
+            .minOrNull()
+            ?.minus(System.currentTimeMillis())
+            ?.coerceAtLeast(0L)
+
         isTakingOver = dialling
         // A config that arrived from a desktop and has not been opened. A
         // config made here is open already, so this is never about that.
@@ -1118,6 +1130,12 @@ class SwitchboardEngine(
             live -> "Connected"
             dialling && pairedWithDesktop ->
                 lastConnectionError?.let { "Taking over — $it" } ?: "Taking over — connecting…"
+            // Told to slow down, and doing it. The reason is the server's own
+            // words, which is the only thing here that says why.
+            waitingFor != null && waitingFor >= Reconnect.THROTTLED_FLOOR_MS / 2 ->
+                lastConnectionError?.let { "Waiting ${waitingFor / 1000}s — $it" }
+                    ?: "Waiting ${waitingFor / 1000}s before trying again"
+
             dialling -> lastConnectionError?.let { "Connecting — $it" } ?: "Connecting…"
 
             // On its own, and that is an ordinary way to use this. What is

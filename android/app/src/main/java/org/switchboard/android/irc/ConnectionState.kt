@@ -94,6 +94,18 @@ class ConnectionState(val serverId: String) {
     var nickRefusedReason: String? = null
     var account: String? = null
     var registered = false
+
+    /**
+     * What the server said in its last ERROR, which is usually why it hung up.
+     *
+     * Kept because the reconnect decision needs it: "Throttled: Reconnecting
+     * too fast" is the server telling us how to behave, and answering it with
+     * another dial two seconds later is how a client stays throttled for ever.
+     * Deliberately *not* cleared by [reset] — the point is to still have it
+     * when deciding whether to dial again.
+     */
+    var closingMessage: String? = null
+
     var serverName = ""
     var away = false
 

@@ -39,6 +39,7 @@ import org.switchboard.android.irc.avatarUrl
 import org.switchboard.android.irc.Friends
 import org.switchboard.android.irc.Isupport
 import org.switchboard.android.irc.ServerConfig
+import org.switchboard.android.irc.Reconnect
 import org.switchboard.android.irc.Services
 import org.switchboard.android.irc.Typing
 import org.switchboard.android.irc.LineLength
@@ -622,6 +623,55 @@ class SharedCorpusTest {
             load("typing.json")["throttleMs"]!!.jsonPrimitive.long,
             Typing.THROTTLE_MS
         )
+    }
+
+    // ── coming back to a server that closed on us ────────────────────
+
+    /**
+     * The ladder was never the problem: both clients had one and neither ever
+     * climbed it, because both reset the attempt counter when the socket
+     * opened rather than when the server accepted them. A connect throttle
+     * accepts the connection and closes it, so the counter went back to zero
+     * every time and the client redialled every two seconds indefinitely.
+     */
+    @Test
+    fun `waits as long as the desktop waits before dialling again`() {
+        val corpus = load("reconnect.json")
+
+        assertEquals(corpus["baseMs"]!!.jsonPrimitive.long, Reconnect.BASE_MS)
+        assertEquals(corpus["maxMs"]!!.jsonPrimitive.long, Reconnect.MAX_MS)
+        assertEquals(
+            corpus["throttledFloorMs"]!!.jsonPrimitive.long,
+            Reconnect.THROTTLED_FLOOR_MS
+        )
+
+        for (case in corpus["slowDown"]!!.jsonArray) {
+            val c = case.jsonObject
+            assertEquals(
+                c["name"]!!.jsonPrimitive.content,
+                c["slowDown"]!!.jsonPrimitive.content == "true",
+                Reconnect.saysSlowDown(c["text"]!!.jsonPrimitive.content)
+            )
+        }
+
+        for (case in corpus["delays"]!!.jsonArray) {
+            val c = case.jsonObject
+            assertEquals(
+                c["name"]!!.jsonPrimitive.content,
+                c["delayMs"]!!.jsonPrimitive.long,
+                Reconnect.delay(
+                    c["attempt"]!!.jsonPrimitive.int,
+                    (c["lastError"] as? JsonPrimitive)?.contentOrNull
+                )
+            )
+        }
+    }
+
+    /** Nothing said is not a reason to wait longer */
+    @Test
+    fun `says nothing about a message that is not there`() {
+        assertEquals(false, Reconnect.saysSlowDown(null))
+        assertEquals(Reconnect.BASE_MS, Reconnect.delay(1, null))
     }
 
     // ── knowing NickServ when you see it ─────────────────────────────

@@ -4,7 +4,10 @@ import { registerHandler } from './registry'
  * ERROR — Server-side error (usually before disconnect)
  */
 registerHandler('ERROR', (client, msg) => {
-  const message = msg.params[0] || 'Unknown error'
+  const message = msg.params[msg.params.length - 1] || 'Unknown error'
+  // Kept for the reconnect decision: a server saying it is throttling us has
+  // told us how to behave, and the answer is not another dial a second later.
+  client.connection.noteClosingMessage(message)
   client.events.emit('error', {
     code: 'ERROR',
     command: 'ERROR',
