@@ -23,8 +23,12 @@ export function TitleBar() {
     (ch) => ch.name.toLowerCase() === activeChannel?.toLowerCase()
   )
 
-  const tokens = useServerStore((s) => (activeServerId ? s.isupport[activeServerId] ?? {} : {}))
-  const keepsLists = maskListsFor(tokens.CHANMODES, tokens.PREFIX).length > 0
+  // The whole map, indexed here. A selector returning `?? {}` hands back a new
+  // object on every call, which to zustand is a changed value — and a store
+  // that changes on every render is a render loop.
+  const allIsupport = useServerStore((s) => s.isupport)
+  const tokens = activeServerId ? allIsupport[activeServerId] : undefined
+  const keepsLists = maskListsFor(tokens?.CHANMODES, tokens?.PREFIX).length > 0
 
   const isServer = activeChannel === '*'
   const isService = activeChannel ? isServiceNick(activeChannel) : false

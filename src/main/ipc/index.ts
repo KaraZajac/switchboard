@@ -28,7 +28,17 @@ import type { ServerConfig } from '@shared/types/server'
  * own idea of one.
  */
 const DEFAULT_PROFILE = 'profile'
+
+/** Where the ignore list lives, shared between the two devices */
+const IGNORE_LIST = 'ignores'
 import { resolveProfile, overrideFrom } from '@shared/profile'
+import {
+  toMask,
+  withIgnore,
+  withoutIgnore,
+  type IgnoreEntry,
+  type IgnoreScope
+} from '@shared/ignore'
 import { secretsProtected, secretsBackendDescription } from '../storage/secrets'
 import { databaseIsEncrypted } from '../storage/database'
 import { serversChanged, monitorChanged, settingChanged, readMarkerChanged } from './notify'
@@ -658,6 +668,36 @@ export function registerIPCHandlers(): void {
       client.connection.send('MODE', channel, `${adding ? '+' : '-'}${mode}`, mask.trim())
     }
   )
+
+  // ── People you would rather not hear from ────────────────────────
+  //
+  // Kept in the shared config rather than on this machine: silencing somebody
+  // at the desk and being messaged by them in your pocket is not a working
+  // ignore list. `network` is a serverId, or `*` for every network.
+
+  handle('ignore:list', async () => getSetting<IgnoreEntry[]>(IGNORE_LIST) ?? [])
+
+  handle('ignore:add', async (_event, mask: string, network: string, scope: IgnoreScope) => {
+    const wanted = toMask(mask)
+    if (!wanted) throw new Error('Nothing to ignore')
+
+    const list = withIgnore(getSetting<IgnoreEntry[]>(IGNORE_LIST) ?? [], {
+      mask: wanted,
+      network,
+      scope,
+      added: Date.now()
+    })
+    setSetting(IGNORE_LIST, list)
+    resealVault()
+    return list
+  })
+
+  handle('ignore:remove', async (_event, mask: string, network: string) => {
+    const list = withoutIgnore(getSetting<IgnoreEntry[]>(IGNORE_LIST) ?? [], mask, network)
+    setSetting(IGNORE_LIST, list)
+    resealVault()
+    return list
+  })
 
   // ── History ──────────────────────────────────────────────────────
 

@@ -69,15 +69,43 @@ describe('what you may do to somebody in a channel', () => {
     expect(quietMode('beIq,k,l,imnst', parsePrefix('(qaohv)~&@%+'))).toBe(null)
   })
 
+  /**
+   * Rank decides what you may do *to a channel*. It has nothing to say about
+   * what you do to your own client, so whois, message and ignore stay on
+   * offer against the channel owner — you can always decide not to listen.
+   */
   it('never offers to act on somebody who outranks you, whatever you hold', () => {
     const scheme = '(qaohv)~&@%+'
+    const mine_own_business: MemberAction[] = ['whois', 'message', 'ignore', 'unignore']
+
     for (const mine of ['', '+', '%', '@', '&']) {
       const offered = actionsFor({
         prefix: scheme, chanmodes: 'beI,k,l,imnst',
         mine, theirs: '~', isSelf: false
       })
-      expect(offered).toEqual(['whois', 'message'])
+      expect(offered.filter((a) => !mine_own_business.includes(a))).toEqual([])
     }
+  })
+
+  /**
+   * Ignoring is never about the network, so no rank and no ISUPPORT can take
+   * it away — except against yourself, which would silence your own messages.
+   */
+  it('offers ignore to everybody, about everybody but you', () => {
+    for (const mine of ['', '+', '%', '@', '~']) {
+      for (const theirs of ['', '+', '@', '~']) {
+        const offered = actionsFor({ prefix: '(qaohv)~&@%+', mine, theirs, isSelf: false })
+        expect(offered).toContain('ignore')
+      }
+    }
+    expect(actionsFor({ prefix: '(ohv)@%+', mine: '@', theirs: '@', isSelf: true }))
+      .not.toContain('ignore')
+  })
+
+  it('offers to undo it where it is already done', () => {
+    const offered = actionsFor({ prefix: '(ohv)@%+', mine: '', theirs: '', isSelf: false, ignored: true })
+    expect(offered).toContain('unignore')
+    expect(offered).not.toContain('ignore')
   })
 })
 

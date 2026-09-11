@@ -89,7 +89,9 @@ describe('which settings are shared at all', () => {
     // The profile most of all: a display name and a set of pronouns are facts
     // about the person. It is also what the phone writes, and a key missing
     // from this list is dropped on the next reseal rather than merely unshared.
-    expect([...SHARED_SETTINGS]).toEqual(['theme', 'mutes', 'profile'])
+    // And the ignore list: silencing somebody at the desk and being messaged
+    // by them in your pocket is not a working ignore list.
+    expect([...SHARED_SETTINGS]).toEqual(['theme', 'mutes', 'profile', 'ignores'])
     expect(SHARED_SETTINGS as readonly string[]).not.toContain('proxy')
     expect(SHARED_SETTINGS as readonly string[]).not.toContain('customCaPath')
   })

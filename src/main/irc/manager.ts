@@ -18,10 +18,14 @@ import { METADATA_KEYS, type UserMetadata } from '@shared/types/metadata'
 import { v4 as uuid } from 'uuid'
 import { friendListKind, friendListLines, friendListStatusLine } from '@shared/friends'
 import { resolveProfile, keysToClear } from '@shared/profile'
+import { isIgnored, type IgnoreEntry, type IgnoreScope } from '@shared/ignore'
 import { getSetting } from '../storage/models/settings'
 
 /** The vault key both clients keep the person's own profile under */
 const DEFAULT_PROFILE = 'profile'
+
+/** And the one they keep the ignore list under */
+const IGNORE_LIST = 'ignores'
 import { avatarUrl } from '@shared/avatar'
 
 /**
@@ -232,6 +236,35 @@ export class IRCManager {
    * Live state of every registered connection, for a renderer that attached late
    * or reloaded and so missed the events that would have built this state.
    */
+  /**
+   * Whether this is somebody we have decided not to hear from.
+   *
+   * Read fresh rather than cached: the list is small, it is edited from either
+   * device, and a cache would mean ignoring somebody on the phone and still
+   * hearing them at the desk until a restart.
+   *
+   * A `userHost` we do not have is not a reason to let something through — the
+   * mask matching treats an unknown user or host as a wildcard would, so a
+   * `nick!*@*` ignore still works on a network that tells us nothing else.
+   */
+  private ignored(
+    serverId: string,
+    nick: string,
+    userHost: string | null | undefined,
+    kind: keyof IgnoreScope = 'messages'
+  ): boolean {
+    const list = getSetting<IgnoreEntry[]>(IGNORE_LIST)
+    if (!list || list.length === 0) return false
+
+    const at = (userHost || '').indexOf('@')
+    const who = {
+      nick,
+      user: at === -1 ? null : (userHost as string).slice(0, at),
+      host: at === -1 ? (userHost || null) : (userHost as string).slice(at + 1)
+    }
+    return isIgnored(list, serverId, who, kind)
+  }
+
   /**
    * Tell both windows about a metadata change we made ourselves.
    *
@@ -510,6 +543,9 @@ export class IRCManager {
 
     // Invite notifications
     client.events.on('invite', (data) => {
+      // An invitation from somebody you ignore is the most obvious way around
+      // an ignore, which is why `requests` is on by default.
+      if (this.ignored(serverId, data.by, null, 'requests')) return
       if (data.isMe) {
         this.send('irc:invite', { serverId, channel: data.channel, by: data.by })
       }
@@ -517,6 +553,12 @@ export class IRCManager {
 
     // Message events
     client.events.on('privmsg', (data) => {
+      // Somebody on the ignore list said nothing, as far as this client is
+      // concerned. Dropped here rather than hidden in the UI: an ignored
+      // message that is stored still comes back on the next reload, still
+      // counts towards an unread badge, and still wakes the phone up.
+      if (this.ignored(serverId, data.nick, data.userHost)) return
+
       // Handle message edits (draft/edit spec)
       if (data.editOf) {
         // Keep it, or the next restart quietly undoes it
@@ -558,6 +600,8 @@ export class IRCManager {
     })
 
     client.events.on('notice', (data) => {
+      if (this.ignored(serverId, data.nick, null)) return
+
       const message: ChatMessage = {
         id: data.msgid || uuid(),
         serverId,

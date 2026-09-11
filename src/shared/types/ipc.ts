@@ -8,6 +8,7 @@ import type { ChatMessage } from './message'
 import type { ChannelUser } from './channel'
 import type { UserMetadata } from './metadata'
 import type { MaskEntry } from '../masklists'
+import type { IgnoreEntry, IgnoreScope } from '../ignore'
 
 /**
  * Live state of one connected server, handed to the renderer when it attaches.
@@ -273,6 +274,16 @@ export interface RendererToMainInvocations {
   'metadata:reset': (serverId: string) => Promise<void>
   /** Ask the server for one of a channel's mask lists — bans and the rest */
   'masklist:fetch': (serverId: string, channel: string, mode: string) => Promise<MaskEntry[]>
+  /** Everyone this client has been told not to hear from */
+  'ignore:list': () => Promise<IgnoreEntry[]>
+  /** Stop hearing from whoever matches this mask */
+  'ignore:add': (
+    mask: string,
+    network: string,
+    scope: IgnoreScope
+  ) => Promise<IgnoreEntry[]>
+  /** Start hearing from them again */
+  'ignore:remove': (mask: string, network: string) => Promise<IgnoreEntry[]>
   /** Add or lift one entry on one of those lists */
   'masklist:set': (
     serverId: string,

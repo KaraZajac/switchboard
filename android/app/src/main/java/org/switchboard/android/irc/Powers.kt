@@ -93,10 +93,11 @@ object Powers {
 
         val actions = mutableListOf(Action.WHOIS)
         if (!isSelf) actions.add(Action.MESSAGE)
+
         // Ignoring somebody is a decision about your own client rather than
-        // about the channel, so it belongs here — but neither client keeps an
-        // ignore list yet, and a menu item that does nothing is the thing this
-        // whole rule exists to stop. It goes in when the list behind it does.
+        // about the channel, so no rank is needed and no network can refuse
+        // it. Never against yourself, which would silence your own messages.
+        if (!isSelf) actions.add(if (ignored) Action.UNIGNORE else Action.IGNORE)
 
         val opRank = rankOfMode('o', scheme)
         val halfopRank = rankOfMode('h', scheme)

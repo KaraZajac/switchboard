@@ -65,7 +65,7 @@ export interface VaultPayload {
  * meant the profile someone set on their phone disappeared the next time the
  * desktop saved anything.
  */
-export const SHARED_SETTINGS = ['theme', 'mutes', 'profile'] as const
+export const SHARED_SETTINGS = ['theme', 'mutes', 'profile', 'ignores'] as const
 
 export interface VaultStatus {
   /** A vault exists on this device */

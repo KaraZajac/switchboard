@@ -17,6 +17,7 @@ import {
 import type { ChannelUser } from '@shared/types/channel'
 import { PREFIX_RANKS } from '@shared/types/channel'
 import { avatarUrl as safeAvatarUrl } from '@shared/avatar'
+import { ignoresFor, DEFAULT_SCOPE, type IgnoreEntry } from '@shared/ignore'
 
 const EMPTY_USERS: ChannelUser[] = []
 
@@ -74,6 +75,37 @@ export function UserList() {
   }, [activeServerId, activeChannel])
 
   /**
+   * Everybody this client has been told not to hear from.
+   *
+   * Loaded once and kept in step by hand rather than subscribed to: the list
+   * is small, changes only from a menu like this one, and a store of its own
+   * would be a third copy of something the vault already owns.
+   */
+  const [ignores, setIgnores] = useState<IgnoreEntry[]>([])
+  useEffect(() => {
+    void window.switchboard.invoke('ignore:list').then(setIgnores)
+  }, [])
+
+  const handleIgnore = useCallback(async (mask: string) => {
+    // This network only. Ignoring somebody everywhere is a bigger decision
+    // than a right-click, and the settings list is where it is offered.
+    if (!activeServerId) return
+    setIgnores(await window.switchboard.invoke('ignore:add', mask, activeServerId, DEFAULT_SCOPE))
+  }, [activeServerId])
+
+  const handleUnignore = useCallback(async (target: { nick: string; user?: string | null; host?: string | null }) => {
+    if (!activeServerId) return
+    // Lift every entry that was silencing them, not just the one whose mask
+    // happens to look like their nick — otherwise "stop ignoring" leaves them
+    // ignored and the menu says so again a moment later.
+    let list = ignores
+    for (const entry of ignoresFor(ignores, activeServerId, target)) {
+      list = await window.switchboard.invoke('ignore:remove', entry.mask, entry.network)
+    }
+    setIgnores(list)
+  }, [activeServerId, ignores])
+
+  /**
    * The menu for one person, from `@shared/powers`.
    *
    * Kick used to be on it unconditionally, so somebody with no rank in the
@@ -97,7 +129,8 @@ export function UserList() {
       chanmodes: tokens.CHANMODES,
       mine: (me?.prefixes || []).join(''),
       theirs: (target.prefixes || []).join(''),
-      isSelf
+      isSelf,
+      ignored: ignoresFor(ignores, activeServerId ?? '', target).length > 0
     })
 
     const mask = banMask(target)
@@ -117,7 +150,11 @@ export function UserList() {
       // Says which mask it will use, because banning the nick is undone by
       // changing it and somebody should know that before pressing it.
       ban: weak ? `Ban ${mask} (nick only)` : `Ban ${mask}`,
-      mute: weak ? `Mute ${mask} (nick only)` : `Mute ${mask}`
+      mute: weak ? `Mute ${mask} (nick only)` : `Mute ${mask}`,
+      // What it will actually silence, since an ignore follows a host rather
+      // than a nick wherever we know one.
+      ignore: weak ? `Ignore ${target.nick}` : `Ignore ${mask}`,
+      unignore: 'Stop ignoring'
     }
 
     const run: Partial<Record<MemberAction, () => void>> = {
@@ -131,7 +168,9 @@ export function UserList() {
       deop: () => handleMode('-o', target.nick),
       kick: () => handleKick(target.nick),
       ban: () => handleMode('+b', mask),
-      mute: () => handleMode(`+${modeOf(quiet)}`, mask)
+      mute: () => handleMode(`+${modeOf(quiet)}`, mask),
+      ignore: () => void handleIgnore(mask),
+      unignore: () => void handleUnignore(target)
     }
 
     const items: ContextMenuItem[] = []
@@ -147,7 +186,7 @@ export function UserList() {
       })
     }
     return items
-  }, [contextMenu, activeServerId, isupport, users, myNick, handleWhois, handleMessage, handleKick, handleMode])
+  }, [contextMenu, activeServerId, isupport, users, myNick, ignores, handleWhois, handleMessage, handleKick, handleMode, handleIgnore, handleUnignore])
 
   return (
     <div className="w-60 shrink-0 overflow-y-auto bg-gray-900 px-2 py-3 no-select">

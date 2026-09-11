@@ -46,9 +46,11 @@ import org.switchboard.android.ui.nickColor
 import org.switchboard.android.ui.theme
 import org.switchboard.android.ui.applyTheme
 import org.switchboard.android.vault.VaultCrypto
-import org.switchboard.android.vault.VaultStore
 import java.util.Timer
 import java.util.TimerTask
+import org.switchboard.android.irc.Ignore
+import kotlinx.serialization.json.JsonArray
+import org.switchboard.android.vault.VaultStore
 
 /**
  * What the phone is doing right now.
@@ -203,7 +205,7 @@ class SwitchboardEngine(
             // only source there is.
             val about = (data as? JsonObject)?.get("serverId")?.jsonPrimitive?.contentOrNull()
 
-            if (about == null || !connections.containsKey(about)) {
+            if ((about == null || !connections.containsKey(about)) && !silenced(channel, data)) {
                 store.handleEvent(channel, data)
                 if (channel == "irc:message") notifyIfWorthIt(data)
 
@@ -617,6 +619,7 @@ class SwitchboardEngine(
             }
 
         (vault.setting(MUTES_KEY) as? JsonObject)?.let { mutes = Mutes.fromJson(it) }
+        (vault.setting(IGNORES_KEY) as? JsonArray)?.let { ignores = readIgnores(it) }
 
         for (server in vault.servers()) {
             val watched = vault.watched(server.id)
@@ -844,6 +847,128 @@ class SwitchboardEngine(
      * desktop; the `settings:set` is what makes a mute show up over there
      * before the next vault exchange. Neither one is enough alone.
      */
+    /**
+     * People this client has been told not to hear from.
+     *
+     * Shared with the desktop rather than kept here: silencing somebody at the
+     * desk and being messaged by them in your pocket is not a working ignore
+     * list. See `src/shared/ignore.ts` for the matching, which both clients do
+     * identically.
+     */
+    @Volatile
+    var ignores: List<Ignore.Entry> = emptyList()
+        private set
+
+    /** Whether this is somebody we have decided not to hear from */
+    internal fun isIgnored(
+        serverId: String,
+        nick: String,
+        userHost: String?,
+        kind: String = "messages"
+    ): Boolean {
+        if (ignores.isEmpty()) return false
+        val at = userHost?.indexOf('@') ?: -1
+        val who = Ignore.Who(
+            nick = nick,
+            user = if (at == -1) null else userHost?.substring(0, at),
+            host = if (at == -1) userHost else userHost?.substring(at + 1)
+        )
+        return Ignore.isIgnored(ignores, serverId, who, kind)
+    }
+
+    /**
+     * Whether this event is from somebody we have decided not to hear from.
+     *
+     * Applied to what the desktop relays as well as to what this phone reads
+     * off a socket: the two clients share the list, so they must silence the
+     * same people whichever of them is holding the connection.
+     */
+    private fun silenced(channel: String, data: JsonElement): Boolean {
+        if (ignores.isEmpty()) return false
+        val row = data as? JsonObject ?: return false
+        val serverId = (row["serverId"] as? JsonPrimitive)?.content ?: return false
+
+        // Messages and invitations only. Joins, parts and quits are what
+        // keeps the member list right, so dropping them would leave somebody
+        // you ignored in the roster after they left, for good.
+        val kind = when (channel) {
+            "irc:message" -> "messages"
+            "irc:invite" -> "requests"
+            else -> return false
+        }
+
+        // A message carries the sender under `message`; the rest name them
+        // directly. An invite names whoever sent it as `from`.
+        val message = row["message"] as? JsonObject
+        val nick = (message?.get("nick") as? JsonPrimitive)?.content
+            ?: (row["nick"] as? JsonPrimitive)?.content
+            ?: (row["from"] as? JsonPrimitive)?.content
+            ?: return false
+        val userHost = (message?.get("userHost") as? JsonPrimitive)?.content
+            ?: (row["userHost"] as? JsonPrimitive)?.content
+
+        return isIgnored(serverId, nick, userHost, kind)
+    }
+
+    /** Stop hearing from whoever matches this mask */
+    fun addIgnore(mask: String, network: String, scope: Ignore.Scope = Ignore.Scope()) {
+        val wanted = Ignore.toMask(mask)
+        if (wanted.isEmpty()) return
+        applyIgnores(
+            Ignore.with(
+                ignores,
+                Ignore.Entry(wanted, network, scope, System.currentTimeMillis())
+            )
+        )
+    }
+
+    /** Start hearing from them again */
+    fun removeIgnore(mask: String, network: String) {
+        applyIgnores(Ignore.without(ignores, mask, network))
+    }
+
+    /**
+     * Hold it, seal it, and tell the desktop — the same three steps a mute
+     * takes, and for the same reason: the vault write is what survives a
+     * restart with no desktop, and `settings:set` is what reaches the other
+     * device before the next vault exchange.
+     */
+    private fun applyIgnores(next: List<Ignore.Entry>) {
+        ignores = next
+        val encoded = writeIgnores(next)
+        vault.setSharedSetting(IGNORES_KEY, encoded)
+        vaultVersion = vault.version
+        scope.launch { ask("settings:set", JsonPrimitive(IGNORES_KEY), encoded) }
+    }
+
+    private fun readIgnores(array: JsonArray): List<Ignore.Entry> = array.mapNotNull { element ->
+        val row = element as? JsonObject ?: return@mapNotNull null
+        val scope = row["scope"] as? JsonObject
+        Ignore.Entry(
+            mask = (row["mask"] as? JsonPrimitive)?.content ?: return@mapNotNull null,
+            network = (row["network"] as? JsonPrimitive)?.content ?: Ignore.EVERYWHERE,
+            scope = Ignore.Scope(
+                messages = (scope?.get("messages") as? JsonPrimitive)?.booleanOrNull ?: true,
+                requests = (scope?.get("requests") as? JsonPrimitive)?.booleanOrNull ?: true
+            ),
+            added = (row["added"] as? JsonPrimitive)?.content?.toLongOrNull() ?: 0
+        )
+    }
+
+    private fun writeIgnores(list: List<Ignore.Entry>): JsonArray = JsonArray(
+        list.map { entry ->
+            buildJsonObject {
+                put("mask", entry.mask)
+                put("network", entry.network)
+                put("added", entry.added)
+                put("scope", buildJsonObject {
+                    put("messages", entry.scope.messages)
+                    put("requests", entry.scope.requests)
+                })
+            }
+        }
+    )
+
     private fun applyMutes(next: Mutes) {
         mutes = next
         val encoded = next.toJson()
@@ -970,6 +1095,11 @@ class SwitchboardEngine(
         Log.i(TAG, "connecting to ${config.host}:${config.port} as ${config.nick}")
         seedServer(config)
         val connection = IrcConnection(config, scope, { vault.defaultProfile() }, { savedProxy() }) { channel, data ->
+            // Somebody on the ignore list said nothing, as far as this client
+            // is concerned. Dropped before the store rather than hidden in the
+            // UI: an ignored message that is kept still counts towards a badge
+            // and still wakes the phone up.
+            if (silenced(channel, data)) return@IrcConnection
             store.handleEvent(channel, data)
 
             // Notifying was wired only to the desktop's relay, so a phone
@@ -1441,6 +1571,9 @@ class SwitchboardEngine(
 
         /** The shared setting both clients keep mutes in */
         const val MUTES_KEY = "mutes"
+
+        /** And the one they keep the ignore list in */
+        const val IGNORES_KEY = "ignores"
 
         // Where this phone's proxy is kept. On the device, not in the shared
         // config: a proxy describes where you are, and the desktop's is almost

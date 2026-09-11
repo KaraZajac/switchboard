@@ -1,0 +1,427 @@
+{
+  "$comment": "People you would rather not hear from. Read by tests/shared/ignore.test.ts and the Android SharedCorpusTest. An ignore is a mask, not a person — somebody who changes nick is the same person — and the matching is the same wildcard comparison an ircd does for a ban, so what you type here behaves like the same thing typed into one.",
+  "$mask": "Turning what somebody typed into a mask.",
+  "mask": [
+    {
+      "name": "a bare nick is about that person",
+      "typed": "kara",
+      "mask": "kara!*@*"
+    },
+    {
+      "name": "a full mask is left alone",
+      "typed": "*!*@example.org",
+      "mask": "*!*@example.org"
+    },
+    {
+      "name": "a host is completed on the left",
+      "typed": "*@example.org",
+      "mask": "*!*@example.org"
+    },
+    {
+      "name": "a user and host too",
+      "typed": "bot@example.org",
+      "mask": "*!bot@example.org"
+    },
+    {
+      "name": "a nick and user is completed on the right",
+      "typed": "kara!bot",
+      "mask": "kara!bot@*"
+    },
+    {
+      "name": "whitespace is trimmed first",
+      "typed": "  kara  ",
+      "mask": "kara!*@*"
+    },
+    {
+      "name": "nothing typed is nothing to ignore",
+      "typed": "  ",
+      "mask": ""
+    },
+    {
+      "name": "a wildcard nick stays a wildcard nick",
+      "typed": "kara*",
+      "mask": "kara*!*@*"
+    }
+  ],
+  "$match": "Whether a mask matches somebody.",
+  "match": [
+    {
+      "name": "an exact nick",
+      "mask": "kara!*@*",
+      "who": {
+        "nick": "kara",
+        "user": "k",
+        "host": "example.org"
+      },
+      "matches": true
+    },
+    {
+      "name": "case does not decide it",
+      "mask": "KARA!*@*",
+      "who": {
+        "nick": "kara",
+        "user": "k",
+        "host": "example.org"
+      },
+      "matches": true
+    },
+    {
+      "name": "and neither does case the other way",
+      "mask": "kara!*@*",
+      "who": {
+        "nick": "KARA",
+        "user": "k",
+        "host": "example.org"
+      },
+      "matches": true
+    },
+    {
+      "name": "a different nick does not match",
+      "mask": "kara!*@*",
+      "who": {
+        "nick": "alice",
+        "user": "k",
+        "host": "example.org"
+      },
+      "matches": false
+    },
+    {
+      "name": "a host mask survives a nick change",
+      "mask": "*!*@example.org",
+      "who": {
+        "nick": "kara_away",
+        "user": "k",
+        "host": "example.org"
+      },
+      "matches": true
+    },
+    {
+      "name": "a wildcard host",
+      "mask": "*!*@*.example.org",
+      "who": {
+        "nick": "kara",
+        "user": "k",
+        "host": "mail.example.org"
+      },
+      "matches": true
+    },
+    {
+      "name": "a wildcard host that does not reach",
+      "mask": "*!*@*.example.org",
+      "who": {
+        "nick": "kara",
+        "user": "k",
+        "host": "example.com"
+      },
+      "matches": false
+    },
+    {
+      "name": "? is exactly one character",
+      "mask": "kar?!*@*",
+      "who": {
+        "nick": "kara",
+        "user": "k",
+        "host": "h"
+      },
+      "matches": true
+    },
+    {
+      "name": "? is not two",
+      "mask": "kar?!*@*",
+      "who": {
+        "nick": "karaa",
+        "user": "k",
+        "host": "h"
+      },
+      "matches": false
+    },
+    {
+      "name": "everything matches everybody",
+      "mask": "*!*@*",
+      "who": {
+        "nick": "kara",
+        "user": "k",
+        "host": "h"
+      },
+      "matches": true
+    },
+    {
+      "name": "an unknown user and host are still matched by a wildcard",
+      "mask": "*!*@*",
+      "who": {
+        "nick": "kara"
+      },
+      "matches": true
+    },
+    {
+      "name": "a specific host cannot match an unknown one",
+      "mask": "*!*@example.org",
+      "who": {
+        "nick": "kara"
+      },
+      "matches": false
+    },
+    {
+      "name": "a user mask",
+      "mask": "*!bot@*",
+      "who": {
+        "nick": "helper",
+        "user": "bot",
+        "host": "services."
+      },
+      "matches": true
+    },
+    {
+      "name": "several stars in a row",
+      "mask": "*a*a*b",
+      "who": {
+        "nick": "aaab",
+        "user": "",
+        "host": ""
+      },
+      "matches": false
+    },
+    {
+      "name": "a star matching nothing at the end",
+      "mask": "kara!*@*",
+      "who": {
+        "nick": "kara",
+        "user": "",
+        "host": ""
+      },
+      "matches": true
+    }
+  ],
+  "$scope": "Which network an entry covers, and what it covers.",
+  "scope": [
+    {
+      "name": "an everywhere entry matches on any network",
+      "list": [
+        {
+          "mask": "kara!*@*",
+          "network": "*",
+          "scope": {
+            "messages": true,
+            "requests": true
+          },
+          "added": 1700000000
+        }
+      ],
+      "network": "libera",
+      "who": {
+        "nick": "kara"
+      },
+      "kind": "messages",
+      "ignored": true
+    },
+    {
+      "name": "a network entry only matches that network",
+      "list": [
+        {
+          "mask": "kara!*@*",
+          "network": "libera",
+          "scope": {
+            "messages": true,
+            "requests": true
+          },
+          "added": 1700000000
+        }
+      ],
+      "network": "libera",
+      "who": {
+        "nick": "kara"
+      },
+      "kind": "messages",
+      "ignored": true
+    },
+    {
+      "name": "and not another one",
+      "list": [
+        {
+          "mask": "kara!*@*",
+          "network": "libera",
+          "scope": {
+            "messages": true,
+            "requests": true
+          },
+          "added": 1700000000
+        }
+      ],
+      "network": "oftc",
+      "who": {
+        "nick": "kara"
+      },
+      "kind": "messages",
+      "ignored": false
+    },
+    {
+      "name": "an events-only entry leaves messages alone",
+      "list": [
+        {
+          "mask": "kara!*@*",
+          "network": "*",
+          "scope": {
+            "messages": false,
+            "requests": false
+          },
+          "added": 1700000000
+        }
+      ],
+      "network": "libera",
+      "who": {
+        "nick": "kara"
+      },
+      "kind": "messages",
+      "ignored": false
+    },
+    {
+      "name": "two entries, and the wider one decides",
+      "list": [
+        {
+          "mask": "kara!*@*",
+          "network": "*",
+          "scope": {
+            "messages": false,
+            "requests": false
+          },
+          "added": 1700000000
+        },
+        {
+          "mask": "*!*@example.org",
+          "network": "*",
+          "scope": {
+            "messages": true,
+            "requests": true
+          },
+          "added": 1700000000
+        }
+      ],
+      "network": "libera",
+      "who": {
+        "nick": "kara",
+        "host": "example.org"
+      },
+      "kind": "messages",
+      "ignored": true
+    },
+    {
+      "name": "nobody is ignored by an empty list",
+      "list": [],
+      "network": "libera",
+      "who": {
+        "nick": "kara"
+      },
+      "kind": "messages",
+      "ignored": false
+    }
+  ],
+  "$edit": "Adding and removing.",
+  "edit": [
+    {
+      "name": "adding the same mask twice keeps one",
+      "list": [
+        {
+          "mask": "kara!*@*",
+          "network": "*",
+          "scope": {
+            "messages": true,
+            "requests": true
+          },
+          "added": 1
+        }
+      ],
+      "add": {
+        "mask": "kara!*@*",
+        "network": "*",
+        "scope": {
+          "messages": true,
+          "requests": true
+        },
+        "added": 2
+      },
+      "masks": [
+        "kara!*@*"
+      ]
+    },
+    {
+      "name": "the same mask on another network is a different entry",
+      "list": [
+        {
+          "mask": "kara!*@*",
+          "network": "libera",
+          "scope": {
+            "messages": true,
+            "requests": true
+          },
+          "added": 1700000000
+        }
+      ],
+      "add": {
+        "mask": "kara!*@*",
+        "network": "oftc",
+        "scope": {
+          "messages": true,
+          "requests": true
+        },
+        "added": 1700000000
+      },
+      "masks": [
+        "kara!*@*",
+        "kara!*@*"
+      ]
+    },
+    {
+      "name": "case does not make it a different mask",
+      "list": [
+        {
+          "mask": "kara!*@*",
+          "network": "*",
+          "scope": {
+            "messages": true,
+            "requests": true
+          },
+          "added": 1700000000
+        }
+      ],
+      "add": {
+        "mask": "KARA!*@*",
+        "network": "*",
+        "scope": {
+          "messages": true,
+          "requests": true
+        },
+        "added": 1700000000
+      },
+      "masks": [
+        "KARA!*@*"
+      ]
+    },
+    {
+      "name": "adding a different mask keeps both",
+      "list": [
+        {
+          "mask": "kara!*@*",
+          "network": "*",
+          "scope": {
+            "messages": true,
+            "requests": true
+          },
+          "added": 1700000000
+        }
+      ],
+      "add": {
+        "mask": "alice!*@*",
+        "network": "*",
+        "scope": {
+          "messages": true,
+          "requests": true
+        },
+        "added": 1700000000
+      },
+      "masks": [
+        "kara!*@*",
+        "alice!*@*"
+      ]
+    }
+  ]
+}

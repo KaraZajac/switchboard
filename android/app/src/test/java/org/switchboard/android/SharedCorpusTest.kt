@@ -25,6 +25,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.switchboard.android.irc.Casemap
 import org.switchboard.android.irc.ConnectionState
+import org.switchboard.android.irc.Ignore
 import org.switchboard.android.irc.Irc
 import org.switchboard.android.irc.Socks
 import org.switchboard.android.vault.VaultEnvelope
@@ -880,6 +881,87 @@ class SharedCorpusTest {
                     mapOfOrNull(c["published"]),
                     mapOfOrNull(c["next"])
                 )
+            )
+        }
+    }
+
+    // ── people you would rather not hear from ────────────────────────
+
+    /**
+     * An ignore list that means different things on two devices is worse than
+     * none: you would silence somebody at the desk and be messaged by them in
+     * your pocket. The masks and the matching have to be the same.
+     */
+    @Test
+    fun `ignores the same people the desktop ignores`() {
+        val corpus = load("ignore.json")
+
+        fun whoOf(e: JsonElement): Ignore.Who {
+            val o = e.jsonObject
+            return Ignore.Who(
+                nick = o["nick"]!!.jsonPrimitive.content,
+                user = o["user"]?.jsonPrimitive?.content,
+                host = o["host"]?.jsonPrimitive?.content
+            )
+        }
+
+        fun scopeOf(e: JsonElement): Ignore.Scope {
+            val o = e.jsonObject
+            return Ignore.Scope(
+                messages = o["messages"]!!.jsonPrimitive.content == "true",
+                requests = o["requests"]!!.jsonPrimitive.content == "true"
+            )
+        }
+
+        fun entryOf(e: JsonElement): Ignore.Entry {
+            val o = e.jsonObject
+            return Ignore.Entry(
+                mask = o["mask"]!!.jsonPrimitive.content,
+                network = o["network"]!!.jsonPrimitive.content,
+                scope = scopeOf(o["scope"]!!),
+                added = o["added"]!!.jsonPrimitive.content.toLong()
+            )
+        }
+
+        for (case in corpus["mask"]!!.jsonArray) {
+            val c = case.jsonObject
+            assertEquals(
+                c["name"]!!.jsonPrimitive.content,
+                c["mask"]!!.jsonPrimitive.content,
+                Ignore.toMask(c["typed"]!!.jsonPrimitive.content)
+            )
+        }
+
+        for (case in corpus["match"]!!.jsonArray) {
+            val c = case.jsonObject
+            assertEquals(
+                c["name"]!!.jsonPrimitive.content,
+                c["matches"]!!.jsonPrimitive.content == "true",
+                Ignore.matches(c["mask"]!!.jsonPrimitive.content, whoOf(c["who"]!!))
+            )
+        }
+
+        for (case in corpus["scope"]!!.jsonArray) {
+            val c = case.jsonObject
+            assertEquals(
+                c["name"]!!.jsonPrimitive.content,
+                c["ignored"]!!.jsonPrimitive.content == "true",
+                Ignore.isIgnored(
+                    c["list"]!!.jsonArray.map { entryOf(it) },
+                    c["network"]!!.jsonPrimitive.content,
+                    whoOf(c["who"]!!),
+                    c["kind"]!!.jsonPrimitive.content
+                )
+            )
+        }
+
+        for (case in corpus["edit"]!!.jsonArray) {
+            val c = case.jsonObject
+            assertEquals(
+                c["name"]!!.jsonPrimitive.content,
+                c["masks"]!!.jsonArray.map { it.jsonPrimitive.content },
+                Ignore.with(c["list"]!!.jsonArray.map { entryOf(it) }, entryOf(c["add"]!!))
+                    .map { it.mask }
             )
         }
     }

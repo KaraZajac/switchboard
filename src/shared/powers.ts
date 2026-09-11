@@ -136,10 +136,11 @@ export function actionsFor(question: PowerQuestion): MemberAction[] {
 
   const actions: MemberAction[] = ['whois']
   if (!question.isSelf) actions.push('message')
+
   // Ignoring somebody is a decision about your own client rather than about
-  // the channel, so it belongs here — but neither client keeps an ignore list
-  // yet, and a menu item that does nothing is the thing this whole rule
-  // exists to stop. It goes in when the list behind it does.
+  // the channel, so no rank is needed and no network can refuse it. Never
+  // against yourself, which would silence your own messages.
+  if (!question.isSelf) actions.push(question.ignored ? 'unignore' : 'ignore')
 
   const opRank = rankOfMode('o', scheme)
   const halfopRank = rankOfMode('h', scheme)

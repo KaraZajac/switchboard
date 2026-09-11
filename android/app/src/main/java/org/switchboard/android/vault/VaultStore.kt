@@ -385,6 +385,9 @@ class VaultStore(context: Context) {
         const val HAS_PASSPHRASE = "hasPassphrase"
         const val PLACEHOLDER = "placeholder"
         const val PROFILE_KEY = "profile"
+
+        /** Where the ignore list lives, shared so both devices silence the same people */
+        const val IGNORES_KEY = "ignores"
     }
 
     /** The sealed envelope, for handing to another device */

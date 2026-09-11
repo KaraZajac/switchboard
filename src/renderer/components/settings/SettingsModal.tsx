@@ -5,13 +5,15 @@ import { useUIStore } from '../../stores/uiStore'
 import type { Theme } from '../../stores/uiStore'
 import { useServerStore } from '../../stores/serverStore'
 import type { StorageProtection } from '@shared/types/ipc'
+import { toMask, DEFAULT_SCOPE, EVERYWHERE, type IgnoreEntry, type IgnoreScope } from '@shared/ignore'
 
-type Tab = 'servers' | 'appearance' | 'notifications' | 'devices' | 'network' | 'shortcuts'
+type Tab = 'servers' | 'appearance' | 'notifications' | 'ignored' | 'devices' | 'network' | 'shortcuts'
 
 const TABS: { key: Tab; label: string }[] = [
   { key: 'servers', label: 'Servers' },
   { key: 'appearance', label: 'Appearance' },
   { key: 'notifications', label: 'Notifications' },
+  { key: 'ignored', label: 'Ignored' },
   { key: 'devices', label: 'Devices' },
   { key: 'network', label: 'Network' },
   { key: 'shortcuts', label: 'Shortcuts' }
@@ -48,6 +50,7 @@ export function SettingsModal() {
           {activeTab === 'servers' && <ServersTab />}
           {activeTab === 'appearance' && <AppearanceTab />}
           {activeTab === 'notifications' && <NotificationsTab />}
+          {activeTab === 'ignored' && <IgnoredTab />}
           {activeTab === 'devices' && <DevicesTab />}
           {activeTab === 'network' && <NetworkTab />}
           {activeTab === 'shortcuts' && <ShortcutsTab />}
@@ -509,5 +512,152 @@ function ToggleSwitch({ checked, onChange }: { checked: boolean; onChange: (v: b
       />
       <div className="peer h-6 w-11 rounded-full bg-gray-600 after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:bg-white after:transition-all peer-checked:bg-indigo-500 peer-checked:after:translate-x-full" />
     </label>
+  )
+}
+
+
+/**
+ * People you have decided not to hear from.
+ *
+ * The list has to be visible somewhere, or the only way to undo an ignore is
+ * to find the person again and right-click them — which is exactly what you
+ * cannot do once they are silent. Shows what each entry covers and lets it be
+ * widened, because "ignore" from a menu deliberately means the narrow thing.
+ */
+function IgnoredTab() {
+  const servers = useServerStore((s) => s.servers)
+  const [list, setList] = useState<IgnoreEntry[]>([])
+  const [typed, setTyped] = useState('')
+  const [network, setNetwork] = useState(EVERYWHERE)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    void window.switchboard.invoke('ignore:list').then(setList)
+  }, [])
+
+  const nameOf = (id: string): string =>
+    id === EVERYWHERE ? 'Everywhere' : servers.find((s) => s.id === id)?.name ?? 'a network you left'
+
+  const add = async () => {
+    setError(null)
+    try {
+      setList(await window.switchboard.invoke('ignore:add', typed, network, DEFAULT_SCOPE))
+      setTyped('')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'That did not work')
+    }
+  }
+
+  const widen = async (entry: IgnoreEntry, kind: keyof IgnoreScope, on: boolean) => {
+    setList(
+      await window.switchboard.invoke('ignore:add', entry.mask, entry.network, {
+        ...entry.scope,
+        [kind]: on
+      })
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      <h3 className="text-sm font-semibold text-gray-300">Ignored</h3>
+      <p className="text-xs leading-relaxed text-gray-500">
+        Nothing from anybody matching one of these reaches this client — not a message, not a
+        notification, not a badge. Shared with your phone, so somebody silenced here is silent
+        there too.
+      </p>
+
+      <div className="flex gap-2">
+        <input
+          type="text"
+          value={typed}
+          onChange={(e) => setTyped(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && typed.trim()) void add()
+          }}
+          placeholder="A nick, or a mask like *!*@example.org"
+          className="flex-1 rounded bg-gray-900 px-3 py-2 font-mono text-sm text-gray-100 outline-none ring-1 ring-gray-700 focus:ring-indigo-500"
+        />
+        <select
+          value={network}
+          onChange={(e) => setNetwork(e.target.value)}
+          className="rounded bg-gray-900 px-2 py-2 text-sm text-gray-100 outline-none ring-1 ring-gray-700 focus:ring-indigo-500"
+        >
+          <option value={EVERYWHERE}>Everywhere</option>
+          {servers.map((server) => (
+            <option key={server.id} value={server.id}>
+              {server.name}
+            </option>
+          ))}
+        </select>
+        <button
+          onClick={() => typed.trim() && void add()}
+          disabled={!typed.trim()}
+          className="rounded bg-indigo-500 px-3 py-2 text-sm text-white hover:bg-indigo-600 disabled:opacity-50"
+        >
+          Add
+        </button>
+      </div>
+
+      {/* What a bare nick will become, before it is added */}
+      {typed.trim() && toMask(typed) !== typed.trim() && (
+        <p className="font-mono text-xs text-gray-500">Will be saved as {toMask(typed)}</p>
+      )}
+
+      {error && <div className="rounded bg-red-900/50 px-2 py-1.5 text-xs text-red-300">{error}</div>}
+
+      {list.length === 0 ? (
+        <p className="text-sm text-gray-500">Nobody. Right-click someone to add them.</p>
+      ) : (
+        <div className="space-y-1">
+          {[...list]
+            .sort((a, b) => b.added - a.added)
+            .map((entry) => (
+              <div
+                key={`${entry.network}:${entry.mask}`}
+                className="rounded bg-gray-900/60 px-3 py-2 ring-1 ring-gray-800"
+              >
+                <div className="flex items-center gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate font-mono text-sm text-gray-100">{entry.mask}</div>
+                    <div className="text-xs text-gray-500">{nameOf(entry.network)}</div>
+                  </div>
+                  <button
+                    onClick={async () =>
+                      setList(
+                        await window.switchboard.invoke('ignore:remove', entry.mask, entry.network)
+                      )
+                    }
+                    className="shrink-0 rounded px-2 py-1 text-xs text-gray-400 hover:bg-gray-700 hover:text-gray-100"
+                  >
+                    Remove
+                  </button>
+                </div>
+
+                {/*
+                  Joins and parts are deliberately not here: they are what
+                  keeps the member list right, and hiding them is a decision
+                  about every arrival rather than about one person.
+                */}
+                <div className="mt-1.5 flex gap-3 text-xs text-gray-400">
+                  {([
+                    ['messages', 'Messages'],
+                    ['requests', 'Invites and CTCP']
+                  ] as [keyof IgnoreScope, string][]).map(([kind, label]) => (
+                    <label key={kind} className="flex items-center gap-1">
+                      <input
+                        type="checkbox"
+                        checked={entry.scope[kind]}
+                        onChange={(e) => void widen(entry, kind, e.target.checked)}
+                        className="accent-indigo-500"
+                      />
+                      {label}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            ))}
+        </div>
+      )}
+    </div>
   )
 }

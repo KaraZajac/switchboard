@@ -1,5 +1,5 @@
 {
-  "$comment": "What a member menu may offer, read by tests/shared/powers.test.ts and the Android SharedCorpusTest. There is no IRCv3 specification for this: no extension tells a client whether it may kick. ISUPPORT gives the roles a network has (PREFIX) and which modes take a mask (CHANMODES), and the rest is inference \u2014 so this errs toward offering something a network might refuse and never toward hiding something it would have allowed, except where there is no rank at all and we can be sure. Ignoring somebody is a decision about your own client rather than the channel and belongs in this menu, but neither client keeps an ignore list yet; it goes in when the list behind it does.",
+  "$comment": "What a member menu may offer, read by tests/shared/powers.test.ts and the Android SharedCorpusTest. There is no IRCv3 specification for this: no extension tells a client whether it may kick. ISUPPORT gives the roles a network has (PREFIX) and which modes take a mask (CHANMODES), and the rest is inference — so this errs toward offering something a network might refuse and never toward hiding something it would have allowed, except where there is no rank at all and we can be sure. Ignoring somebody is a decision about your own client rather than the channel and belongs in this menu, but neither client keeps an ignore list yet; it goes in when the list behind it does.",
   "$cases": "`mine` and `theirs` are the prefix symbols each person is wearing in the channel. `actions` is the menu, in order.",
   "cases": [
     {
@@ -11,7 +11,8 @@
       "isSelf": false,
       "actions": [
         "whois",
-        "message"
+        "message",
+        "ignore"
       ],
       "$comment": "The case that prompted this. Both clients showed Kick to everybody and let the server answer 482, which teaches people that half the menu is a lie."
     },
@@ -36,6 +37,7 @@
       "actions": [
         "whois",
         "message",
+        "ignore",
         "voice",
         "halfop",
         "op",
@@ -54,6 +56,7 @@
       "actions": [
         "whois",
         "message",
+        "ignore",
         "devoice",
         "dehalfop",
         "deop",
@@ -73,6 +76,7 @@
       "actions": [
         "whois",
         "message",
+        "ignore",
         "voice",
         "kick",
         "mute"
@@ -88,7 +92,8 @@
       "isSelf": false,
       "actions": [
         "whois",
-        "message"
+        "message",
+        "ignore"
       ]
     },
     {
@@ -100,7 +105,8 @@
       "isSelf": false,
       "actions": [
         "whois",
-        "message"
+        "message",
+        "ignore"
       ],
       "$comment": "The one permission rule every ircd agrees on."
     },
@@ -114,6 +120,7 @@
       "actions": [
         "whois",
         "message",
+        "ignore",
         "voice",
         "halfop",
         "deop",
@@ -131,7 +138,8 @@
       "isSelf": false,
       "actions": [
         "whois",
-        "message"
+        "message",
+        "ignore"
       ]
     },
     {
@@ -144,6 +152,7 @@
       "actions": [
         "whois",
         "message",
+        "ignore",
         "voice",
         "halfop",
         "deop",
@@ -162,6 +171,7 @@
       "actions": [
         "whois",
         "message",
+        "ignore",
         "voice",
         "op",
         "kick",
@@ -191,6 +201,7 @@
       "actions": [
         "whois",
         "message",
+        "ignore",
         "voice",
         "op",
         "kick"
@@ -207,6 +218,7 @@
       "actions": [
         "whois",
         "message",
+        "ignore",
         "voice",
         "halfop",
         "op",

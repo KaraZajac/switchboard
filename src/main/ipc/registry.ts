@@ -69,6 +69,9 @@ export const REMOTE_ALLOWED = new Set([
   'user:mode',
   'masklist:fetch',
   'masklist:set',
+  'ignore:list',
+  'ignore:add',
+  'ignore:remove',
   // Registering an account is a thing you do from whichever device is in your
   // hand, and the second half of it arrives by email — often on the phone.
   'account:register',

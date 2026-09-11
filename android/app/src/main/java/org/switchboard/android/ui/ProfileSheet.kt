@@ -58,6 +58,7 @@ import org.switchboard.android.resetProfile
 import org.switchboard.android.GLOBAL_SCOPE
 import org.switchboard.android.irc.Profile
 import org.switchboard.android.whois
+import org.switchboard.android.irc.Ignore
 
 /**
  * Someone's profile.
@@ -152,7 +153,13 @@ fun ProfileSheet(
                     mine = me?.prefixes?.joinToString("").orEmpty(),
                     theirs = them?.prefixes?.joinToString("").orEmpty(),
                     isSelf = isSelf
-                ).filter { it != Powers.Action.WHOIS && it != Powers.Action.MESSAGE }
+                ).filter {
+                    // Whois and message have their own buttons above, and
+                    // ignoring somebody is about this client rather than about
+                    // the channel — it has its own row below.
+                    it != Powers.Action.WHOIS && it != Powers.Action.MESSAGE &&
+                        it != Powers.Action.IGNORE && it != Powers.Action.UNIGNORE
+                }
 
                 if (offered.isNotEmpty()) {
                     Spacer(Modifier.height(18.dp))
@@ -243,6 +250,37 @@ fun ProfileSheet(
                 if (serverId == null) return@SecondaryAction
                 if (watching) engine.unwatchNicks(serverId, listOf(nick))
                 else engine.watchNicks(serverId, listOf(nick))
+            }
+
+            // Ignoring is a decision about this client, so it needs no rank
+            // and no network can refuse it — which is why it sits here rather
+            // than with the channel actions. Never against yourself.
+            if (serverId != null && !nick.equals(store.servers[serverId]?.nick, true)) {
+                val host = store.membersFor(serverId, channel.orEmpty())
+                    .firstOrNull { it.nick.equals(nick, true) }?.host
+                val covering = Ignore.covering(
+                    engine.ignores, serverId, Ignore.Who(nick, host = host)
+                )
+                // The mask it will actually use, since an ignore follows a
+                // host rather than a nick wherever we know one.
+                val mask = if (host.isNullOrBlank()) "$nick!*@*" else "*!*@$host"
+
+                Spacer(Modifier.height(10.dp))
+                SecondaryAction(
+                    if (covering.isNotEmpty()) "Stop ignoring $nick"
+                    else if (host.isNullOrBlank()) "Ignore $nick"
+                    else "Ignore $mask",
+                    if (covering.isNotEmpty()) Subtext else Yellow
+                ) {
+                    if (covering.isNotEmpty()) {
+                        // Lift every entry that was silencing them, not just
+                        // the one whose mask looks like their nick.
+                        covering.forEach { engine.removeIgnore(it.mask, it.network) }
+                    } else {
+                        engine.addIgnore(mask, serverId)
+                    }
+                    onDismiss()
+                }
             }
 
         }
