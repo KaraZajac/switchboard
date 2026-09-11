@@ -312,7 +312,7 @@ class SwitchboardEngine(
         // A direct message is always for you; in a channel, your name has to
         // come up as a word rather than as part of a longer one.
         val direct = !channel.startsWith("#") && !channel.startsWith("&")
-        val mentioned = direct || namesYou(text, me)
+        val mentioned = direct || mentionsYou(text, me, store.highlightWords)
 
         notifier.show(
             conversationKey = conversationKey,
@@ -620,6 +620,9 @@ class SwitchboardEngine(
 
         (vault.setting(MUTES_KEY) as? JsonObject)?.let { mutes = Mutes.fromJson(it) }
         (vault.setting(IGNORES_KEY) as? JsonArray)?.let { ignores = readIgnores(it) }
+        (vault.setting(HIGHLIGHTS_KEY) as? JsonArray)?.let { array ->
+            store.highlightWords = array.mapNotNull { (it as? JsonPrimitive)?.content }
+        }
 
         for (server in vault.servers()) {
             val watched = vault.watched(server.id)
@@ -908,6 +911,21 @@ class SwitchboardEngine(
             ?: (row["userHost"] as? JsonPrimitive)?.content
 
         return isIgnored(serverId, nick, userHost, kind)
+    }
+
+    /**
+     * Change the words that ring the same bell your nick does.
+     *
+     * Sealed and relayed the way a mute is: the vault write survives a restart
+     * with no desktop, and `settings:set` reaches the other device before the
+     * next vault exchange.
+     */
+    fun setHighlightWords(words: List<String>) {
+        store.highlightWords = words
+        val encoded = JsonArray(words.map { JsonPrimitive(it) })
+        vault.setSharedSetting(HIGHLIGHTS_KEY, encoded)
+        vaultVersion = vault.version
+        scope.launch { ask("settings:set", JsonPrimitive(HIGHLIGHTS_KEY), encoded) }
     }
 
     /** Stop hearing from whoever matches this mask */
@@ -1574,6 +1592,9 @@ class SwitchboardEngine(
 
         /** And the one they keep the ignore list in */
         const val IGNORES_KEY = "ignores"
+
+        /** And the words that ring the same bell your nick does */
+        const val HIGHLIGHTS_KEY = "highlights"
 
         // Where this phone's proxy is kept. On the device, not in the shared
         // config: a proxy describes where you are, and the desktop's is almost

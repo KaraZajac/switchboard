@@ -76,6 +76,14 @@ function AppInner() {
       })
       .catch((err) => console.error('Failed to load your profile:', err))
 
+    // Words that ring the same bell your nick does
+    window.switchboard
+      .invoke('settings:get', 'highlights')
+      .then((value) => {
+        if (Array.isArray(value)) useServerStore.getState().setHighlightWords(value as string[])
+      })
+      .catch((err) => console.error('Failed to load your highlight words:', err))
+
     const off = window.switchboard.on('servers:changed', () => {
       loadServers().catch((err) => {
         console.error('Failed to reload servers:', err)

@@ -34,6 +34,8 @@ interface ServerState {
    * network that has not been given something different.
    */
   globalProfile: UserMetadata
+  /** Words that ring the same bell your nick does */
+  highlightWords: string[]
   /** Our current nick per server */
   currentNick: Record<string, string>
   /** User avatars from metadata: `${serverId}:${nick}` -> URL */
@@ -80,6 +82,7 @@ interface ServerState {
   setNetworkIcon: (serverId: string, url: string) => void
   setIsupport: (serverId: string, tokens: Record<string, string>) => void
   setGlobalProfile: (profile: UserMetadata) => void
+  setHighlightWords: (words: string[]) => void
   /** A services bot has spoken on this network, so it has one */
   noteService: (serverId: string, nick: string) => void
   setFilehostUrl: (serverId: string, url: string) => void
@@ -100,6 +103,7 @@ export const useServerStore = create<ServerState>((set, get) => ({
   capabilityValues: {},
   isupport: {},
   globalProfile: {},
+  highlightWords: [],
   currentNick: {},
   userMetadata: {},
   mutedServers: {},
@@ -133,6 +137,7 @@ export const useServerStore = create<ServerState>((set, get) => ({
   setActiveServer: (id) => set({ activeServerId: id }),
 
   setGlobalProfile: (profile) => set({ globalProfile: profile }),
+  setHighlightWords: (words) => set({ highlightWords: words }),
 
   setIsupport: (serverId, tokens) =>
     set((state) => ({

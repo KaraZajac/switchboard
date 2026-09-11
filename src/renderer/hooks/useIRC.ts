@@ -5,7 +5,7 @@ import { useMessageStore } from '../stores/messageStore'
 import { useUserStore } from '../stores/userStore'
 import { useUIStore, syncThemeFromSettings } from '../stores/uiStore'
 import { isChannelName, isServiceNick } from '@shared/constants'
-import { namesYou } from '@shared/mentions'
+import { mentionsYou } from '@shared/mentions'
 import { asksForIdentification, confirmsIdentification } from '@shared/services'
 
 /**
@@ -239,7 +239,11 @@ export function useIRCEvents(): void {
         // One rule, shared with the phone and checked against the same corpus:
         // a mention that rings one device and not the other is two clients.
         const myNick = currentNicks[serverId] || ''
-        const isMention = namesYou(message.content, myNick)
+        const isMention = mentionsYou(
+          message.content,
+          myNick,
+          useServerStore.getState().highlightWords
+        )
         const isPrivate = !isChannelName(channel) && channel !== '*' && !isService
 
         if (!isActiveChannel) {

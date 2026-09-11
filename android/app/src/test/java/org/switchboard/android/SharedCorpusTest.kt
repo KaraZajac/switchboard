@@ -1222,6 +1222,27 @@ class SharedCorpusTest {
         }
     }
 
+    /**
+     * And about words you asked to be told about.
+     *
+     * Same corpus, same reason: a highlight word that rings the phone and does
+     * not colour the desktop is two clients.
+     */
+    @Test
+    fun `agrees with the desktop about words you watch for`() {
+        for (case in load("mentions.json")["words"]!!.jsonArray) {
+            val c = case.jsonObject
+            assertEquals(
+                c["name"]!!.jsonPrimitive.content,
+                c["mentions"]!!.jsonPrimitive.content == "true",
+                saysWatchedWord(
+                    c["text"]!!.jsonPrimitive.content,
+                    c["words"]!!.jsonArray.map { it.jsonPrimitive.content }
+                )
+            )
+        }
+    }
+
     // ── casemapping ──────────────────────────────────────────────────
 
     /**

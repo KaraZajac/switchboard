@@ -58,6 +58,7 @@ import org.switchboard.android.irc.Socks
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.foundation.layout.FlowRow
 
 /**
  * Settings: the shared config, and what this phone is currently doing.
@@ -135,6 +136,7 @@ fun SettingsScreen(
         }
 
         FriendsCard(engine)
+        HighlightsCard(engine)
         ProxyCard(engine)
 
         Spacer(Modifier.height(8.dp))
@@ -728,6 +730,90 @@ private fun FriendsCard(engine: SwitchboardEngine) {
                             .clickable { engine.unwatchNicks(server.id, listOf(nick)) }
                             .padding(horizontal = 10.dp, vertical = 6.dp)
                     )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Words that ring the same bell your nick does.
+ *
+ * Being told only when somebody types your nick means missing the thread about
+ * the thing you are actually in that channel for. Whole words, so `rust` does
+ * not fire on `trusted`, and shared with the desktop — a word that rings here
+ * and not there would be two clients.
+ */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun HighlightsCard(engine: SwitchboardEngine) {
+    val words = engine.store.highlightWords
+    var typed by remember { mutableStateOf("") }
+
+    fun add() {
+        val word = typed.trim()
+        if (word.isEmpty()) return
+        // Case-insensitively, because that is how they are matched — two
+        // entries differing only in case would be one word listed twice.
+        if (words.none { it.equals(word, ignoreCase = true) }) {
+            engine.setHighlightWords(words + word)
+        }
+        typed = ""
+    }
+
+    Spacer(Modifier.height(8.dp))
+    Text(
+        "Words to watch for",
+        color = Overlay,
+        fontSize = 11.sp,
+        fontWeight = FontWeight.Bold,
+        modifier = Modifier.padding(start = 20.dp, bottom = 6.dp)
+    )
+    Card {
+        Text(
+            "These light up a message and notify you the way your nick does. " +
+                "Whole words only, so \"rust\" does not fire on \"trusted\".",
+            color = Subtext,
+            fontSize = 13.sp,
+            lineHeight = 18.sp
+        )
+
+        Spacer(Modifier.height(12.dp))
+        Row(modifier = Modifier.fillMaxWidth()) {
+            SettingField(
+                value = typed,
+                onChange = { typed = it },
+                hint = "A word, or a phrase",
+                modifier = Modifier.weight(1f).padding(end = 8.dp)
+            )
+            Button(
+                onClick = { add() },
+                enabled = typed.isNotBlank(),
+                colors = ButtonDefaults.buttonColors(containerColor = Surface0, contentColor = Blue),
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier.align(Alignment.CenterVertically)
+            ) {
+                Text("Add", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+            }
+        }
+
+        if (words.isNotEmpty()) {
+            Spacer(Modifier.height(12.dp))
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                for (word in words) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .padding(bottom = 6.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Surface0)
+                            .clickable { engine.setHighlightWords(words - word) }
+                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                    ) {
+                        Text(word, color = Text0, fontSize = 13.sp)
+                        Spacer(Modifier.width(6.dp))
+                        Text("×", color = Overlay, fontSize = 13.sp)
+                    }
                 }
             }
         }

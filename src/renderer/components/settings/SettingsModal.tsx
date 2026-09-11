@@ -265,6 +265,30 @@ function NotificationsTab() {
   const notificationSound = useUIStore((s) => s.notificationSound)
   const setNotificationSound = useUIStore((s) => s.setNotificationSound)
 
+  const words = useServerStore((s) => s.highlightWords)
+  const setWords = useServerStore((s) => s.setHighlightWords)
+  const [typed, setTyped] = useState('')
+
+  /** Written through to the shared config, so the phone rings for them too */
+  const save = async (next: string[]) => {
+    setWords(next)
+    await window.switchboard.invoke('settings:set', 'highlights', next)
+  }
+
+  const addWord = async () => {
+    const word = typed.trim()
+    // Case-insensitively, because that is how they are matched — two entries
+    // differing only in case would be one word listed twice.
+    if (words.some((one) => one.toLowerCase() === word.toLowerCase())) {
+      setTyped('')
+      return
+    }
+    await save([...words, word])
+    setTyped('')
+  }
+
+  const removeWord = async (word: string) => save(words.filter((one) => one !== word))
+
   return (
     <div className="space-y-4">
       <h3 className="text-sm font-semibold text-gray-300">Notifications</h3>
@@ -283,6 +307,55 @@ function NotificationsTab() {
           <div className="text-xs text-gray-500">Play a sound for notifications</div>
         </div>
         <ToggleSwitch checked={notificationSound} onChange={setNotificationSound} />
+      </div>
+
+      {/*
+        Being told only when somebody types your nick means missing the thread
+        about the thing you are actually in that channel for.
+      */}
+      <div className="space-y-2 border-t border-gray-800 pt-3">
+        <div className="text-sm text-gray-200">Words to watch for</div>
+        <div className="text-xs leading-relaxed text-gray-500">
+          These light up a message and ring the same bell your nick does. Whole words only, so
+          <span className="font-mono"> rust </span>
+          does not fire on <span className="font-mono">trusted</span>. Shared with your phone.
+        </div>
+
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={typed}
+            onChange={(e) => setTyped(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && typed.trim()) void addWord()
+            }}
+            placeholder="A word, or a phrase"
+            className="flex-1 rounded bg-gray-900 px-3 py-2 text-sm text-gray-100 outline-none ring-1 ring-gray-700 focus:ring-indigo-500"
+          />
+          <button
+            onClick={() => typed.trim() && void addWord()}
+            disabled={!typed.trim()}
+            className="rounded bg-indigo-500 px-3 py-2 text-sm text-white hover:bg-indigo-600 disabled:opacity-50"
+          >
+            Add
+          </button>
+        </div>
+
+        {words.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {words.map((word) => (
+              <button
+                key={word}
+                onClick={() => void removeWord(word)}
+                title="Remove"
+                className="group flex items-center gap-1 rounded bg-gray-800 px-2 py-1 text-xs text-gray-200 hover:bg-gray-700"
+              >
+                {word}
+                <span className="text-gray-500 group-hover:text-red-400">×</span>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="rounded bg-gray-900 p-3">

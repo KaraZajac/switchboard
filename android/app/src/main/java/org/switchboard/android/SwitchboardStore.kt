@@ -761,7 +761,7 @@ class SwitchboardStore {
                     val mentioned = when {
                         isConsole(channel) -> false
                         !isChannel(channel) -> true
-                        else -> namesYou(message.content, myNick)
+                        else -> mentionsYou(message.content, myNick, highlightWords)
                     }
                     channels[serverId] = (channels[serverId] ?: return)
                         .map {
@@ -1036,6 +1036,16 @@ class SwitchboardStore {
     fun watchedFor(serverId: String): List<String> = watched[serverId].orEmpty()
 
     /**
+     * Words that ring the same bell your nick does.
+     *
+     * Held here rather than read where they are needed, because three places
+     * ask — the badge, the notifier and the conversation — and they have to
+     * agree. Shared with the desktop through the vault.
+     */
+    var highlightWords: List<String> by mutableStateOf(emptyList())
+        internal set
+
+    /**
      * Adopt a watched list from the vault.
      *
      * MONITOR is per connection: the server reports who is *online* and never
@@ -1261,6 +1271,47 @@ fun namesYou(text: String, nick: String): Boolean {
         RegexOption.IGNORE_CASE
     ).containsMatchIn(said)
 }
+
+/**
+ * Words that should ring the same bell your nick does.
+ *
+ * Every other client has had these for decades under one name or another —
+ * "highlight words", "keywords", "notify words". Being told only when somebody
+ * types your nick means missing the thread about the thing you are actually in
+ * that channel for.
+ *
+ * Prose boundaries rather than nick boundaries. A nick may contain
+ * `[]{}\`|^-` so those cannot separate words there; a highlight word is
+ * ordinary English and `rust` must not fire on `trusted`.
+ */
+fun saysWatchedWord(text: String, words: List<String>): Boolean {
+    if (words.isEmpty()) return false
+    val said = Formatting.strip(text)
+
+    for (raw in words) {
+        val word = raw.trim()
+        if (word.isEmpty()) continue
+        // `\b` sits between a word character and anything else, which is right
+        // for prose — and wrong for a word that begins or ends with
+        // punctuation, where there is no boundary to find.
+        val head = if (word.first().isLetterOrDigit() || word.first() == '_') "\\b" else ""
+        val tail = if (word.last().isLetterOrDigit() || word.last() == '_') "\\b" else ""
+        if (Regex(head + Regex.escape(word) + tail, RegexOption.IGNORE_CASE).containsMatchIn(said)) {
+            return true
+        }
+    }
+    return false
+}
+
+/**
+ * The one question both clients ask: is this line for me?
+ *
+ * Your nick, or anything you said to watch for. One function so the line that
+ * rings the phone, the line the badge counts and the line the conversation
+ * highlights cannot come apart.
+ */
+fun mentionsYou(text: String, nick: String, words: List<String> = emptyList()): Boolean =
+    namesYou(text, nick) || saysWatchedWord(text, words)
 
 /** How long someone stays "typing" without saying so again */
 const val TYPING_TIMEOUT_MS = 6_000L

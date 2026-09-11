@@ -66,7 +66,7 @@ import org.switchboard.android.UserMetadata
 import org.switchboard.android.isChannel
 import org.switchboard.android.irc.Formatting
 import org.switchboard.android.irc.Links
-import org.switchboard.android.namesYou
+import org.switchboard.android.mentionsYou
 
 /**
  * The conversation.
@@ -407,7 +407,7 @@ private fun MessageRow(
     val mentioned = message.type != "notice" &&
         myNick.isNotEmpty() &&
         !message.nick.equals(myNick, ignoreCase = true) &&
-        namesYou(body, myNick)
+        mentionsYou(body, myNick, store.highlightWords)
     val mentionWash = Yellow.copy(alpha = 0.07f)
 
     Column(modifier = Modifier.fillMaxWidth()) {

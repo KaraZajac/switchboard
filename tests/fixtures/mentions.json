@@ -1,5 +1,5 @@
 {
-  "$comment": "Whether a line says your name, shared by tests/main/mentions.test.ts and the Android SharedCorpusTest. Three parts of each client ask this \u2014 the notifier, the unread badge and the conversation highlight \u2014 and the two clients have to answer identically, or picking up the other device changes what happened while you were away.",
+  "$comment": "Whether a line says your name, shared by tests/main/mentions.test.ts and the Android SharedCorpusTest. Three parts of each client ask this — the notifier, the unread badge and the conversation highlight — and the two clients have to answer identically, or picking up the other device changes what happened while you were away.",
   "$cases": "`text` is what somebody said, `nick` is yours, `mentions` is whether it was about you.",
   "cases": [
     {
@@ -139,6 +139,155 @@
       "name": "digits that are really a colour code do not join onto the nick",
       "text": "\u000313kara",
       "nick": "kara",
+      "mentions": true
+    }
+  ],
+  "$words": "Words that should ring the same bell your nick does. Prose boundaries rather than nick boundaries: a nick may contain []{}`|^- so those cannot separate words there, but a highlight word is ordinary English and 'rust' must not fire on 'trusted'.",
+  "words": [
+    {
+      "name": "a word on its own",
+      "text": "anyone tried rust yet?",
+      "words": [
+        "rust"
+      ],
+      "mentions": true
+    },
+    {
+      "name": "the same word inside another one does not count",
+      "text": "a trusted source",
+      "words": [
+        "rust"
+      ],
+      "mentions": false
+    },
+    {
+      "name": "nor at the end of one",
+      "text": "we discussed thrust",
+      "words": [
+        "rust"
+      ],
+      "mentions": false
+    },
+    {
+      "name": "case does not decide it",
+      "text": "Rust is fine",
+      "words": [
+        "rust"
+      ],
+      "mentions": true
+    },
+    {
+      "name": "and neither does the case you typed",
+      "text": "rust is fine",
+      "words": [
+        "RUST"
+      ],
+      "mentions": true
+    },
+    {
+      "name": "a phrase is matched whole",
+      "text": "is it release day already",
+      "words": [
+        "release day"
+      ],
+      "mentions": true
+    },
+    {
+      "name": "a phrase that is not there",
+      "text": "is it release time",
+      "words": [
+        "release day"
+      ],
+      "mentions": false
+    },
+    {
+      "name": "any of several words",
+      "text": "the build is broken",
+      "words": [
+        "rust",
+        "build",
+        "deploy"
+      ],
+      "mentions": true
+    },
+    {
+      "name": "none of them",
+      "text": "good morning",
+      "words": [
+        "rust",
+        "build",
+        "deploy"
+      ],
+      "mentions": false
+    },
+    {
+      "name": "no words to watch for is no match",
+      "text": "anything at all",
+      "words": [],
+      "mentions": false
+    },
+    {
+      "name": "a blank entry is not a word",
+      "text": "anything at all",
+      "words": [
+        "  "
+      ],
+      "mentions": false
+    },
+    {
+      "name": "punctuation at the edges matches plainly",
+      "text": "see issue #42 please",
+      "words": [
+        "#42"
+      ],
+      "mentions": true
+    },
+    {
+      "name": "a word ending in punctuation",
+      "text": "ship it!! now",
+      "words": [
+        "it!!"
+      ],
+      "mentions": true
+    },
+    {
+      "name": "regex characters are literal, not a pattern",
+      "text": "the cost is 5.00",
+      "words": [
+        "5.00"
+      ],
+      "mentions": true
+    },
+    {
+      "name": "and do not match what the pattern would have",
+      "text": "the cost is 5x00",
+      "words": [
+        "5.00"
+      ],
+      "mentions": false
+    },
+    {
+      "name": "a word written in colour still counts",
+      "text": "\u000304rust\u0003 is fine",
+      "words": [
+        "rust"
+      ],
+      "mentions": true
+    },
+    {
+      "name": "a hyphenated word",
+      "text": "the well-known problem",
+      "words": [
+        "well-known"
+      ],
+      "mentions": true
+    },
+    {
+      "name": "underscores are word characters",
+      "text": "call get_user please",
+      "words": [
+        "get_user"
+      ],
       "mentions": true
     }
   ]

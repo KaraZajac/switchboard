@@ -34,3 +34,48 @@ export function namesYou(text: string, nick: string): boolean {
   const said = stripFormatting(text)
   return new RegExp(`(?<![${NICK_CHAR}])${literal(nick)}(?![${NICK_CHAR}])`, 'i').test(said)
 }
+
+/**
+ * Words that should ring the same bell your nick does.
+ *
+ * Every other client has had these for decades, under one name or another —
+ * "highlight words", "keywords", "notify words". Being told only when somebody
+ * types your nick means missing the thread about the thing you actually care
+ * about, in a channel you are only in for that.
+ *
+ * Prose boundaries rather than nick boundaries. A nick may contain `[]{}\`|^-`
+ * so those cannot separate words there; a highlight word is ordinary English
+ * and `rust` should not fire on `trusted`. A phrase with spaces in it is
+ * matched whole.
+ */
+export function saysWatchedWord(text: string, words: readonly string[]): boolean {
+  if (words.length === 0) return false
+  const said = stripFormatting(text)
+
+  for (const raw of words) {
+    const word = raw.trim()
+    if (word.length === 0) continue
+    // `\b` sits between a word character and anything else, which is exactly
+    // right for prose — and wrong for a word that begins or ends with
+    // punctuation, where there is no boundary to find. Those match plainly.
+    const edged = /^\w/.test(word) ? '\\b' : ''
+    const tail = /\w$/.test(word) ? '\\b' : ''
+    if (new RegExp(`${edged}${literal(word)}${tail}`, 'i').test(said)) return true
+  }
+  return false
+}
+
+/**
+ * The one question both clients ask: is this line for me?
+ *
+ * Your nick, or anything you said to watch for. Kept as one function so the
+ * line that rings the phone, the line the badge counts and the line the
+ * conversation highlights cannot come apart.
+ */
+export function mentionsYou(
+  text: string,
+  nick: string,
+  words: readonly string[] = []
+): boolean {
+  return namesYou(text, nick) || saysWatchedWord(text, words)
+}

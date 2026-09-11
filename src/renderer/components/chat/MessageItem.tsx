@@ -8,7 +8,7 @@ import { useChannelStore } from '../../stores/channelStore'
 import { useUserStore, type MonitoredNick } from '../../stores/userStore'
 import { nickColor } from '../../utils/nickColor'
 import { displayNameFor, metadataColor } from '@shared/types/metadata'
-import { namesYou } from '@shared/mentions'
+import { mentionsYou } from '@shared/mentions'
 import { speak } from '../../utils/speak'
 
 interface MessageItemProps {
@@ -36,8 +36,9 @@ export function MessageItem({ message, prevMessage, onReply }: MessageItemProps)
 
   // The same rule the notifier and the badge use, and the same rule the phone
   // uses — a line that lights up one of them has to light up all three.
+  const highlightWords = useServerStore((s) => s.highlightWords)
   const isMention =
-    !isOwn && message.type === 'privmsg' && namesYou(message.content, currentNick)
+    !isOwn && message.type === 'privmsg' && mentionsYou(message.content, currentNick, highlightWords)
   const mentionBg = isMention ? 'bg-amber-500/8 border-l-2 border-amber-500/50' : ''
 
   const handleEditStart = () => {
