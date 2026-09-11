@@ -704,6 +704,49 @@ class StoreTest {
         assertNull(store.channelToOpen(server))
     }
 
+
+    // ── the bots that speak for the network ──────────────────────────
+
+    /**
+     * Detected rather than assumed. The desktop lists NickServ and ChanServ
+     * whenever it is connected, which invents them on a network that has no
+     * services and misses the ones whose bots are called something else.
+     */
+    @Test
+    fun `lists the services this network actually has`() {
+        store.handleEvent("irc:message", incoming("NickServ", "m1", "NickServ", "please identify"))
+        store.handleEvent("irc:message", incoming("ChanServ", "m2", "ChanServ", "hello"))
+
+        assertEquals(listOf("NickServ", "ChanServ"), store.servicesOn(server))
+    }
+
+    /** A network with none has none, rather than two that do not exist */
+    @Test
+    fun `a network without services lists none`() {
+        store.handleEvent("irc:message", incoming("#lounge", "m1", "robin", "hello"))
+        store.handleEvent("irc:message", incoming("robin", "m2", "robin", "privately"))
+
+        assertEquals(emptyList<String>(), store.servicesOn(server))
+    }
+
+    /** And a person is not a service, however administrative they sound */
+    @Test
+    fun `a person is not listed among the services`() {
+        store.handleEvent("irc:message", incoming("operator", "m1", "operator", "hello"))
+
+        assertEquals(emptyList<String>(), store.servicesOn(server))
+    }
+
+    /** A service is not a direct message; it has its own place */
+    @Test
+    fun `services stay out of the direct message list`() {
+        store.handleEvent("irc:message", incoming("NickServ", "m1", "NickServ", "identify"))
+        store.handleEvent("irc:message", incoming("robin", "m2", "robin", "hello"))
+
+        assertEquals(listOf("robin"), store.allDirectMessages().map { it.nick })
+        assertEquals(listOf("NickServ"), store.servicesOn(server))
+    }
+
 }
 
 private fun kotlinx.serialization.json.JsonArrayBuilder.add(element: JsonElement) {

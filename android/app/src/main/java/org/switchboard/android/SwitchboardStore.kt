@@ -349,6 +349,23 @@ class SwitchboardStore {
             .filterNot { isChannel(it.name) || isConsole(it.name) }
             .map { it.name }
 
+    /**
+     * The services bots this network actually has, in the order they turned up.
+     *
+     * Detected rather than assumed. The desktop lists NickServ and ChanServ
+     * whenever it is connected, which invents them on EFnet — which has no
+     * services at all — and misses Undernet's `X` and QuakeNet's `Q`, which is
+     * exactly where somebody would need the help.
+     *
+     * A bot is here because it has spoken to us or we have spoken to it, which
+     * is the only honest signal IRC offers: there is no ISUPPORT token for
+     * "this network has a NickServ".
+     */
+    fun servicesOn(serverId: String): List<String> =
+        channels[serverId].orEmpty()
+            .map { it.name }
+            .filter { Services.isServices(it) }
+
     /** Whether this server has anything in its console worth showing */
     fun hasConsole(serverId: String): Boolean =
         messages[key(serverId, SERVER_CONSOLE)]?.isNotEmpty() == true

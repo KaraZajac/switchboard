@@ -65,6 +65,7 @@ import coil.compose.AsyncImage
 import androidx.compose.ui.layout.ContentScale
 import org.switchboard.android.SwitchboardStore
 import org.switchboard.android.SERVER_CONSOLE
+import org.switchboard.android.irc.Services
 import org.switchboard.android.irc.Unread
 import org.switchboard.android.isChannel
 
@@ -675,6 +676,53 @@ private fun ChannelList(
         // Where the server itself talks. Listed once it has said something,
         // under its own heading rather than among the people — its connection
         // banner is not a conversation, but it is worth being able to read.
+        val services = serverId?.let { store.servicesOn(it) }.orEmpty()
+        if (services.isNotEmpty()) {
+            SectionHeader("Network services")
+
+            for (who in services) {
+                val selected = store.activeChannel.equals(who, true)
+                val entry = store.channelsFor(serverId!!).first { it.name.equals(who, true) }
+                val muted = isChannelMuted(serverId, who)
+                val look = Unread.rowLook(entry.unread, muted, selected)
+                val badge = Unread.rowBadge(entry.mentions, muted)
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 1.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(if (selected) Surface0 else Color.Transparent)
+                        .clickable { onSelect(serverId, who) }
+                        .padding(horizontal = 8.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "\u2699",
+                        color = if (look != Unread.RowLook.QUIET) Subtext else Overlay,
+                        fontSize = 15.sp,
+                        modifier = Modifier.width(22.dp)
+                    )
+                    Text(
+                        who,
+                        color = if (look != Unread.RowLook.QUIET) Text0 else Subtext,
+                        fontWeight = if (look == Unread.RowLook.UNREAD) {
+                            FontWeight.SemiBold
+                        } else {
+                            FontWeight.Normal
+                        },
+                        fontSize = 15.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                    badge?.let { CountBadge(it.count, if (it.muted) Overlay else Red) }
+                }
+            }
+
+            Spacer(Modifier.height(8.dp))
+        }
+
         if (serverId != null && store.hasConsole(serverId)) {
             val selected = store.activeChannel == SERVER_CONSOLE
             Spacer(Modifier.height(12.dp))
@@ -729,6 +777,8 @@ private fun DirectMessageList(
     modifier: Modifier = Modifier
 ) {
     val conversations = store.allDirectMessages()
+    var starting by remember { mutableStateOf(false) }
+    var who by remember { mutableStateOf("") }
     // Only where it tells you something. With one network on the phone every
     // row would carry the same word, which is noise on all of them; with two
     // it is the difference between two people. The desktop draws the line in
@@ -746,8 +796,64 @@ private fun DirectMessageList(
                 fontSize = 17.sp,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
             )
+            // The desktop has always been able to start one. Without this the
+            // phone could only ever answer, which also meant it could not talk
+            // to a network's services until they spoke first — and being told
+            // to identify is precisely the moment you need to reply.
+            Text(
+                "+",
+                color = Green,
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .clickable { starting = !starting }
+                    .padding(horizontal = 10.dp, vertical = 2.dp)
+            )
+        }
+
+        if (starting) {
+            val serverId = store.activeServerId
+            OutlinedTextField(
+                value = who,
+                onValueChange = { who = it },
+                singleLine = true,
+                placeholder = { Text("Who? — a nickname, or NickServ", color = Overlay) },
+                colors = TextFieldDefaults.colors(
+                    focusedTextColor = Text0,
+                    unfocusedTextColor = Text0,
+                    focusedContainerColor = Surface0,
+                    unfocusedContainerColor = Surface0
+                ),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
+                keyboardActions = KeyboardActions(onGo = {
+                    val name = who.trim()
+                    if (name.isNotEmpty() && serverId != null) {
+                        store.openConversation(serverId, name)
+                        // A service is listed under its network rather than
+                        // here, so staying in Messages would show an empty
+                        // list straight after opening something.
+                        if (Services.isServices(name)) store.dmMode = false
+                        onSelect(serverId, name)
+                        who = ""
+                        starting = false
+                    }
+                }),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp)
+            )
+
+            if (serverId == null) {
+                Text(
+                    "Pick a network first — a name on IRC belongs to one.",
+                    color = Overlay,
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+                )
+            }
+            Spacer(Modifier.height(8.dp))
         }
 
         if (conversations.isEmpty()) {

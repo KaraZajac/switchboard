@@ -4,6 +4,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import org.switchboard.android.SERVER_CONSOLE
 import java.util.Base64
 
 /**
@@ -360,6 +361,12 @@ internal fun registerRegistrationHandlers() {
     }
 
     // MOTD
+    //
+    // Collected, and then put in the console where somebody can read it. It
+    // used to be collected and nothing more: on a network whose only greeting
+    // is its MOTD the console stayed empty, so the phone showed no "Server
+    // messages" entry at all and the text went nowhere. The desktop has always
+    // filed it there.
     Handlers.on("375") { session, _ ->
         session.state.motd.clear()
         session.state.motdInProgress = true
@@ -367,8 +374,17 @@ internal fun registerRegistrationHandlers() {
     Handlers.on("372") { session, message ->
         session.state.motd.add(message.params.lastOrNull().orEmpty())
     }
-    Handlers.on("376") { session, _ -> session.state.motdInProgress = false }
-    Handlers.on("422") { session, _ -> session.state.motdInProgress = false }
+    Handlers.on("376") { session, _ ->
+        session.state.motdInProgress = false
+        publishMotd(session)
+    }
+    Handlers.on("422") { session, message ->
+        // No MOTD at all, which is itself worth saying rather than leaving a
+        // console that looks like nothing happened.
+        session.state.motdInProgress = false
+        session.state.motd.clear()
+        consoleLine(session, message.params.lastOrNull() ?: "This server has no message of the day.")
+    }
 
     // ERR_NICKNAMEINUSE
     Handlers.on("433") { session, message ->
@@ -549,4 +565,33 @@ internal object Sasl {
         }
         if (encoded.length % 400 == 0) session.send("AUTHENTICATE", "+")
     }
+}
+
+/** The MOTD as one console entry, kept together the way the server sent it */
+private fun publishMotd(session: IrcSession) {
+    val lines = session.state.motd
+    if (lines.isEmpty()) return
+    consoleLine(session, lines.joinToString("\n"), type = "motd")
+}
+
+/**
+ * Something the server said, in the place a server speaks.
+ *
+ * The console is what a network says to you — the greeting, the MOTD, the
+ * notices that arrive before you have joined anything. A client that collects
+ * those and shows them nowhere has quietly thrown away the only introduction
+ * most networks give.
+ */
+private fun consoleLine(session: IrcSession, text: String, type: String = "notice") {
+    session.emit("irc:message", buildJsonObject {
+        put("serverId", session.state.serverId)
+        put("channel", SERVER_CONSOLE)
+        put("message", buildJsonObject {
+            put("id", "server-${'$'}{System.currentTimeMillis()}-${'$'}{text.hashCode()}")
+            put("nick", session.state.serverName.ifBlank { "server" })
+            put("content", text)
+            put("timestamp", java.time.Instant.now().toString())
+            put("type", type)
+        })
+    })
 }
