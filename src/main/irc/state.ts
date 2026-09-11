@@ -2,6 +2,7 @@ import type { RegistrationState, IRCBatch } from '@shared/types/irc'
 import { foldCase, casemappingOf } from '@shared/casemap'
 import type { ChannelUser } from '@shared/types/channel'
 import type { UserMetadata } from '@shared/types/metadata'
+import type { MaskEntry } from '@shared/masklists'
 
 /**
  * Per-connection state tracking.
@@ -198,6 +199,19 @@ export class ChannelStateData {
 
   /** Whether we've received the initial NAMES list */
   namesReceived = false
+
+  /**
+   * The mask lists this channel keeps, by mode letter.
+   *
+   * Kept per connection rather than fetched on demand every time a panel
+   * opens: a ban list on a busy channel is hundreds of lines, and asking for
+   * it again on every glance is rude to the server and slow for the person.
+   * Refreshed when something changes it, or when asked.
+   */
+  maskLists = new Map<string, MaskEntry[]>()
+
+  /** Lists we have asked for and not yet seen the end of */
+  loadingLists = new Set<string>()
 
   /**
    * How this server folds a nick.

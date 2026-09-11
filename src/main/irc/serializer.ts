@@ -32,7 +32,7 @@ export function serializeMessage(msg: Partial<IRCMessage> & { command: string })
   if (msg.params && msg.params.length > 0) {
     for (let i = 0; i < msg.params.length; i++) {
       const param = msg.params[i]
-      if (i === msg.params.length - 1 && trailing(msg.command, param)) {
+      if (i === msg.params.length - 1 && trailing(msg.command, param, i)) {
         parts.push(`:${param}`)
       } else {
         parts.push(param)
@@ -44,23 +44,31 @@ export function serializeMessage(msg: Partial<IRCMessage> & { command: string })
 }
 
 /**
- * Commands whose last parameter is a piece of human text.
+ * Where the piece of human text is, in the commands that carry one.
  *
- * These always take the trailing form, single word or not — it is what every
- * other client sends, and a bare last word invites a sloppy relay to split it.
+ * That parameter always takes the trailing form, single word or not — it is
+ * what every other client sends, and a bare last word invites a sloppy relay
+ * to split it.
+ *
+ * By position rather than by command, which is the fix for a real bug: the
+ * rule used to be "this command's *last* parameter is text", and `PART #chan`
+ * with no reason has the channel in that position. Every part without a reason
+ * went out as `PART :#chan` — legal, but it puts a channel name in the field
+ * meant for a sentence, and it is not what anything else sends.
  */
-const TEXT_TRAILING = new Set([
-  'PRIVMSG',
-  'NOTICE',
-  'TOPIC',
-  'PART',
-  'QUIT',
-  'KICK',
-  'AWAY',
-  'SETNAME',
-  'WALLOPS',
-  'USER'
-])
+const TEXT_PARAM: Record<string, number> = {
+  PRIVMSG: 1,
+  NOTICE: 1,
+  TOPIC: 1,
+  PART: 1,
+  KICK: 2,
+  KNOCK: 1,
+  QUIT: 0,
+  AWAY: 0,
+  SETNAME: 0,
+  WALLOPS: 0,
+  USER: 3
+}
 
 /**
  * Whether the last parameter goes in the trailing form.
@@ -71,8 +79,8 @@ const TEXT_TRAILING = new Set([
  * sends (`CAP LS :302`, `METADATA * SUB a b :c`), and a server that matches a
  * subcommand as a literal token then quietly does nothing.
  */
-function trailing(command: string, param: string): boolean {
-  if (TEXT_TRAILING.has(command.toUpperCase())) return true
+function trailing(command: string, param: string, at: number): boolean {
+  if (TEXT_PARAM[command.toUpperCase()] === at) return true
   return param === '' || param.includes(' ') || param.startsWith(':')
 }
 

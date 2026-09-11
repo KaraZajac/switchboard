@@ -10,6 +10,10 @@ import org.switchboard.android.irc.Commands
 import org.switchboard.android.irc.ConnectionState
 import org.switchboard.android.irc.Irc
 import org.switchboard.android.irc.IrcCommandTarget
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 
 /**
  * Slash commands on the phone.
@@ -288,5 +292,87 @@ class CommandsTest {
             Irc.oneLine(Irc.serialise("TOPIC", listOf("#chan", "hello\nJOIN #elsewhere")))
         )
         assertEquals("nothing to strip", Irc.oneLine("nothing to strip"))
+    }
+
+    // ── the same lines the desktop sends ─────────────────────────────
+
+    /**
+     * A connection that records the *lines*, not the calls.
+     *
+     * The desktop reaches the socket through a differently shaped object, so
+     * the only thing the two genuinely share is what comes out of it. Anything
+     * compared above the wire is comparing two APIs, not two clients.
+     */
+    private class Wire(override val state: ConnectionState) : IrcCommandTarget {
+        val lines = mutableListOf<String>()
+
+        private fun line(command: String, vararg params: String) {
+            lines.add(Irc.serialise(command, params.toList()))
+        }
+
+        override fun send(command: String, vararg params: String) = line(command, *params)
+        override fun sendRaw(line: String) { lines.add(line) }
+        override fun say(target: String, text: String) = line("PRIVMSG", target, text)
+        override fun action(target: String, text: String) =
+            line("PRIVMSG", target, "\u0001ACTION $text\u0001")
+        override fun notice(target: String, text: String) = line("NOTICE", target, text)
+        override fun join(channel: String, key: String?) =
+            if (key == null) line("JOIN", channel) else line("JOIN", channel, key)
+        override fun part(channel: String, reason: String?) =
+            if (reason == null) line("PART", channel) else line("PART", channel, reason)
+        override fun setTopic(channel: String, topic: String) = line("TOPIC", channel, topic)
+        override fun setNick(nick: String) = line("NICK", nick)
+        override fun whois(nick: String) = line("WHOIS", nick)
+        override fun setAway(message: String?) =
+            if (message == null) line("AWAY") else line("AWAY", message)
+        override fun setMode(target: String, mode: String, vararg args: String) =
+            line("MODE", target, mode, *args)
+        override fun kick(channel: String, nick: String, reason: String?) =
+            line("KICK", channel, nick, reason ?: nick)
+        override fun invite(nick: String, channel: String) = line("INVITE", nick, channel)
+        override fun stop(quitMessage: String) = line("QUIT", quitMessage)
+    }
+
+    /**
+     * Every case in `tests/fixtures/commands.json`, which the desktop's
+     * `commands.test.ts` reads too. `/op` on the phone and `/op` on the desktop
+     * produce the same bytes, or one of the two goes red.
+     */
+    @Test
+    fun `sends the same lines the desktop sends`() {
+        val corpus = Json.parseToJsonElement(
+            java.io.File(
+                System.getProperty("switchboard.fixtures")!!,
+                "commands.json"
+            ).readText()
+        ).jsonObject
+
+        for (case in corpus["cases"]!!.jsonArray) {
+            val c = case.jsonObject
+            val name = c["name"]!!.jsonPrimitive.content
+
+            val state = ConnectionState("srv")
+            state.reset(c["nick"]!!.jsonPrimitive.content)
+            for ((key, value) in c["isupport"]!!.jsonObject) {
+                state.isupport[key] = value.jsonPrimitive.content
+            }
+
+            val wire = Wire(state)
+            val result = Commands.run(wire, c["target"]!!.jsonPrimitive.content, c["input"]!!.jsonPrimitive.content)
+
+            assertTrue(name, result.handled)
+            val error = c["error"]?.jsonPrimitive?.content
+            if (error != null) {
+                assertEquals(name, error, result.error)
+                assertEquals(name, emptyList<String>(), wire.lines)
+            } else {
+                assertNull(name, result.error)
+                assertEquals(
+                    name,
+                    c["lines"]!!.jsonArray.map { it.jsonPrimitive.content },
+                    wire.lines
+                )
+            }
+        }
     }
 }

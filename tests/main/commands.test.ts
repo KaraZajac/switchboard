@@ -1,5 +1,8 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { runCommand } from '../../src/main/irc/commands'
+import { serializeMessage } from '../../src/main/irc/serializer'
+import { readFileSync } from 'fs'
+import { join } from 'path'
 
 interface Call {
   method: string
@@ -216,3 +219,90 @@ describe('text the server would silently cut', () => {
     expect(calls.find((c) => c.method === 'setTopic')).toBeDefined()
   })
 })
+
+/**
+ * The new commands, as lines on the wire.
+ *
+ * Compared against `tests/fixtures/commands.json`, which the Android
+ * `CommandsTest` reads too — so `/op` on the phone and `/op` on the desktop
+ * produce the same bytes, or one of the two tests goes red.
+ *
+ * Lines rather than method calls, because the two clients reach the socket
+ * through differently-shaped objects and the only thing they genuinely share
+ * is what comes out of it.
+ */
+describe('the commands every client has', () => {
+  const corpus = JSON.parse(
+    readFileSync(join(__dirname, '../fixtures/commands.json'), 'utf8')
+  ) as {
+    cases: {
+      name: string
+      input: string
+      target: string
+      nick: string
+      isupport: Record<string, string>
+      lines?: string[]
+      error?: string
+    }[]
+  }
+
+  for (const c of corpus.cases) {
+    it(c.name, () => {
+      const lines: string[] = []
+      const wire = {
+        connection: {
+          send: (...params: string[]) => lines.push(serialise(params)),
+          sendRaw: (line: string) => lines.push(line)
+        },
+        state: {
+          isupport: c.isupport as Record<string, string | true>,
+          nick: c.nick,
+          casemap: (value: string) => value.toLowerCase(),
+          channels: new Map()
+        },
+        // The convenience methods IRCClient offers, as the lines they send
+        mode: (target: string, mode: string, ...params: string[]) =>
+          lines.push(serialise(['MODE', target, mode, ...params])),
+        kick: (channel: string, nick: string, reason?: string) =>
+          lines.push(serialise(['KICK', channel, nick, reason ?? nick])),
+        join: (channel: string) => lines.push(serialise(['JOIN', channel])),
+        part: (channel: string) => lines.push(serialise(['PART', channel]))
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any
+
+      const result = runCommand(wire, c.target, c.input)
+      expect(result.handled).toBe(true)
+
+      if (c.error) {
+        expect(result.error).toBe(c.error)
+        expect(lines).toEqual([])
+      } else {
+        expect(result.error).toBeUndefined()
+        expect(lines).toEqual(c.lines)
+      }
+    })
+  }
+
+  /**
+   * The one that would be a memorable bug. Kicking before banning leaves a
+   * window in which they can rejoin, which is the single thing kickban exists
+   * to prevent.
+   */
+  it('bans before it kicks, never after', () => {
+    const order = corpus.cases.find((c) => c.name === '/kickban bans before it kicks')!
+    expect(order.lines![0].startsWith('MODE')).toBe(true)
+    expect(order.lines![1].startsWith('KICK')).toBe(true)
+  })
+})
+
+/**
+ * The real serializer, not a second copy of its rules.
+ *
+ * Which parameters go in the trailing form is exactly the sort of thing the
+ * two clients could disagree about, so the comparison has to run through the
+ * code that actually decides it.
+ */
+function serialise(params: string[]): string {
+  const [command, ...rest] = params
+  return serializeMessage({ command, params: rest })
+}

@@ -36,6 +36,18 @@ class ChannelState(
     var topicSetAt: Long? = null
     var namesReceived = false
     val modes = mutableMapOf<String, String?>()
+
+    /**
+     * The mask lists this channel keeps, by mode letter.
+     *
+     * Held per connection rather than fetched every time a panel opens: a ban
+     * list on a busy channel is hundreds of lines, and asking again on every
+     * glance is rude to the server and slow for the person.
+     */
+    val maskLists = mutableMapOf<String, MutableList<MaskLists.Entry>>()
+
+    /** Lists we have asked for and not yet seen the end of */
+    val loadingLists = mutableSetOf<String>()
     val users = LinkedHashMap<String, ChannelUser>()
 
     private fun key(nick: String) = fold(nick)

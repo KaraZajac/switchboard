@@ -192,7 +192,9 @@ class IrcHandlersTest {
 
         feed(":asker!u@h PRIVMSG kara :\u0001VERSION\u0001")
         assertEquals(
-            listOf("NOTICE asker :\u0001VERSION Switchboard for Android\u0001"),
+            // Unset in a plain JVM test, so it is the bare name — the version
+            // and platform are stamped on at startup by the application.
+            listOf("NOTICE asker :\u0001VERSION Switchboard\u0001"),
             session.sent
         )
 

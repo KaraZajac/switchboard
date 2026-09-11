@@ -277,6 +277,200 @@ object Commands {
                 }
             }
 
+            // ── Ranks ──────────────────────────────────────────────
+            //
+            // The everyday ones. Every client has had these for thirty years
+            // and this one made you type `/mode #channel +o nick`, which is
+            // the same thing with more to get wrong.
+            "op", "deop", "voice", "devoice", "halfop", "dehalfop",
+            "owner", "deowner", "admin", "deadmin" -> {
+                val letters = mapOf("op" to "o", "voice" to "v", "halfop" to "h",
+                    "owner" to "q", "admin" to "a")
+                val adding = !name.startsWith("de")
+                val letter = letters[if (adding) name else name.drop(2)]!!
+                val words = args.toMutableList()
+                val channel = if (isChannel(words.firstOrNull().orEmpty())) words.removeAt(0) else target
+
+                if (!isChannel(channel)) Result(true, error = "/$name only works in a channel")
+                else {
+                    val nicks = words.ifEmpty { listOf(connection.state.nick) }
+                    // One MODE per MODES-worth: a server that takes four at a
+                    // time silently drops the fifth.
+                    val perLine = Isupport.number(connection.state.isupport, "MODES") ?: 4
+                    nicks.chunked(perLine).forEach { batch ->
+                        connection.setMode(
+                            channel,
+                            (if (adding) "+" else "-") + letter.repeat(batch.size),
+                            *batch.toTypedArray()
+                        )
+                    }
+                    Result(true)
+                }
+            }
+
+            // ── Lists ──────────────────────────────────────────────
+            "ban", "unban", "quiet", "unquiet" -> {
+                val scheme = Powers.parsePrefix(connection.state.isupport["PREFIX"])
+                val quieting = name.endsWith("quiet")
+                val letter: String? = if (quieting)
+                    Powers.quietMode(connection.state.isupport["CHANMODES"], scheme)?.toString()
+                else "b"
+
+                val words = args.toMutableList()
+                val channel = if (isChannel(words.firstOrNull().orEmpty())) words.removeAt(0) else target
+
+                when {
+                    letter == null -> Result(true, error = "This network does not have a quiet mode")
+                    !isChannel(channel) -> Result(true, error = "/$name only works in a channel")
+                    words.isEmpty() -> Result(true, error = "Usage: /$name <nick or mask>")
+                    else -> {
+                        val adding = !name.startsWith("un")
+                        // A bare nick becomes `nick!*@*`, which is what almost
+                        // every server would have done anyway.
+                        words.forEach { who ->
+                            connection.setMode(
+                                channel,
+                                (if (adding) "+" else "-") + letter,
+                                MaskLists.maskToSet(who)
+                            )
+                        }
+                        Result(true)
+                    }
+                }
+            }
+
+            "kickban" -> {
+                val words = args.toMutableList()
+                val channel = if (isChannel(words.firstOrNull().orEmpty())) words.removeAt(0) else target
+                val who = if (words.isEmpty()) null else words.removeAt(0)
+
+                when {
+                    !isChannel(channel) -> Result(true, error = "/kickban only works in a channel")
+                    who == null -> Result(true, error = "Usage: /kickban <nick> [reason]")
+                    else -> {
+                        // Ban first. Kicking first leaves a window — short but
+                        // real — in which they can rejoin before the ban lands,
+                        // which is the one thing kickban exists to prevent.
+                        val host = connection.state.findChannel(channel)
+                            ?.users?.get(connection.state.casemap(who))?.host
+                        connection.setMode(channel, "+b", Powers.banMask(who, host))
+                        connection.kick(channel, who, words.joinToString(" ").ifEmpty { who })
+                        Result(true)
+                    }
+                }
+            }
+
+            "banlist", "bans" -> {
+                val channel = if (isChannel(args.firstOrNull().orEmpty())) args[0] else target
+                if (!isChannel(channel)) Result(true, error = "/banlist only works in a channel")
+                else {
+                    connection.setMode(channel, "+b")
+                    Result(true)
+                }
+            }
+
+            // ── Channels ───────────────────────────────────────────
+            "cycle", "hop" -> {
+                val channel = if (isChannel(args.firstOrNull().orEmpty())) args[0] else target
+                if (!isChannel(channel)) Result(true, error = "/$name only works in a channel")
+                else {
+                    connection.part(channel)
+                    connection.join(channel)
+                    Result(true)
+                }
+            }
+
+            "knock" -> {
+                val channel = args.firstOrNull().orEmpty()
+                if (!isChannel(channel)) Result(true, error = "Usage: /knock <#channel> [reason]")
+                else {
+                    val why = args.drop(1).joinToString(" ").ifEmpty { "Please let me in" }
+                    connection.send("KNOCK", channel, why)
+                    Result(true)
+                }
+            }
+
+            "names" -> {
+                val channel = if (isChannel(args.firstOrNull().orEmpty())) args[0] else target
+                if (!isChannel(channel)) Result(true, error = "/names only works in a channel")
+                else {
+                    connection.send("NAMES", channel)
+                    Result(true)
+                }
+            }
+
+            "list" -> {
+                // With no arguments this is every channel on the network,
+                // which on a large one is tens of thousands of lines.
+                connection.send("LIST", *args.toTypedArray())
+                Result(true)
+            }
+
+            // ── People ─────────────────────────────────────────────
+            "whowas" -> {
+                if (rest.isEmpty()) Result(true, error = "Usage: /whowas <nick> [count]")
+                else {
+                    connection.send("WHOWAS", *args.toTypedArray())
+                    Result(true)
+                }
+            }
+
+            "who" -> {
+                if (rest.isEmpty()) Result(true, error = "Usage: /who <nick, #channel or mask>")
+                else {
+                    connection.send("WHO", *args.toTypedArray())
+                    Result(true)
+                }
+            }
+
+            "ctcp" -> {
+                val who = args.getOrNull(0)
+                val verb = args.getOrNull(1)
+                if (who == null || verb == null)
+                    Result(true, error = "Usage: /ctcp <nick> <VERSION|PING|TIME|…>")
+                else {
+                    val body = args.drop(2).joinToString(" ")
+                    val payload = verb.uppercase() + if (body.isEmpty()) "" else " $body"
+                    connection.sendRaw("PRIVMSG $who :\u0001$payload\u0001")
+                    Result(true)
+                }
+            }
+
+            "setname" -> {
+                if (rest.isEmpty()) Result(true, error = "Usage: /setname <real name>")
+                else {
+                    connection.send("SETNAME", rest)
+                    Result(true)
+                }
+            }
+
+            // ── The server ─────────────────────────────────────────
+            "motd", "lusers", "time", "version", "links", "stats", "info", "admininfo" -> {
+                val verb = if (name == "admininfo") "ADMIN" else name.uppercase()
+                connection.send(verb, *args.toTypedArray())
+                Result(true)
+            }
+
+            "wallops" -> {
+                if (rest.isEmpty()) Result(true, error = "Usage: /wallops <message>")
+                else {
+                    connection.send("WALLOPS", rest)
+                    Result(true)
+                }
+            }
+
+            "ping" -> {
+                val who = args.firstOrNull()
+                if (who != null) {
+                    // A CTCP PING to a person, which is what /ping means
+                    // everywhere — stamped so the reply is a round trip.
+                    connection.sendRaw("PRIVMSG $who :\u0001PING ${System.currentTimeMillis()}\u0001")
+                } else {
+                    connection.send("PING", System.currentTimeMillis().toString())
+                }
+                Result(true)
+            }
+
             else -> Result(true, error = "Unknown command: /$name")
         }
     }

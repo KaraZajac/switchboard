@@ -15,6 +15,7 @@ import { WhoisModal } from '../user/WhoisModal'
 import { SearchModal } from '../chat/SearchModal'
 import { QuickSwitcher } from '../common/QuickSwitcher'
 import { WelcomeScreen } from '../onboarding/WelcomeScreen'
+import { ChannelLists } from '../channel/ChannelLists'
 
 export function AppLayout() {
   const showUserList = useUIStore((s) => s.showUserList)
@@ -68,6 +69,7 @@ export function AppLayout() {
       {activeModal === 'account' && <AccountModal />}
       {activeModal === 'search' && <SearchModal />}
       {activeModal === 'quick-switcher' && <QuickSwitcher />}
+      {activeModal === 'channel-lists' && <ChannelLists />}
     </div>
   )
 }

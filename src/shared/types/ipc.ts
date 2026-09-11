@@ -7,6 +7,7 @@ import type { ServerConfig } from './server'
 import type { ChatMessage } from './message'
 import type { ChannelUser } from './channel'
 import type { UserMetadata } from './metadata'
+import type { MaskEntry } from '../masklists'
 
 /**
  * Live state of one connected server, handed to the renderer when it attaches.
@@ -123,6 +124,14 @@ export interface MainToRendererEvents {
   'irc:nick': { serverId: string; oldNick: string; newNick: string }
   'irc:topic': { serverId: string; channel: string; topic: string; setBy: string | null }
   'irc:mode': { serverId: string; channel: string; mode: string; params: string[] }
+  /** One of a channel's mask lists, whole — bans, quiets, exceptions, invites */
+  'irc:masklist': {
+    serverId: string
+    channel: string
+    mode: string
+    entries: MaskEntry[]
+    done: boolean
+  }
   'irc:kick': { serverId: string; channel: string; nick: string; by: string; reason: string | null; isMe: boolean }
   'irc:names': { serverId: string; channel: string; users: ChannelUser[] }
   'irc:away': { serverId: string; nick: string; message: string | null }
@@ -262,6 +271,16 @@ export interface RendererToMainInvocations {
   ) => Promise<{ saved: boolean; published: boolean; reason?: string } | void>
   /** Drop this network's own profile, so it follows the one you carry again */
   'metadata:reset': (serverId: string) => Promise<void>
+  /** Ask the server for one of a channel's mask lists — bans and the rest */
+  'masklist:fetch': (serverId: string, channel: string, mode: string) => Promise<MaskEntry[]>
+  /** Add or lift one entry on one of those lists */
+  'masklist:set': (
+    serverId: string,
+    channel: string,
+    mode: string,
+    mask: string,
+    adding: boolean
+  ) => Promise<void>
   'account:register': (serverId: string, email: string | null, password: string) => Promise<boolean>
   'account:verify': (serverId: string, account: string, code: string) => Promise<boolean>
   'history:fetch': (serverId: string, channel: string, before?: string, limit?: number) => Promise<ChatMessage[]>

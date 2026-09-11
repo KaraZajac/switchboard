@@ -1,0 +1,706 @@
+{
+  "$comment": "Slash commands, as lines on the wire. Read by tests/main/commands.test.ts and the Android CommandsTest. The same client on two devices must not answer /op differently depending on which one you picked up — and the phone had none of these at all until recently, so every one of them went to the channel as ordinary text.",
+  "cases": [
+    {
+      "name": "/op names somebody",
+      "input": "/op alice",
+      "target": "#chan",
+      "nick": "kara",
+      "isupport": {
+        "PREFIX": "(ohv)@%+",
+        "CHANMODES": "eIbq,k,flj,CFLMPQScgimnprstz",
+        "MODES": "4"
+      },
+      "lines": [
+        "MODE #chan +o alice"
+      ]
+    },
+    {
+      "name": "/op with no argument is about you",
+      "input": "/op",
+      "target": "#chan",
+      "nick": "kara",
+      "isupport": {
+        "PREFIX": "(ohv)@%+",
+        "CHANMODES": "eIbq,k,flj,CFLMPQScgimnprstz",
+        "MODES": "4"
+      },
+      "lines": [
+        "MODE #chan +o kara"
+      ]
+    },
+    {
+      "name": "/deop takes it away",
+      "input": "/deop alice",
+      "target": "#chan",
+      "nick": "kara",
+      "isupport": {
+        "PREFIX": "(ohv)@%+",
+        "CHANMODES": "eIbq,k,flj,CFLMPQScgimnprstz",
+        "MODES": "4"
+      },
+      "lines": [
+        "MODE #chan -o alice"
+      ]
+    },
+    {
+      "name": "/voice",
+      "input": "/voice bob",
+      "target": "#chan",
+      "nick": "kara",
+      "isupport": {
+        "PREFIX": "(ohv)@%+",
+        "CHANMODES": "eIbq,k,flj,CFLMPQScgimnprstz",
+        "MODES": "4"
+      },
+      "lines": [
+        "MODE #chan +v bob"
+      ]
+    },
+    {
+      "name": "/devoice",
+      "input": "/devoice bob",
+      "target": "#chan",
+      "nick": "kara",
+      "isupport": {
+        "PREFIX": "(ohv)@%+",
+        "CHANMODES": "eIbq,k,flj,CFLMPQScgimnprstz",
+        "MODES": "4"
+      },
+      "lines": [
+        "MODE #chan -v bob"
+      ]
+    },
+    {
+      "name": "/halfop where the network has one",
+      "input": "/halfop bob",
+      "target": "#chan",
+      "nick": "kara",
+      "isupport": {
+        "PREFIX": "(ohv)@%+",
+        "CHANMODES": "eIbq,k,flj,CFLMPQScgimnprstz",
+        "MODES": "4"
+      },
+      "lines": [
+        "MODE #chan +h bob"
+      ]
+    },
+    {
+      "name": "/owner is the Unreal rank",
+      "input": "/owner bob",
+      "target": "#chan",
+      "nick": "kara",
+      "isupport": {
+        "PREFIX": "(qaohv)~&@%+",
+        "CHANMODES": "beI,kLf,l,psmntirzMQNRT",
+        "MODES": "6"
+      },
+      "lines": [
+        "MODE #chan +q bob"
+      ]
+    },
+    {
+      "name": "/admin as a rank on Unreal",
+      "input": "/admin bob",
+      "target": "#chan",
+      "nick": "kara",
+      "isupport": {
+        "PREFIX": "(qaohv)~&@%+",
+        "CHANMODES": "beI,kLf,l,psmntirzMQNRT",
+        "MODES": "6"
+      },
+      "lines": [
+        "MODE #chan +a bob"
+      ]
+    },
+    {
+      "name": "several at once, within MODES",
+      "input": "/op a b c",
+      "target": "#chan",
+      "nick": "kara",
+      "isupport": {
+        "PREFIX": "(ohv)@%+",
+        "CHANMODES": "eIbq,k,flj,CFLMPQScgimnprstz",
+        "MODES": "4"
+      },
+      "lines": [
+        "MODE #chan +ooo a b c"
+      ]
+    },
+    {
+      "name": "more than MODES allows is split",
+      "input": "/op a b c d e",
+      "target": "#chan",
+      "nick": "kara",
+      "isupport": {
+        "PREFIX": "(ohv)@%+",
+        "CHANMODES": "eIbq,k,flj,CFLMPQScgimnprstz",
+        "MODES": "4"
+      },
+      "lines": [
+        "MODE #chan +oooo a b c d",
+        "MODE #chan +o e"
+      ]
+    },
+    {
+      "name": "a named channel wins over the current one",
+      "input": "/op #other alice",
+      "target": "#chan",
+      "nick": "kara",
+      "isupport": {
+        "PREFIX": "(ohv)@%+",
+        "CHANMODES": "eIbq,k,flj,CFLMPQScgimnprstz",
+        "MODES": "4"
+      },
+      "lines": [
+        "MODE #other +o alice"
+      ]
+    },
+    {
+      "name": "no channel to act on",
+      "input": "/op alice",
+      "target": "someone",
+      "nick": "kara",
+      "isupport": {
+        "PREFIX": "(ohv)@%+",
+        "CHANMODES": "eIbq,k,flj,CFLMPQScgimnprstz",
+        "MODES": "4"
+      },
+      "error": "/op only works in a channel"
+    },
+    {
+      "name": "four at a time when the network says nothing",
+      "input": "/op a b c d e",
+      "target": "#chan",
+      "nick": "kara",
+      "isupport": {},
+      "lines": [
+        "MODE #chan +oooo a b c d",
+        "MODE #chan +o e"
+      ]
+    },
+    {
+      "name": "/ban expands a bare nick",
+      "input": "/ban alice",
+      "target": "#chan",
+      "nick": "kara",
+      "isupport": {
+        "PREFIX": "(ohv)@%+",
+        "CHANMODES": "eIbq,k,flj,CFLMPQScgimnprstz",
+        "MODES": "4"
+      },
+      "lines": [
+        "MODE #chan +b alice!*@*"
+      ]
+    },
+    {
+      "name": "/ban leaves a mask alone",
+      "input": "/ban *!*@bad.example",
+      "target": "#chan",
+      "nick": "kara",
+      "isupport": {
+        "PREFIX": "(ohv)@%+",
+        "CHANMODES": "eIbq,k,flj,CFLMPQScgimnprstz",
+        "MODES": "4"
+      },
+      "lines": [
+        "MODE #chan +b *!*@bad.example"
+      ]
+    },
+    {
+      "name": "/unban lifts it",
+      "input": "/unban *!*@bad.example",
+      "target": "#chan",
+      "nick": "kara",
+      "isupport": {
+        "PREFIX": "(ohv)@%+",
+        "CHANMODES": "eIbq,k,flj,CFLMPQScgimnprstz",
+        "MODES": "4"
+      },
+      "lines": [
+        "MODE #chan -b *!*@bad.example"
+      ]
+    },
+    {
+      "name": "/ban takes several",
+      "input": "/ban a b",
+      "target": "#chan",
+      "nick": "kara",
+      "isupport": {
+        "PREFIX": "(ohv)@%+",
+        "CHANMODES": "eIbq,k,flj,CFLMPQScgimnprstz",
+        "MODES": "4"
+      },
+      "lines": [
+        "MODE #chan +b a!*@*",
+        "MODE #chan +b b!*@*"
+      ]
+    },
+    {
+      "name": "/quiet uses the network's quiet mode",
+      "input": "/quiet alice",
+      "target": "#chan",
+      "nick": "kara",
+      "isupport": {
+        "PREFIX": "(ohv)@%+",
+        "CHANMODES": "eIbq,k,flj,CFLMPQScgimnprstz",
+        "MODES": "4"
+      },
+      "lines": [
+        "MODE #chan +q alice!*@*"
+      ]
+    },
+    {
+      "name": "/unquiet",
+      "input": "/unquiet alice",
+      "target": "#chan",
+      "nick": "kara",
+      "isupport": {
+        "PREFIX": "(ohv)@%+",
+        "CHANMODES": "eIbq,k,flj,CFLMPQScgimnprstz",
+        "MODES": "4"
+      },
+      "lines": [
+        "MODE #chan -q alice!*@*"
+      ]
+    },
+    {
+      "name": "no quiet mode where q is a rank",
+      "input": "/quiet alice",
+      "target": "#chan",
+      "nick": "kara",
+      "isupport": {
+        "PREFIX": "(qaohv)~&@%+",
+        "CHANMODES": "beI,kLf,l,psmntirzMQNRT",
+        "MODES": "6"
+      },
+      "error": "This network does not have a quiet mode"
+    },
+    {
+      "name": "/ban with nothing to ban",
+      "input": "/ban",
+      "target": "#chan",
+      "nick": "kara",
+      "isupport": {
+        "PREFIX": "(ohv)@%+",
+        "CHANMODES": "eIbq,k,flj,CFLMPQScgimnprstz",
+        "MODES": "4"
+      },
+      "error": "Usage: /ban <nick or mask>"
+    },
+    {
+      "name": "/banlist asks the server",
+      "input": "/banlist",
+      "target": "#chan",
+      "nick": "kara",
+      "isupport": {
+        "PREFIX": "(ohv)@%+",
+        "CHANMODES": "eIbq,k,flj,CFLMPQScgimnprstz",
+        "MODES": "4"
+      },
+      "lines": [
+        "MODE #chan +b"
+      ]
+    },
+    {
+      "name": "/bans is the same thing",
+      "input": "/bans",
+      "target": "#chan",
+      "nick": "kara",
+      "isupport": {
+        "PREFIX": "(ohv)@%+",
+        "CHANMODES": "eIbq,k,flj,CFLMPQScgimnprstz",
+        "MODES": "4"
+      },
+      "lines": [
+        "MODE #chan +b"
+      ]
+    },
+    {
+      "name": "/kickban bans before it kicks",
+      "input": "/kickban alice being rude",
+      "target": "#chan",
+      "nick": "kara",
+      "isupport": {
+        "PREFIX": "(ohv)@%+",
+        "CHANMODES": "eIbq,k,flj,CFLMPQScgimnprstz",
+        "MODES": "4"
+      },
+      "lines": [
+        "MODE #chan +b alice!*@*",
+        "KICK #chan alice :being rude"
+      ]
+    },
+    {
+      "name": "/kickban with no reason uses the nick",
+      "input": "/kickban alice",
+      "target": "#chan",
+      "nick": "kara",
+      "isupport": {
+        "PREFIX": "(ohv)@%+",
+        "CHANMODES": "eIbq,k,flj,CFLMPQScgimnprstz",
+        "MODES": "4"
+      },
+      "lines": [
+        "MODE #chan +b alice!*@*",
+        "KICK #chan alice :alice"
+      ]
+    },
+    {
+      "name": "/kickban with nobody named",
+      "input": "/kickban",
+      "target": "#chan",
+      "nick": "kara",
+      "isupport": {
+        "PREFIX": "(ohv)@%+",
+        "CHANMODES": "eIbq,k,flj,CFLMPQScgimnprstz",
+        "MODES": "4"
+      },
+      "error": "Usage: /kickban <nick> [reason]"
+    },
+    {
+      "name": "/cycle leaves and comes back",
+      "input": "/cycle",
+      "target": "#chan",
+      "nick": "kara",
+      "isupport": {
+        "PREFIX": "(ohv)@%+",
+        "CHANMODES": "eIbq,k,flj,CFLMPQScgimnprstz",
+        "MODES": "4"
+      },
+      "lines": [
+        "PART #chan",
+        "JOIN #chan"
+      ]
+    },
+    {
+      "name": "/hop is the same thing",
+      "input": "/hop",
+      "target": "#chan",
+      "nick": "kara",
+      "isupport": {
+        "PREFIX": "(ohv)@%+",
+        "CHANMODES": "eIbq,k,flj,CFLMPQScgimnprstz",
+        "MODES": "4"
+      },
+      "lines": [
+        "PART #chan",
+        "JOIN #chan"
+      ]
+    },
+    {
+      "name": "/knock asks to be let in",
+      "input": "/knock #secret please",
+      "target": "#chan",
+      "nick": "kara",
+      "isupport": {
+        "PREFIX": "(ohv)@%+",
+        "CHANMODES": "eIbq,k,flj,CFLMPQScgimnprstz",
+        "MODES": "4"
+      },
+      "lines": [
+        "KNOCK #secret :please"
+      ]
+    },
+    {
+      "name": "/knock says something by default",
+      "input": "/knock #secret",
+      "target": "#chan",
+      "nick": "kara",
+      "isupport": {
+        "PREFIX": "(ohv)@%+",
+        "CHANMODES": "eIbq,k,flj,CFLMPQScgimnprstz",
+        "MODES": "4"
+      },
+      "lines": [
+        "KNOCK #secret :Please let me in"
+      ]
+    },
+    {
+      "name": "/knock needs a channel",
+      "input": "/knock",
+      "target": "#chan",
+      "nick": "kara",
+      "isupport": {
+        "PREFIX": "(ohv)@%+",
+        "CHANMODES": "eIbq,k,flj,CFLMPQScgimnprstz",
+        "MODES": "4"
+      },
+      "error": "Usage: /knock <#channel> [reason]"
+    },
+    {
+      "name": "/names asks for the roster",
+      "input": "/names",
+      "target": "#chan",
+      "nick": "kara",
+      "isupport": {
+        "PREFIX": "(ohv)@%+",
+        "CHANMODES": "eIbq,k,flj,CFLMPQScgimnprstz",
+        "MODES": "4"
+      },
+      "lines": [
+        "NAMES #chan"
+      ]
+    },
+    {
+      "name": "/list with a filter",
+      "input": "/list >50",
+      "target": "#chan",
+      "nick": "kara",
+      "isupport": {
+        "PREFIX": "(ohv)@%+",
+        "CHANMODES": "eIbq,k,flj,CFLMPQScgimnprstz",
+        "MODES": "4"
+      },
+      "lines": [
+        "LIST >50"
+      ]
+    },
+    {
+      "name": "/whowas",
+      "input": "/whowas alice 5",
+      "target": "#chan",
+      "nick": "kara",
+      "isupport": {
+        "PREFIX": "(ohv)@%+",
+        "CHANMODES": "eIbq,k,flj,CFLMPQScgimnprstz",
+        "MODES": "4"
+      },
+      "lines": [
+        "WHOWAS alice 5"
+      ]
+    },
+    {
+      "name": "/whowas needs a nick",
+      "input": "/whowas",
+      "target": "#chan",
+      "nick": "kara",
+      "isupport": {
+        "PREFIX": "(ohv)@%+",
+        "CHANMODES": "eIbq,k,flj,CFLMPQScgimnprstz",
+        "MODES": "4"
+      },
+      "error": "Usage: /whowas <nick> [count]"
+    },
+    {
+      "name": "/who takes a mask",
+      "input": "/who *.example.org",
+      "target": "#chan",
+      "nick": "kara",
+      "isupport": {
+        "PREFIX": "(ohv)@%+",
+        "CHANMODES": "eIbq,k,flj,CFLMPQScgimnprstz",
+        "MODES": "4"
+      },
+      "lines": [
+        "WHO *.example.org"
+      ]
+    },
+    {
+      "name": "/ctcp asks a question",
+      "input": "/ctcp alice VERSION",
+      "target": "#chan",
+      "nick": "kara",
+      "isupport": {
+        "PREFIX": "(ohv)@%+",
+        "CHANMODES": "eIbq,k,flj,CFLMPQScgimnprstz",
+        "MODES": "4"
+      },
+      "lines": [
+        "PRIVMSG alice :\u0001VERSION\u0001"
+      ]
+    },
+    {
+      "name": "/ctcp uppercases the verb and keeps the rest",
+      "input": "/ctcp alice ping hello",
+      "target": "#chan",
+      "nick": "kara",
+      "isupport": {
+        "PREFIX": "(ohv)@%+",
+        "CHANMODES": "eIbq,k,flj,CFLMPQScgimnprstz",
+        "MODES": "4"
+      },
+      "lines": [
+        "PRIVMSG alice :\u0001PING hello\u0001"
+      ]
+    },
+    {
+      "name": "/ctcp needs somebody and something",
+      "input": "/ctcp alice",
+      "target": "#chan",
+      "nick": "kara",
+      "isupport": {
+        "PREFIX": "(ohv)@%+",
+        "CHANMODES": "eIbq,k,flj,CFLMPQScgimnprstz",
+        "MODES": "4"
+      },
+      "error": "Usage: /ctcp <nick> <VERSION|PING|TIME|…>"
+    },
+    {
+      "name": "/setname",
+      "input": "/setname Kara Z",
+      "target": "#chan",
+      "nick": "kara",
+      "isupport": {
+        "PREFIX": "(ohv)@%+",
+        "CHANMODES": "eIbq,k,flj,CFLMPQScgimnprstz",
+        "MODES": "4"
+      },
+      "lines": [
+        "SETNAME :Kara Z"
+      ]
+    },
+    {
+      "name": "/motd",
+      "input": "/motd",
+      "target": "#chan",
+      "nick": "kara",
+      "isupport": {
+        "PREFIX": "(ohv)@%+",
+        "CHANMODES": "eIbq,k,flj,CFLMPQScgimnprstz",
+        "MODES": "4"
+      },
+      "lines": [
+        "MOTD"
+      ]
+    },
+    {
+      "name": "/motd of a named server",
+      "input": "/motd irc.example.org",
+      "target": "#chan",
+      "nick": "kara",
+      "isupport": {
+        "PREFIX": "(ohv)@%+",
+        "CHANMODES": "eIbq,k,flj,CFLMPQScgimnprstz",
+        "MODES": "4"
+      },
+      "lines": [
+        "MOTD irc.example.org"
+      ]
+    },
+    {
+      "name": "/lusers",
+      "input": "/lusers",
+      "target": "#chan",
+      "nick": "kara",
+      "isupport": {
+        "PREFIX": "(ohv)@%+",
+        "CHANMODES": "eIbq,k,flj,CFLMPQScgimnprstz",
+        "MODES": "4"
+      },
+      "lines": [
+        "LUSERS"
+      ]
+    },
+    {
+      "name": "/time",
+      "input": "/time",
+      "target": "#chan",
+      "nick": "kara",
+      "isupport": {
+        "PREFIX": "(ohv)@%+",
+        "CHANMODES": "eIbq,k,flj,CFLMPQScgimnprstz",
+        "MODES": "4"
+      },
+      "lines": [
+        "TIME"
+      ]
+    },
+    {
+      "name": "/version",
+      "input": "/version",
+      "target": "#chan",
+      "nick": "kara",
+      "isupport": {
+        "PREFIX": "(ohv)@%+",
+        "CHANMODES": "eIbq,k,flj,CFLMPQScgimnprstz",
+        "MODES": "4"
+      },
+      "lines": [
+        "VERSION"
+      ]
+    },
+    {
+      "name": "/links",
+      "input": "/links",
+      "target": "#chan",
+      "nick": "kara",
+      "isupport": {
+        "PREFIX": "(ohv)@%+",
+        "CHANMODES": "eIbq,k,flj,CFLMPQScgimnprstz",
+        "MODES": "4"
+      },
+      "lines": [
+        "LINKS"
+      ]
+    },
+    {
+      "name": "/stats with a letter",
+      "input": "/stats u",
+      "target": "#chan",
+      "nick": "kara",
+      "isupport": {
+        "PREFIX": "(ohv)@%+",
+        "CHANMODES": "eIbq,k,flj,CFLMPQScgimnprstz",
+        "MODES": "4"
+      },
+      "lines": [
+        "STATS u"
+      ]
+    },
+    {
+      "name": "/info",
+      "input": "/info",
+      "target": "#chan",
+      "nick": "kara",
+      "isupport": {
+        "PREFIX": "(ohv)@%+",
+        "CHANMODES": "eIbq,k,flj,CFLMPQScgimnprstz",
+        "MODES": "4"
+      },
+      "lines": [
+        "INFO"
+      ]
+    },
+    {
+      "name": "/admininfo is ADMIN, since /admin is a rank",
+      "input": "/admininfo",
+      "target": "#chan",
+      "nick": "kara",
+      "isupport": {
+        "PREFIX": "(ohv)@%+",
+        "CHANMODES": "eIbq,k,flj,CFLMPQScgimnprstz",
+        "MODES": "4"
+      },
+      "lines": [
+        "ADMIN"
+      ]
+    },
+    {
+      "name": "/wallops",
+      "input": "/wallops the server is restarting",
+      "target": "#chan",
+      "nick": "kara",
+      "isupport": {
+        "PREFIX": "(ohv)@%+",
+        "CHANMODES": "eIbq,k,flj,CFLMPQScgimnprstz",
+        "MODES": "4"
+      },
+      "lines": [
+        "WALLOPS :the server is restarting"
+      ]
+    },
+    {
+      "name": "/wallops needs something to say",
+      "input": "/wallops",
+      "target": "#chan",
+      "nick": "kara",
+      "isupport": {
+        "PREFIX": "(ohv)@%+",
+        "CHANMODES": "eIbq,k,flj,CFLMPQScgimnprstz",
+        "MODES": "4"
+      },
+      "error": "Usage: /wallops <message>"
+    }
+  ]
+}

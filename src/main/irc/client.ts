@@ -1,4 +1,5 @@
 import { EventEmitter } from 'events'
+import type { MaskEntry } from '@shared/masklists'
 import { lineBudget, splitToFit } from './features/linelen'
 import { groupTargets, targetMax } from '@shared/isupport'
 import type { IRCMessage } from '@shared/types/irc'
@@ -29,6 +30,13 @@ export interface ClientEvents {
   names: (data: { channel: string; users: ChannelUser[] }) => void
   mode: (data: { channel: string; mode: string; params: string[]; setBy: string | null }) => void
   invite: (data: { channel: string; by: string; target: string; isMe: boolean }) => void
+  /** One of the channel's mask lists, whole */
+  masklist: (data: {
+    channel: string
+    mode: string
+    entries: MaskEntry[]
+    done: boolean
+  }) => void
 
   // Message events
   privmsg: (data: {

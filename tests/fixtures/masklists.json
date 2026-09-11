@@ -1,0 +1,332 @@
+{
+  "$comment": "The lists a channel keeps — bans, quiets, exceptions, invites. Read by tests/shared/masklists.test.ts and the Android SharedCorpusTest. Which letters exist comes from ISUPPORT; what they mean is convention, and both clients have to agree on both or one of them shows a list the other cannot.",
+  "$lists": "Which mask lists a network keeps, from CHANMODES type A. A letter that is also a PREFIX is a rank, not a list.",
+  "lists": [
+    {
+      "name": "Solanum and rIRCd: bans, quiets and both exceptions",
+      "chanmodes": "eIbq,k,flj,CFLMPQScgimnprstz",
+      "prefix": "(ohv)@%+",
+      "modes": [
+        "e",
+        "I",
+        "b",
+        "q"
+      ]
+    },
+    {
+      "name": "UnrealIRCd: q is owner there, so it is not a list",
+      "chanmodes": "beI,kLf,l,psmntirzMQNRTOVKDdGPZSCc",
+      "prefix": "(qaohv)~&@%+",
+      "modes": [
+        "b",
+        "e",
+        "I"
+      ]
+    },
+    {
+      "name": "a network with bans and nothing else",
+      "chanmodes": "b,k,l,imnpst",
+      "prefix": "(ov)@+",
+      "modes": [
+        "b"
+      ]
+    },
+    {
+      "name": "a mode nobody has heard of still gets a list",
+      "chanmodes": "bX,k,l,imnpst",
+      "prefix": "(ov)@+",
+      "modes": [
+        "b",
+        "X"
+      ]
+    },
+    {
+      "name": "no CHANMODES at all means no lists to show",
+      "chanmodes": null,
+      "prefix": "(ov)@+",
+      "modes": []
+    }
+  ],
+  "$labels": "What each list is called. The four everyone means the same thing by, plus the shape for one nobody has seen.",
+  "labels": [
+    {
+      "name": "b is bans",
+      "chanmodes": "b,k,l,imnpst",
+      "prefix": "(ov)@+",
+      "mode": "b",
+      "label": "Bans",
+      "entry": "ban"
+    },
+    {
+      "name": "q is quiets where it is not a prefix",
+      "chanmodes": "bq,k,l,imnpst",
+      "prefix": "(ov)@+",
+      "mode": "q",
+      "label": "Quiets",
+      "entry": "quiet"
+    },
+    {
+      "name": "e is ban exceptions",
+      "chanmodes": "be,k,l,imnpst",
+      "prefix": "(ov)@+",
+      "mode": "e",
+      "label": "Ban exceptions",
+      "entry": "exception"
+    },
+    {
+      "name": "I is invite exceptions",
+      "chanmodes": "bI,k,l,imnpst",
+      "prefix": "(ov)@+",
+      "mode": "I",
+      "label": "Invite exceptions",
+      "entry": "invite exception"
+    },
+    {
+      "name": "anything else is named after itself",
+      "chanmodes": "bX,k,l,imnpst",
+      "prefix": "(ov)@+",
+      "mode": "X",
+      "label": "+X list",
+      "entry": "+X entry"
+    }
+  ],
+  "$replies": "Reading one line of a list off the wire. The shapes differ more than they look.",
+  "replies": [
+    {
+      "name": "a ban with who set it and when",
+      "command": "367",
+      "params": [
+        "kara",
+        "#test",
+        "*!*@bad.example",
+        "op!u@h",
+        "1700000000"
+      ],
+      "mode": "b",
+      "channel": "#test",
+      "done": false,
+      "entry": {
+        "mask": "*!*@bad.example",
+        "setBy": "op!u@h",
+        "setAt": 1700000000
+      }
+    },
+    {
+      "name": "a ban with neither, which plenty of servers send",
+      "command": "367",
+      "params": [
+        "kara",
+        "#test",
+        "*!*@bad.example"
+      ],
+      "mode": "b",
+      "channel": "#test",
+      "done": false,
+      "entry": {
+        "mask": "*!*@bad.example"
+      }
+    },
+    {
+      "name": "end of the ban list",
+      "command": "368",
+      "params": [
+        "kara",
+        "#test",
+        "End of Channel Ban List"
+      ],
+      "mode": "b",
+      "channel": "#test",
+      "done": true
+    },
+    {
+      "name": "a quiet names its own mode, one parameter along",
+      "command": "728",
+      "params": [
+        "kara",
+        "#test",
+        "q",
+        "*!*@loud.example",
+        "op!u@h",
+        "1700000000"
+      ],
+      "mode": "q",
+      "channel": "#test",
+      "done": false,
+      "entry": {
+        "mask": "*!*@loud.example",
+        "setBy": "op!u@h",
+        "setAt": 1700000000
+      }
+    },
+    {
+      "name": "end of the quiet list, which also names the mode",
+      "command": "729",
+      "params": [
+        "kara",
+        "#test",
+        "q",
+        "End of Channel Quiet List"
+      ],
+      "mode": "q",
+      "channel": "#test",
+      "done": true
+    },
+    {
+      "name": "an invite exception",
+      "command": "346",
+      "params": [
+        "kara",
+        "#test",
+        "*!*@friend.example"
+      ],
+      "mode": "I",
+      "channel": "#test",
+      "done": false,
+      "entry": {
+        "mask": "*!*@friend.example"
+      }
+    },
+    {
+      "name": "end of the invite exceptions",
+      "command": "347",
+      "params": [
+        "kara",
+        "#test",
+        "End of Channel Invite List"
+      ],
+      "mode": "I",
+      "channel": "#test",
+      "done": true
+    },
+    {
+      "name": "a ban exception",
+      "command": "348",
+      "params": [
+        "kara",
+        "#test",
+        "*!*@trusted.example"
+      ],
+      "mode": "e",
+      "channel": "#test",
+      "done": false,
+      "entry": {
+        "mask": "*!*@trusted.example"
+      }
+    },
+    {
+      "name": "end of the ban exceptions",
+      "command": "349",
+      "params": [
+        "kara",
+        "#test",
+        "End of Channel Exception List"
+      ],
+      "mode": "e",
+      "channel": "#test",
+      "done": true
+    },
+    {
+      "name": "a timestamp of zero is not a time",
+      "command": "367",
+      "params": [
+        "kara",
+        "#test",
+        "*!*@x",
+        "op",
+        "0"
+      ],
+      "mode": "b",
+      "channel": "#test",
+      "done": false,
+      "entry": {
+        "mask": "*!*@x",
+        "setBy": "op"
+      }
+    },
+    {
+      "name": "a timestamp that is not a number is not a time",
+      "command": "367",
+      "params": [
+        "kara",
+        "#test",
+        "*!*@x",
+        "op",
+        "recently"
+      ],
+      "mode": "b",
+      "channel": "#test",
+      "done": false,
+      "entry": {
+        "mask": "*!*@x",
+        "setBy": "op"
+      }
+    },
+    {
+      "name": "a numeric that is not a list at all",
+      "command": "353",
+      "params": [
+        "kara",
+        "=",
+        "#test",
+        "kara"
+      ],
+      "reply": null
+    },
+    {
+      "name": "no channel is nothing we can file",
+      "command": "367",
+      "params": [
+        "kara"
+      ],
+      "reply": null
+    },
+    {
+      "name": "no mask is nothing to list",
+      "command": "367",
+      "params": [
+        "kara",
+        "#test"
+      ],
+      "reply": null
+    }
+  ],
+  "$masks": "What to send for something typed into a ban box.",
+  "masks": [
+    {
+      "name": "a bare nick becomes a mask",
+      "typed": "kara",
+      "sent": "kara!*@*",
+      "isMask": false
+    },
+    {
+      "name": "a full mask is left alone",
+      "typed": "*!*@example.org",
+      "sent": "*!*@example.org",
+      "isMask": true
+    },
+    {
+      "name": "a host-only wildcard is a mask",
+      "typed": "*.example.org",
+      "sent": "*.example.org",
+      "isMask": true
+    },
+    {
+      "name": "a user@host is a mask",
+      "typed": "kara@example.org",
+      "sent": "kara@example.org",
+      "isMask": true
+    },
+    {
+      "name": "whitespace is trimmed off first",
+      "typed": "  kara  ",
+      "sent": "kara!*@*",
+      "isMask": false
+    },
+    {
+      "name": "nothing typed is nothing to send",
+      "typed": "   ",
+      "sent": "",
+      "isMask": false
+    }
+  ]
+}

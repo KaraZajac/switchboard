@@ -120,7 +120,7 @@ object Irc {
         parts.add(command)
 
         params.forEachIndexed { index, param ->
-            if (index == params.size - 1 && trailing(command, param)) {
+            if (index == params.size - 1 && trailing(command, param, index)) {
                 parts.add(":$param")
             } else {
                 parts.add(param)
@@ -169,8 +169,19 @@ object Irc {
      * These always take the trailing form, single word or not — it is what every
      * other client sends, and a bare last word invites a sloppy relay to split it.
      */
-    private val TEXT_TRAILING = setOf(
-        "PRIVMSG", "NOTICE", "TOPIC", "PART", "QUIT", "KICK", "AWAY", "SETNAME", "WALLOPS", "USER"
+    /**
+     * Where the piece of human text is, in the commands that carry one.
+     *
+     * By position rather than by command, which is the fix for a real bug: the
+     * rule used to be "this command's *last* parameter is text", and
+     * `PART #chan` with no reason has the channel in that position. Every part
+     * without a reason went out as `PART :#chan` — legal, but it puts a
+     * channel name in the field meant for a sentence.
+     */
+    private val TEXT_PARAM = mapOf(
+        "PRIVMSG" to 1, "NOTICE" to 1, "TOPIC" to 1, "PART" to 1,
+        "KICK" to 2, "KNOCK" to 1,
+        "QUIT" to 0, "AWAY" to 0, "SETNAME" to 0, "WALLOPS" to 0, "USER" to 3
     )
 
     /**
@@ -182,8 +193,8 @@ object Irc {
      * sends (`CAP LS :302`, `METADATA * SUB a b :c`), and a server that matches a
      * subcommand as a literal token then quietly does nothing.
      */
-    private fun trailing(command: String, param: String): Boolean {
-        if (command.uppercase() in TEXT_TRAILING) return true
+    private fun trailing(command: String, param: String, at: Int): Boolean {
+        if (TEXT_PARAM[command.uppercase()] == at) return true
         return param.isEmpty() || param.contains(' ') || param.startsWith(":")
     }
 

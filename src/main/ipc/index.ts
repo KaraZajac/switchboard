@@ -610,6 +610,55 @@ export function registerIPCHandlers(): void {
     ircManager.refreshProfile(client)
   })
 
+  /**
+   * Ask for one of a channel's mask lists.
+   *
+   * Answers with what is already known and asks the server in the background,
+   * because a ban list is sent as hundreds of separate numerics and waiting
+   * for the last one before showing anything means a panel that is empty for
+   * a second every time it opens. The `irc:masklist` event fills it in.
+   */
+  handle('masklist:fetch', async (_event, serverId: string, channel: string, mode: string) => {
+    const client = ircManager.getClient(serverId)
+    if (!client) return []
+
+    const ch = client.state.channels.get(client.state.casemap(channel))
+    if (!ch) return []
+
+    // Asking again while an answer is still arriving would interleave two
+    // copies of the same list.
+    if (!ch.loadingLists.has(mode)) {
+      ch.loadingLists.add(mode)
+      client.connection.send('MODE', channel, `+${mode}`)
+    }
+    return ch.maskLists.get(mode) ?? []
+  })
+
+  /**
+   * Put something on one of those lists, or take it off.
+   *
+   * No privilege check here: the server is the authority on that and will say
+   * 482 if we are wrong. The check that matters is in the UI, which does not
+   * offer the button at all where `actionsFor` says it would fail.
+   */
+  handle(
+    'masklist:set',
+    async (
+      _event,
+      serverId: string,
+      channel: string,
+      mode: string,
+      mask: string,
+      adding: boolean
+    ) => {
+      const client = ircManager.getClient(serverId)
+      if (!client) throw new Error('Not connected to this network')
+      if (!mask.trim()) throw new Error('Nothing to set')
+
+      client.connection.send('MODE', channel, `${adding ? '+' : '-'}${mode}`, mask.trim())
+    }
+  )
+
   // ── History ──────────────────────────────────────────────────────
 
   handle('history:fetch', async (_event, serverId: string, channel: string, before?: string, limit?: number) => {

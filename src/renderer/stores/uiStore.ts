@@ -23,6 +23,7 @@ type Modal =
   | 'search'
   | 'quick-switcher'
   | 'account'
+  | 'channel-lists'
   | null
 
 export interface WhoisData {

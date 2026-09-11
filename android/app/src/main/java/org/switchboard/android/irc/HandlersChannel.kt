@@ -2,6 +2,7 @@ package org.switchboard.android.irc
 
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
@@ -28,6 +29,34 @@ internal fun userJson(user: ChannelUser) = buildJsonObject {
     put("prefixes", buildJsonArray { for (prefix in user.prefixes) add(JsonPrimitive(prefix)) })
     put("away", user.away)
     put("isBot", user.isBot)
+}
+
+/**
+ * One of a channel's mask lists, whole.
+ *
+ * Sent as one event rather than a line at a time, and in the shape the desktop
+ * sends — a busy channel's ban list is hundreds of entries, and an event each
+ * would be hundreds of redraws for one glance at a panel.
+ */
+internal fun emitMaskList(
+    session: IrcSession,
+    channel: String,
+    mode: String,
+    entries: List<MaskLists.Entry>
+) {
+    session.emit("irc:masklist", buildJsonObject {
+        put("serverId", session.state.serverId)
+        put("channel", channel)
+        put("mode", mode)
+        put("done", true)
+        put("entries", JsonArray(entries.map { entry ->
+            buildJsonObject {
+                put("mask", entry.mask)
+                entry.setBy?.let { put("setBy", it) }
+                entry.setAt?.let { put("setAt", it) }
+            }
+        }))
+    })
 }
 
 internal fun emitNames(session: IrcSession, channel: ChannelState) {
@@ -245,6 +274,39 @@ internal fun registerChannelHandlers() {
     Handlers.on("324") { session, message ->
         val channel = session.state.findChannel(message.param(1)) ?: return@on
         applyChannelModes(session.state, channel, message.params.drop(2))
+    }
+
+    // ── The lists a channel keeps ────────────────────────────────
+    //
+    // RPL_BANLIST and its relatives. None of these were handled on either
+    // client, so a client that could set a ban had no way to show one: you
+    // could put somebody on a list and never find them again.
+    //
+    // Which numeric means which list, and how to read each shape, is in
+    // [MaskLists] — 728 puts its mode letter where the others put the mask,
+    // and reading one as the other lists the letter `q` as though somebody
+    // had banned it.
+    for (numeric in listOf("367", "368", "346", "347", "348", "349", "728", "729")) {
+        Handlers.on(numeric) { session, message ->
+            val reply = MaskLists.readReply(numeric, message.params) ?: return@on
+            val channel = session.state.findChannel(reply.channel) ?: return@on
+
+            if (reply.done) {
+                channel.loadingLists.remove(reply.mode)
+                emitMaskList(session, reply.channel, reply.mode, channel.maskLists[reply.mode].orEmpty())
+                return@on
+            }
+
+            // The first line of a fresh fetch replaces what we had. A list is
+            // sent whole, so appending would double it on every look.
+            if (channel.loadingLists.remove(reply.mode)) {
+                channel.maskLists[reply.mode] = mutableListOf()
+            }
+
+            val entries = channel.maskLists.getOrPut(reply.mode) { mutableListOf() }
+            val entry = reply.entry ?: return@on
+            if (entries.none { it.mask == entry.mask }) entries.add(entry)
+        }
     }
 
     Handlers.on("INVITE") { session, message ->

@@ -1,4 +1,6 @@
 import { registerHandler } from './registry'
+import { readListReply, maskListsFor, type MaskEntry } from '@shared/masklists'
+import { parsePrefix } from '@shared/powers'
 import { hasMetadata } from '@shared/metadata'
 import type { ChannelUser } from '@shared/types/channel'
 import { sendWHOX } from '../features/whox'
@@ -283,6 +285,7 @@ registerHandler('MODE', (client, msg) => {
     const ch = client.state.channels.get(client.state.casemap(target))
     if (ch) {
       applyChannelModes(ch, modeStr, modeParams, client)
+      trackMaskListChange(client, ch, target, modeStr, modeParams)
     }
 
     client.events.emit('mode', {
@@ -433,4 +436,116 @@ function applyChannelModes(
       }
     }
   }
+}
+
+// ── The lists a channel keeps ────────────────────────────────────────
+
+/**
+ * RPL_BANLIST and its relatives — 367/368, 346/347, 348/349, 728/729.
+ *
+ * None of these were handled at all, which meant a client that could set a ban
+ * had no way to show one. You could put somebody on a list and never find them
+ * again: not to lift it, not to check that the mask you guessed at matched
+ * anything, not to see what the last operator did.
+ *
+ * Which numeric means which list, and how to read each shape, is in
+ * `@shared/masklists` — because 728 puts its mode letter where the others put
+ * the mask, and getting that wrong lists the letter `q` as though somebody had
+ * banned it.
+ */
+for (const numeric of ['367', '368', '346', '347', '348', '349', '728', '729']) {
+  registerHandler(numeric, (client, msg) => {
+    const reply = readListReply(numeric, msg.params)
+    if (!reply) return
+
+    const ch = client.state.channels.get(client.state.casemap(reply.channel))
+    if (!ch) return
+
+    if (reply.done) {
+      ch.loadingLists.delete(reply.mode)
+      client.events.emit('masklist', {
+        channel: reply.channel,
+        mode: reply.mode,
+        entries: ch.maskLists.get(reply.mode) ?? [],
+        done: true
+      })
+      return
+    }
+
+    // The first line of a fresh fetch replaces what we had. A list is sent
+    // whole, so appending would double it every time somebody looked.
+    if (ch.loadingLists.has(reply.mode)) {
+      ch.maskLists.set(reply.mode, [])
+      ch.loadingLists.delete(reply.mode)
+    }
+
+    const entries = ch.maskLists.get(reply.mode) ?? []
+    if (!entries.some((e: MaskEntry) => e.mask === reply.entry!.mask)) entries.push(reply.entry!)
+    ch.maskLists.set(reply.mode, entries)
+  })
+}
+
+/**
+ * Keep a mask list in step with a MODE that changed it.
+ *
+ * Otherwise banning somebody and then opening the list shows the list as it
+ * was before you banned them, until something refetches — which reads as the
+ * ban not having worked. Cheaper and more truthful than asking the server
+ * again on every change, and the panel can still refresh by hand.
+ */
+function trackMaskListChange(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  client: any,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  ch: any,
+  channel: string,
+  modeStr: string,
+  params: string[]
+): void {
+  const lists = maskListsFor(client.state.isupport.CHANMODES, client.state.isupport.PREFIX)
+  if (lists.length === 0) return
+
+  const listModes = new Set(lists.map((l) => l.mode))
+  let adding = true
+  let at = 0
+
+  for (const char of modeStr) {
+    if (char === '+') { adding = true; continue }
+    if (char === '-') { adding = false; continue }
+    if (!listModes.has(char)) {
+      // Only list modes are tracked here, but every mode that takes a
+      // parameter still consumes one — miscounting would attribute the wrong
+      // mask to the ban.
+      if (takesParameter(client, char, adding)) at++
+      continue
+    }
+
+    const mask = params[at++]
+    if (!mask) continue
+
+    const entries = ch.maskLists.get(char) ?? []
+    if (adding) {
+      if (!entries.some((e: MaskEntry) => e.mask === mask)) {
+        entries.push({ mask, setBy: client.state.nick, setAt: Math.floor(Date.now() / 1000) })
+      }
+    } else {
+      const found = entries.findIndex((e: MaskEntry) => e.mask === mask)
+      if (found !== -1) entries.splice(found, 1)
+    }
+    ch.maskLists.set(char, entries)
+
+    client.events.emit('masklist', { channel, mode: char, entries, done: true })
+  }
+}
+
+/** Whether this mode letter consumes a parameter in this direction */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function takesParameter(client: any, char: string, adding: boolean): boolean {
+  const [typeA = '', typeB = '', typeC = ''] = (client.state.isupport.CHANMODES || '').split(',')
+  const scheme = parsePrefix(client.state.isupport.PREFIX)
+  if (scheme.modes.includes(char)) return true
+  if (typeA.includes(char)) return true
+  if (typeB.includes(char)) return true
+  if (typeC.includes(char)) return adding
+  return false
 }

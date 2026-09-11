@@ -1,5 +1,7 @@
 import type { IRCClient } from './client'
 import { isupportNumber, fitsLimit } from '@shared/isupport'
+import { parsePrefix, quietMode, banMask } from '@shared/powers'
+import { maskToSet } from '@shared/masklists'
 
 /**
  * Slash commands typed into the composer.
@@ -207,6 +209,198 @@ export function runCommand(client: IRCClient, target: string, text: string): Com
     case 'quote': {
       if (!rest) return { handled: true, error: 'Usage: /raw <IRC line>' }
       client.connection.sendRaw(rest)
+      return { handled: true }
+    }
+
+    // ── Ranks ──────────────────────────────────────────────────────
+    //
+    // The everyday ones. Every client has had these for thirty years and this
+    // one made you type `/mode #channel +o nick`, which is the same thing with
+    // more to get wrong.
+
+    case 'op':
+    case 'deop':
+    case 'voice':
+    case 'devoice':
+    case 'halfop':
+    case 'dehalfop':
+    case 'owner':
+    case 'deowner':
+    case 'admin':
+    case 'deadmin': {
+      const letters: Record<string, string> = {
+        op: 'o',
+        voice: 'v',
+        halfop: 'h',
+        owner: 'q',
+        admin: 'a'
+      }
+      const adding = !name.startsWith('de')
+      const letter = letters[adding ? name : name.slice(2)]
+      const channel = isChannel(args[0]) ? args.shift()! : target
+      if (!isChannel(channel)) return { handled: true, error: `/${name} only works in a channel` }
+
+      const nicks = args.length > 0 ? args : [client.state.nick]
+      // One MODE per MODES-worth, because a server that takes four at a time
+      // silently drops the fifth.
+      const perLine = isupportNumber(client.state.isupport, 'MODES') ?? 4
+      for (let at = 0; at < nicks.length; at += perLine) {
+        const batch = nicks.slice(at, at + perLine)
+        client.connection.send(
+          'MODE',
+          channel,
+          `${adding ? '+' : '-'}${letter.repeat(batch.length)}`,
+          ...batch
+        )
+      }
+      return { handled: true }
+    }
+
+    // ── Lists ──────────────────────────────────────────────────────
+
+    case 'ban':
+    case 'unban':
+    case 'quiet':
+    case 'unquiet': {
+      const scheme = parsePrefix(client.state.isupport.PREFIX as string)
+      const quieting = name.endsWith('quiet')
+      const letter = quieting ? quietMode(client.state.isupport.CHANMODES as string, scheme) : 'b'
+      if (!letter) {
+        return { handled: true, error: 'This network does not have a quiet mode' }
+      }
+
+      const channel = isChannel(args[0]) ? args.shift()! : target
+      if (!isChannel(channel)) return { handled: true, error: `/${name} only works in a channel` }
+      if (args.length === 0) return { handled: true, error: `Usage: /${name} <nick or mask>` }
+
+      const adding = !name.startsWith('un')
+      for (const who of args) {
+        // A bare nick becomes `nick!*@*`, which is what almost every server
+        // would have done anyway and what the person plainly meant.
+        client.connection.send('MODE', channel, `${adding ? '+' : '-'}${letter}`, maskToSet(who))
+      }
+      return { handled: true }
+    }
+
+    case 'kickban': {
+      const channel = isChannel(args[0]) ? args.shift()! : target
+      if (!isChannel(channel)) return { handled: true, error: '/kickban only works in a channel' }
+      const who = args.shift()
+      if (!who) return { handled: true, error: 'Usage: /kickban <nick> [reason]' }
+
+      // Ban first. Kicking first leaves a window — short, but real — in which
+      // they can rejoin before the ban lands, which is the one thing kickban
+      // exists to prevent.
+      const user = client.state.channels
+        .get(client.state.casemap(channel))
+        ?.users.get(client.state.casemap(who))
+      client.connection.send('MODE', channel, '+b', banMask({ nick: who, host: user?.host }))
+      client.connection.send('KICK', channel, who, args.join(' ') || who)
+      return { handled: true }
+    }
+
+    case 'banlist':
+    case 'bans': {
+      const channel = isChannel(args[0]) ? args[0] : target
+      if (!isChannel(channel)) return { handled: true, error: '/banlist only works in a channel' }
+      client.connection.send('MODE', channel, '+b')
+      return { handled: true }
+    }
+
+    // ── Channels ───────────────────────────────────────────────────
+
+    case 'cycle':
+    case 'hop': {
+      const channel = isChannel(args[0]) ? args[0] : target
+      if (!isChannel(channel)) return { handled: true, error: `/${name} only works in a channel` }
+      client.connection.send('PART', channel)
+      client.connection.send('JOIN', channel)
+      return { handled: true }
+    }
+
+    case 'knock': {
+      const [channel, ...why] = args
+      if (!isChannel(channel)) return { handled: true, error: 'Usage: /knock <#channel> [reason]' }
+      client.connection.send('KNOCK', channel, why.join(' ') || 'Please let me in')
+      return { handled: true }
+    }
+
+    case 'names': {
+      const channel = isChannel(args[0]) ? args[0] : target
+      if (!isChannel(channel)) return { handled: true, error: '/names only works in a channel' }
+      client.connection.send('NAMES', channel)
+      return { handled: true }
+    }
+
+    case 'list': {
+      // With no arguments this is every channel on the network, which on a
+      // large one is tens of thousands of lines. The browser asks the same
+      // question with a filter box, so send them there.
+      if (args.length > 0) client.connection.send('LIST', ...args)
+      else client.connection.send('LIST')
+      return { handled: true }
+    }
+
+    // ── People ─────────────────────────────────────────────────────
+
+    case 'whowas': {
+      if (!rest) return { handled: true, error: 'Usage: /whowas <nick> [count]' }
+      client.connection.send('WHOWAS', ...args)
+      return { handled: true }
+    }
+
+    case 'who': {
+      if (!rest) return { handled: true, error: 'Usage: /who <nick, #channel or mask>' }
+      client.connection.send('WHO', ...args)
+      return { handled: true }
+    }
+
+    case 'ctcp': {
+      const [who, verb, ...body] = args
+      if (!who || !verb) return { handled: true, error: 'Usage: /ctcp <nick> <VERSION|PING|TIME|…>' }
+      client.connection.sendRaw(
+        `PRIVMSG ${who} :\u0001${verb.toUpperCase()}${body.length ? ' ' + body.join(' ') : ''}\u0001`
+      )
+      return { handled: true }
+    }
+
+    case 'setname': {
+      if (!rest) return { handled: true, error: 'Usage: /setname <real name>' }
+      client.connection.send('SETNAME', rest)
+      return { handled: true }
+    }
+
+    // ── The server ─────────────────────────────────────────────────
+
+    case 'motd':
+    case 'lusers':
+    case 'time':
+    case 'version':
+    case 'links':
+    case 'stats':
+    case 'info':
+    case 'admininfo': {
+      const verb = name === 'admininfo' ? 'ADMIN' : name.toUpperCase()
+      if (args.length > 0) client.connection.send(verb, ...args)
+      else client.connection.send(verb)
+      return { handled: true }
+    }
+
+    case 'wallops': {
+      if (!rest) return { handled: true, error: 'Usage: /wallops <message>' }
+      client.connection.send('WALLOPS', rest)
+      return { handled: true }
+    }
+
+    case 'ping': {
+      const who = args[0]
+      if (who) {
+        // A CTCP PING to a person, which is what /ping means everywhere —
+        // stamped so the reply can be turned back into a round trip.
+        client.connection.sendRaw(`PRIVMSG ${who} :\u0001PING ${Date.now()}\u0001`)
+      } else {
+        client.connection.send('PING', String(Date.now()))
+      }
       return { handled: true }
     }
 

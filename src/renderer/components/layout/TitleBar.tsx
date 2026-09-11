@@ -4,6 +4,7 @@ import { useUIStore } from '../../stores/uiStore'
 import { isChannelName, isServiceNick } from '@shared/constants'
 import { FormattedText } from '../chat/MessageContent'
 import { stripFormatting } from '@shared/formatting'
+import { maskListsFor } from '@shared/masklists'
 
 const EMPTY_CHANNELS: { name: string; topic: string | null }[] = []
 
@@ -21,6 +22,9 @@ export function TitleBar() {
   const channelInfo = channels.find(
     (ch) => ch.name.toLowerCase() === activeChannel?.toLowerCase()
   )
+
+  const tokens = useServerStore((s) => (activeServerId ? s.isupport[activeServerId] ?? {} : {}))
+  const keepsLists = maskListsFor(tokens.CHANMODES, tokens.PREFIX).length > 0
 
   const isServer = activeChannel === '*'
   const isService = activeChannel ? isServiceNick(activeChannel) : false
@@ -85,6 +89,23 @@ export function TitleBar() {
       </div>
 
       <div className="flex items-center gap-2" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
+        {/*
+          What this channel is keeping — bans and the rest. Shown only in a
+          channel on a network that keeps any: a shield that opens an empty
+          box is worse than no shield.
+        */}
+        {!inDmList && activeChannel && !isDM && !isServer && !isService && keepsLists && (
+          <button
+            onClick={() => useUIStore.getState().openModal('channel-lists')}
+            className="rounded p-1.5 text-gray-400 transition-colors hover:bg-gray-700 hover:text-gray-100"
+            title="Bans and other channel lists"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M12 3l7 3v5c0 4.5-3 8.3-7 10-4-1.7-7-5.5-7-10V6l7-3z" />
+            </svg>
+          </button>
+        )}
+
         {/* Search */}
         <button
           onClick={() => useUIStore.getState().openModal('search')}

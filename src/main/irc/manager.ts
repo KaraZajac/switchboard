@@ -495,6 +495,19 @@ export class IRCManager {
       })
     })
 
+    // The lists a channel keeps — bans and the rest. Sent whole rather than a
+    // line at a time: a busy channel's ban list is hundreds of entries, and
+    // an event each would be hundreds of renders for one glance at a panel.
+    client.events.on('masklist', (data) => {
+      this.send('irc:masklist', {
+        serverId,
+        channel: data.channel,
+        mode: data.mode,
+        entries: data.entries,
+        done: data.done
+      })
+    })
+
     // Invite notifications
     client.events.on('invite', (data) => {
       if (data.isMe) {
