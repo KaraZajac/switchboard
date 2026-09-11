@@ -539,6 +539,70 @@ class StoreTest {
         assertTrue(before.first { it.name == "#lounge" }.unread > 0)
     }
 
+
+    // ── everybody who has written to you, in one list ────────────────
+
+    /**
+     * The order both clients show conversations in.
+     *
+     * Unread first, so anything waiting on an answer is at the top, then by
+     * name so the rest do not move around underneath it. The desktop used to
+     * show them in whatever order the servers and their channels happened to
+     * be walked in, which reshuffled as channels came and went.
+     */
+    @Test
+    fun `conversations are ordered by what is waiting, then by name`() {
+        store.activeChannel = "#elsewhere"
+        store.handleEvent("irc:message", incoming("zoe", "m1", "zoe", "hi"))
+        store.handleEvent("irc:message", incoming("adam", "m2", "adam", "hi"))
+        store.handleEvent("irc:message", incoming("robin", "m3", "robin", "hi"))
+
+        // adam has been read; the other two are still waiting
+        store.select(server, "adam")
+        store.activeChannel = "#elsewhere"
+
+        assertEquals(
+            listOf("robin", "zoe", "adam"),
+            store.allDirectMessages().map { it.nick }
+        )
+    }
+
+    /** A channel is not a conversation, and neither is NickServ */
+    @Test
+    fun `the list is people, not rooms or services`() {
+        store.handleEvent("irc:message", incoming("#lounge", "m1", "robin", "in the room"))
+        store.handleEvent("irc:message", incoming("robin", "m2", "robin", "and privately"))
+        store.handleEvent("irc:message", incoming("NickServ", "m3", "NickServ", "please identify"))
+
+        assertEquals(listOf("robin"), store.allDirectMessages().map { it.nick })
+    }
+
+    /**
+     * The same nick on two networks is two people.
+     *
+     * This is the one place the shape cannot be copied from apps where an
+     * account is the same account everywhere: a row that merges them is a row
+     * you can answer wrongly, so each carries the network it belongs to.
+     */
+    @Test
+    fun `the same name on two networks is two conversations`() {
+        val other = "s2"
+        store.servers[other] = Server(id = other, name = "Other", host = "h2", nick = "me")
+        store.channels[other] = listOf(Channel("#hall"))
+
+        store.handleEvent("irc:message", incoming("robin", "m1", "robin", "here"))
+        store.handleEvent("irc:message", buildJsonObject {
+            put("serverId", other)
+            put("channel", "robin")
+            put("message", message("m2", "robin", "and here", "2026-09-08T12:00:00Z"))
+        })
+
+        val all = store.allDirectMessages()
+        assertEquals(2, all.size)
+        assertEquals(setOf("Test", "Other"), all.map { it.serverName }.toSet())
+        assertEquals(setOf(server, other), all.map { it.serverId }.toSet())
+    }
+
 }
 
 private fun kotlinx.serialization.json.JsonArrayBuilder.add(element: JsonElement) {

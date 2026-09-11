@@ -47,6 +47,16 @@ export function DMSidebar() {
     }
   }
 
+  // Unread first, then by name. The order used to be however the servers and
+  // their channels happened to be walked, so a conversation waiting on an
+  // answer sat wherever it sat, and the list reshuffled as channels came and
+  // went. The phone answers this the same way.
+  dms.sort((a, b) => {
+    const waiting = Number(b.unreadCount > 0) - Number(a.unreadCount > 0)
+    if (waiting !== 0) return waiting
+    return a.nick.toLowerCase().localeCompare(b.nick.toLowerCase())
+  })
+
   const handleDMClick = (serverId: string, nick: string) => {
     useServerStore.getState().setActiveServer(serverId)
     useChannelStore.getState().setActiveChannel(serverId, nick)

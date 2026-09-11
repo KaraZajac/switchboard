@@ -655,6 +655,11 @@ private fun DirectMessageList(
     modifier: Modifier = Modifier
 ) {
     val conversations = store.allDirectMessages()
+    // Only where it tells you something. With one network on the phone every
+    // row would carry the same word, which is noise on all of them; with two
+    // it is the difference between two people. The desktop draws the line in
+    // the same place.
+    val showNetwork = store.servers.size > 1
 
     Column(modifier = modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
         Row(
@@ -715,13 +720,15 @@ private fun DirectMessageList(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
-                    Text(
-                        dm.serverName,
-                        color = Overlay,
-                        fontSize = 11.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                    if (showNetwork) {
+                        Text(
+                            dm.serverName,
+                            color = Overlay,
+                            fontSize = 11.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 }
                 if (dm.unread > 0) CountBadge(dm.unread)
             }
