@@ -60,6 +60,8 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.sp
 import org.switchboard.android.EngineMode
 import org.switchboard.android.Server
+import coil.compose.AsyncImage
+import androidx.compose.ui.layout.ContentScale
 import org.switchboard.android.SwitchboardStore
 import org.switchboard.android.SERVER_CONSOLE
 import org.switchboard.android.isChannel
@@ -398,12 +400,26 @@ private fun ServerBadge(
                 ),
             contentAlignment = Alignment.Center
         ) {
+            // The initials are drawn either way, so a picture that is still
+            // loading — or that never arrives — leaves something to read
+            // rather than an empty tile.
             Text(
                 server.name.take(2).uppercase(),
                 color = if (active) Crust else Text0,
                 fontSize = 15.sp,
                 fontWeight = FontWeight.Bold
             )
+
+            // `draft/network-icon`, which the network gives us in ISUPPORT.
+            // Most networks set none and the initials are what you get.
+            server.icon?.let { icon ->
+                AsyncImage(
+                    model = icon,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.matchParentSize()
+                )
+            }
         }
 
         // Connection state, where a Discord avatar would carry presence

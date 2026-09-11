@@ -340,6 +340,21 @@ internal fun registerRegistrationHandlers() {
                     put("serverId", state.serverId)
                     put("network", value)
                 })
+
+                // draft/network-icon: the network's own picture for the rail,
+                // so a row of badges is something you can pick out at a glance
+                // rather than a column of first letters. The desktop has read
+                // this since the draft existed.
+                //
+                // Held to the same rule as a user's avatar — https, a real
+                // host, nothing absurd — because it is the same thing: a URL a
+                // server handed us that this client is about to fetch.
+                "ICON", "draft/ICON" -> avatarUrl(value)?.let { url ->
+                    session.emit("irc:network-icon", buildJsonObject {
+                        put("serverId", state.serverId)
+                        put("url", url)
+                    })
+                }
             }
         }
     }

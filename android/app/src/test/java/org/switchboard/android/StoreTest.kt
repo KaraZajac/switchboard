@@ -603,6 +603,32 @@ class StoreTest {
         assertEquals(setOf(server, other), all.map { it.serverId }.toSet())
     }
 
+
+    // ── the network's own picture ────────────────────────────────────
+
+    /** What the rail draws instead of two letters, when a network offers one */
+    @Test
+    fun `keeps the network icon against the server`() {
+        store.handleEvent("irc:network-icon", buildJsonObject {
+            put("serverId", server)
+            put("url", "https://example.org/net.png")
+        })
+
+        assertEquals("https://example.org/net.png", store.servers[server]?.icon)
+    }
+
+    /** And an icon for a network that is not here changes nothing */
+    @Test
+    fun `an icon for a server we do not have is ignored`() {
+        store.handleEvent("irc:network-icon", buildJsonObject {
+            put("serverId", "nosuch")
+            put("url", "https://example.org/net.png")
+        })
+
+        assertNull(store.servers["nosuch"])
+        assertNull(store.servers[server]?.icon)
+    }
+
 }
 
 private fun kotlinx.serialization.json.JsonArrayBuilder.add(element: JsonElement) {

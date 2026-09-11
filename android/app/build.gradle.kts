@@ -36,6 +36,8 @@ android {
 
     buildFeatures {
         compose = true
+        // For the version in the User-Agent every image request carries
+        buildConfig = true
     }
 
     // One APK per ABI: the iroh native library is ~15 MB per architecture, and a

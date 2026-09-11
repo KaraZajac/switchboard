@@ -17,6 +17,7 @@ import { serversChanged } from '../ipc/notify'
 import type { UserMetadata } from '@shared/types/metadata'
 import { v4 as uuid } from 'uuid'
 import { friendListKind, friendListLines, friendListStatusLine } from '@shared/friends'
+import { avatarUrl } from '@shared/avatar'
 
 /**
  * Manages all IRC client connections and bridges events to the renderer.
@@ -769,8 +770,13 @@ export class IRCManager {
     })
 
     client.events.on('isupport', (tokens) => {
-      const iconUrl = tokens['ICON'] || tokens['draft/ICON']
-      if (typeof iconUrl === 'string' && /^https?:\/\//i.test(iconUrl)) {
+      // Held to the same rule as a user's avatar, because it is the same
+      // thing: a URL a server handed us that this client is about to fetch.
+      // `^https?://` let a network point the client at plaintext http, which
+      // tells anyone on the path which network you are on and when you
+      // connected. The phone reads this token with the same helper.
+      const iconUrl = avatarUrl(tokens['ICON'] || tokens['draft/ICON'])
+      if (iconUrl) {
         this.send('irc:network-icon', { serverId, url: iconUrl })
       }
       const filehostUrl = tokens['FILEHOST'] || tokens['draft/FILEHOST']

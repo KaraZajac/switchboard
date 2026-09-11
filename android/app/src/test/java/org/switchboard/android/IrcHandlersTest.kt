@@ -828,4 +828,53 @@ class IrcHandlersTest {
         feed(":robin!robin@host NICK kara")
         assertEquals("kara_", session.state.nick)
     }
+
+    // ── the network's own picture ────────────────────────────────────
+
+    /**
+     * `draft/network-icon`: the network hands out a picture in ISUPPORT and
+     * the rail draws it instead of two letters. The desktop has read this
+     * token since the draft existed and the phone did not, so the same two
+     * clients showed the same network differently.
+     */
+    @Test
+    fun `takes the network icon out of ISUPPORT`() {
+        feed(":irc.example.org 005 kara ICON=https://example.org/net.png :are supported")
+
+        val icon = session.eventsOn("irc:network-icon").single()
+        assertEquals("https://example.org/net.png", icon["url"]?.jsonPrimitive?.content)
+    }
+
+    /** Both spellings, because a draft token gets renamed on its way in */
+    @Test
+    fun `reads the drafted spelling of it too`() {
+        feed(":irc.example.org 005 kara draft/ICON=https://example.org/net.png :are supported")
+
+        assertEquals(1, session.eventsOn("irc:network-icon").size)
+    }
+
+    /**
+     * A URL the server chose and this client is about to fetch, which is the
+     * same thing a user's avatar is — and held to the same rule. Plain http
+     * would tell anyone on the path which network you are on and when you
+     * turned up.
+     */
+    @Test
+    fun `refuses an icon it should not fetch`() {
+        feed(":irc.example.org 005 kara ICON=http://example.org/net.png :are supported")
+        feed(":irc.example.org 005 kara ICON=javascript:alert(1) :are supported")
+        feed(":irc.example.org 005 kara ICON=/relative.png :are supported")
+        feed(":irc.example.org 005 kara ICON= :are supported")
+
+        assertEquals(emptyList<Any>(), session.eventsOn("irc:network-icon"))
+    }
+
+    /** Most networks set none, and two letters is the answer then */
+    @Test
+    fun `says nothing when the network has no icon`() {
+        feed(":irc.example.org 005 kara CHANTYPES=# NETWORK=Example :are supported")
+
+        assertEquals(emptyList<Any>(), session.eventsOn("irc:network-icon"))
+    }
+
 }

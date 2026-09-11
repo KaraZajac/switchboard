@@ -35,6 +35,13 @@ data class Server(
     var nick: String = "",
     var connected: Boolean = false,
     /**
+     * The network's own picture, from `ICON=` in ISUPPORT.
+     *
+     * `draft/network-icon`. Null for the networks that do not set one, which
+     * is most of them — a badge falls back to the first letter of the name.
+     */
+    var icon: String? = null,
+    /**
      * The account we are logged in to on this network, if any.
      *
      * Not the same as the nick, and the difference is the whole of how IRC
@@ -527,6 +534,11 @@ class SwitchboardStore {
                 // "nothing joined yet" while the desktop fills up, and only a
                 // restart puts it right.
                 if (activeServerId == null) activeServerId = serverId
+            }
+
+            "irc:network-icon" -> {
+                val url = data["url"]?.str() ?: return
+                servers[serverId] = (servers[serverId] ?: return).copy(icon = url)
             }
 
             "irc:disconnected" -> {
