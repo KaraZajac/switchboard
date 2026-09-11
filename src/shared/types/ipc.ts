@@ -272,6 +272,17 @@ export interface RendererToMainInvocations {
   ) => Promise<{ saved: boolean; published: boolean; reason?: string } | void>
   /** Drop this network's own profile, so it follows the one you carry again */
   'metadata:reset': (serverId: string) => Promise<void>
+  /**
+   * Write a conversation to a file the person picks.
+   *
+   * Answers with the path it wrote, or null if the dialog was dismissed. Not
+   * offered to a paired device: a phone cannot be handed a file on a desktop's
+   * disk, and the save dialog belongs to the window that asked.
+   */
+  'transcript:save': (
+    serverId: string,
+    channel: string
+  ) => Promise<{ path: string; messages: number } | null>
   /** What a channel is currently set to, as the connection has tracked it */
   'channel:modes': (serverId: string, channel: string) => Promise<Record<string, string | true>>
   /**

@@ -1,0 +1,126 @@
+{
+  "$comment": "A conversation as text. Read by tests/shared/transcript.test.ts and the Android SharedCorpusTest. One format wherever it is asked for, close enough to what irssi and WeeChat log that existing tools can read it — which is most of the point of having it.",
+  "$lines": "One line. UTC unless asked otherwise, because a log that moves when the reader's clock does is not a record.",
+  "lines": [
+    {
+      "name": "an ordinary message",
+      "message": {
+        "nick": "kara",
+        "content": "hello there",
+        "timestamp": "2026-09-11T14:30:05.000Z",
+        "type": "privmsg"
+      },
+      "line": "[14:30:05] <kara> hello there"
+    },
+    {
+      "name": "an action",
+      "message": {
+        "nick": "kara",
+        "content": "waves",
+        "timestamp": "2026-09-11T14:30:05.000Z",
+        "type": "action"
+      },
+      "line": "[14:30:05] * kara waves"
+    },
+    {
+      "name": "a notice",
+      "message": {
+        "nick": "NickServ",
+        "content": "You are now identified",
+        "timestamp": "2026-09-11T09:00:00.000Z",
+        "type": "notice"
+      },
+      "line": "[09:00:00] -NickServ- You are now identified"
+    },
+    {
+      "name": "something the client said",
+      "message": {
+        "nick": "",
+        "content": "kara joined the channel",
+        "timestamp": "2026-09-11T09:00:00.000Z",
+        "type": "system"
+      },
+      "line": "[09:00:00] -!- kara joined the channel"
+    },
+    {
+      "name": "formatting is stripped by default",
+      "message": {
+        "nick": "kara",
+        "content": "\u0002bold\u0002 text",
+        "timestamp": "2026-09-11T14:30:05.000Z",
+        "type": "privmsg"
+      },
+      "line": "[14:30:05] <kara> bold text"
+    },
+    {
+      "name": "and kept when asked",
+      "message": {
+        "nick": "kara",
+        "content": "\u0002bold\u0002 text",
+        "timestamp": "2026-09-11T14:30:05.000Z",
+        "type": "privmsg"
+      },
+      "keepFormatting": true,
+      "line": "[14:30:05] <kara> \u0002bold\u0002 text"
+    },
+    {
+      "name": "midnight",
+      "message": {
+        "nick": "kara",
+        "content": "late",
+        "timestamp": "2026-09-11T00:00:00.000Z",
+        "type": "privmsg"
+      },
+      "line": "[00:00:00] <kara> late"
+    },
+    {
+      "name": "a timestamp that is not one",
+      "message": {
+        "nick": "kara",
+        "content": "when?",
+        "timestamp": "not a date",
+        "type": "privmsg"
+      },
+      "line": "[--:--:--] <kara> when?"
+    }
+  ],
+  "$files": "What to call the file. The channel alone is ambiguous — two networks have a #general.",
+  "files": [
+    {
+      "name": "a plain channel",
+      "network": "Libera",
+      "channel": "#general",
+      "file": "Libera-#general.txt"
+    },
+    {
+      "name": "spaces become underscores",
+      "network": "My Network",
+      "channel": "#a b",
+      "file": "My_Network-#a_b.txt"
+    },
+    {
+      "name": "a slash cannot be in a filename",
+      "network": "net",
+      "channel": "#a/b",
+      "file": "net-#a_b.txt"
+    },
+    {
+      "name": "a DM is a name",
+      "network": "Libera",
+      "channel": "alice",
+      "file": "Libera-alice.txt"
+    },
+    {
+      "name": "two channels differing only in punctuation stay two files",
+      "network": "n",
+      "channel": "#a+b",
+      "file": "n-#a_b.txt"
+    },
+    {
+      "name": "a run of dots is collapsed, so no filename carries one",
+      "network": "net",
+      "channel": "..",
+      "file": "net.txt"
+    }
+  ]
+}

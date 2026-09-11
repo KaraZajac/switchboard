@@ -19,6 +19,7 @@ import { v4 as uuid } from 'uuid'
 import { friendListKind, friendListLines, friendListStatusLine } from '@shared/friends'
 import { resolveProfile, keysToClear } from '@shared/profile'
 import { performLines } from '@shared/aliases'
+import { logMessage } from '../storage/logfile'
 import { runCommand } from './commands'
 import { isIgnored, type IgnoreEntry, type IgnoreScope } from '@shared/ignore'
 import { getSetting } from '../storage/models/settings'
@@ -681,6 +682,7 @@ export class IRCManager {
 
       // Store in database
       storeMessage(message)
+      logMessage(getServer(serverId)?.name || serverId, message)
 
       this.send('irc:message', { serverId, channel: data.channel, message })
     })
@@ -706,6 +708,7 @@ export class IRCManager {
       }
 
       storeMessage(message)
+      logMessage(getServer(serverId)?.name || serverId, message)
       this.send('irc:message', { serverId, channel: data.channel, message })
     })
 

@@ -110,6 +110,38 @@ export function TitleBar() {
           </button>
         )}
 
+        {/*
+          Everything said is in the database and nothing could get it out. A
+          history you cannot export is a history you cannot keep when you stop
+          using the app.
+        */}
+        {!inDmList && activeChannel && !isServer && (
+          <button
+            onClick={async () => {
+              if (!activeServerId || !activeChannel) return
+              const saved = await window.switchboard.invoke(
+                'transcript:save',
+                activeServerId,
+                activeChannel
+              )
+              if (saved) {
+                useUIStore.getState().addToast({
+                  title: 'Conversation saved',
+                  body: `${saved.messages} message${saved.messages === 1 ? '' : 's'} to ${saved.path}`
+                })
+              }
+            }}
+            className="rounded p-1.5 text-gray-400 transition-colors hover:bg-gray-700 hover:text-gray-100"
+            title="Save this conversation to a file"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <path d="M7 10l5 5 5-5" />
+              <path d="M12 15V3" />
+            </svg>
+          </button>
+        )}
+
         {/* Search */}
         <button
           onClick={() => useUIStore.getState().openModal('search')}

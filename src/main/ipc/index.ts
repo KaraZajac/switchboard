@@ -1,7 +1,8 @@
 import { BrowserWindow, Notification, app, net, dialog, type IpcMainInvokeEvent } from 'electron'
 import { hasMetadata } from '@shared/metadata'
+import { transcript, transcriptFilename } from '@shared/transcript'
 import { handle } from './registry'
-import { readFile } from 'fs/promises'
+import { readFile, writeFile } from 'fs/promises'
 import { userInfo } from 'os'
 import { basename, extname } from 'path'
 import https from 'node:https'
@@ -674,6 +675,55 @@ export function registerIPCHandlers(): void {
 
     client.connection.send('MODE', channel)
     return { ...ch.modes }
+  })
+
+  /**
+   * Write a conversation out as text.
+   *
+   * Everything said is in the database and nothing could get it out — no log
+   * files, no "save this", no way to hand a channel to somebody who does not
+   * run this client. An encrypted history you cannot export is a history you
+   * cannot keep when you stop using the app.
+   *
+   * The whole conversation, not the window's scrollback: the point is the part
+   * you can no longer see.
+   */
+  handle('transcript:save', async (event, serverId: string, channel: string) => {
+    const server = getServer(serverId)
+    const network = server?.name || serverId
+
+    // Ten thousand is a long conversation and a small file. A channel with
+    // more than that has more than anybody is about to read in one sitting,
+    // and an unbounded read would be a way to run the machine out of memory.
+    const messages = getMessages(serverId, channel, { limit: 10_000 })
+
+    // Null when this came over the link rather than from a window, which the
+    // allowlist already prevents — belt as well as braces.
+    const window = event ? BrowserWindow.fromWebContents(event.sender) : null
+    const chosen = await (window
+      ? dialog.showSaveDialog(window, {
+          defaultPath: transcriptFilename(network, channel),
+          filters: [{ name: 'Text', extensions: ['txt'] }]
+        })
+      : dialog.showSaveDialog({ defaultPath: transcriptFilename(network, channel) }))
+
+    if (chosen.canceled || !chosen.filePath) return null
+
+    await writeFile(
+      chosen.filePath,
+      transcript(
+        network,
+        channel,
+        messages.map((message) => ({
+          nick: message.nick,
+          content: message.content,
+          timestamp: message.timestamp,
+          type: message.type
+        }))
+      ),
+      'utf8'
+    )
+    return { path: chosen.filePath, messages: messages.length }
   })
 
   handle('channel:set-mode', async (_event, serverId: string, channel: string, args: string[]) => {

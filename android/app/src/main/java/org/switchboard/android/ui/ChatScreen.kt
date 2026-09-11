@@ -96,6 +96,8 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.ui.platform.LocalContext
 import org.switchboard.android.irc.Formatter
 import org.switchboard.android.irc.Formatting
+import androidx.compose.material.icons.filled.Share
+import org.switchboard.android.irc.Transcript
 
 /**
  * The whole client, once it is running.
@@ -732,6 +734,22 @@ private fun ChannelHeader(
             modifier = Modifier.size(40.dp).clickable(onClick = onOpenSearch).padding(10.dp)
         )
 
+        // Everything said is in the store and nothing could get it out. The
+        // desktop writes a file; a phone shares, which is the same thing in the
+        // shape this platform has. Only where there is a conversation to share.
+        val context = LocalContext.current
+        if (serverId != null && channel != null) {
+            Icon(
+                Icons.Filled.Share,
+                contentDescription = "Share this conversation",
+                tint = Subtext,
+                modifier = Modifier
+                    .size(40.dp)
+                    .clickable { shareTranscript(context, store, serverId, channel) }
+                    .padding(10.dp)
+            )
+        }
+
         Row(
             modifier = Modifier.clickable(onClick = onOpenMembers).padding(horizontal = 10.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -1116,4 +1134,40 @@ private fun FormatButton(
             .clickable(onClick = onClick)
             .padding(horizontal = 10.dp, vertical = 4.dp)
     )
+}
+
+
+/**
+ * Hand a conversation to whatever the person picks.
+ *
+ * A share sheet rather than a file, because that is what this platform has —
+ * and it reaches mail, notes, a text editor and the file manager without this
+ * app asking for storage permission it does not otherwise need. The text is
+ * the same the desktop writes; see [Transcript].
+ */
+private fun shareTranscript(
+    context: android.content.Context,
+    store: SwitchboardStore,
+    serverId: String,
+    channel: String
+) {
+    val network = store.servers[serverId]?.name ?: serverId
+    val text = Transcript.of(
+        network,
+        channel,
+        store.messagesFor(serverId, channel).map {
+            Transcript.Line(it.nick, it.content, it.timestamp, it.type)
+        }
+    )
+
+    val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(android.content.Intent.EXTRA_TITLE, Transcript.filename(network, channel))
+        putExtra(android.content.Intent.EXTRA_TEXT, text)
+    }
+    runCatching {
+        context.startActivity(
+            android.content.Intent.createChooser(intent, "Share $channel")
+        )
+    }
 }

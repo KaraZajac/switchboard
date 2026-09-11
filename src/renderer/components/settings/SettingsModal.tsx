@@ -464,9 +464,14 @@ function NetworkTab() {
   const [proxyPass, setProxyPass] = useState('')
   const [customCaPath, setCustomCaPath] = useState('')
   const [proxySaved, setProxySaved] = useState(false)
+  const [logDirectory, setLogDirectory] = useState('')
+  const [logSaved, setLogSaved] = useState(false)
 
   // Load saved settings
   useEffect(() => {
+    window.switchboard.invoke('settings:get', 'logDirectory').then((v) => {
+      if (typeof v === 'string') setLogDirectory(v)
+    })
     window.switchboard.invoke('settings:get', 'proxy').then((v) => {
       if (v && typeof v === 'object') {
         const p = v as Record<string, string>
@@ -602,6 +607,43 @@ function NetworkTab() {
                 : 'Host names are resolved by the proxy, not here, so a lookup does not go out from this machine. Applies to every network on the next connection.'}
             </div>
           </div>
+        )}
+      </div>
+
+      {/*
+        Off unless somebody asks. Everything is already kept in a database this
+        machine encrypts, and a folder of plain text beside it is strictly less
+        protected than what it copies — which the person should be told rather
+        than left to work out.
+      */}
+      <div>
+        <div className="mb-1 text-sm text-gray-200">Write logs to disk</div>
+        <div className="mb-1 text-xs leading-relaxed text-gray-500">
+          A plain text file per conversation, written as messages arrive. Leave this empty for
+          none. These files are <em>not</em> encrypted the way your history is.
+        </div>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={logDirectory}
+            onChange={(e) => setLogDirectory(e.target.value)}
+            placeholder="/home/you/irc-logs"
+            className="flex-1 rounded bg-gray-900 px-3 py-2 text-sm text-gray-100 outline-none ring-1 ring-gray-700 focus:ring-indigo-500"
+          />
+          <button
+            onClick={() => {
+              void window.switchboard.invoke('settings:set', 'logDirectory', logDirectory.trim())
+              setLogSaved(true)
+            }}
+            className="rounded bg-indigo-500 px-3 py-2 text-sm text-white hover:bg-indigo-600"
+          >
+            Save
+          </button>
+        </div>
+        {logSaved && (
+          <p className="mt-1 text-xs text-green-400">
+            Saved. New messages are written from now on.
+          </p>
         )}
       </div>
 

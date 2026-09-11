@@ -31,6 +31,7 @@ import org.switchboard.android.irc.Formatter
 import org.switchboard.android.irc.Ignore
 import org.switchboard.android.irc.Irc
 import org.switchboard.android.irc.Socks
+import org.switchboard.android.irc.Transcript
 import org.switchboard.android.vault.VaultEnvelope
 import org.switchboard.android.vault.VaultKdf
 import org.switchboard.android.vault.VaultPayload
@@ -883,6 +884,48 @@ class SharedCorpusTest {
                     c["keys"]!!.jsonArray.map { it.jsonPrimitive.content },
                     mapOfOrNull(c["published"]),
                     mapOfOrNull(c["next"])
+                )
+            )
+        }
+    }
+
+    // ── a conversation as text ───────────────────────────────────────
+
+    /**
+     * A log written on one device and one written on the other have to be the
+     * same file. Anything else is two formats, and the second one is the one
+     * somebody's tooling does not read.
+     */
+    @Test
+    fun `writes the transcript the desktop writes`() {
+        val corpus = load("transcript.json")
+
+        for (case in corpus["lines"]!!.jsonArray) {
+            val c = case.jsonObject
+            val m = c["message"]!!.jsonObject
+            assertEquals(
+                c["name"]!!.jsonPrimitive.content,
+                c["line"]!!.jsonPrimitive.content,
+                Transcript.line(
+                    Transcript.Line(
+                        nick = m["nick"]!!.jsonPrimitive.content,
+                        content = m["content"]!!.jsonPrimitive.content,
+                        timestamp = m["timestamp"]!!.jsonPrimitive.content,
+                        type = m["type"]!!.jsonPrimitive.content
+                    ),
+                    keepFormatting = c["keepFormatting"]?.jsonPrimitive?.content == "true"
+                )
+            )
+        }
+
+        for (case in corpus["files"]!!.jsonArray) {
+            val c = case.jsonObject
+            assertEquals(
+                c["name"]!!.jsonPrimitive.content,
+                c["file"]!!.jsonPrimitive.content,
+                Transcript.filename(
+                    c["network"]!!.jsonPrimitive.content,
+                    c["channel"]!!.jsonPrimitive.content
                 )
             )
         }
