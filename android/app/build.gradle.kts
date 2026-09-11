@@ -13,8 +13,8 @@ android {
         applicationId = "org.switchboard.android"
         minSdk = 26
         targetSdk = 35
-        versionCode = 4
-        versionName = "2.1.1-beta"
+        versionCode = 5
+        versionName = "2.1.2-beta"
     }
 
     buildTypes {
