@@ -24,6 +24,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.switchboard.android.irc.Aliases
+import org.switchboard.android.irc.AutoAway
 import org.switchboard.android.irc.ChanModes
 import org.switchboard.android.irc.Casemap
 import org.switchboard.android.irc.ConnectionState
@@ -2134,6 +2135,48 @@ class SharedCorpusTest {
                     case["draft"]!!.jsonPrimitive.content,
                     case["completion"]!!.jsonPrimitive.content
                 )
+            )
+        }
+    }
+
+    // ── away when nobody is there ─────────────────────────────────────
+
+    /**
+     * The two clients measure idleness differently and have to — the desktop
+     * asks the system how long since any input, this counts from the screen
+     * going dark. What they do with that number is one decision, and a
+     * disagreement here is the two devices arguing about whether you are at
+     * your keyboard.
+     */
+    @Test
+    fun `goes away when the desktop would`() {
+        val corpus = load("autoaway.json")
+
+        for (entry in corpus["actions"]!!.jsonArray) {
+            val case = entry.jsonObject
+            val wanted = when (case["action"]!!.jsonPrimitive.content) {
+                "set" -> AutoAway.Action.SET
+                "clear" -> AutoAway.Action.CLEAR
+                else -> AutoAway.Action.NOTHING
+            }
+            assertEquals(
+                case["name"]!!.jsonPrimitive.content,
+                wanted,
+                AutoAway.action(
+                    idleSeconds = case["idleSeconds"]!!.jsonPrimitive.long,
+                    afterMinutes = case["afterMinutes"]!!.jsonPrimitive.int,
+                    alreadyAway = case["alreadyAway"]!!.jsonPrimitive.boolean,
+                    setByUs = case["setByUs"]!!.jsonPrimitive.boolean
+                )
+            )
+        }
+
+        for (entry in corpus["messages"]!!.jsonArray) {
+            val case = entry.jsonObject
+            assertEquals(
+                case["name"]!!.jsonPrimitive.content,
+                case["message"]!!.jsonPrimitive.content,
+                AutoAway.message((case["configured"] as? JsonPrimitive)?.contentOrNull)
             )
         }
     }

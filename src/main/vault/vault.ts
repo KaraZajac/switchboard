@@ -2,11 +2,7 @@ import { getSetting, setSetting } from '../storage/models/settings'
 import { shouldAdoptVault } from '@shared/vaultorder'
 import { serversChanged, settingChanged, monitorChanged } from '../ipc/notify'
 import { getAllServers, removeServer, upsertServer } from '../storage/models/server'
-import {
-  addToMonitorList,
-  clearMonitorList,
-  getMonitorList
-} from '../storage/models/monitor'
+import { addToMonitorList, clearMonitorList, getMonitorList } from '../storage/models/monitor'
 import type { ServerConfig } from '@shared/types/server'
 import {
   deriveKey,
@@ -71,7 +67,13 @@ export const SHARED_SETTINGS = [
   'profile',
   'ignores',
   'highlights',
-  'aliases'
+  'aliases',
+  // How long of nothing counts as away is a fact about the person, not about
+  // the device measuring it — and the two measure it differently, so having
+  // two settings would mean the phone and the desktop disagreeing about when
+  // you left.
+  'autoAwayMinutes',
+  'autoAwayMessage'
 ] as const
 
 export interface VaultStatus {

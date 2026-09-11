@@ -35,6 +35,7 @@ class SwitchboardService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var watcher: Job? = null
     private var doze: DozeWatch? = null
+    private var idle: IdleWatch? = null
 
     private val engine: SwitchboardEngine
         get() = (application as SwitchboardApp).engine
@@ -55,6 +56,17 @@ class SwitchboardService : Service() {
         // the instant the phone surfaces for any other reason.
         if (doze == null) {
             doze = DozeWatch(this) { engine.wake() }.also { it.start() }
+        }
+
+        // Away when nobody is there. The screen is the only idle clock an
+        // ordinary Android app gets, and it has to be watched from something
+        // that outlives the activity — an app in the background is not an app
+        // whose person has gone.
+        if (idle == null) {
+            idle = IdleWatch(this, onChange = { engine.applyAutoAway() }).also { watch ->
+                watch.start()
+                engine.idleSeconds = { watch.idleSeconds }
+            }
         }
 
         // Keep the notification honest about what the phone is doing. Compose
@@ -84,6 +96,9 @@ class SwitchboardService : Service() {
         watcher?.cancel()
         doze?.stop()
         doze = null
+        idle?.stop()
+        idle = null
+        engine.idleSeconds = { 0L }
         scope.cancel()
     }
 

@@ -59,6 +59,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.foundation.layout.FlowRow
+import org.switchboard.android.irc.AutoAway
 import org.switchboard.android.irc.Aliases
 import org.switchboard.android.irc.Ignore
 
@@ -139,6 +140,7 @@ fun SettingsScreen(
 
         FriendsCard(engine)
         HighlightsCard(engine)
+        AwayCard(engine)
         IgnoredCard(engine)
         AliasesCard(engine)
         ProxyCard(engine)
@@ -820,6 +822,101 @@ private fun HighlightsCard(engine: SwitchboardEngine) {
                     }
                 }
             }
+        }
+    }
+}
+
+/**
+ * Saying you are not there, without having to remember to.
+ *
+ * The desktop asks the system how long since any input anywhere. A phone gives
+ * an app no such clock, so this counts from the screen going dark — see
+ * [org.switchboard.android.IdleWatch] for why that is the honest answer and why
+ * the app being in the background deliberately is not.
+ *
+ * How long is long enough is shared with the desktop, because that is a fact
+ * about you rather than about the thing measuring it.
+ */
+@Composable
+private fun AwayCard(engine: SwitchboardEngine) {
+    // Keyed on the engine so a change made at the desk shows up here rather
+    // than sitting stale behind whatever was typed last.
+    var minutes by remember(engine.awayAfterMinutes) {
+        mutableStateOf(engine.awayAfterMinutes.takeIf { it > 0 }?.toString().orEmpty())
+    }
+    var message by remember(engine.awayMessage) { mutableStateOf(engine.awayMessage) }
+    var note by remember { mutableStateOf<String?>(null) }
+
+    val wanted = minutes.toIntOrNull() ?: 0
+
+    Spacer(Modifier.height(8.dp))
+    Text(
+        "Away when idle",
+        color = Overlay,
+        fontSize = 11.sp,
+        fontWeight = FontWeight.Bold,
+        modifier = Modifier.padding(start = 20.dp, bottom = 6.dp)
+    )
+    Card {
+        Text(
+            "Mark yourself away after the screen has been off this long, and come " +
+                "back when it lights up. Leave it empty to never do it.",
+            color = Subtext,
+            fontSize = 13.sp,
+            lineHeight = 18.sp
+        )
+
+        Spacer(Modifier.height(12.dp))
+        Row(modifier = Modifier.fillMaxWidth()) {
+            SettingField(
+                value = minutes,
+                onChange = { minutes = it.filter { c -> c.isDigit() }.take(4); note = null },
+                hint = "Off",
+                numeric = true,
+                modifier = Modifier.weight(1f).padding(end = 8.dp)
+            )
+            Text(
+                "minutes",
+                color = Subtext,
+                fontSize = 13.sp,
+                modifier = Modifier.align(Alignment.CenterVertically).weight(2f)
+            )
+        }
+
+        if (wanted > 0) {
+            Spacer(Modifier.height(8.dp))
+            SettingField(
+                value = message,
+                onChange = { message = it; note = null },
+                hint = AutoAway.DEFAULT_MESSAGE,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+
+        Spacer(Modifier.height(12.dp))
+        Text(
+            note ?: "Only the networks this phone is holding. While the desktop has " +
+                "them it is its own idle clock that decides, which is the one next to " +
+                "the person.",
+            color = if (note != null) Green else Subtext,
+            fontSize = 12.sp,
+            lineHeight = 17.sp
+        )
+
+        Spacer(Modifier.height(12.dp))
+        Button(
+            onClick = {
+                engine.setAutoAway(wanted, message.trim())
+                note = if (wanted > 0) {
+                    "Saved. Away after $wanted ${if (wanted == 1) "minute" else "minutes"}."
+                } else {
+                    "Saved. Nothing will mark you away but you."
+                }
+            },
+            colors = ButtonDefaults.buttonColors(containerColor = Surface0, contentColor = Blue),
+            shape = RoundedCornerShape(8.dp)
+        ) {
+            Text("Save", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
         }
     }
 }

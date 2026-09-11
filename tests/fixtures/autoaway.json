@@ -1,0 +1,170 @@
+{
+  "$comment": "Going away when nobody is there. Read by tests/shared/autoaway.test.ts and the Android SharedCorpusTest. The desktop counts seconds since any input anywhere and the phone counts from the screen going dark; both hand the same number to the same rule, and a disagreement here is the two devices arguing about whether you are at your keyboard.",
+  "$actions": "idleSeconds and afterMinutes are what the device measured and what was asked for; alreadyAway and setByUs are what the network thinks and who told it.",
+  "actions": [
+    {
+      "name": "nothing has happened yet",
+      "idleSeconds": 0,
+      "afterMinutes": 10,
+      "alreadyAway": false,
+      "setByUs": false,
+      "action": "nothing"
+    },
+    {
+      "name": "a minute short of the interval",
+      "idleSeconds": 540,
+      "afterMinutes": 10,
+      "alreadyAway": false,
+      "setByUs": false,
+      "action": "nothing"
+    },
+    {
+      "name": "a second short of the interval",
+      "idleSeconds": 599,
+      "afterMinutes": 10,
+      "alreadyAway": false,
+      "setByUs": false,
+      "action": "nothing"
+    },
+    {
+      "name": "the interval exactly",
+      "idleSeconds": 600,
+      "afterMinutes": 10,
+      "alreadyAway": false,
+      "setByUs": false,
+      "action": "set"
+    },
+    {
+      "name": "long past it",
+      "idleSeconds": 36000,
+      "afterMinutes": 10,
+      "alreadyAway": false,
+      "setByUs": false,
+      "action": "set"
+    },
+    {
+      "name": "a one-minute setting waits the minute",
+      "idleSeconds": 59,
+      "afterMinutes": 1,
+      "alreadyAway": false,
+      "setByUs": false,
+      "action": "nothing"
+    },
+    {
+      "name": "and acts on it",
+      "idleSeconds": 60,
+      "afterMinutes": 1,
+      "alreadyAway": false,
+      "setByUs": false,
+      "action": "set"
+    },
+    {
+      "name": "no setting means off, however long it has been",
+      "idleSeconds": 99999,
+      "afterMinutes": 0,
+      "alreadyAway": false,
+      "setByUs": false,
+      "action": "nothing"
+    },
+    {
+      "name": "and a nonsense one means off too",
+      "idleSeconds": 99999,
+      "afterMinutes": -5,
+      "alreadyAway": false,
+      "setByUs": false,
+      "action": "nothing"
+    },
+    {
+      "name": "switching it off takes back what it set",
+      "idleSeconds": 99999,
+      "afterMinutes": 0,
+      "alreadyAway": true,
+      "setByUs": true,
+      "action": "clear"
+    },
+    {
+      "name": "but leaves alone what it did not",
+      "idleSeconds": 99999,
+      "afterMinutes": 0,
+      "alreadyAway": true,
+      "setByUs": false,
+      "action": "nothing"
+    },
+    {
+      "name": "never over the top of an away somebody typed",
+      "idleSeconds": 36000,
+      "afterMinutes": 10,
+      "alreadyAway": true,
+      "setByUs": false,
+      "action": "nothing"
+    },
+    {
+      "name": "does not say it twice",
+      "idleSeconds": 36000,
+      "afterMinutes": 10,
+      "alreadyAway": true,
+      "setByUs": true,
+      "action": "nothing"
+    },
+    {
+      "name": "coming back takes back its own away",
+      "idleSeconds": 0,
+      "afterMinutes": 10,
+      "alreadyAway": true,
+      "setByUs": true,
+      "action": "clear"
+    },
+    {
+      "name": "coming back leaves a typed away alone",
+      "idleSeconds": 0,
+      "afterMinutes": 10,
+      "alreadyAway": true,
+      "setByUs": false,
+      "action": "nothing"
+    },
+    {
+      "name": "an away it set, with the away already gone",
+      "idleSeconds": 0,
+      "afterMinutes": 10,
+      "alreadyAway": false,
+      "setByUs": true,
+      "action": "clear"
+    },
+    {
+      "name": "a clock that went backwards is not an eternity of idleness",
+      "idleSeconds": -1000,
+      "afterMinutes": 10,
+      "alreadyAway": false,
+      "setByUs": false,
+      "action": "nothing"
+    }
+  ],
+  "$messages": "What is sent, given what is in the box.",
+  "messages": [
+    {
+      "name": "an empty box gets the ordinary sentence",
+      "configured": "",
+      "message": "Away from the keyboard"
+    },
+    {
+      "name": "and so does one with only spaces in it",
+      "configured": "   ",
+      "message": "Away from the keyboard"
+    },
+    {
+      "name": "and so does no setting at all",
+      "configured": null,
+      "message": "Away from the keyboard"
+    },
+    {
+      "name": "what was typed, otherwise",
+      "configured": "back after lunch",
+      "message": "back after lunch"
+    },
+    {
+      "name": "trimmed, because a trailing space is not a word",
+      "configured": "  back after lunch  ",
+      "message": "back after lunch"
+    }
+  ]
+}

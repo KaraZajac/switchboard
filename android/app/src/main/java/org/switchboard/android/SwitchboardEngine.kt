@@ -27,6 +27,7 @@ import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import org.switchboard.android.irc.Aliases
+import org.switchboard.android.irc.AutoAway
 import org.switchboard.android.irc.ChatHistory
 import org.switchboard.android.irc.IrcConnection
 import org.switchboard.android.irc.Profile
@@ -238,6 +239,17 @@ class SwitchboardEngine(
     fun start() {
         watchTheNetwork()
         coordinator.start()
+
+        // Half a minute is often enough for a rule counted in minutes, and the
+        // loop costs nothing while the feature is off — the action is NOTHING
+        // for every connection and no line is sent.
+        awayJob?.cancel()
+        awayJob = scope.launch {
+            while (true) {
+                delay(AWAY_TICK_MS)
+                applyAutoAway()
+            }
+        }
     }
 
     /**
@@ -279,6 +291,10 @@ class SwitchboardEngine(
         coordinator.poke()
         if (!remote.isLinked) scheduleReconnect()
         recomputeMode()
+        // Doze freezes the half-minute poll, and the screen being off is
+        // exactly when the away is owed. The backstop alarm that got us here
+        // is the only thing still running, so this rides on it.
+        applyAutoAway()
     }
 
     /**
@@ -500,6 +516,9 @@ class SwitchboardEngine(
         networkCallback = null
         reconnectJob?.cancel()
         reconnectJob = null
+        awayJob?.cancel()
+        awayJob = null
+        awaySetByUs.clear()
         // Say so, so the desktop takes over at once instead of waiting
         coordinator.leave()
         releaseConnections()
@@ -625,6 +644,12 @@ class SwitchboardEngine(
             store.highlightWords = array.mapNotNull { (it as? JsonPrimitive)?.content }
         }
         (vault.setting(ALIASES_KEY) as? JsonArray)?.let { storedAliases = readAliases(it) }
+        (vault.setting(AWAY_MINUTES_KEY) as? JsonPrimitive)?.let {
+            awayAfterMinutes = (it.contentOrNull()?.toIntOrNull() ?: 0).coerceAtLeast(0)
+        }
+        (vault.setting(AWAY_MESSAGE_KEY) as? JsonPrimitive)?.let {
+            awayMessage = it.contentOrNull().orEmpty()
+        }
 
         for (server in vault.servers()) {
             val watched = vault.watched(server.id)
@@ -930,6 +955,95 @@ class SwitchboardEngine(
         vault.setSharedSetting(HIGHLIGHTS_KEY, encoded)
         vaultVersion = vault.version
         scope.launch { ask("settings:set", JsonPrimitive(HIGHLIGHTS_KEY), encoded) }
+    }
+
+    // ── away when nobody is there ─────────────────────────────────────
+
+    /**
+     * How long of nothing counts as away, and what to say when it does.
+     *
+     * Shared with the desktop, because how long you have to be gone before you
+     * are gone is a fact about you rather than about the thing measuring it.
+     * What each device measures is not shared and cannot be: the desktop asks
+     * the system how long since any input, and this counts from the screen
+     * going dark. See [IdleWatch] for why that is the honest answer here.
+     */
+    var awayAfterMinutes by mutableStateOf(0)
+        private set
+
+    var awayMessage by mutableStateOf("")
+        private set
+
+    /** Seconds since anybody touched this phone. Installed by the service. */
+    var idleSeconds: () -> Long = { 0L }
+
+    /**
+     * Networks this put into away, so it only ever takes back its own.
+     *
+     * Somebody who typed `/away lunch` and then picked the phone up has not
+     * come back from lunch.
+     */
+    private val awaySetByUs = mutableSetOf<String>()
+
+    private var awayJob: Job? = null
+
+    fun setAutoAway(minutes: Int, message: String) {
+        awayAfterMinutes = minutes.coerceAtLeast(0)
+        awayMessage = message
+        vault.setSharedSetting(AWAY_MINUTES_KEY, JsonPrimitive(awayAfterMinutes))
+        vault.setSharedSetting(AWAY_MESSAGE_KEY, JsonPrimitive(message))
+        vaultVersion = vault.version
+        scope.launch {
+            ask("settings:set", JsonPrimitive(AWAY_MINUTES_KEY), JsonPrimitive(awayAfterMinutes))
+            ask("settings:set", JsonPrimitive(AWAY_MESSAGE_KEY), JsonPrimitive(message))
+        }
+        // Switching it off should take back the away it set now, not in half a
+        // minute, and switching it on with the phone already dark should act
+        // now too.
+        applyAutoAway()
+    }
+
+    /**
+     * One look at the clock, across the networks this phone is holding.
+     *
+     * Only those: while the desktop holds a connection it is the desktop's
+     * idle clock that governs it, and a phone in a pocket marking the desk
+     * away would be this feature working against itself.
+     *
+     * Reached from three threads — the poll, the screen broadcast and the
+     * alarm that fires through Doze — so it is serialised, and the map is
+     * copied before walking it. Two of those would otherwise be able to send
+     * the same AWAY twice, and one of them could walk the map while a
+     * connection was being added to it.
+     */
+    @Synchronized
+    internal fun applyAutoAway() {
+        val idle = runCatching { idleSeconds() }.getOrDefault(0L)
+
+        for ((serverId, connection) in connections.toList()) {
+            if (!connection.isConnected) continue
+
+            val action = AutoAway.action(
+                idleSeconds = idle,
+                afterMinutes = awayAfterMinutes,
+                alreadyAway = connection.state.away,
+                setByUs = serverId in awaySetByUs
+            )
+
+            when (action) {
+                AutoAway.Action.SET -> {
+                    connection.setAway(AutoAway.message(awayMessage))
+                    awaySetByUs += serverId
+                }
+
+                AutoAway.Action.CLEAR -> {
+                    connection.setAway(null)
+                    awaySetByUs -= serverId
+                }
+
+                AutoAway.Action.NOTHING -> Unit
+            }
+        }
     }
 
     /**
@@ -1693,6 +1807,13 @@ class SwitchboardEngine(
 
         /** And the commands somebody made up themselves */
         const val ALIASES_KEY = "aliases"
+
+        /** And how long of nothing counts as away, and what to say then */
+        const val AWAY_MINUTES_KEY = "autoAwayMinutes"
+        const val AWAY_MESSAGE_KEY = "autoAwayMessage"
+
+        /** How often to look at the idle clock */
+        const val AWAY_TICK_MS = 30_000L
 
         // Where this phone's proxy is kept. On the device, not in the shared
         // config: a proxy describes where you are, and the desktop's is almost

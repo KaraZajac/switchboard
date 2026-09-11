@@ -5,10 +5,25 @@ import { useUIStore } from '../../stores/uiStore'
 import type { Theme } from '../../stores/uiStore'
 import { useServerStore } from '../../stores/serverStore'
 import type { StorageProtection } from '@shared/types/ipc'
-import { toMask, DEFAULT_SCOPE, EVERYWHERE, type IgnoreEntry, type IgnoreScope } from '@shared/ignore'
+import {
+  toMask,
+  DEFAULT_SCOPE,
+  EVERYWHERE,
+  type IgnoreEntry,
+  type IgnoreScope
+} from '@shared/ignore'
 import { validAliasName, type Alias } from '@shared/aliases'
+import { DEFAULT_AWAY_MESSAGE } from '@shared/autoaway'
 
-type Tab = 'servers' | 'appearance' | 'notifications' | 'ignored' | 'aliases' | 'devices' | 'network' | 'shortcuts'
+type Tab =
+  | 'servers'
+  | 'appearance'
+  | 'notifications'
+  | 'ignored'
+  | 'aliases'
+  | 'devices'
+  | 'network'
+  | 'shortcuts'
 
 const TABS: { key: Tab; label: string }[] = [
   { key: 'servers', label: 'Servers' },
@@ -75,9 +90,7 @@ function ServersTab() {
   return (
     <div>
       <h3 className="mb-3 text-sm font-semibold text-gray-300">Configured Servers</h3>
-      {servers.length === 0 && (
-        <p className="text-sm text-gray-500">No servers configured yet.</p>
-      )}
+      {servers.length === 0 && <p className="text-sm text-gray-500">No servers configured yet.</p>}
       <div className="space-y-2">
         {servers.map((server) => (
           <div
@@ -121,19 +134,84 @@ interface ThemeDef {
 }
 
 const THEMES: ThemeDef[] = [
-  { id: 'catppuccin-mocha', label: 'Catppuccin Mocha', group: 'dark', colors: ['#11111b', '#1e1e2e', '#89b4fa', '#cdd6f4', '#f38ba8'] },
-  { id: 'catppuccin-frappe', label: 'Catppuccin Frappé', group: 'dark', colors: ['#232634', '#303446', '#8caaee', '#c6d0f5', '#e78284'] },
-  { id: 'catppuccin-macchiato', label: 'Catppuccin Macchiato', group: 'dark', colors: ['#181926', '#24273a', '#8aadf4', '#cad3f5', '#ed8796'] },
-  { id: 'catppuccin-latte', label: 'Catppuccin Latte', group: 'light', colors: ['#dce0e8', '#e6e9ef', '#1e66f5', '#4c4f69', '#d20f39'] },
-  { id: 'dracula', label: 'Dracula', group: 'dark', colors: ['#191a21', '#282a36', '#bd93f9', '#f8f8f2', '#ff5555'] },
-  { id: 'nord', label: 'Nord', group: 'dark', colors: ['#242933', '#3b4252', '#81a1c1', '#d8dee9', '#bf616a'] },
-  { id: 'gruvbox', label: 'Gruvbox', group: 'dark', colors: ['#1d2021', '#32302f', '#b16286', '#ebdbb2', '#cc241d'] },
-  { id: 'one-dark', label: 'One Dark', group: 'dark', colors: ['#1b1e24', '#282c34', '#61afef', '#d7dae0', '#e06c75'] },
-  { id: 'rose-pine', label: 'Rosé Pine', group: 'dark', colors: ['#191724', '#26233a', '#c4a7e7', '#e0def4', '#eb6f92'] },
-  { id: 'solarized-dark', label: 'Solarized Dark', group: 'dark', colors: ['#001e27', '#073642', '#6c71c4', '#b5c4c4', '#dc322f'] },
-  { id: 'tokyo-night', label: 'Tokyo Night', group: 'dark', colors: ['#16161e', '#24283b', '#7aa2f7', '#c0caf5', '#f7768e'] },
-  { id: 'kanagawa', label: 'Kanagawa', group: 'dark', colors: ['#16161d', '#2a2a37', '#957fb8', '#dcd7ba', '#e46876'] },
-  { id: 'discord', label: 'Discord', group: 'dark', colors: ['#1a1b1e', '#313338', '#5865f2', '#f2f3f5', '#ed4245'] },
+  {
+    id: 'catppuccin-mocha',
+    label: 'Catppuccin Mocha',
+    group: 'dark',
+    colors: ['#11111b', '#1e1e2e', '#89b4fa', '#cdd6f4', '#f38ba8']
+  },
+  {
+    id: 'catppuccin-frappe',
+    label: 'Catppuccin Frappé',
+    group: 'dark',
+    colors: ['#232634', '#303446', '#8caaee', '#c6d0f5', '#e78284']
+  },
+  {
+    id: 'catppuccin-macchiato',
+    label: 'Catppuccin Macchiato',
+    group: 'dark',
+    colors: ['#181926', '#24273a', '#8aadf4', '#cad3f5', '#ed8796']
+  },
+  {
+    id: 'catppuccin-latte',
+    label: 'Catppuccin Latte',
+    group: 'light',
+    colors: ['#dce0e8', '#e6e9ef', '#1e66f5', '#4c4f69', '#d20f39']
+  },
+  {
+    id: 'dracula',
+    label: 'Dracula',
+    group: 'dark',
+    colors: ['#191a21', '#282a36', '#bd93f9', '#f8f8f2', '#ff5555']
+  },
+  {
+    id: 'nord',
+    label: 'Nord',
+    group: 'dark',
+    colors: ['#242933', '#3b4252', '#81a1c1', '#d8dee9', '#bf616a']
+  },
+  {
+    id: 'gruvbox',
+    label: 'Gruvbox',
+    group: 'dark',
+    colors: ['#1d2021', '#32302f', '#b16286', '#ebdbb2', '#cc241d']
+  },
+  {
+    id: 'one-dark',
+    label: 'One Dark',
+    group: 'dark',
+    colors: ['#1b1e24', '#282c34', '#61afef', '#d7dae0', '#e06c75']
+  },
+  {
+    id: 'rose-pine',
+    label: 'Rosé Pine',
+    group: 'dark',
+    colors: ['#191724', '#26233a', '#c4a7e7', '#e0def4', '#eb6f92']
+  },
+  {
+    id: 'solarized-dark',
+    label: 'Solarized Dark',
+    group: 'dark',
+    colors: ['#001e27', '#073642', '#6c71c4', '#b5c4c4', '#dc322f']
+  },
+  {
+    id: 'tokyo-night',
+    label: 'Tokyo Night',
+    group: 'dark',
+    colors: ['#16161e', '#24283b', '#7aa2f7', '#c0caf5', '#f7768e']
+  },
+  {
+    id: 'kanagawa',
+    label: 'Kanagawa',
+    group: 'dark',
+    colors: ['#16161d', '#2a2a37', '#957fb8', '#dcd7ba', '#e46876']
+  },
+  {
+    id: 'discord',
+    label: 'Discord',
+    group: 'dark',
+    colors: ['#1a1b1e', '#313338', '#5865f2', '#f2f3f5', '#ed4245']
+  }
 ]
 
 function AppearanceTab() {
@@ -158,17 +236,31 @@ function AppearanceTab() {
         <div className="text-sm text-gray-200">Select Theme</div>
         <div className="mt-1 text-xs text-gray-500">Choose a color theme for Switchboard</div>
 
-        <div className="mt-2 text-[11px] font-semibold uppercase tracking-wide text-gray-400">Dark</div>
+        <div className="mt-2 text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+          Dark
+        </div>
         <div className="mt-1 grid grid-cols-3 gap-2">
           {darkThemes.map((t) => (
-            <ThemeCard key={t.id} theme={t} active={theme === t.id} onClick={() => setTheme(t.id)} />
+            <ThemeCard
+              key={t.id}
+              theme={t}
+              active={theme === t.id}
+              onClick={() => setTheme(t.id)}
+            />
           ))}
         </div>
 
-        <div className="mt-3 text-[11px] font-semibold uppercase tracking-wide text-gray-400">Light</div>
+        <div className="mt-3 text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+          Light
+        </div>
         <div className="mt-1 grid grid-cols-3 gap-2">
           {lightThemes.map((t) => (
-            <ThemeCard key={t.id} theme={t} active={theme === t.id} onClick={() => setTheme(t.id)} />
+            <ThemeCard
+              key={t.id}
+              theme={t}
+              active={theme === t.id}
+              onClick={() => setTheme(t.id)}
+            />
           ))}
         </div>
       </div>
@@ -236,7 +328,15 @@ function AppearanceTab() {
   )
 }
 
-function ThemeCard({ theme, active, onClick }: { theme: ThemeDef; active: boolean; onClick: () => void }) {
+function ThemeCard({
+  theme,
+  active,
+  onClick
+}: {
+  theme: ThemeDef
+  active: boolean
+  onClick: () => void
+}) {
   return (
     <button
       onClick={onClick}
@@ -248,14 +348,12 @@ function ThemeCard({ theme, active, onClick }: { theme: ThemeDef; active: boolea
     >
       <div className="flex gap-1">
         {theme.colors.map((color, i) => (
-          <div
-            key={i}
-            className="h-4 w-4 rounded-full"
-            style={{ backgroundColor: color }}
-          />
+          <div key={i} className="h-4 w-4 rounded-full" style={{ backgroundColor: color }} />
         ))}
       </div>
-      <div className={`mt-1.5 truncate text-xs ${active ? 'font-medium text-gray-100' : 'text-gray-300'}`}>
+      <div
+        className={`mt-1.5 truncate text-xs ${active ? 'font-medium text-gray-100' : 'text-gray-300'}`}
+      >
         {theme.label}
       </div>
     </button>
@@ -395,6 +493,8 @@ function NotificationsTab() {
             <div className="text-sm text-gray-200">Away when idle</div>
             <div className="text-xs text-gray-500">
               Mark yourself away after a while with no typing anywhere, and back when you return.
+              Shared with your phone, which has no such clock and counts from its screen going dark
+              instead.
             </div>
           </div>
           <ToggleSwitch
@@ -417,7 +517,7 @@ function NotificationsTab() {
               type="text"
               value={awayMessage}
               onChange={(e) => void saveAway(awayMinutes, e.target.value)}
-              placeholder="Away from the keyboard"
+              placeholder={DEFAULT_AWAY_MESSAGE}
               className="flex-1 rounded bg-gray-900 px-2 py-1.5 text-sm text-gray-100 outline-none ring-1 ring-gray-700 focus:ring-indigo-500"
             />
           </div>
@@ -447,10 +547,10 @@ function NotificationsTab() {
 
       <div className="rounded bg-gray-900 p-3">
         <div className="text-xs text-gray-400">
-          Per-channel mute: right-click a channel in the sidebar to mute/unmute notifications for that channel.
+          Per-channel mute: right-click a channel in the sidebar to mute/unmute notifications for
+          that channel.
         </div>
       </div>
-
     </div>
   )
 }
@@ -562,14 +662,20 @@ function NetworkTab() {
               <input
                 type="text"
                 value={proxyHost}
-                onChange={(e) => { setProxyHost(e.target.value); setProxySaved(false) }}
+                onChange={(e) => {
+                  setProxyHost(e.target.value)
+                  setProxySaved(false)
+                }}
                 placeholder="Proxy host"
                 className="flex-1 rounded bg-gray-900 px-3 py-2 text-sm text-gray-100 outline-none ring-1 ring-gray-700 focus:ring-indigo-500"
               />
               <input
                 type="number"
                 value={proxyPort}
-                onChange={(e) => { setProxyPort(e.target.value); setProxySaved(false) }}
+                onChange={(e) => {
+                  setProxyPort(e.target.value)
+                  setProxySaved(false)
+                }}
                 placeholder="Port"
                 className="w-24 rounded bg-gray-900 px-3 py-2 text-sm text-gray-100 outline-none ring-1 ring-gray-700 focus:ring-indigo-500"
               />
@@ -580,15 +686,23 @@ function NetworkTab() {
               <input
                 type="text"
                 value={proxyUser}
-                onChange={(e) => { setProxyUser(e.target.value); setProxySaved(false) }}
-                placeholder={proxyType === 'socks4' ? 'User name (optional)' : 'Username (optional)'}
+                onChange={(e) => {
+                  setProxyUser(e.target.value)
+                  setProxySaved(false)
+                }}
+                placeholder={
+                  proxyType === 'socks4' ? 'User name (optional)' : 'Username (optional)'
+                }
                 className="flex-1 rounded bg-gray-900 px-3 py-2 text-sm text-gray-100 outline-none ring-1 ring-gray-700 focus:ring-indigo-500"
               />
               {proxyType === 'socks5' && (
                 <input
                   type="password"
                   value={proxyPass}
-                  onChange={(e) => { setProxyPass(e.target.value); setProxySaved(false) }}
+                  onChange={(e) => {
+                    setProxyPass(e.target.value)
+                    setProxySaved(false)
+                  }}
                   placeholder="Password (optional)"
                   className="flex-1 rounded bg-gray-900 px-3 py-2 text-sm text-gray-100 outline-none ring-1 ring-gray-700 focus:ring-indigo-500"
                 />
@@ -619,8 +733,8 @@ function NetworkTab() {
       <div>
         <div className="mb-1 text-sm text-gray-200">Write logs to disk</div>
         <div className="mb-1 text-xs leading-relaxed text-gray-500">
-          A plain text file per conversation, written as messages arrive. Leave this empty for
-          none. These files are <em>not</em> encrypted the way your history is.
+          A plain text file per conversation, written as messages arrive. Leave this empty for none.
+          These files are <em>not</em> encrypted the way your history is.
         </div>
         <div className="flex gap-2">
           <input
@@ -717,7 +831,6 @@ function ToggleSwitch({ checked, onChange }: { checked: boolean; onChange: (v: b
   )
 }
 
-
 /**
  * People you have decided not to hear from.
  *
@@ -738,7 +851,9 @@ function IgnoredTab() {
   }, [])
 
   const nameOf = (id: string): string =>
-    id === EVERYWHERE ? 'Everywhere' : servers.find((s) => s.id === id)?.name ?? 'a network you left'
+    id === EVERYWHERE
+      ? 'Everywhere'
+      : (servers.find((s) => s.id === id)?.name ?? 'a network you left')
 
   const add = async () => {
     setError(null)
@@ -764,8 +879,8 @@ function IgnoredTab() {
       <h3 className="text-sm font-semibold text-gray-300">Ignored</h3>
       <p className="text-xs leading-relaxed text-gray-500">
         Nothing from anybody matching one of these reaches this client — not a message, not a
-        notification, not a badge. Shared with your phone, so somebody silenced here is silent
-        there too.
+        notification, not a badge. Shared with your phone, so somebody silenced here is silent there
+        too.
       </p>
 
       <div className="flex gap-2">
@@ -805,7 +920,9 @@ function IgnoredTab() {
         <p className="font-mono text-xs text-gray-500">Will be saved as {toMask(typed)}</p>
       )}
 
-      {error && <div className="rounded bg-red-900/50 px-2 py-1.5 text-xs text-red-300">{error}</div>}
+      {error && (
+        <div className="rounded bg-red-900/50 px-2 py-1.5 text-xs text-red-300">{error}</div>
+      )}
 
       {list.length === 0 ? (
         <p className="text-sm text-gray-500">Nobody. Right-click someone to add them.</p>
@@ -841,10 +958,12 @@ function IgnoredTab() {
                   about every arrival rather than about one person.
                 */}
                 <div className="mt-1.5 flex gap-3 text-xs text-gray-400">
-                  {([
-                    ['messages', 'Messages'],
-                    ['requests', 'Invites and CTCP']
-                  ] as [keyof IgnoreScope, string][]).map(([kind, label]) => (
+                  {(
+                    [
+                      ['messages', 'Messages'],
+                      ['requests', 'Invites and CTCP']
+                    ] as [keyof IgnoreScope, string][]
+                  ).map(([kind, label]) => (
                     <label key={kind} className="flex items-center gap-1">
                       <input
                         type="checkbox"
@@ -863,7 +982,6 @@ function IgnoredTab() {
     </div>
   )
 }
-
 
 /**
  * Commands you make up yourself.
@@ -914,9 +1032,9 @@ function AliasesTab() {
       <h3 className="text-sm font-semibold text-gray-300">Aliases</h3>
       <p className="text-xs leading-relaxed text-gray-500">
         A command of your own. <span className="font-mono">$1</span> is the first word after it,
-        <span className="font-mono"> $*</span> is all of them, <span className="font-mono">$2-</span>
-        {' '}is the second onwards. Several lines run in order. One alias may use another, but not
-        itself.
+        <span className="font-mono"> $*</span> is all of them,{' '}
+        <span className="font-mono">$2-</span> is the second onwards. Several lines run in order.
+        One alias may use another, but not itself.
       </p>
 
       <div className="space-y-2">
@@ -946,7 +1064,9 @@ function AliasesTab() {
             Add
           </button>
         </div>
-        {error && <div className="rounded bg-red-900/50 px-2 py-1.5 text-xs text-red-300">{error}</div>}
+        {error && (
+          <div className="rounded bg-red-900/50 px-2 py-1.5 text-xs text-red-300">{error}</div>
+        )}
       </div>
 
       {aliases.length === 0 ? (
@@ -965,9 +1085,7 @@ function AliasesTab() {
                   {alias.expansion.split('\n').join(' ; ')}
                 </span>
                 <button
-                  onClick={() =>
-                    void save(aliases.filter((one) => one.name !== alias.name))
-                  }
+                  onClick={() => void save(aliases.filter((one) => one.name !== alias.name))}
                   className="shrink-0 rounded px-2 py-1 text-xs text-gray-400 hover:bg-gray-700 hover:text-gray-100"
                 >
                   Remove
