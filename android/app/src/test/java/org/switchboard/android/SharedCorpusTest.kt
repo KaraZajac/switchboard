@@ -47,6 +47,7 @@ import org.switchboard.android.irc.dialChanged
 import org.switchboard.android.irc.Formatting
 import org.switchboard.android.irc.avatarUrl
 import org.switchboard.android.irc.Friends
+import org.switchboard.android.irc.History
 import org.switchboard.android.irc.Isupport
 import org.switchboard.android.irc.Links
 import org.switchboard.android.irc.ServerConfig
@@ -2277,6 +2278,51 @@ class SharedCorpusTest {
             } else {
                 assertEquals(name, wanted["key"]!!.jsonPrimitive.content, kept?.first)
                 assertEquals(name, wanted["value"]!!.jsonPrimitive.content, kept?.second)
+            }
+        }
+    }
+
+    // ── getting back a line you already sent ──────────────────────────
+
+    /**
+     * Up and Down in the composer. The most-used key after Enter, and neither
+     * client had it — so both learned it at once, and both have to mean the
+     * same thing by it.
+     */
+    @Test
+    fun `recalls a sent line the way the desktop does`() {
+        for (entry in load("history.json")["cases"]!!.jsonArray) {
+            val case = entry.jsonObject
+            val name = case["name"]!!.jsonPrimitive.content
+
+            var state = History.State()
+            var box = ""
+            for (step in case["steps"]!!.jsonArray) {
+                val one = step.jsonObject
+                when {
+                    one.containsKey("send") -> {
+                        state = History.remember(state, one["send"]!!.jsonPrimitive.content)
+                        box = History.textOf(state)
+                    }
+
+                    one.containsKey("up") -> {
+                        box = one["up"]!!.jsonPrimitive.content
+                        state = History.older(state, box)
+                        box = History.textOf(state)
+                    }
+
+                    one.containsKey("down") -> {
+                        state = History.newer(state)
+                        box = History.textOf(state)
+                    }
+
+                    one.containsKey("type") -> box = one["type"]!!.jsonPrimitive.content
+                }
+            }
+
+            (case["text"] as? JsonPrimitive)?.let { assertEquals(name, it.content, box) }
+            (case["lines"] as? JsonArray)?.let { wanted ->
+                assertEquals(name, wanted.map { it.jsonPrimitive.content }, state.lines)
             }
         }
     }

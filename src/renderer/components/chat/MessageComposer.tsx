@@ -1,6 +1,15 @@
 import { useState, useRef, useCallback, useEffect, type KeyboardEvent } from 'react'
 import type { ReplyTarget } from '../../stores/messageStore'
 import type { ChannelUser } from '@shared/types/channel'
+import {
+  browsing,
+  emptyHistory,
+  newer,
+  older,
+  remember,
+  textOf,
+  type History
+} from '@shared/history'
 import { IRC_COMMANDS } from '@shared/constants'
 import { typingToSend, type TypingEvent } from '@shared/typing'
 import { GifPicker } from './GifPicker'
@@ -12,6 +21,18 @@ import { mark, colourise, IRC_PALETTE, type FormattingMark } from '@shared/forma
 const MAX_COMPOSER_HEIGHT = 320
 
 const COMPLETION_COMMANDS = IRC_COMMANDS.map((name) => `/${name}`)
+
+/**
+ * What has been sent where, kept outside the component.
+ *
+ * A composer is unmounted and remade on every channel change, so state inside
+ * it would be history that lasted until you looked away. In memory only and
+ * per conversation — see `@shared/history` for why both of those.
+ */
+const histories = new Map<string, History>()
+
+const historyFor = (key: string): History => histories.get(key) ?? emptyHistory()
+const keep = (key: string, history: History): void => void histories.set(key, history)
 
 interface MessageComposerProps {
   serverId: string
@@ -28,8 +49,15 @@ interface MessageComposerProps {
 }
 
 export function MessageComposer({
-  serverId, channel, onSend, onSendReply, replyTarget, onCancelReply,
-  disabled, users = [], channels = []
+  serverId,
+  channel,
+  onSend,
+  onSendReply,
+  replyTarget,
+  onCancelReply,
+  disabled,
+  users = [],
+  channels = []
 }: MessageComposerProps) {
   const [text, setText] = useState('')
   const [showGifPicker, setShowGifPicker] = useState(false)
@@ -38,6 +66,22 @@ export function MessageComposer({
   const hasFilehost = !!useServerStore((s) => s.filehostUrls[serverId])
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const lastTypingSent = useRef(0)
+
+  /*
+   * The lines already sent here, for Up and Down.
+   *
+   * Per conversation and outside the component, because a composer is
+   * unmounted and remade every time you change channel — state inside it would
+   * mean history that lasted until you looked away. A module-level map is not
+   * elegant; it is the thing that survives.
+   *
+   * Never written to disk. See `@shared/history`.
+   */
+  const key = `${serverId}:${channel}`
+  const history = useRef<History>(historyFor(key))
+  useEffect(() => {
+    history.current = historyFor(key)
+  }, [key])
 
   // Tab completion state
   const completionState = useRef<{
@@ -54,13 +98,14 @@ export function MessageComposer({
   const [mentionIndex, setMentionIndex] = useState(0)
   const mentionRef = useRef<HTMLDivElement>(null)
 
-  const mentionCandidates = mentionQuery !== null
-    ? users
-        .map((u) => u.nick)
-        .filter((nick) => nick.toLowerCase().startsWith(mentionQuery.toLowerCase()))
-        .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
-        .slice(0, 10)
-    : []
+  const mentionCandidates =
+    mentionQuery !== null
+      ? users
+          .map((u) => u.nick)
+          .filter((nick) => nick.toLowerCase().startsWith(mentionQuery.toLowerCase()))
+          .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
+          .slice(0, 10)
+      : []
 
   // Reset mention index when candidates change
   useEffect(() => {
@@ -88,21 +133,24 @@ export function MessageComposer({
     el.style.height = `${Math.min(el.scrollHeight, MAX_COMPOSER_HEIGHT)}px`
   }, [text])
 
-  const acceptMention = useCallback((nick: string) => {
-    const before = text.slice(0, mentionStart)
-    const after = text.slice(inputRef.current?.selectionStart || text.length)
-    setText(before + nick + ' ' + after.trimStart())
-    setMentionQuery(null)
-    // Focus back and move cursor after inserted nick
-    setTimeout(() => {
-      if (inputRef.current) {
-        const pos = mentionStart + nick.length + 1
-        inputRef.current.selectionStart = pos
-        inputRef.current.selectionEnd = pos
-        inputRef.current.focus()
-      }
-    }, 0)
-  }, [text, mentionStart])
+  const acceptMention = useCallback(
+    (nick: string) => {
+      const before = text.slice(0, mentionStart)
+      const after = text.slice(inputRef.current?.selectionStart || text.length)
+      setText(before + nick + ' ' + after.trimStart())
+      setMentionQuery(null)
+      // Focus back and move cursor after inserted nick
+      setTimeout(() => {
+        if (inputRef.current) {
+          const pos = mentionStart + nick.length + 1
+          inputRef.current.selectionStart = pos
+          inputRef.current.selectionEnd = pos
+          inputRef.current.focus()
+        }
+      }, 0)
+    },
+    [text, mentionStart]
+  )
 
   /**
    * Put a formatting code around the selection.
@@ -112,31 +160,37 @@ export function MessageComposer({
    * afterwards so the next keystroke carries on inside the pair rather than
    * at the end of the line.
    */
-  const applyMark = useCallback((which: FormattingMark) => {
-    const field = inputRef.current
-    if (!field) return
+  const applyMark = useCallback(
+    (which: FormattingMark) => {
+      const field = inputRef.current
+      if (!field) return
 
-    const out = mark(text, field.selectionStart, field.selectionEnd, which)
-    setText(out.text)
-    // After React has written the new value, or the selection lands in the old
-    // one and jumps to the end.
-    setTimeout(() => {
-      field.focus()
-      field.setSelectionRange(out.selectionStart, out.selectionEnd)
-    }, 0)
-  }, [text])
+      const out = mark(text, field.selectionStart, field.selectionEnd, which)
+      setText(out.text)
+      // After React has written the new value, or the selection lands in the old
+      // one and jumps to the end.
+      setTimeout(() => {
+        field.focus()
+        field.setSelectionRange(out.selectionStart, out.selectionEnd)
+      }, 0)
+    },
+    [text]
+  )
 
-  const applyColour = useCallback((colour: number | null) => {
-    const field = inputRef.current
-    if (!field) return
+  const applyColour = useCallback(
+    (colour: number | null) => {
+      const field = inputRef.current
+      if (!field) return
 
-    const out = colourise(text, field.selectionStart, field.selectionEnd, colour)
-    setText(out.text)
-    setTimeout(() => {
-      field.focus()
-      field.setSelectionRange(out.selectionStart, out.selectionEnd)
-    }, 0)
-  }, [text])
+      const out = colourise(text, field.selectionStart, field.selectionEnd, colour)
+      setText(out.text)
+      setTimeout(() => {
+        field.focus()
+        field.setSelectionRange(out.selectionStart, out.selectionEnd)
+      }, 0)
+    },
+    [text]
+  )
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -195,6 +249,8 @@ export function MessageComposer({
           } else {
             onSend(text.trim())
           }
+          history.current = remember(history.current, text.trim())
+          keep(key, history.current)
           setText('')
           noteTyping('sent')
           onCancelReply?.()
@@ -215,13 +271,58 @@ export function MessageComposer({
         return
       }
 
+      /*
+       * Up and Down: the line you sent before.
+       *
+       * Only when the caret has nowhere else to go, so a half-written
+       * paragraph still moves line by line the way the key otherwise does. The
+       * mention popup takes these first — it is handled above.
+       */
+      if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+        const input = inputRef.current
+        const atEdge =
+          e.key === 'ArrowUp'
+            ? (input?.selectionStart ?? 0) === 0
+            : (input?.selectionStart ?? 0) === text.length
+
+        if (!atEdge && !browsing(history.current)) return
+
+        const moved = e.key === 'ArrowUp' ? older(history.current, text) : newer(history.current)
+        const wanted = textOf(moved)
+
+        // Nothing to recall — leave the key to the caret rather than eating it
+        if (!browsing(moved) && !browsing(history.current)) return
+
+        e.preventDefault()
+        history.current = moved
+        keep(key, moved)
+        setText(wanted)
+        // The caret goes to the end, as it does in a shell
+        requestAnimationFrame(() => input?.setSelectionRange(wanted.length, wanted.length))
+        return
+      }
+
       // Any other key resets completion state
       if (e.key !== 'Shift') {
         completionState.current.active = false
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [text, onSend, onSendReply, replyTarget, onCancelReply, disabled, users, channels, mentionCandidates, mentionQuery, mentionIndex, acceptMention, applyMark]
+    [
+      text,
+      onSend,
+      onSendReply,
+      replyTarget,
+      onCancelReply,
+      disabled,
+      users,
+      channels,
+      mentionCandidates,
+      mentionQuery,
+      mentionIndex,
+      acceptMention,
+      applyMark
+    ]
   )
 
   const handleTabCompletion = useCallback(
@@ -260,14 +361,10 @@ export function MessageComposer({
 
       if (prefix.startsWith('/')) {
         // Command completion
-        candidates = COMPLETION_COMMANDS.filter((cmd) =>
-          cmd.toLowerCase().startsWith(prefix)
-        )
+        candidates = COMPLETION_COMMANDS.filter((cmd) => cmd.toLowerCase().startsWith(prefix))
       } else if (prefix.startsWith('#') || prefix.startsWith('&')) {
         // Channel completion
-        candidates = channels.filter((ch) =>
-          ch.toLowerCase().startsWith(prefix)
-        )
+        candidates = channels.filter((ch) => ch.toLowerCase().startsWith(prefix))
       } else {
         // Nick completion
         candidates = users
@@ -320,7 +417,13 @@ export function MessageComposer({
       {/* Reply preview bar */}
       {replyTarget && (
         <div className="mb-1 flex items-center gap-2 rounded-t-lg bg-gray-700/50 px-4 py-2">
-          <svg className="h-4 w-4 flex-shrink-0 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <svg
+            className="h-4 w-4 flex-shrink-0 text-gray-400"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
             <path d="M9 17l-5-5 5-5" />
             <path d="M4 12h12a4 4 0 0 1 0 8h-1" />
           </svg>
@@ -353,7 +456,9 @@ export function MessageComposer({
                   acceptMention(nick)
                 }}
                 className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm ${
-                  i === mentionIndex ? 'bg-indigo-500/30 text-white' : 'text-gray-300 hover:bg-gray-700'
+                  i === mentionIndex
+                    ? 'bg-indigo-500/30 text-white'
+                    : 'text-gray-300 hover:bg-gray-700'
                 }`}
               >
                 <span className="font-medium">{nick}</span>
@@ -387,11 +492,23 @@ export function MessageComposer({
               title="Upload a file"
             >
               {uploading ? (
-                <svg className="h-5 w-5 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <svg
+                  className="h-5 w-5 animate-spin"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
                   <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
                 </svg>
               ) : (
-                <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <svg
+                  className="h-5 w-5"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
                   <line x1="12" y1="5" x2="12" y2="19" />
                   <line x1="5" y1="12" x2="19" y2="12" />
                 </svg>
@@ -437,11 +554,13 @@ export function MessageComposer({
             used since mIRC, but a shortcut nobody can see is barely a feature.
           */}
           <div className="mb-2 flex items-center">
-            {([
-              ['bold', 'B', 'font-bold', 'Bold (Ctrl+B)'],
-              ['italic', 'I', 'font-serif italic', 'Italic (Ctrl+I)'],
-              ['underline', 'U', 'underline', 'Underline (Ctrl+U)']
-            ] as [FormattingMark, string, string, string][]).map(([which, glyph, style, title]) => (
+            {(
+              [
+                ['bold', 'B', 'font-bold', 'Bold (Ctrl+B)'],
+                ['italic', 'I', 'font-serif italic', 'Italic (Ctrl+I)'],
+                ['underline', 'U', 'underline', 'Underline (Ctrl+U)']
+              ] as [FormattingMark, string, string, string][]
+            ).map(([which, glyph, style, title]) => (
               <button
                 key={which}
                 onClick={() => applyMark(which)}

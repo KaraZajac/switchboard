@@ -76,6 +76,20 @@ export function runCommand(client: IRCClient, target: string, text: string): Com
       return { handled: false, message: rest }
     }
 
+    // The two services everybody talks to, by the names every client uses for
+    // them. `/ns identify …` rather than `/msg NickServ identify …`, which is
+    // the same message and four more words. The redactor already knows both
+    // shapes — a password typed at a service is a password either way.
+    case 'ns':
+    case 'nickserv':
+    case 'cs':
+    case 'chanserv': {
+      const service = name.startsWith('n') ? 'NickServ' : 'ChanServ'
+      if (!rest) return { handled: true, error: `Usage: /${name} <command> [arguments]` }
+      client.connection.send('PRIVMSG', service, rest)
+      return { handled: true }
+    }
+
     case 'me': {
       if (!rest) return { handled: true, error: '/me needs something to do' }
       client.action(target, rest)
@@ -368,7 +382,8 @@ export function runCommand(client: IRCClient, target: string, text: string): Com
 
     case 'ctcp': {
       const [who, verb, ...body] = args
-      if (!who || !verb) return { handled: true, error: 'Usage: /ctcp <nick> <VERSION|PING|TIME|…>' }
+      if (!who || !verb)
+        return { handled: true, error: 'Usage: /ctcp <nick> <VERSION|PING|TIME|…>' }
       client.connection.sendRaw(
         `PRIVMSG ${who} :\u0001${verb.toUpperCase()}${body.length ? ' ' + body.join(' ') : ''}\u0001`
       )

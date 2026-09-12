@@ -701,6 +701,75 @@
         "MODES": "4"
       },
       "error": "Usage: /wallops <message>"
+    },
+    {
+      "name": "/ns is a message to NickServ",
+      "input": "/ns identify hunter2",
+      "target": "#chan",
+      "nick": "kara",
+      "isupport": {
+        "PREFIX": "(ohv)@%+",
+        "CHANMODES": "eIbq,k,flj,CFLMPQScgimnprstz",
+        "MODES": "4"
+      },
+      "lines": [
+        "PRIVMSG NickServ :identify hunter2"
+      ]
+    },
+    {
+      "name": "and /nickserv is the same thing spelled out",
+      "input": "/nickserv ghost kara",
+      "target": "#chan",
+      "nick": "kara",
+      "isupport": {
+        "PREFIX": "(ohv)@%+",
+        "CHANMODES": "eIbq,k,flj,CFLMPQScgimnprstz",
+        "MODES": "4"
+      },
+      "lines": [
+        "PRIVMSG NickServ :ghost kara"
+      ]
+    },
+    {
+      "name": "/cs is a message to ChanServ",
+      "input": "/cs op #chan kara",
+      "target": "#chan",
+      "nick": "kara",
+      "isupport": {
+        "PREFIX": "(ohv)@%+",
+        "CHANMODES": "eIbq,k,flj,CFLMPQScgimnprstz",
+        "MODES": "4"
+      },
+      "lines": [
+        "PRIVMSG ChanServ :op #chan kara"
+      ]
+    },
+    {
+      "name": "and /chanserv likewise",
+      "input": "/chanserv info #chan",
+      "target": "#chan",
+      "nick": "kara",
+      "isupport": {
+        "PREFIX": "(ohv)@%+",
+        "CHANMODES": "eIbq,k,flj,CFLMPQScgimnprstz",
+        "MODES": "4"
+      },
+      "lines": [
+        "PRIVMSG ChanServ :info #chan"
+      ]
+    },
+    {
+      "name": "/ns with nothing to say says how to use it",
+      "input": "/ns",
+      "target": "#chan",
+      "nick": "kara",
+      "isupport": {
+        "PREFIX": "(ohv)@%+",
+        "CHANMODES": "eIbq,k,flj,CFLMPQScgimnprstz",
+        "MODES": "4"
+      },
+      "lines": [],
+      "error": "Usage: /ns <command> [arguments]"
     }
   ]
 }

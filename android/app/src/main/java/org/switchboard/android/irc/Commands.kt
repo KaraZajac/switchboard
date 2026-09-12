@@ -109,6 +109,18 @@ object Commands {
                 }
             }
 
+            // The two services everybody talks to, by the names every client
+            // uses for them. `/ns identify …` rather than `/msg NickServ
+            // identify …`, which is the same message and four more words.
+            "ns", "nickserv", "cs", "chanserv" -> {
+                val service = if (name.startsWith("n")) "NickServ" else "ChanServ"
+                if (rest.isEmpty()) Result(true, error = "Usage: /$name <command> [arguments]")
+                else {
+                    connection.send("PRIVMSG", service, rest)
+                    Result(true)
+                }
+            }
+
             "join", "j" -> {
                 val first = args.getOrNull(0)
                 if (first == null) Result(true, error = "Usage: /join #channel [key]")

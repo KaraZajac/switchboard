@@ -99,6 +99,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.ui.platform.LocalContext
 import org.switchboard.android.irc.Formatter
 import org.switchboard.android.irc.Formatting
+import org.switchboard.android.irc.History
 import androidx.compose.material.icons.filled.Share
 import org.switchboard.android.irc.Transcript
 import org.switchboard.android.irc.ChanModes
@@ -922,6 +923,15 @@ private fun Banner(
 }
 
 /**
+ * What has been sent where, kept outside the composable.
+ *
+ * The composer is remade on every channel change, so state inside it would be
+ * history that lasted until you looked away. In memory only and per
+ * conversation — see `org.switchboard.android.irc.History` for why both.
+ */
+private val histories = mutableMapOf<String, History.State>()
+
+/**
  * The composer.
  *
  * One line until it needs more, exactly as on the desktop — a phone keyboard
@@ -971,6 +981,23 @@ private fun Composer(
     // the one number it needs.
     var lastTypingAt by remember { mutableStateOf(0L) }
 
+    // Up and Down are a desktop keyboard's. A phone has neither, so the same
+    // thing is a button — beside the formatting marks, where the other things
+    // that act on the box already are.
+    val historyKey = channel ?: ""
+    var history by remember(historyKey) {
+        mutableStateOf(histories[historyKey] ?: History.State())
+    }
+
+    fun step(back: Boolean) {
+        val moved = if (back) History.older(history, draft) else History.newer(history)
+        if (!History.browsing(moved) && !History.browsing(history)) return
+        history = moved
+        histories[historyKey] = moved
+        val wanted = History.textOf(moved)
+        field = TextFieldValue(wanted, TextRange(wanted.length))
+    }
+
     fun note(event: Typing.Event) {
         val decision = Typing.toSend(event, lastTypingAt, System.currentTimeMillis())
         lastTypingAt = decision.lastActiveAt
@@ -988,6 +1015,8 @@ private fun Composer(
         val text = draft.trim()
         if (text.isEmpty()) return
         onSend(text)
+        history = History.remember(history, text)
+        histories[historyKey] = history
         field = TextFieldValue("")
         note(Typing.Event.SENT)
     }
@@ -1073,6 +1102,15 @@ private fun Composer(
             FormatButton("I", FontWeight.Normal, italic = true) { format("italic") }
             FormatButton("U", FontWeight.Normal, underline = true) { format("underline") }
             FormatButton("A", FontWeight.Normal, tint = Blue) { showColours = !showColours }
+
+            // Only when there is something to go back to, so the row stays
+            // quiet in a conversation you have not spoken in.
+            if (history.lines.isNotEmpty()) {
+                FormatButton("↑", FontWeight.Normal) { step(back = true) }
+                if (History.browsing(history)) {
+                    FormatButton("↓", FontWeight.Normal) { step(back = false) }
+                }
+            }
         }
     }
 

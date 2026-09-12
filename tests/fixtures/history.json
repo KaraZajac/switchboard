@@ -1,0 +1,250 @@
+{
+  "$comment": "Getting back a line you already sent. Read by tests/shared/history.test.ts and the Android SharedCorpusTest. Up and Down in the composer — the most-used key after Enter, and neither client had it. Both have to behave identically or the same keystroke means two things depending on which screen you are at.",
+  "$steps": "A sequence applied to an empty history. `send` adds a line, `up` and `down` move, and `type` replaces what is in the box without moving. `text` is what the box shows afterwards; `lines` is the history itself, newest first, where the case checks it.",
+  "cases": [
+    {
+      "name": "nothing to go back to",
+      "steps": [
+        {
+          "up": "half typed"
+        }
+      ],
+      "text": "half typed"
+    },
+    {
+      "name": "one line back",
+      "steps": [
+        {
+          "send": "hello"
+        },
+        {
+          "up": ""
+        }
+      ],
+      "text": "hello"
+    },
+    {
+      "name": "and back down to the empty box",
+      "steps": [
+        {
+          "send": "hello"
+        },
+        {
+          "up": ""
+        },
+        {
+          "down": true
+        }
+      ],
+      "text": ""
+    },
+    {
+      "name": "the half-typed line comes back",
+      "steps": [
+        {
+          "send": "hello"
+        },
+        {
+          "up": "what I was writing"
+        },
+        {
+          "down": true
+        }
+      ],
+      "text": "what I was writing"
+    },
+    {
+      "name": "newest first",
+      "steps": [
+        {
+          "send": "one"
+        },
+        {
+          "send": "two"
+        },
+        {
+          "send": "three"
+        },
+        {
+          "up": ""
+        }
+      ],
+      "text": "three"
+    },
+    {
+      "name": "further back",
+      "steps": [
+        {
+          "send": "one"
+        },
+        {
+          "send": "two"
+        },
+        {
+          "send": "three"
+        },
+        {
+          "up": ""
+        },
+        {
+          "up": ""
+        },
+        {
+          "up": ""
+        }
+      ],
+      "text": "one"
+    },
+    {
+      "name": "and no further — it stays at the oldest rather than wrapping",
+      "steps": [
+        {
+          "send": "one"
+        },
+        {
+          "send": "two"
+        },
+        {
+          "up": ""
+        },
+        {
+          "up": ""
+        },
+        {
+          "up": ""
+        },
+        {
+          "up": ""
+        }
+      ],
+      "text": "one"
+    },
+    {
+      "name": "down past the newest is the draft again, not the oldest",
+      "steps": [
+        {
+          "send": "one"
+        },
+        {
+          "send": "two"
+        },
+        {
+          "up": "draft"
+        },
+        {
+          "down": true
+        }
+      ],
+      "text": "draft"
+    },
+    {
+      "name": "down when not browsing does nothing",
+      "steps": [
+        {
+          "send": "one"
+        },
+        {
+          "down": true
+        }
+      ],
+      "text": ""
+    },
+    {
+      "name": "the same line twice running is one entry",
+      "steps": [
+        {
+          "send": "yes"
+        },
+        {
+          "send": "yes"
+        },
+        {
+          "up": ""
+        },
+        {
+          "up": ""
+        }
+      ],
+      "text": "yes",
+      "lines": [
+        "yes"
+      ]
+    },
+    {
+      "name": "but the same line again later is its own entry",
+      "steps": [
+        {
+          "send": "yes"
+        },
+        {
+          "send": "no"
+        },
+        {
+          "send": "yes"
+        }
+      ],
+      "lines": [
+        "yes",
+        "no",
+        "yes"
+      ]
+    },
+    {
+      "name": "a blank line is not history",
+      "steps": [
+        {
+          "send": "one"
+        },
+        {
+          "send": "   "
+        },
+        {
+          "up": ""
+        }
+      ],
+      "text": "one",
+      "lines": [
+        "one"
+      ]
+    },
+    {
+      "name": "sending ends the browsing",
+      "steps": [
+        {
+          "send": "one"
+        },
+        {
+          "send": "two"
+        },
+        {
+          "up": "draft"
+        },
+        {
+          "send": "three"
+        }
+      ],
+      "text": ""
+    },
+    {
+      "name": "editing a recalled line does not move the position",
+      "steps": [
+        {
+          "send": "one"
+        },
+        {
+          "send": "two"
+        },
+        {
+          "up": ""
+        },
+        {
+          "type": "two edited"
+        },
+        {
+          "up": ""
+        }
+      ],
+      "text": "one"
+    }
+  ]
+}
