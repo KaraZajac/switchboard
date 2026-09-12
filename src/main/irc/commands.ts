@@ -12,6 +12,18 @@ import { maskToSet } from '@shared/masklists'
  * A doubled slash ("//hello") escapes, and sends a literal "/hello".
  */
 
+/**
+ * Something for the client around the connection to do.
+ *
+ * Most commands are a line on the wire and nothing else. These three are not:
+ * clearing a view and keeping an ignore list happen entirely on this side, and
+ * the command layer has no business reaching into either. It says what it
+ * wants; whoever called it does it.
+ */
+export type CommandEffect =
+  /** Empty what is on screen for this conversation. Not the stored history. */
+  { kind: 'clear' } | { kind: 'ignore'; mask: string } | { kind: 'unignore'; mask: string }
+
 export interface CommandResult {
   /** False when the text is an ordinary message and should be sent as one */
   handled: boolean
@@ -19,6 +31,8 @@ export interface CommandResult {
   message?: string
   /** Set when the command could not be run */
   error?: string
+  /** Something for the caller to do that is not a line on the wire */
+  effect?: CommandEffect
 }
 
 const CHANNEL_PREFIXES = '#&+!'
@@ -88,6 +102,34 @@ export function runCommand(client: IRCClient, target: string, text: string): Com
       if (!rest) return { handled: true, error: `Usage: /${name} <command> [arguments]` }
       client.connection.send('PRIVMSG', service, rest)
       return { handled: true }
+    }
+
+    /*
+     * Empty the view.
+     *
+     * The screen, not the log. Every client's `/clear` is a scrollback command
+     * and none of them delete anything — somebody clearing a busy channel to
+     * see what happens next does not mean "forget the morning".
+     */
+    case 'clear':
+      return { handled: true, effect: { kind: 'clear' } }
+
+    /*
+     * Stop hearing from somebody, by name or by mask.
+     *
+     * The list has existed since 2.2.0 and could only be reached through a
+     * profile — which is exactly what you cannot open once somebody is
+     * silent. `toMask` turns a bare nick into one; the list is shared with
+     * the other device the way it always was.
+     */
+    case 'ignore': {
+      if (!args[0]) return { handled: true, error: 'Usage: /ignore <nick or mask>' }
+      return { handled: true, effect: { kind: 'ignore', mask: args[0] } }
+    }
+
+    case 'unignore': {
+      if (!args[0]) return { handled: true, error: 'Usage: /unignore <nick or mask>' }
+      return { handled: true, effect: { kind: 'unignore', mask: args[0] } }
     }
 
     case 'me': {

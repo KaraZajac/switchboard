@@ -411,6 +411,18 @@ class SwitchboardStore {
         return key(server, channel)
     }
 
+    /**
+     * Empty what is on screen for one conversation.
+     *
+     * `/clear`. The view only — every client's is a scrollback command and
+     * none of them delete anything, so asking for history again brings it all
+     * back, which is the right answer for somebody who wanted a clean screen
+     * for a minute.
+     */
+    fun clearConversation(serverId: String, channel: String) {
+        messages[key(serverId, channel)] = mutableStateListOf()
+    }
+
     fun messagesFor(serverId: String, channel: String): List<Message> =
         messages[key(serverId, channel)] ?: emptyList()
 

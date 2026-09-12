@@ -563,6 +563,20 @@ export function useIRCEvents(): void {
       })
     )
 
+    /*
+     * Somebody typed `/clear`.
+     *
+     * The view, not the log — see `clearConversation`. It comes back from the
+     * main process rather than being done in the composer, so a command typed
+     * on a paired phone empties the desktop too, which is what "the same
+     * client on two devices" is supposed to mean.
+     */
+    cleanups.push(
+      api.on('chat:clear', ({ serverId, channel }) => {
+        useMessageStore.getState().clearConversation(serverId, channel)
+      })
+    )
+
     // Monitor online/offline events
     cleanups.push(
       api.on('irc:monitor-online', ({ serverId, nick }) => {

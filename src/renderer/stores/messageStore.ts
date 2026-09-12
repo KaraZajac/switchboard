@@ -31,6 +31,8 @@ interface MessageState {
   editMessage: (serverId: string, channel: string, msgid: string, newContent: string, editedAt: string) => void
   setTyping: (serverId: string, channel: string, nick: string, active: boolean) => void
   clearTyping: (serverId: string, channel: string) => void
+  /** Empty what is on screen for one conversation. The database is untouched. */
+  clearConversation: (serverId: string, channel: string) => void
   setReplyTarget: (serverId: string, channel: string, target: ReplyTarget | null) => void
   getMessageById: (serverId: string, channel: string, msgid: string) => ChatMessage | undefined
 }
@@ -78,6 +80,18 @@ export const useMessageStore = create<MessageState>((set, get) => ({
         }
       }
     }),
+
+  /**
+   * Empty what is on screen for one conversation.
+   *
+   * `/clear`. The view only — every client's is a scrollback command and none
+   * of them delete anything, so scrolling up fetches it all back, which is the
+   * right answer for somebody who wanted a clean screen for a minute.
+   */
+  clearConversation: (serverId, channel) =>
+    set((state) => ({
+      messages: { ...state.messages, [`${serverId}:${channel}`]: [] }
+    })),
 
   setMessages: (serverId, channel, messages) =>
     set((state) => ({

@@ -373,6 +373,22 @@ class CommandsTest {
                     wire.lines
                 )
             }
+
+            // Three commands are not a line on the wire at all — see
+            // `$effects` in the fixture. Checked even when absent, so one that
+            // grows an effect by accident is caught rather than ignored.
+            val wanted = c["effect"]?.jsonObject
+            if (wanted == null) {
+                assertNull(name, result.effect)
+            } else {
+                val mask = wanted["mask"]?.jsonPrimitive?.content
+                val expected = when (wanted["kind"]!!.jsonPrimitive.content) {
+                    "clear" -> Commands.Effect.Clear
+                    "ignore" -> Commands.Effect.Ignore(mask!!)
+                    else -> Commands.Effect.Unignore(mask!!)
+                }
+                assertEquals(name, expected, result.effect)
+            }
         }
     }
 }

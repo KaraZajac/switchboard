@@ -64,3 +64,20 @@ export function settingChanged(key: string): void {
 export function readMarkerChanged(serverId: string, channel: string, timestamp: string): void {
   sink?.('irc:read-marker', { serverId, channel, timestamp })
 }
+
+/**
+ * Somebody typed `/clear`.
+ *
+ * The view, not the log. Every client's `/clear` is a scrollback command and
+ * none of them delete anything, so the window empties what it is showing and
+ * the database is left alone — scrolling up will fetch it all back, which is
+ * the right answer for somebody who wanted a clean screen for a minute.
+ */
+export function conversationCleared(serverId: string, channel: string): void {
+  sink?.('chat:clear', { serverId, channel })
+}
+
+/** The ignore list changed from somewhere other than the settings panel */
+export function ignoresChanged(list: unknown): void {
+  sink?.('ignore:changed', list)
+}

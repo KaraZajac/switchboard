@@ -50,10 +50,29 @@ object Commands {
      * message; [message] is the text to send instead, which the `//` escape
      * uses; [error] is something to tell the user rather than the network.
      */
+    /**
+     * Something for the client around the connection to do.
+     *
+     * Most commands are a line on the wire and nothing else. These are not:
+     * clearing a view and keeping an ignore list happen entirely on this side,
+     * and this layer has no business reaching into either. It says what it
+     * wants; whoever called it does it.
+     *
+     * Matches `CommandEffect` in `src/main/irc/commands.ts`.
+     */
+    sealed interface Effect {
+        /** Empty what is on screen here. Not the stored history. */
+        data object Clear : Effect
+        data class Ignore(val mask: String) : Effect
+        data class Unignore(val mask: String) : Effect
+    }
+
     data class Result(
         val handled: Boolean,
         val message: String? = null,
-        val error: String? = null
+        val error: String? = null,
+        /** Something for the caller to do that is not a line on the wire */
+        val effect: Effect? = null
     )
 
     private const val CHANNEL_PREFIXES = "#&+!"
@@ -112,6 +131,34 @@ object Commands {
             // The two services everybody talks to, by the names every client
             // uses for them. `/ns identify …` rather than `/msg NickServ
             // identify …`, which is the same message and four more words.
+            /*
+             * Empty the view.
+             *
+             * The screen, not the log. Every client's `/clear` is a scrollback
+             * command and none of them delete anything — somebody clearing a
+             * busy channel to see what happens next does not mean "forget the
+             * morning".
+             */
+            "clear" -> Result(true, effect = Effect.Clear)
+
+            /*
+             * Stop hearing from somebody, by name or by mask.
+             *
+             * The list could only be reached through a profile, which is
+             * exactly what you cannot open once somebody is silent.
+             */
+            "ignore" -> {
+                val who = args.getOrNull(0)
+                if (who == null) Result(true, error = "Usage: /ignore <nick or mask>")
+                else Result(true, effect = Effect.Ignore(who))
+            }
+
+            "unignore" -> {
+                val who = args.getOrNull(0)
+                if (who == null) Result(true, error = "Usage: /unignore <nick or mask>")
+                else Result(true, effect = Effect.Unignore(who))
+            }
+
             "ns", "nickserv", "cs", "chanserv" -> {
                 val service = if (name.startsWith("n")) "NickServ" else "ChanServ"
                 if (rest.isEmpty()) Result(true, error = "Usage: /$name <command> [arguments]")

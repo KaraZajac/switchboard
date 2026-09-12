@@ -243,6 +243,7 @@ describe('the commands every client has', () => {
       isupport: Record<string, string>
       lines?: string[]
       error?: string
+      effect?: { kind: string; mask?: string }
     }[]
   }
 
@@ -280,6 +281,11 @@ describe('the commands every client has', () => {
         expect(result.error).toBeUndefined()
         expect(lines).toEqual(c.lines)
       }
+
+      // Three commands are not a line on the wire at all — see `$effects` in
+      // the fixture. Asserted even when absent, so a command that grows one by
+      // accident is caught rather than ignored.
+      expect(result.effect ?? null).toEqual(c.effect ?? null)
     })
   }
 

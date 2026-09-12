@@ -770,6 +770,96 @@
       },
       "lines": [],
       "error": "Usage: /ns <command> [arguments]"
+    },
+    {
+      "name": "/clear empties the view and sends nothing",
+      "input": "/clear",
+      "target": "#chan",
+      "nick": "kara",
+      "isupport": {
+        "PREFIX": "(ohv)@%+",
+        "CHANMODES": "eIbq,k,flj,CFLMPQScgimnprstz",
+        "MODES": "4"
+      },
+      "lines": [],
+      "effect": {
+        "kind": "clear"
+      }
+    },
+    {
+      "name": "/ignore names somebody",
+      "input": "/ignore spammer",
+      "target": "#chan",
+      "nick": "kara",
+      "isupport": {
+        "PREFIX": "(ohv)@%+",
+        "CHANMODES": "eIbq,k,flj,CFLMPQScgimnprstz",
+        "MODES": "4"
+      },
+      "lines": [],
+      "effect": {
+        "kind": "ignore",
+        "mask": "spammer"
+      }
+    },
+    {
+      "name": "/ignore takes a mask as it is given",
+      "input": "/ignore *!*@spam.example",
+      "target": "#chan",
+      "nick": "kara",
+      "isupport": {
+        "PREFIX": "(ohv)@%+",
+        "CHANMODES": "eIbq,k,flj,CFLMPQScgimnprstz",
+        "MODES": "4"
+      },
+      "lines": [],
+      "effect": {
+        "kind": "ignore",
+        "mask": "*!*@spam.example"
+      }
+    },
+    {
+      "name": "/unignore takes it back",
+      "input": "/unignore spammer",
+      "target": "#chan",
+      "nick": "kara",
+      "isupport": {
+        "PREFIX": "(ohv)@%+",
+        "CHANMODES": "eIbq,k,flj,CFLMPQScgimnprstz",
+        "MODES": "4"
+      },
+      "lines": [],
+      "effect": {
+        "kind": "unignore",
+        "mask": "spammer"
+      }
+    },
+    {
+      "name": "/ignore with nobody named says how to use it",
+      "input": "/ignore",
+      "target": "#chan",
+      "nick": "kara",
+      "isupport": {
+        "PREFIX": "(ohv)@%+",
+        "CHANMODES": "eIbq,k,flj,CFLMPQScgimnprstz",
+        "MODES": "4"
+      },
+      "lines": [],
+      "error": "Usage: /ignore <nick or mask>"
+    },
+    {
+      "name": "/unignore with nobody named likewise",
+      "input": "/unignore",
+      "target": "#chan",
+      "nick": "kara",
+      "isupport": {
+        "PREFIX": "(ohv)@%+",
+        "CHANMODES": "eIbq,k,flj,CFLMPQScgimnprstz",
+        "MODES": "4"
+      },
+      "lines": [],
+      "error": "Usage: /unignore <nick or mask>"
     }
-  ]
+  ],
+  "$effects": "Three commands are not a line on the wire at all: clearing a view and keeping an ignore list both happen on the client's side of the socket. `effect` says what the command asked for, and `lines` stays empty — if either client sent something here it would be sending it to the channel."
 }

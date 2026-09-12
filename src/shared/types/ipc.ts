@@ -117,6 +117,16 @@ export interface MainToRendererEvents {
   'monitor:changed': { serverId: string }
   /** A stored setting changed somewhere other than here — the theme, most visibly */
   'settings:changed': { key: string }
+  /**
+   * Somebody typed `/clear`, here or on a paired device.
+   *
+   * The view, not the log: nothing is deleted and scrolling up fetches it all
+   * back. It arrives as an event rather than being done in the composer so
+   * that a command typed on the phone empties this window too.
+   */
+  'chat:clear': { serverId: string; channel: string }
+  /** The ignore list changed from somewhere other than the settings panel */
+  'ignore:changed': IgnoreEntry[]
   'irc:connected': { serverId: string; nick: string; account: string | null }
   'irc:disconnected': { serverId: string; reason: string }
   'irc:message': { serverId: string; channel: string; message: ChatMessage }

@@ -17,6 +17,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import org.switchboard.android.irc.Aliases
+import org.switchboard.android.irc.Ignore
 import org.switchboard.android.irc.Commands
 import org.switchboard.android.irc.ServerConfig
 import java.time.Instant
@@ -72,8 +73,38 @@ fun SwitchboardEngine.say(serverId: String, target: String, text: String) =
                 // banner would otherwise read "Unknown command: /x — /x".
                 command.error != null -> store.noteRefusal(command.error)
             }
+            // The part that is not a line on the wire
+            command.effect?.let { applyCommandEffect(serverId, target, it) }
         }
     }
+
+/**
+ * The part of a command that is not a line on the wire.
+ *
+ * Clearing a view and keeping an ignore list both live on this side, and
+ * `Commands` has no business reaching into either — it says what it wants and
+ * this does it. The ignore arms go through the same list a profile writes, so
+ * `/ignore` and a tap in a profile are the same act.
+ */
+private fun SwitchboardEngine.applyCommandEffect(
+    serverId: String,
+    target: String,
+    effect: Commands.Effect
+) {
+    when (effect) {
+        is Commands.Effect.Clear -> store.clearConversation(serverId, target)
+
+        // Everywhere, because a command typed in a channel says nothing about
+        // which network it was meant for and the list is shared across both.
+        is Commands.Effect.Ignore ->
+            Ignore.toMask(effect.mask).takeIf { it.isNotEmpty() }
+                ?.let { addIgnore(it, Ignore.EVERYWHERE) }
+
+        is Commands.Effect.Unignore ->
+            Ignore.toMask(effect.mask).takeIf { it.isNotEmpty() }
+                ?.let { removeIgnore(it, Ignore.EVERYWHERE) }
+    }
+}
 
 fun SwitchboardEngine.reply(serverId: String, target: String, messageId: String, text: String) =
     act(

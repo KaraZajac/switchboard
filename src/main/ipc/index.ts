@@ -12,7 +12,7 @@ import https from 'node:https'
 import http from 'node:http'
 import { autoUpdater } from 'electron-updater'
 import { ircManager } from '../irc/manager'
-import { runCommand } from '../irc/commands'
+import { runCommand, type CommandEffect } from '../irc/commands'
 import { expandAliases, type Alias } from '@shared/aliases'
 import type { IRCClient } from '../irc/client'
 import {
@@ -45,12 +45,21 @@ import {
   toMask,
   withIgnore,
   withoutIgnore,
+  DEFAULT_SCOPE,
+  EVERYWHERE,
   type IgnoreEntry,
   type IgnoreScope
 } from '@shared/ignore'
 import { secretsProtected, secretsBackendDescription } from '../storage/secrets'
 import { databaseIsEncrypted } from '../storage/database'
-import { serversChanged, monitorChanged, settingChanged, readMarkerChanged } from './notify'
+import {
+  serversChanged,
+  monitorChanged,
+  settingChanged,
+  readMarkerChanged,
+  conversationCleared,
+  ignoresChanged
+} from './notify'
 import {
   createVault,
   lockVault,
@@ -313,6 +322,7 @@ export function registerIPCHandlers(): void {
           message: command.error
         })
       }
+      if (command.effect) await applyEffect(serverId, channel, command.effect)
       return
     }
 
@@ -329,6 +339,45 @@ export function registerIPCHandlers(): void {
     // message that had to be split, rather than two messages.
     const { sendMultilineMessage } = await import('../irc/features/multiline')
     sendMultilineMessage(client, channel, body.split('\n'))
+  }
+
+  /**
+   * The part of a command that is not a line on the wire.
+   *
+   * Clearing a view and keeping an ignore list both live on this side, and
+   * `runCommand` has no business reaching into either — it says what it wants
+   * and this does it. The ignore arms go through the same list the settings
+   * panel writes, so a `/ignore` and a tick in a profile are the same act.
+   */
+  async function applyEffect(
+    serverId: string,
+    channel: string,
+    effect: CommandEffect
+  ): Promise<void> {
+    if (effect.kind === 'clear') {
+      conversationCleared(serverId, channel)
+      return
+    }
+
+    const wanted = toMask(effect.mask)
+    if (!wanted) return
+
+    const current = getSetting<IgnoreEntry[]>(IGNORE_LIST) ?? []
+    // Everywhere, because a command typed in a channel says nothing about
+    // which network it was meant for and the list is shared across both.
+    const list =
+      effect.kind === 'ignore'
+        ? withIgnore(current, {
+            mask: wanted,
+            network: EVERYWHERE,
+            scope: DEFAULT_SCOPE,
+            added: Date.now()
+          })
+        : withoutIgnore(current, wanted, EVERYWHERE)
+
+    setSetting(IGNORE_LIST, list)
+    resealVault()
+    ignoresChanged(list)
   }
 
   handle(
