@@ -29,6 +29,8 @@ import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
@@ -141,6 +143,7 @@ fun SettingsScreen(
         FriendsCard(engine)
         HighlightsCard(engine)
         AwayCard(engine)
+        RejoinCard(engine)
         IgnoredCard(engine)
         AliasesCard(engine)
         ProxyCard(engine)
@@ -917,6 +920,56 @@ private fun AwayCard(engine: SwitchboardEngine) {
             shape = RoundedCornerShape(8.dp)
         ) {
             Text("Save", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+        }
+    }
+}
+
+/**
+ * Going back to a channel you were kicked out of.
+ *
+ * The desktop has had this since 2.2.0 and this phone had not, so what
+ * happened after a kick depended on which device was holding the connection —
+ * the seam these two clients exist to hide.
+ *
+ * Off unless asked for, and it should be: rejoining the instant an operator
+ * removes you is rude, and on some networks it is what turns a kick into a
+ * ban.
+ */
+@Composable
+private fun RejoinCard(engine: SwitchboardEngine) {
+    Spacer(Modifier.height(8.dp))
+    Text(
+        "After a kick",
+        color = Overlay,
+        fontSize = 11.sp,
+        fontWeight = FontWeight.Bold,
+        modifier = Modifier.padding(start = 20.dp, bottom = 6.dp)
+    )
+    Card {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                Text("Rejoin the channel", color = Text0, fontSize = 15.sp)
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "Five seconds later, once. Off by default — going straight back " +
+                        "in is rude, and on some networks it is what turns a kick into " +
+                        "a ban. Shared with your desktop.",
+                    color = Subtext,
+                    fontSize = 12.sp,
+                    lineHeight = 17.sp
+                )
+            }
+            Switch(
+                checked = engine.rejoinOnKick,
+                onCheckedChange = { engine.setRejoinAfterKick(it) },
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = Crust,
+                    checkedTrackColor = Blue
+                )
+            )
         }
     }
 }

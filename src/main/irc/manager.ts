@@ -34,14 +34,10 @@ const IGNORE_LIST = 'ignores'
 /** Whether to go back to a channel after being kicked out of it */
 const REJOIN_ON_KICK = 'rejoinOnKick'
 
-/**
- * How long to wait before doing so.
- *
- * Long enough not to race the `+b` that usually follows a kick, which would
- * get the JOIN refused and report a failure the client caused itself.
- */
-const REJOIN_DELAY_MS = 5_000
+/** How long to wait before doing so — shared, so the phone waits the same */
+const REJOIN_DELAY_MS = REJOIN_AFTER_KICK_MS
 import { avatarUrl } from '@shared/avatar'
+import { REJOIN_AFTER_KICK_MS } from '@shared/constants'
 
 /**
  * Manages all IRC client connections and bridges events to the renderer.
@@ -345,7 +341,7 @@ export class IRCManager {
     const who = {
       nick,
       user: at === -1 ? null : (userHost as string).slice(0, at),
-      host: at === -1 ? (userHost || null) : (userHost as string).slice(at + 1)
+      host: at === -1 ? userHost || null : (userHost as string).slice(at + 1)
     }
     return isIgnored(list, serverId, who, kind)
   }
@@ -714,8 +710,10 @@ export class IRCManager {
         relayedBy: (data.relayedBy as string | null) ?? null,
         pending: false,
         reactions: {},
-        channelContext: typeof data.tags['+draft/channel-context'] === 'string'
-          ? data.tags['+draft/channel-context'] : null
+        channelContext:
+          typeof data.tags['+draft/channel-context'] === 'string'
+            ? data.tags['+draft/channel-context']
+            : null
       }
 
       // Store in database
@@ -765,13 +763,7 @@ export class IRCManager {
 
     client.events.on(
       'react',
-      (data: {
-        channel: string
-        nick: string
-        emoji: string
-        msgid: string
-        removed: boolean
-      }) => {
+      (data: { channel: string; nick: string; emoji: string; msgid: string; removed: boolean }) => {
         // Parsed and then dropped before this: the reaction reached the client
         // and stopped there, so nothing ever showed one — on either client.
         //
@@ -782,11 +774,14 @@ export class IRCManager {
       }
     )
 
-    client.events.on('redact', (data: { channel: string; msgid: string; nick: string; reason: string | null }) => {
-      // Delete from local database
-      deleteMessage(data.msgid)
-      this.send('irc:redact', { serverId, channel: data.channel, msgid: data.msgid })
-    })
+    client.events.on(
+      'redact',
+      (data: { channel: string; msgid: string; nick: string; reason: string | null }) => {
+        // Delete from local database
+        deleteMessage(data.msgid)
+        this.send('irc:redact', { serverId, channel: data.channel, msgid: data.msgid })
+      }
+    )
 
     client.events.on('webpush', (data) => {
       this.send('irc:webpush', { serverId, ...data })
@@ -834,76 +829,142 @@ export class IRCManager {
     )
 
     // Channel rename
-    client.events.on('channelRename', (data: { oldName: string; newName: string; reason: string | null }) => {
-      this.send('irc:channel-rename', { serverId, ...data })
-    })
+    client.events.on(
+      'channelRename',
+      (data: { oldName: string; newName: string; reason: string | null }) => {
+        this.send('irc:channel-rename', { serverId, ...data })
+      }
+    )
 
     // Chathistory batch (including draft/event-playback events)
     client.events.on('chathistoryBatch', (data: { target: string; messages: IRCMessage[] }) => {
       const chatMessages: ChatMessage[] = data.messages
-        .filter((m) => m.command === 'PRIVMSG' || m.command === 'NOTICE' ||
-          m.command === 'JOIN' || m.command === 'PART' || m.command === 'QUIT' ||
-          m.command === 'NICK' || m.command === 'TOPIC' || m.command === 'KICK')
+        .filter(
+          (m) =>
+            m.command === 'PRIVMSG' ||
+            m.command === 'NOTICE' ||
+            m.command === 'JOIN' ||
+            m.command === 'PART' ||
+            m.command === 'QUIT' ||
+            m.command === 'NICK' ||
+            m.command === 'TOPIC' ||
+            m.command === 'KICK'
+        )
         .map((m) => {
-          const timestamp = typeof m.tags['time'] === 'string' ? m.tags['time'] : new Date().toISOString()
+          const timestamp =
+            typeof m.tags['time'] === 'string' ? m.tags['time'] : new Date().toISOString()
           const nick = m.source?.nick || ''
 
           // Event-playback: convert channel events to system messages
           if (m.command === 'JOIN') {
             return {
               id: typeof m.tags['msgid'] === 'string' ? m.tags['msgid'] : uuid(),
-              serverId, channel: data.target, nick: '', userHost: null,
+              serverId,
+              channel: data.target,
+              nick: '',
+              userHost: null,
               content: `${nick} joined the channel`,
-              type: 'system' as const, tags: {}, replyTo: null, timestamp,
-              account: null, pending: false, reactions: {}, channelContext: null
+              type: 'system' as const,
+              tags: {},
+              replyTo: null,
+              timestamp,
+              account: null,
+              pending: false,
+              reactions: {},
+              channelContext: null
             }
           }
           if (m.command === 'PART') {
             const reason = m.params[1] ? ` (${m.params[1]})` : ''
             return {
               id: typeof m.tags['msgid'] === 'string' ? m.tags['msgid'] : uuid(),
-              serverId, channel: data.target, nick: '', userHost: null,
+              serverId,
+              channel: data.target,
+              nick: '',
+              userHost: null,
               content: `${nick} left the channel${reason}`,
-              type: 'system' as const, tags: {}, replyTo: null, timestamp,
-              account: null, pending: false, reactions: {}, channelContext: null
+              type: 'system' as const,
+              tags: {},
+              replyTo: null,
+              timestamp,
+              account: null,
+              pending: false,
+              reactions: {},
+              channelContext: null
             }
           }
           if (m.command === 'QUIT') {
             const reason = m.params[0] ? ` (${m.params[0]})` : ''
             return {
               id: typeof m.tags['msgid'] === 'string' ? m.tags['msgid'] : uuid(),
-              serverId, channel: data.target, nick: '', userHost: null,
+              serverId,
+              channel: data.target,
+              nick: '',
+              userHost: null,
               content: `${nick} quit${reason}`,
-              type: 'system' as const, tags: {}, replyTo: null, timestamp,
-              account: null, pending: false, reactions: {}, channelContext: null
+              type: 'system' as const,
+              tags: {},
+              replyTo: null,
+              timestamp,
+              account: null,
+              pending: false,
+              reactions: {},
+              channelContext: null
             }
           }
           if (m.command === 'NICK') {
             return {
               id: typeof m.tags['msgid'] === 'string' ? m.tags['msgid'] : uuid(),
-              serverId, channel: data.target, nick: '', userHost: null,
+              serverId,
+              channel: data.target,
+              nick: '',
+              userHost: null,
               content: `${nick} is now known as ${m.params[0]}`,
-              type: 'system' as const, tags: {}, replyTo: null, timestamp,
-              account: null, pending: false, reactions: {}, channelContext: null
+              type: 'system' as const,
+              tags: {},
+              replyTo: null,
+              timestamp,
+              account: null,
+              pending: false,
+              reactions: {},
+              channelContext: null
             }
           }
           if (m.command === 'TOPIC') {
             return {
               id: typeof m.tags['msgid'] === 'string' ? m.tags['msgid'] : uuid(),
-              serverId, channel: data.target, nick: '', userHost: null,
+              serverId,
+              channel: data.target,
+              nick: '',
+              userHost: null,
               content: `${nick} changed the topic to: ${m.params[1] || ''}`,
-              type: 'system' as const, tags: {}, replyTo: null, timestamp,
-              account: null, pending: false, reactions: {}, channelContext: null
+              type: 'system' as const,
+              tags: {},
+              replyTo: null,
+              timestamp,
+              account: null,
+              pending: false,
+              reactions: {},
+              channelContext: null
             }
           }
           if (m.command === 'KICK') {
             const reason = m.params[2] ? ` (${m.params[2]})` : ''
             return {
               id: typeof m.tags['msgid'] === 'string' ? m.tags['msgid'] : uuid(),
-              serverId, channel: data.target, nick: '', userHost: null,
+              serverId,
+              channel: data.target,
+              nick: '',
+              userHost: null,
               content: `${m.params[1]} was kicked by ${nick}${reason}`,
-              type: 'system' as const, tags: {}, replyTo: null, timestamp,
-              account: null, pending: false, reactions: {}, channelContext: null
+              type: 'system' as const,
+              tags: {},
+              replyTo: null,
+              timestamp,
+              account: null,
+              pending: false,
+              reactions: {},
+              channelContext: null
             }
           }
 
@@ -913,7 +974,7 @@ export class IRCManager {
           const content = isAction ? text.slice(8, -1) : text
 
           const msg: ChatMessage = {
-            id: (typeof m.tags['msgid'] === 'string' ? m.tags['msgid'] : uuid()),
+            id: typeof m.tags['msgid'] === 'string' ? m.tags['msgid'] : uuid(),
             serverId,
             channel: data.target,
             nick,
@@ -926,8 +987,10 @@ export class IRCManager {
             account: typeof m.tags['account'] === 'string' ? m.tags['account'] : null,
             pending: false,
             reactions: {},
-            channelContext: typeof m.tags['+draft/channel-context'] === 'string'
-              ? m.tags['+draft/channel-context'] : null
+            channelContext:
+              typeof m.tags['+draft/channel-context'] === 'string'
+                ? m.tags['+draft/channel-context']
+                : null
           }
           storeMessage(msg)
           return msg
@@ -941,23 +1004,29 @@ export class IRCManager {
     })
 
     // Netsplit/netjoin batch events
-    client.events.on('netsplit', (data: { server1: string; server2: string; quits: { nick: string }[] }) => {
-      this.send('irc:netsplit', {
-        serverId,
-        server1: data.server1,
-        server2: data.server2,
-        nicks: data.quits.map((q) => q.nick)
-      })
-    })
+    client.events.on(
+      'netsplit',
+      (data: { server1: string; server2: string; quits: { nick: string }[] }) => {
+        this.send('irc:netsplit', {
+          serverId,
+          server1: data.server1,
+          server2: data.server2,
+          nicks: data.quits.map((q) => q.nick)
+        })
+      }
+    )
 
-    client.events.on('netjoin', (data: { server1: string; server2: string; joins: { nick: string }[] }) => {
-      this.send('irc:netjoin', {
-        serverId,
-        server1: data.server1,
-        server2: data.server2,
-        nicks: data.joins.map((j) => j.nick)
-      })
-    })
+    client.events.on(
+      'netjoin',
+      (data: { server1: string; server2: string; joins: { nick: string }[] }) => {
+        this.send('irc:netjoin', {
+          serverId,
+          server1: data.server1,
+          server2: data.server2,
+          nicks: data.joins.map((j) => j.nick)
+        })
+      }
+    )
 
     // Server info events
     client.events.on('motd', (lines) => {
@@ -981,10 +1050,7 @@ export class IRCManager {
         serverId,
         capabilities: caps,
         values: Object.fromEntries(
-          Array.from(client.state.availableCapabilities).map(([name, value]) => [
-            name,
-            value ?? ''
-          ])
+          Array.from(client.state.availableCapabilities).map(([name, value]) => [name, value ?? ''])
         )
       })
 
@@ -1038,10 +1104,14 @@ export class IRCManager {
             nick: m.source?.nick || '',
             userHost: m.source ? `${m.source.user || ''}@${m.source.host || ''}` : null,
             content,
-            type: (isAction ? 'action' : m.command === 'NOTICE' ? 'notice' : 'privmsg') as 'action' | 'notice' | 'privmsg',
+            type: (isAction ? 'action' : m.command === 'NOTICE' ? 'notice' : 'privmsg') as
+              | 'action'
+              | 'notice'
+              | 'privmsg',
             tags: m.tags as Record<string, string>,
             replyTo: typeof m.tags['+reply'] === 'string' ? m.tags['+reply'] : null,
-            timestamp: typeof m.tags['time'] === 'string' ? m.tags['time'] : new Date().toISOString(),
+            timestamp:
+              typeof m.tags['time'] === 'string' ? m.tags['time'] : new Date().toISOString(),
             account: typeof m.tags['account'] === 'string' ? m.tags['account'] : null,
             pending: false,
             reactions: {},

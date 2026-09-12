@@ -664,6 +664,9 @@ class SwitchboardEngine(
         (vault.setting(AWAY_MESSAGE_KEY) as? JsonPrimitive)?.let {
             awayMessage = it.contentOrNull().orEmpty()
         }
+        (vault.setting(REJOIN_KEY) as? JsonPrimitive)?.let {
+            rejoinOnKick = it.booleanOrNull ?: false
+        }
 
         for (server in vault.servers()) {
             val watched = vault.watched(server.id)
@@ -973,6 +976,55 @@ class SwitchboardEngine(
         vault.setSharedSetting(HIGHLIGHTS_KEY, encoded)
         vaultVersion = vault.version
         scope.launch { ask("settings:set", JsonPrimitive(HIGHLIGHTS_KEY), encoded) }
+    }
+
+    /**
+     * Whether being kicked out of a channel means going back to it.
+     *
+     * Off unless asked for. Rejoining the instant an operator removes you is
+     * rude, and on some networks it is what turns a kick into a ban.
+     *
+     * Shared with the desktop, because it is a preference about how you use
+     * IRC rather than about a machine.
+     */
+    var rejoinOnKick by mutableStateOf(false)
+        private set
+
+    // Named for the action rather than the field: a property called
+    // `rejoinOnKick` already generates a `setRejoinOnKick`, and the two collide
+    // on the same JVM signature. The alias list has the same shape for the
+    // same reason.
+    fun setRejoinAfterKick(on: Boolean) {
+        rejoinOnKick = on
+        vault.setSharedSetting(REJOIN_KEY, JsonPrimitive(on))
+        vaultVersion = vault.version
+        scope.launch { ask("settings:set", JsonPrimitive(REJOIN_KEY), JsonPrimitive(on)) }
+    }
+
+    /**
+     * Go back, after a pause.
+     *
+     * The wait is not politeness theatre: an immediate JOIN races the `+b`
+     * that usually follows a kick, gets refused, and has the client announce a
+     * failure it caused itself. [REJOIN_AFTER_KICK_MS] is the desktop's number
+     * too — see `src/shared/constants.ts`.
+     */
+    private fun rejoinAfterKick(serverId: String, data: JsonElement) {
+        if (!rejoinOnKick) return
+        val row = data as? JsonObject ?: return
+        if (row["isMe"]?.jsonPrimitive?.booleanOrNull != true) return
+        val channel = (row["channel"] as? JsonPrimitive)?.content ?: return
+
+        scope.launch {
+            delay(REJOIN_AFTER_KICK_MS)
+            val connection = connections[serverId] ?: return@launch
+            // Still connected, and not already back by hand
+            if (!connection.isConnected) return@launch
+            if (connection.state.channels.containsKey(connection.state.casemap(channel))) {
+                return@launch
+            }
+            connection.send("JOIN", channel)
+        }
     }
 
     // ── away when nobody is there ─────────────────────────────────────
@@ -1358,6 +1410,14 @@ class SwitchboardEngine(
                 askWhatWeMissed(config.id)
                 recomputeMode()
             }
+
+            // Kicked, and told to go back.
+            //
+            // The desktop has done this since 2.2.0 and this did not, so what
+            // happened after a kick depended on which device happened to be
+            // holding the connection — which is exactly the seam the two
+            // clients exist to hide.
+            if (channel == "irc:kick") rejoinAfterKick(config.id, data)
 
             // Read on the other device. Both of us are on the network now, so
             // both of us were about to tell the user about it — and a phone
@@ -1848,6 +1908,18 @@ class SwitchboardEngine(
 
         /** How often to look at the idle clock */
         const val AWAY_TICK_MS = 30_000L
+
+        /** And whether a kick means going back */
+        const val REJOIN_KEY = "rejoinOnKick"
+
+        /**
+         * How long to wait before going back.
+         *
+         * The desktop holds the same number in `src/shared/constants.ts`; they
+         * have to agree, or a kick looks different depending on which device
+         * happened to be holding the connection.
+         */
+        const val REJOIN_AFTER_KICK_MS = 5_000L
 
         // Where this phone's proxy is kept. On the device, not in the shared
         // config: a proxy describes where you are, and the desktop's is almost

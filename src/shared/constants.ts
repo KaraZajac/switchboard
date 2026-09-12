@@ -122,6 +122,18 @@ export const TAG_UNESCAPE_MAP: Record<string, string> = {
  */
 export const MAX_INCOMING = 16384
 
+/**
+ * How long to wait before going back to a channel somebody kicked you out of.
+ *
+ * Long enough not to race the `+b` that usually follows a kick: an immediate
+ * JOIN gets refused and the client announces a failure it caused itself.
+ *
+ * Both clients wait the same, because being kicked on the device that happens
+ * to be holding the connection should not look different from being kicked on
+ * the other one.
+ */
+export const REJOIN_AFTER_KICK_MS = 5_000
+
 /** Max message tags size (bytes) */
 export const MAX_TAGS_SIZE = 8191
 

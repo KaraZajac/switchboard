@@ -93,7 +93,7 @@ describe('which settings are shared at all', () => {
     // by them in your pocket is not a working ignore list.
     expect([...SHARED_SETTINGS]).toEqual([
       'theme', 'mutes', 'profile', 'ignores', 'highlights', 'aliases',
-      'autoAwayMinutes', 'autoAwayMessage'
+      'autoAwayMinutes', 'autoAwayMessage', 'rejoinOnKick'
     ])
     expect(SHARED_SETTINGS as readonly string[]).not.toContain('proxy')
     expect(SHARED_SETTINGS as readonly string[]).not.toContain('customCaPath')

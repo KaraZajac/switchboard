@@ -247,6 +247,7 @@ private fun ServerForm(
     var clientCert by remember { mutableStateOf(existing?.clientCert.orEmpty()) }
     var autoJoin by remember { mutableStateOf(existing?.autoJoin?.joinToString(", ").orEmpty()) }
     var autoConnect by remember { mutableStateOf(existing?.autoConnect ?: true) }
+    var perform by remember { mutableStateOf(existing?.performOnConnect.orEmpty()) }
     var confirmingRemoval by remember { mutableStateOf(false) }
     // A new network starts at the list; editing one never does.
     var picking by remember { mutableStateOf(existing == null) }
@@ -307,6 +308,12 @@ private fun ServerForm(
 
             Field("Join on connect", "#one, #two", autoJoin) { autoJoin = it }
 
+            // The engine has run these since aliases existed and there was
+            // nowhere here to write them — so a perform could only be made at
+            // a desk, and saving a network from this screen quietly erased
+            // whatever was in it.
+            Field("On connect", "One line each, a slash for a command", perform) { perform = it }
+
             Toggle("Connect automatically", "Bring this network up on its own.", autoConnect) {
                 autoConnect = it
             }
@@ -347,7 +354,8 @@ private fun ServerForm(
                             websocketUrl = existing?.websocketUrl,
                             avatarUrl = existing?.avatarUrl,
                             profile = existing?.profile.orEmpty(),
-                            preAwayMessage = existing?.preAwayMessage
+                            preAwayMessage = existing?.preAwayMessage,
+                            performOnConnect = perform.trim().ifBlank { null }
                         )
                         if (existing == null) engine.addServer(config)
                         else engine.updateServer(existing.id, config)

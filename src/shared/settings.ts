@@ -33,7 +33,12 @@ export const SHARED_SETTINGS = [
   // two settings would mean the phone and the desktop disagreeing about when
   // you left.
   'autoAwayMinutes',
-  'autoAwayMessage'
+  'autoAwayMessage',
+  // Whether being kicked means going back. A preference about how you use IRC,
+  // not about the machine — and one the two devices must agree on, or what
+  // happens after a kick depends on which of them happened to be holding the
+  // connection at the time.
+  'rejoinOnKick'
 ] as const
 
 export type SharedSetting = (typeof SHARED_SETTINGS)[number]
