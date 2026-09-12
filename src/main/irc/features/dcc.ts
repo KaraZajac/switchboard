@@ -9,6 +9,7 @@ import {
   isReverse,
   type DccTransfer as Transfer
 } from '@shared/dcc'
+import { isPrivateAddress } from '@shared/privateaddress'
 
 export type { DccTransfer as Transfer } from '@shared/dcc'
 
@@ -48,11 +49,7 @@ export function listTransfers(): Transfer[] {
  * otherwise has nowhere to appear. Null covers both "not a DCC line" and "one
  * we do not act on", which the caller treats the same way.
  */
-export function noteDccOffer(
-  serverId: string,
-  peer: string,
-  body: string
-): Transfer | null {
+export function noteDccOffer(serverId: string, peer: string, body: string): Transfer | null {
   const offer = parseDcc(body)
   if (!offer) return null
 
@@ -101,9 +98,30 @@ export function declineTransfer(id: string): void {
  * they said, because a transfer that keeps writing until the disk fills is the
  * failure that matters.
  */
-export function acceptTransfer(id: string, directory: string): void {
+/**
+ * @param policy whether to refuse an address on this machine or this
+ *   network. Refusing is the default and what the app uses; the tests stand
+ *   up a sender on 127.0.0.1 and say so explicitly.
+ */
+export function acceptTransfer(
+  id: string,
+  directory: string,
+  policy: { refusePrivate: boolean } = { refusePrivate: true }
+): void {
   const transfer = transfers.get(id)
   if (!transfer || transfer.state !== 'offered') return
+
+  // The sender chose this address, and Accept is the only thing between
+  // it and a connection from this machine. `127.0.0.1:9222` and
+  // `192.168.1.1:80` are addresses — the same door a link preview must not
+  // knock on, with a click in front of it that says nothing about where it
+  // leads. Refused before the file is opened, so nothing is left behind.
+  if (policy.refusePrivate && isPrivateAddress(transfer.offer.address)) {
+    transfer.state = 'failed'
+    transfer.error = `${transfer.offer.address} is not on the internet — refused`
+    watch(transfer)
+    return
+  }
 
   const path = join(directory, transfer.filename)
   transfer.path = path
@@ -264,4 +282,3 @@ export function offerFile(
     })
   })
 }
-

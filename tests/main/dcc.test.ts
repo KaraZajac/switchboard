@@ -13,8 +13,14 @@ import { formatDcc } from '../../src/shared/dcc'
  * connects. None of those can be produced with a mock that behaves.
  */
 
-const { noteDccOffer, acceptTransfer, declineTransfer, listTransfers, onTransferChange, offerFile } =
-  await import('../../src/main/irc/features/dcc')
+const {
+  noteDccOffer,
+  acceptTransfer,
+  declineTransfer,
+  listTransfers,
+  onTransferChange,
+  offerFile
+} = await import('../../src/main/irc/features/dcc')
 
 const servers: net.Server[] = []
 afterEach(() => {
@@ -62,7 +68,7 @@ describe('receiving a file', () => {
 
     const directory = mkdtempSync(join(tmpdir(), 'dcc-'))
     const done = settled(transfer.id)
-    acceptTransfer(transfer.id, directory)
+    acceptTransfer(transfer.id, directory, { refusePrivate: false })
 
     expect(await done).toBe('done')
     expect(readFileSync(join(directory, 'notes.txt'), 'utf8')).toBe(body.toString())
@@ -82,7 +88,7 @@ describe('receiving a file', () => {
 
     const directory = mkdtempSync(join(tmpdir(), 'dcc-'))
     const done = settled(transfer.id)
-    acceptTransfer(transfer.id, directory)
+    acceptTransfer(transfer.id, directory, { refusePrivate: false })
 
     expect(await done).toBe('done')
     expect(readFileSync(join(directory, 'notes.txt')).length).toBe(claimed)
@@ -97,7 +103,7 @@ describe('receiving a file', () => {
 
     const directory = mkdtempSync(join(tmpdir(), 'dcc-'))
     const done = settled(transfer.id)
-    acceptTransfer(transfer.id, directory)
+    acceptTransfer(transfer.id, directory, { refusePrivate: false })
 
     expect(await done).toBe('failed')
   })
@@ -114,7 +120,7 @@ describe('receiving a file', () => {
 
     const directory = mkdtempSync(join(tmpdir(), 'dcc-'))
     const done = settled(transfer.id)
-    acceptTransfer(transfer.id, directory)
+    acceptTransfer(transfer.id, directory, { refusePrivate: false })
 
     expect(await done).toBe('failed')
   })
@@ -133,11 +139,27 @@ describe('receiving a file', () => {
 
     const directory = mkdtempSync(join(tmpdir(), 'dcc-'))
     const done = settled(transfer.id)
-    acceptTransfer(transfer.id, directory)
+    acceptTransfer(transfer.id, directory, { refusePrivate: false })
     await done
 
     expect(existsSync(join(directory, 'escaped.txt'))).toBe(true)
     expect(existsSync(join(directory, '..', 'escaped.txt'))).toBe(false)
+  })
+
+  /**
+   * The sender chose the address, and Accept is the only thing between it and
+   * a connection from this machine. `127.0.0.1:9222` is an address. The other
+   * tests here stand up a sender on loopback and say so; the app never does.
+   */
+  it('refuses to connect to an address on this machine or this network', () => {
+    const transfer = noteDccOffer('srv', 'alice', offer(9222, 10, 'devtools.json'))!
+    const directory = mkdtempSync(join(tmpdir(), 'dcc-'))
+    acceptTransfer(transfer.id, directory)
+
+    expect(transfer.state).toBe('failed')
+    expect(transfer.error).toMatch(/not on the internet/)
+    // Refused before anything was opened
+    expect(existsSync(join(directory, 'devtools.json'))).toBe(false)
   })
 
   it('records an offer without connecting to anything', () => {

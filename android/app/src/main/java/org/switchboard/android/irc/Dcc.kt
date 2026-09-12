@@ -60,7 +60,7 @@ object Dcc {
             // "chat", which readFilename has already taken off the front.
             val address = parts.getOrNull(0) ?: return null
             val port = parts.getOrNull(1) ?: return null
-            return Offer("chat", "", addressFrom(address), port.toIntOrNull() ?: 0, 0)
+            return Offer("chat", "", addressFrom(address), portFrom(port) ?: return null, 0)
         }
 
         val address = parts.getOrNull(0) ?: return null
@@ -70,7 +70,7 @@ object Dcc {
             kind = kind,
             filename = filename,
             address = addressFrom(address),
-            port = port.toIntOrNull() ?: 0,
+            port = portFrom(port) ?: return null,
             size = parts.getOrNull(2)?.toLongOrNull() ?: 0,
             token = parts.getOrNull(3)
         )
@@ -170,5 +170,17 @@ object Dcc {
         val space = input.indexOf(' ')
         if (space == -1) return input to ""
         return input.substring(0, space) to input.substring(space + 1).trim()
+    }
+
+    /**
+     * A TCP port, or zero for "I cannot listen", or null for not a port.
+     *
+     * Sixteen bits. `toIntOrNull() ?: 0` let 70000 through as an offer, which
+     * is one right up until the socket refuses it. Zero is reverse DCC.
+     */
+    private fun portFrom(value: String): Int? {
+        if (!Regex("""^\d{1,5}$""").matches(value)) return null
+        val port = value.toInt()
+        return if (port <= 65535) port else null
     }
 }

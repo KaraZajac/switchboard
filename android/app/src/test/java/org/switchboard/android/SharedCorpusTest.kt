@@ -53,6 +53,7 @@ import org.switchboard.android.irc.Links
 import org.switchboard.android.irc.ServerConfig
 import org.switchboard.android.irc.Reconnect
 import org.switchboard.android.irc.Powers
+import org.switchboard.android.irc.PrivateAddress
 import org.switchboard.android.irc.Profile
 import org.switchboard.android.irc.Redact
 import org.switchboard.android.irc.Unread
@@ -2408,5 +2409,29 @@ class SharedCorpusTest {
         }
         assertEquals("NOW", ServerTime.of("soon") { "NOW" })
         assertEquals("NOW", ServerTime.of(null) { "NOW" })
+    }
+
+    // ── addresses we will not connect to ──────────────────────────────
+
+    /**
+     * Wherever somebody else names an address this phone would then connect
+     * to — a DCC offer — the same door must stay shut on both devices.
+     */
+    @Test
+    fun `refuses the same addresses the desktop refuses`() {
+        val corpus = load("privateaddress.json")
+        for (entry in corpus["private"]!!.jsonArray) {
+            val c = entry.jsonObject
+            assertTrue(c["name"]!!.jsonPrimitive.content, PrivateAddress.isPrivate(c["address"]!!.jsonPrimitive.content))
+        }
+        for (entry in corpus["public"]!!.jsonArray) {
+            val c = entry.jsonObject
+            assertFalse(c["name"]!!.jsonPrimitive.content, PrivateAddress.isPrivate(c["address"]!!.jsonPrimitive.content))
+        }
+        for (entry in corpus["literals"]!!.jsonArray) {
+            val c = entry.jsonObject
+            assertEquals(c["value"]!!.jsonPrimitive.content, c["literal"]!!.jsonPrimitive.boolean,
+                PrivateAddress.isIpLiteral(c["value"]!!.jsonPrimitive.content))
+        }
     }
 }

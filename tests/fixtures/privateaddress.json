@@ -1,0 +1,148 @@
+{
+  "$comment": "Whether an address is on this machine or this network. Read by tests/main/safefetch.test.ts and the Android SharedCorpusTest. Used wherever somebody else names an address a client would then connect to — a link preview on the desktop, a DCC offer on both. Ranges from RFC 1918, 3927, 5735, 5737, 6598, 4193 and 4291.",
+  "$private": "Addresses we will not connect to. Anything that cannot be read as an address is refused too.",
+  "private": [
+    {
+      "name": "loopback",
+      "address": "127.0.0.1"
+    },
+    {
+      "name": "anything else in 127/8",
+      "address": "127.13.99.4"
+    },
+    {
+      "name": "this network",
+      "address": "0.0.0.0"
+    },
+    {
+      "name": "a home router",
+      "address": "192.168.1.1"
+    },
+    {
+      "name": "RFC 1918, ten",
+      "address": "10.0.0.7"
+    },
+    {
+      "name": "RFC 1918, the awkward one",
+      "address": "172.20.3.4"
+    },
+    {
+      "name": "cloud metadata",
+      "address": "169.254.169.254"
+    },
+    {
+      "name": "carrier-grade NAT",
+      "address": "100.64.0.1"
+    },
+    {
+      "name": "multicast",
+      "address": "239.255.255.250"
+    },
+    {
+      "name": "broadcast",
+      "address": "255.255.255.255"
+    },
+    {
+      "name": "IPv6 loopback",
+      "address": "::1"
+    },
+    {
+      "name": "IPv6 unspecified",
+      "address": "::"
+    },
+    {
+      "name": "IPv6 unique local",
+      "address": "fd00::1"
+    },
+    {
+      "name": "IPv6 link-local",
+      "address": "fe80::1"
+    },
+    {
+      "name": "IPv4 in an IPv6 coat",
+      "address": "::ffff:127.0.0.1"
+    },
+    {
+      "name": "a bracketed literal",
+      "address": "[::1]"
+    },
+    {
+      "name": "nothing at all",
+      "address": ""
+    },
+    {
+      "name": "not an address",
+      "address": "not-an-address"
+    },
+    {
+      "name": "an octet that is not one",
+      "address": "999.1.1.1"
+    }
+  ],
+  "$public": "And addresses we will.",
+  "public": [
+    {
+      "name": "an ordinary host",
+      "address": "93.184.216.34"
+    },
+    {
+      "name": "the edge of 172.16/12",
+      "address": "172.32.0.1"
+    },
+    {
+      "name": "the other edge",
+      "address": "172.15.255.255"
+    },
+    {
+      "name": "a public one that looks close",
+      "address": "192.169.0.1"
+    },
+    {
+      "name": "one just under multicast",
+      "address": "223.255.255.255"
+    },
+    {
+      "name": "a public IPv6",
+      "address": "2606:4700:4700::1111"
+    }
+  ],
+  "$literals": "Which strings are addresses at all, as opposed to names that something has to resolve.",
+  "literals": [
+    {
+      "value": "127.0.0.1",
+      "literal": true
+    },
+    {
+      "value": "8.8.8.8",
+      "literal": true
+    },
+    {
+      "value": "::1",
+      "literal": true
+    },
+    {
+      "value": "fd00::1",
+      "literal": true
+    },
+    {
+      "value": "[::1]",
+      "literal": true
+    },
+    {
+      "value": "example.org",
+      "literal": false
+    },
+    {
+      "value": "localhost",
+      "literal": false
+    },
+    {
+      "value": "irc.libera.chat",
+      "literal": false
+    },
+    {
+      "value": "",
+      "literal": false
+    }
+  ]
+}

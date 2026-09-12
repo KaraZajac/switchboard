@@ -56,11 +56,13 @@ export function parseDcc(body: string): DccOffer | null {
     // which `readFilename` has already taken off the front.
     const [address, port] = parts
     if (!address || !port) return null
+    const portNumber = portFrom(port)
+    if (portNumber === null) return null
     return {
       kind,
       filename: '',
       address: addressFrom(address),
-      port: Number(port) || 0,
+      port: portNumber,
       size: 0
     }
   }
@@ -68,14 +70,28 @@ export function parseDcc(body: string): DccOffer | null {
   const [address, port, size, token] = parts
   if (!address || port === undefined) return null
 
+  // A port is sixteen bits. `Number("70000") || 0` was 70000, which is an
+  // offer right up until `net.connect` throws on it — after the file has
+  // been opened, leaving a row that says "active" for good. Zero is reverse
+  // DCC and stays; anything else out of range is not an offer.
+  const portNumber = portFrom(port)
+  if (portNumber === null) return null
+
   return {
     kind,
     filename,
     address: addressFrom(address),
-    port: Number(port) || 0,
+    port: portNumber,
     size: Number(size) || 0,
     ...(token ? { token } : {})
   }
+}
+
+/** A TCP port, or zero for "I cannot listen", or null for not a port */
+function portFrom(value: string): number | null {
+  if (!/^\d{1,5}$/.test(value)) return null
+  const port = Number(value)
+  return port <= 65535 ? port : null
 }
 
 /**

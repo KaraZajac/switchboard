@@ -13,6 +13,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.switchboard.android.irc.PrivateAddress
 import java.io.File
 import java.io.OutputStream
 import java.net.InetSocketAddress
@@ -96,6 +97,16 @@ class DccTransfers(private val context: Context, private val scope: CoroutineSco
     fun accept(id: String) {
         val transfer = all.firstOrNull { it.id == id } ?: return
         if (transfer.state != "offered") return
+
+        // The sender chose this address, and Accept is the only thing between
+        // it and a connection from this phone. Refused before anything is
+        // opened, so nothing is left behind.
+        if (PrivateAddress.isPrivate(transfer.address)) {
+            transfer.state = "failed"
+            transfer.error = "${transfer.address} is not on the internet — refused"
+            changed()
+            return
+        }
 
         transfer.state = "active"
         changed()

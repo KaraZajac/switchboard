@@ -159,6 +159,37 @@
       "name": "a chat with no port",
       "body": "DCC CHAT chat 3232235777",
       "offer": null
+    },
+    {
+      "name": "the highest port there is",
+      "body": "DCC SEND notes.txt 3232235777 65535 1024",
+      "offer": {
+        "kind": "send",
+        "filename": "notes.txt",
+        "address": "192.168.1.1",
+        "port": 65535,
+        "size": 1024
+      }
+    },
+    {
+      "name": "a port that does not fit in sixteen bits is not an offer",
+      "body": "DCC SEND notes.txt 3232235777 65536 1024",
+      "offer": null
+    },
+    {
+      "name": "nor is a negative one",
+      "body": "DCC SEND notes.txt 3232235777 -1 1024",
+      "offer": null
+    },
+    {
+      "name": "nor a word where a port should be",
+      "body": "DCC SEND notes.txt 3232235777 five 1024",
+      "offer": null
+    },
+    {
+      "name": "a chat on an impossible port is not an offer either",
+      "body": "DCC CHAT chat 3232235777 70000",
+      "offer": null
     }
   ],
   "$format": "Writing one. The address goes as an integer, because a client that sends a dotted quad is one older clients cannot read.",
