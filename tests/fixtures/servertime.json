@@ -1,0 +1,90 @@
+{
+  "$comment": "What a message's `time` tag is allowed to be. Read by tests/shared/servertime.test.ts and the Android SharedCorpusTest. server-time says ISO 8601 in UTC with milliseconds; both clients stored the tag on trust. The phone later hands it to Instant.parse, which throws on garbage, and the desktop to new Date, which yields an Invalid Date that sorts anywhere. `valid` is the string where it is a timestamp we will store, and null where it is not.",
+  "cases": [
+    {
+      "name": "the spec's own example",
+      "value": "2011-10-19T16:40:51.620Z",
+      "valid": "2011-10-19T16:40:51.620Z"
+    },
+    {
+      "name": "no milliseconds, which some servers omit",
+      "value": "2026-09-12T18:00:00Z",
+      "valid": "2026-09-12T18:00:00Z"
+    },
+    {
+      "name": "one or two decimal places are still milliseconds",
+      "value": "2026-09-12T18:00:00.5Z",
+      "valid": "2026-09-12T18:00:00.5Z"
+    },
+    {
+      "name": "a leap second is refused, because neither runtime can parse one",
+      "value": "2016-12-31T23:59:60Z",
+      "valid": null
+    },
+    {
+      "name": "not a timestamp at all",
+      "value": "soon",
+      "valid": null
+    },
+    {
+      "name": "empty",
+      "value": "",
+      "valid": null
+    },
+    {
+      "name": "missing",
+      "value": null,
+      "valid": null
+    },
+    {
+      "name": "an offset instead of Z is not what the spec allows",
+      "value": "2026-09-12T18:00:00+02:00",
+      "valid": null
+    },
+    {
+      "name": "microseconds are more than the spec allows",
+      "value": "2026-09-12T18:00:00.123456Z",
+      "valid": null
+    },
+    {
+      "name": "a date that matches the pattern and is not a day",
+      "value": "2026-02-30T00:00:00Z",
+      "valid": null
+    },
+    {
+      "name": "a month that does not exist",
+      "value": "2026-13-01T00:00:00Z",
+      "valid": null
+    },
+    {
+      "name": "an hour that does not exist",
+      "value": "2026-09-12T24:00:00Z",
+      "valid": null
+    },
+    {
+      "name": "a year from before IRC is a sort key, not a message",
+      "value": "1969-12-31T23:59:59Z",
+      "valid": null
+    },
+    {
+      "name": "and so is one from the far future",
+      "value": "9999-01-01T00:00:00Z",
+      "valid": null
+    },
+    {
+      "name": "a date with no time",
+      "value": "2026-09-12",
+      "valid": null
+    },
+    {
+      "name": "trailing junk",
+      "value": "2026-09-12T18:00:00Z junk",
+      "valid": null
+    },
+    {
+      "name": "a unix timestamp is not ISO 8601",
+      "value": "1789172653",
+      "valid": null
+    }
+  ]
+}

@@ -56,6 +56,7 @@ import org.switchboard.android.irc.Powers
 import org.switchboard.android.irc.Profile
 import org.switchboard.android.irc.Redact
 import org.switchboard.android.irc.Unread
+import org.switchboard.android.irc.ServerTime
 import org.switchboard.android.irc.Services
 import org.switchboard.android.irc.Typing
 import org.switchboard.android.irc.LineLength
@@ -2386,5 +2387,26 @@ class SharedCorpusTest {
                 SaslPlan.account(config, case["nick"]!!.jsonPrimitive.content)
             )
         }
+    }
+
+    // ── what a server-time tag may be ─────────────────────────────────
+
+    /**
+     * Both clients stored the `time` tag on trust. Here it later reached
+     * `Instant.parse`, which throws — so a server could crash the transcript
+     * export with `@time=soon`. Both cut the same cases now.
+     */
+    @Test
+    fun `accepts the same timestamps the desktop accepts`() {
+        for (entry in load("servertime.json")["cases"]!!.jsonArray) {
+            val case = entry.jsonObject
+            assertEquals(
+                case["name"]!!.jsonPrimitive.content,
+                (case["valid"] as? JsonPrimitive)?.contentOrNull,
+                ServerTime.valid((case["value"] as? JsonPrimitive)?.contentOrNull)
+            )
+        }
+        assertEquals("NOW", ServerTime.of("soon") { "NOW" })
+        assertEquals("NOW", ServerTime.of(null) { "NOW" })
     }
 }

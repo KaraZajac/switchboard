@@ -252,6 +252,14 @@ object Irc {
         if (at != -1) {
             return IrcSource(prefix.substring(0, at), null, prefix.substring(at + 1))
         }
+        // A user and no host. Rare on the wire, but `!` is not a nick
+        // character, so a prefix carrying one is a nick and a user whatever
+        // follows — and reporting `nick!user` as the nick breaks every mask
+        // built from it, which is how an ignored person's messages would come
+        // through.
+        if (bang != -1) {
+            return IrcSource(prefix.substring(0, bang), prefix.substring(bang + 1), null)
+        }
         return IrcSource(prefix, null, null)
     }
 }

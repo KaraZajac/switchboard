@@ -284,6 +284,187 @@
           "multi-prefix server-time"
         ]
       }
+    },
+    {
+      "name": "an unknown escape drops the backslash and keeps the letter (message-tags §Escaping)",
+      "raw": "@key=a\\qb PRIVMSG #c :x",
+      "parsed": {
+        "tags": {
+          "key": "aqb"
+        },
+        "prefix": null,
+        "nick": null,
+        "command": "PRIVMSG",
+        "params": [
+          "#c",
+          "x"
+        ]
+      }
+    },
+    {
+      "name": "an empty value is empty, which is not the same as no value",
+      "raw": "@key= PRIVMSG #c :x",
+      "parsed": {
+        "tags": {
+          "key": ""
+        },
+        "prefix": null,
+        "nick": null,
+        "command": "PRIVMSG",
+        "params": [
+          "#c",
+          "x"
+        ]
+      }
+    },
+    {
+      "name": "the last of two identical keys wins",
+      "raw": "@key=first;key=second PRIVMSG #c :x",
+      "parsed": {
+        "tags": {
+          "key": "second"
+        },
+        "prefix": null,
+        "nick": null,
+        "command": "PRIVMSG",
+        "params": [
+          "#c",
+          "x"
+        ]
+      }
+    },
+    {
+      "name": "a client-only tag keeps its plus sign",
+      "raw": "@+typing=active TAGMSG #c",
+      "parsed": {
+        "tags": {
+          "+typing": "active"
+        },
+        "prefix": null,
+        "nick": null,
+        "command": "TAGMSG",
+        "params": [
+          "#c"
+        ]
+      }
+    },
+    {
+      "name": "a vendor-prefixed tag keeps its vendor",
+      "raw": "@example.com/thing=1 PRIVMSG #c :x",
+      "parsed": {
+        "tags": {
+          "example.com/thing": "1"
+        },
+        "prefix": null,
+        "nick": null,
+        "command": "PRIVMSG",
+        "params": [
+          "#c",
+          "x"
+        ]
+      }
+    },
+    {
+      "name": "a doubled backslash before s is a backslash and an s, not a space",
+      "raw": "@key=a\\\\sb PRIVMSG #c :x",
+      "parsed": {
+        "tags": {
+          "key": "a\\sb"
+        },
+        "prefix": null,
+        "nick": null,
+        "command": "PRIVMSG",
+        "params": [
+          "#c",
+          "x"
+        ]
+      }
+    },
+    {
+      "name": "a source with a user and no host",
+      "raw": ":nick!user PRIVMSG #c :x",
+      "parsed": {
+        "tags": {},
+        "prefix": "nick!user",
+        "nick": "nick",
+        "command": "PRIVMSG",
+        "params": [
+          "#c",
+          "x"
+        ]
+      }
+    },
+    {
+      "name": "a source with a host and no user",
+      "raw": ":nick@host PRIVMSG #c :x",
+      "parsed": {
+        "tags": {},
+        "prefix": "nick@host",
+        "nick": "nick",
+        "command": "PRIVMSG",
+        "params": [
+          "#c",
+          "x"
+        ]
+      }
+    },
+    {
+      "name": "a command and nothing else",
+      "raw": "PING",
+      "parsed": {
+        "tags": {},
+        "prefix": null,
+        "nick": null,
+        "command": "PING",
+        "params": []
+      }
+    },
+    {
+      "name": "a trailing parameter that itself begins with a colon",
+      "raw": ":server 001 me ::hello",
+      "parsed": {
+        "tags": {},
+        "prefix": "server",
+        "nick": "server",
+        "command": "001",
+        "params": [
+          "me",
+          ":hello"
+        ]
+      }
+    },
+    {
+      "name": "tags and a source and many parameters, all at once",
+      "raw": "@time=2026-09-12T00:00:00.000Z :nick!u@h KICK #c victim :bye",
+      "parsed": {
+        "tags": {
+          "time": "2026-09-12T00:00:00.000Z"
+        },
+        "prefix": "nick!u@h",
+        "nick": "nick",
+        "command": "KICK",
+        "params": [
+          "#c",
+          "victim",
+          "bye"
+        ]
+      }
+    },
+    {
+      "name": "a tag value carrying every escape at once",
+      "raw": "@key=\\:\\s\\\\\\r\\n PRIVMSG #c :x",
+      "parsed": {
+        "tags": {
+          "key": "; \\\r\n"
+        },
+        "prefix": null,
+        "nick": null,
+        "command": "PRIVMSG",
+        "params": [
+          "#c",
+          "x"
+        ]
+      }
     }
   ],
   "serialise": [
@@ -403,6 +584,33 @@
         "bye"
       ],
       "line": "PART #channel :bye"
+    },
+    {
+      "name": "a parameter with a space in it goes last, with a colon",
+      "command": "PRIVMSG",
+      "params": [
+        "#c",
+        "two words"
+      ],
+      "line": "PRIVMSG #c :two words"
+    },
+    {
+      "name": "an empty last parameter is sent as a bare colon",
+      "command": "TOPIC",
+      "params": [
+        "#c",
+        ""
+      ],
+      "line": "TOPIC #c :"
+    },
+    {
+      "name": "a parameter that starts with a colon has to be trailing",
+      "command": "PRIVMSG",
+      "params": [
+        "#c",
+        ":)"
+      ],
+      "line": "PRIVMSG #c ::)"
     }
   ],
   "$serialiseRule": "A command whose last parameter is human text (PRIVMSG, NOTICE, TOPIC, PART, QUIT, KICK, AWAY, SETNAME, WALLOPS, USER) always sends it as trailing. Any other last parameter is trailing only when it is empty, contains a space, or starts with ':'. Earlier parameters are always sent bare."

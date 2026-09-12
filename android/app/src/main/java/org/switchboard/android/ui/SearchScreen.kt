@@ -248,5 +248,6 @@ private fun highlighted(content: String, term: String) = buildAnnotatedString {
 }
 
 private fun whenItWas(timestamp: String): String = runCatching {
-    Instant.parse(timestamp).atZone(ZoneId.systemDefault()).format(DAY_FORMAT)
+    runCatching { Instant.parse(timestamp).atZone(ZoneId.systemDefault()).format(DAY_FORMAT) }
+        .getOrDefault("")
 }.getOrDefault("")

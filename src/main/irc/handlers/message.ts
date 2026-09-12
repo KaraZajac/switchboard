@@ -1,3 +1,4 @@
+import { serverTimeOf } from '@shared/servertime'
 import { registerHandler } from './registry'
 import { operFrom, relayedBy } from '@shared/tags'
 import { isServerSource } from '@shared/source'
@@ -98,7 +99,8 @@ registerHandler('PRIVMSG', (client, msg) => {
 
   // Extract relevant tags
   const msgid = typeof msg.tags['msgid'] === 'string' ? msg.tags['msgid'] : undefined
-  const time = typeof msg.tags['time'] === 'string' ? msg.tags['time'] : new Date().toISOString()
+  // A tag we are willing to store, or now — see `@shared/servertime`
+  const time = serverTimeOf(msg.tags['time'] as string | undefined, () => new Date().toISOString())
   const account = typeof msg.tags['account'] === 'string' ? msg.tags['account'] : undefined
   const replyTo = typeof msg.tags['+reply'] === 'string' ? msg.tags['+reply'] : undefined
   const label = typeof msg.tags['label'] === 'string' ? msg.tags['label'] : undefined
@@ -124,9 +126,7 @@ registerHandler('PRIVMSG', (client, msg) => {
     label,
     oper,
     relayedBy: relayed,
-    userHost: msg.source
-      ? `${msg.source.user || ''}@${msg.source.host || ''}`
-      : null,
+    userHost: msg.source ? `${msg.source.user || ''}@${msg.source.host || ''}` : null,
     tags: msg.tags
   })
 })
@@ -153,7 +153,8 @@ registerHandler('NOTICE', (client, msg) => {
   const channel = isPrivate ? (isServerSource(msg.prefix) ? '*' : nick) : addressed
 
   const msgid = typeof msg.tags['msgid'] === 'string' ? msg.tags['msgid'] : undefined
-  const time = typeof msg.tags['time'] === 'string' ? msg.tags['time'] : new Date().toISOString()
+  // A tag we are willing to store, or now — see `@shared/servertime`
+  const time = serverTimeOf(msg.tags['time'] as string | undefined, () => new Date().toISOString())
 
   client.events.emit('notice', {
     channel,
@@ -232,10 +233,7 @@ registerHandler('TAGMSG', (client, msg) => {
 })
 
 /** The first of several tag spellings that is actually present */
-function tagValue(
-  tags: Record<string, string | true>,
-  ...names: string[]
-): string | null {
+function tagValue(tags: Record<string, string | true>, ...names: string[]): string | null {
   for (const name of names) {
     const value = tags[name]
     if (typeof value === 'string') return value

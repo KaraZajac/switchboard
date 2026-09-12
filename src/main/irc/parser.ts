@@ -134,6 +134,14 @@ function parsePrefix(prefix: string): IRCSource {
     }
   }
 
+  // A user and no host. Rare on the wire, but `!` is not a nick character,
+  // so a prefix carrying one is a nick and a user whatever follows — and
+  // reporting `nick!user` as the nick breaks every mask built from it, which
+  // is how an ignored person's messages would come through.
+  if (bangIdx !== -1) {
+    return { nick: prefix.slice(0, bangIdx), user: prefix.slice(bangIdx + 1), host: null }
+  }
+
   return {
     nick: prefix,
     user: null,

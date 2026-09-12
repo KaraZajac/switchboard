@@ -22,7 +22,8 @@ internal fun messageId(message: IrcMessage, serverId: String): String =
     message.tag("msgid") ?: "$serverId-${Instant.now().toEpochMilli()}-${counter.incrementAndGet()}"
 
 internal fun timestampOf(message: IrcMessage): String =
-    message.tag("time") ?: Instant.now().toString()
+    // A tag we are willing to store, or now — see [ServerTime]
+    ServerTime.of(message.tag("time"))
 
 internal fun registerMessagingHandlers() {
 
