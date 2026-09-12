@@ -1,6 +1,6 @@
 import { app } from 'electron'
 import { readFile, writeFile, mkdir } from 'fs/promises'
-import { randomBytes, timingSafeEqual } from 'crypto'
+import { randomBytes } from 'crypto'
 import { join } from 'path'
 import { ircManager } from '../irc/manager'
 import { invokeForRemote, isRemoteAllowed } from '../ipc/registry'
@@ -16,6 +16,7 @@ import { getSetting, setSetting } from '../storage/models/settings'
 import {
   encodeFrame,
   generatePairingCode,
+  pairingAttempt,
   isPeerFrame,
   FrameDecoder,
   PROTOCOL_VERSION,
@@ -58,6 +59,8 @@ const PAIRING_WINDOW_MS = 5 * 60 * 1000
 interface PairingSession {
   code: string
   expiresAt: number
+  /** Wrong guesses so far, across every device that has tried */
+  wrong: number
 }
 
 interface RemoteClient {
@@ -268,7 +271,7 @@ export async function startPairing(): Promise<RemoteStatus> {
   if (!endpoint) await startRemoteLink()
   if (!endpoint) return remoteStatus()
 
-  pairing = { code: generatePairingCode(), expiresAt: Date.now() + PAIRING_WINDOW_MS }
+  pairing = { code: generatePairingCode(), expiresAt: Date.now() + PAIRING_WINDOW_MS, wrong: 0 }
   return remoteStatus()
 }
 
@@ -343,7 +346,6 @@ async function handleConnection(connection: IrohConnection): Promise<void> {
   let authenticated = false
   let name = 'Unknown device'
   let closed = false
-
 
   // One QUIC stream, many event sources: writes must be serialised or two
   // concurrent writeAll calls interleave and the link dies — quietly, since
@@ -446,13 +448,17 @@ function authorise(
     return { ok: false, reason: 'This device is not paired. Start pairing on the desktop first.' }
   }
 
-  const given = Buffer.from(hello.pairingCode ?? '')
-  const expected = Buffer.from(session.code)
-  if (given.length !== expected.length || !timingSafeEqual(given, expected)) {
-    return { ok: false, reason: 'Wrong pairing code' }
-  }
+  switch (pairingAttempt(session, hello.pairingCode)) {
+    case 'ok':
+      return { ok: true }
 
-  return { ok: true }
+    case 'exhausted':
+      pairing = null
+      return { ok: false, reason: 'Too many wrong codes. Start pairing again on the desktop.' }
+
+    default:
+      return { ok: false, reason: 'Wrong pairing code' }
+  }
 }
 
 /**
@@ -505,7 +511,12 @@ async function handleCall(
   send: (frame: ServerFrame) => void
 ): Promise<void> {
   if (!isRemoteAllowed(frame.channel)) {
-    send({ t: 'result', id: frame.id, ok: false, error: `Not available remotely: ${frame.channel}` })
+    send({
+      t: 'result',
+      id: frame.id,
+      ok: false,
+      error: `Not available remotely: ${frame.channel}`
+    })
     return
   }
 

@@ -66,6 +66,39 @@ describe('remote frame codec', () => {
     }
   })
 
+  /**
+   * From the system's random source, not `Math.random`.
+   *
+   * V8's is xorshift128+: fast, evenly distributed, and recoverable — given a
+   * few outputs of the same stream its state can be solved for and every later
+   * value predicted. Fine for picking a colour, not for the one secret between
+   * somebody holding your ticket and your IRC connection.
+   *
+   * Randomness cannot be tested, so this tests the thing that would actually
+   * be wrong: that it asks the right generator at all.
+   */
+  it('does not take the pairing code from Math.random', () => {
+    const random = vi.spyOn(Math, 'random')
+    try {
+      generatePairingCode()
+      expect(random).not.toHaveBeenCalled()
+    } finally {
+      random.mockRestore()
+    }
+  })
+
+  /** And that it uses the whole space, including the codes with leading zeros */
+  it('spreads across the range and keeps short codes six long', () => {
+    const seen = new Set<string>()
+    for (let i = 0; i < 3000; i++) seen.add(generatePairingCode())
+    // Collisions in 3000 draws from a million are expected; a generator stuck
+    // in a corner of the range is what this would catch.
+    expect(seen.size).toBeGreaterThan(2900)
+
+    const lowest = [...seen].filter((code) => code.startsWith('0'))
+    for (const code of lowest) expect(code).toHaveLength(6)
+  })
+
   it('pins the protocol identifiers', () => {
     expect(REMOTE_ALPN).toBe('switchboard/remote/0')
     expect(PROTOCOL_VERSION).toBe(1)
@@ -261,5 +294,51 @@ describe('which settings a paired device may touch', () => {
     )
     await expect(invokeForRemote('settings:get', [''])).rejects.toThrow(/not available/i)
     await expect(invokeForRemote('settings:get', [])).rejects.toThrow(/not available/i)
+  })
+})
+
+/**
+ * Guessing the pairing code.
+ *
+ * Six digits is a million, and a wrong guess only cost a reconnect — so the
+ * five-minute window was five minutes of free attempts against the one secret
+ * between somebody holding your ticket and your IRC connection. Nobody types
+ * it wrong five times; a program does.
+ */
+describe('trying the pairing code', () => {
+  it('lets the right code through, however many times', async () => {
+    const { pairingAttempt } = await import('../../src/main/remote/protocol')
+    const session = { code: '004201', wrong: 0 }
+    expect(pairingAttempt(session, '004201')).toBe('ok')
+    expect(pairingAttempt(session, '004201')).toBe('ok')
+    expect(session.wrong).toBe(0)
+  })
+
+  it('closes the window after five wrong ones', async () => {
+    const { pairingAttempt } = await import('../../src/main/remote/protocol')
+    const session = { code: '004201', wrong: 0 }
+
+    for (let i = 0; i < 4; i++) {
+      expect(pairingAttempt(session, String(i).padStart(6, '0'))).toBe('wrong')
+    }
+    expect(pairingAttempt(session, '999999')).toBe('exhausted')
+    expect(session.wrong).toBe(5)
+  })
+
+  /** Counted across devices: opening another connection is what a guess costs */
+  it('counts every guess against the same window', async () => {
+    const { pairingAttempt } = await import('../../src/main/remote/protocol')
+    const session = { code: '004201', wrong: 3 }
+    expect(pairingAttempt(session, '111111')).toBe('wrong')
+    expect(pairingAttempt(session, '222222')).toBe('exhausted')
+  })
+
+  it('treats a missing code as a wrong one rather than a match', async () => {
+    const { pairingAttempt } = await import('../../src/main/remote/protocol')
+    expect(pairingAttempt({ code: '004201', wrong: 0 }, undefined)).toBe('wrong')
+    expect(pairingAttempt({ code: '004201', wrong: 0 }, '')).toBe('wrong')
+    // A prefix is not a match, and neither is a longer string that starts right
+    expect(pairingAttempt({ code: '004201', wrong: 0 }, '00420')).toBe('wrong')
+    expect(pairingAttempt({ code: '004201', wrong: 0 }, '0042010')).toBe('wrong')
   })
 })

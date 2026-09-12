@@ -1,3 +1,4 @@
+import { randomBytes } from 'crypto'
 import { getSetting, setSetting } from '../storage/models/settings'
 import { SHARED_SETTINGS } from '@shared/settings'
 import { shouldAdoptVault } from '@shared/vaultorder'
@@ -90,7 +91,11 @@ function writeEnvelope(envelope: VaultEnvelope): void {
 function deviceName(): string {
   const existing = getSetting<string>(DEVICE_NAME_KEY)
   if (existing) return existing
-  const name = `desktop-${Math.random().toString(36).slice(2, 8)}`
+  // Also from the system's random source. This one is not a secret — it is a
+  // label on a config — but it travels to paired devices, and an observable
+  // output of the same generator that produces the pairing code is exactly
+  // what makes that generator worth attacking.
+  const name = `desktop-${randomBytes(4).toString('hex')}`
   setSetting(DEVICE_NAME_KEY, name)
   return name
 }
