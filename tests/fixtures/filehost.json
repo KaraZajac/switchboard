@@ -1,5 +1,5 @@
 {
-  "$comment": "Uploading a file to the network's own filehost, shared by tests/shared/filehost.test.ts and the Android SharedCorpusTest. The desktop has had this since there was a file picker; the phone had no attach button at all, which is the wrong way round \u2014 a photograph is on the phone.",
+  "$comment": "Uploading a file to the network's own filehost, shared by tests/shared/filehost.test.ts and the Android SharedCorpusTest. The desktop has had this since there was a file picker; the phone had no attach button at all, which is the wrong way round — a photograph is on the phone.",
   "$where": "`isupport` is what the network advertised; `url` is where uploads go, or null.",
   "where": [
     {
@@ -45,7 +45,7 @@
       "url": null
     }
   ],
-  "$auth": "Whether the account password may be sent. The upload authenticates with Basic, which over plain http hands the password to anyone on the path \u2014 and unlike the IRC connection, this URL is whatever the server said.",
+  "$auth": "Whether the account password may be sent. The upload authenticates with Basic, which over plain http hands the password to anyone on the path — and unlike the IRC connection, this URL is whatever the server said.",
   "auth": [
     {
       "url": "https://files.example.net/",
@@ -86,6 +86,24 @@
       "name": "no location is no link",
       "location": "",
       "base": "https://files.example.net/",
+      "url": null
+    },
+    {
+      "name": "a Location that is not a link to a file at all",
+      "location": "javascript:alert(1)",
+      "base": "https://files.example.org/upload",
+      "url": null
+    },
+    {
+      "name": "nor is one that reads this machine",
+      "location": "file:///etc/passwd",
+      "base": "https://files.example.org/upload",
+      "url": null
+    },
+    {
+      "name": "nor a data URL",
+      "location": "data:text/html,<script>alert(1)</script>",
+      "base": "https://files.example.org/upload",
       "url": null
     }
   ]

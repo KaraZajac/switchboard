@@ -67,7 +67,13 @@ export function uploadedUrl(location: string | null | undefined, base: string): 
   if (!trimmed) return null
 
   try {
-    return new URL(trimmed, base).toString()
+    const resolved = new URL(trimmed, base)
+    // The filehost chose this string and the next thing that happens to it is
+    // being pasted into a channel — so it is a link this person publishes to
+    // everyone there. `Location: javascript:…` resolves perfectly well and is
+    // not a file anybody uploaded.
+    if (resolved.protocol !== 'https:' && resolved.protocol !== 'http:') return null
+    return resolved.toString()
   } catch {
     return null
   }

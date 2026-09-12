@@ -61,7 +61,15 @@ object Filehost {
     fun uploaded(location: String?, base: String): String? {
         val trimmed = location?.trim()
         if (trimmed.isNullOrEmpty()) return null
-        return runCatching { URI(base).resolve(trimmed).toString() }.getOrNull()
+
+        val resolved = runCatching { URI(base).resolve(trimmed) }.getOrNull() ?: return null
+        // The filehost chose this string and the next thing that happens to it
+        // is being pasted into a channel — so it is a link this person
+        // publishes to everyone there. `Location: javascript:…` resolves
+        // perfectly well and is not a file anybody uploaded.
+        val scheme = resolved.scheme?.lowercase()
+        if (scheme != "https" && scheme != "http") return null
+        return resolved.toString()
     }
 
     /** What went wrong, in a sentence worth showing */
