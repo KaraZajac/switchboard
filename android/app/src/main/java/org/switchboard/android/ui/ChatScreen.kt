@@ -52,7 +52,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
+import androidx.activity.compose.BackHandler
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.TextStyle
@@ -128,6 +131,56 @@ fun ChatScreen(
 
     var viewingProfile by remember { mutableStateOf<String?>(null) }
     var editingProfile by remember { mutableStateOf(false) }
+
+    // A drawer opening means you have stopped writing.
+    //
+    // The composer keeps focus otherwise, so the keyboard stays up over the
+    // list you just asked to see — which on a phone is half of it. Watching
+    // `targetValue` rather than `isOpen` puts the keyboard away as the swipe
+    // commits rather than when it lands, so the list is never drawn behind it.
+    val keyboard = LocalSoftwareKeyboardController.current
+    val focus = LocalFocusManager.current
+    LaunchedEffect(channelDrawer.targetValue, memberDrawer.targetValue) {
+        if (channelDrawer.targetValue == DrawerValue.Open ||
+            memberDrawer.targetValue == DrawerValue.Open
+        ) {
+            // Both: hiding the keyboard while the composer still holds focus
+            // invites it straight back on the next recomposition.
+            focus.clearFocus()
+            keyboard?.hide()
+        }
+    }
+
+    /*
+     * Back goes up a level, and above a conversation is the list of them.
+     *
+     * It used to leave Switchboard outright from anywhere, which no other chat
+     * app on the phone does and which is a rough thing to do to somebody
+     * mid-sentence.
+     *
+     * The conversation list is the top of the app, so back from *there* does
+     * leave — two presses out rather than one, the same shape as every other
+     * messenger. Deliberately not a third state that closes the list and
+     * returns to the conversation: that is "down", which back never means, and
+     * it makes back a loop you can never leave the app with.
+     *
+     * Off while a sheet is up. Those dismiss themselves, and opening the
+     * channel list behind one is not what the press meant.
+     */
+    BackHandler(
+        enabled = channelDrawer.isClosed && memberDrawer.isClosed &&
+            viewingProfile == null && !editingProfile
+    ) {
+        scope.launch { channelDrawer.open() }
+    }
+
+    // The member list is a detail of the conversation rather than a level above
+    // it, so back puts it away and leaves you where you were. Without this it
+    // falls through and closes the app from a panel somebody opened to look up
+    // one nick.
+    BackHandler(enabled = memberDrawer.isOpen) {
+        scope.launch { memberDrawer.close() }
+    }
 
     // Right-hand drawer: mirror the layout, then mirror its contents back
     Mirrored {
