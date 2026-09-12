@@ -1,12 +1,9 @@
-import { BrowserWindow, Notification, app, net, dialog, type IpcMainInvokeEvent } from 'electron'
+import { fetchForPreview, BlockedAddressError } from '../net/safefetch'
+import { isPrivateAddress } from '@shared/privateaddress'
+import { BrowserWindow, Notification, app, dialog, type IpcMainInvokeEvent } from 'electron'
 import { hasMetadata } from '@shared/metadata'
 import { transcript, transcriptFilename } from '@shared/transcript'
-import {
-  listTransfers,
-  acceptTransfer,
-  declineTransfer,
-  offerFile
-} from '../irc/features/dcc'
+import { listTransfers, acceptTransfer, declineTransfer, offerFile } from '../irc/features/dcc'
 import { handle } from './registry'
 import { readFile, writeFile } from 'fs/promises'
 import { userInfo } from 'os'
@@ -334,23 +331,26 @@ export function registerIPCHandlers(): void {
     sendMultilineMessage(client, channel, body.split('\n'))
   }
 
-  handle('message:reply', async (_event, serverId: string, channel: string, text: string, replyTo: string) => {
-    const client = ircManager.getClient(serverId)
-    if (!client) throw new Error('Not connected')
-    // Strip newlines to prevent IRC command injection
-    const safeText = text.replace(/[\r\n]+/g, ' ')
+  handle(
+    'message:reply',
+    async (_event, serverId: string, channel: string, text: string, replyTo: string) => {
+      const client = ircManager.getClient(serverId)
+      if (!client) throw new Error('Not connected')
+      // Strip newlines to prevent IRC command injection
+      const safeText = text.replace(/[\r\n]+/g, ' ')
 
-    // Whichever spelling this network carries. FurNet allows draft/reply and
-    // denies reply, which was the one we always sent — so the reply arrived as
-    // an ordinary line, attached to nothing. A network that carries neither
-    // still gets the message; it is the threading that is lost, not the words.
-    const replyTag = tagToUse(client.state.isupport['CLIENTTAGDENY'], TAG_NAMES.reply)
-    client.connection.sendRaw(
-      replyTag
-        ? `@+${replyTag}=${sanitizeTagValue(replyTo)} PRIVMSG ${channel} :${safeText}`
-        : `PRIVMSG ${channel} :${safeText}`
-    )
-  })
+      // Whichever spelling this network carries. FurNet allows draft/reply and
+      // denies reply, which was the one we always sent — so the reply arrived as
+      // an ordinary line, attached to nothing. A network that carries neither
+      // still gets the message; it is the threading that is lost, not the words.
+      const replyTag = tagToUse(client.state.isupport['CLIENTTAGDENY'], TAG_NAMES.reply)
+      client.connection.sendRaw(
+        replyTag
+          ? `@+${replyTag}=${sanitizeTagValue(replyTo)} PRIVMSG ${channel} :${safeText}`
+          : `PRIVMSG ${channel} :${safeText}`
+      )
+    }
+  )
 
   /**
    * React to a message, or take the reaction back.
@@ -389,41 +389,50 @@ export function registerIPCHandlers(): void {
     }
   )
 
-  handle('message:redact', async (_event, serverId: string, channel: string, msgid: string, reason?: string) => {
-    const client = ircManager.getClient(serverId)
-    if (!client) throw new Error('Not connected')
+  handle(
+    'message:redact',
+    async (_event, serverId: string, channel: string, msgid: string, reason?: string) => {
+      const client = ircManager.getClient(serverId)
+      if (!client) throw new Error('Not connected')
 
-    // Delete from local database
-    deleteMessage(msgid)
+      // Delete from local database
+      deleteMessage(msgid)
 
-    // Send REDACT to the server
-    if (reason) {
-      client.connection.send('REDACT', channel, msgid, reason)
-    } else {
-      client.connection.send('REDACT', channel, msgid)
+      // Send REDACT to the server
+      if (reason) {
+        client.connection.send('REDACT', channel, msgid, reason)
+      } else {
+        client.connection.send('REDACT', channel, msgid)
+      }
     }
-  })
+  )
 
-  handle('message:edit', async (_event, serverId: string, channel: string, msgid: string, newText: string) => {
-    const client = ircManager.getClient(serverId)
-    if (!client) throw new Error('Not connected')
-    // Strip newlines to prevent IRC command injection
-    const safeText = newText.replace(/[\r\n]+/g, ' ')
-    // Send edited message with +draft/edit tag pointing to original message ID
-    client.connection.sendRaw(`@+draft/edit=${sanitizeTagValue(msgid)} PRIVMSG ${channel} :${safeText}`)
-  })
+  handle(
+    'message:edit',
+    async (_event, serverId: string, channel: string, msgid: string, newText: string) => {
+      const client = ircManager.getClient(serverId)
+      if (!client) throw new Error('Not connected')
+      // Strip newlines to prevent IRC command injection
+      const safeText = newText.replace(/[\r\n]+/g, ' ')
+      // Send edited message with +draft/edit tag pointing to original message ID
+      client.connection.sendRaw(
+        `@+draft/edit=${sanitizeTagValue(msgid)} PRIVMSG ${channel} :${safeText}`
+      )
+    }
+  )
 
-  handle('message:typing', async (_event, serverId: string, channel: string, status: 'active' | 'done' = 'active') => {
-    const client = ircManager.getClient(serverId)
-    if (!client) throw new Error('Not connected')
-    // Nothing to say if the network drops it: a TAGMSG with its only tag
-    // stripped is a line that means nothing to everyone who receives it.
-    const typingTag = tagToUse(client.state.isupport['CLIENTTAGDENY'], TAG_NAMES.typing)
-    if (!typingTag) return
-    client.connection.sendRaw(
-      `@+${typingTag}=${sanitizeTagValue(status)} TAGMSG ${channel}`
-    )
-  })
+  handle(
+    'message:typing',
+    async (_event, serverId: string, channel: string, status: 'active' | 'done' = 'active') => {
+      const client = ircManager.getClient(serverId)
+      if (!client) throw new Error('Not connected')
+      // Nothing to say if the network drops it: a TAGMSG with its only tag
+      // stripped is a line that means nothing to everyone who receives it.
+      const typingTag = tagToUse(client.state.isupport['CLIENTTAGDENY'], TAG_NAMES.typing)
+      if (!typingTag) return
+      client.connection.sendRaw(`@+${typingTag}=${sanitizeTagValue(status)} TAGMSG ${channel}`)
+    }
+  )
 
   // ── User operations ──────────────────────────────────────────────
 
@@ -435,11 +444,14 @@ export function registerIPCHandlers(): void {
     return {}
   })
 
-  handle('user:kick', async (_event, serverId: string, channel: string, nick: string, reason?: string) => {
-    const client = ircManager.getClient(serverId)
-    if (!client) throw new Error('Not connected')
-    client.kick(channel, nick, reason)
-  })
+  handle(
+    'user:kick',
+    async (_event, serverId: string, channel: string, nick: string, reason?: string) => {
+      const client = ircManager.getClient(serverId)
+      if (!client) throw new Error('Not connected')
+      client.kick(channel, nick, reason)
+    }
+  )
 
   /**
    * Give or take a channel mode against one person.
@@ -452,13 +464,7 @@ export function registerIPCHandlers(): void {
    */
   handle(
     'user:mode',
-    async (
-      _event,
-      serverId: string,
-      channel: string,
-      change: string,
-      target: string
-    ) => {
+    async (_event, serverId: string, channel: string, change: string, target: string) => {
       const client = ircManager.getClient(serverId)
       if (!client) throw new Error('Not connected')
       client.connection.send('MODE', channel, change, target)
@@ -770,7 +776,7 @@ export function registerIPCHandlers(): void {
     // asking something, and guessing would be worse than a transfer the
     // recipient can watch fail.
     const local = client.connection.localAddress()
-    if (!local) throw new Error('Could not work out this machine\'s address')
+    if (!local) throw new Error("Could not work out this machine's address")
 
     const { line } = await offerFile(serverId, nick, chosen.filePaths[0], local)
     client.connection.sendRaw(`PRIVMSG ${nick} :\u0001${line}\u0001`)
@@ -866,9 +872,12 @@ export function registerIPCHandlers(): void {
 
   // ── History ──────────────────────────────────────────────────────
 
-  handle('history:fetch', async (_event, serverId: string, channel: string, before?: string, limit?: number) => {
-    return getMessages(serverId, channel, { before, limit })
-  })
+  handle(
+    'history:fetch',
+    async (_event, serverId: string, channel: string, before?: string, limit?: number) => {
+      return getMessages(serverId, channel, { before, limit })
+    }
+  )
 
   /**
    * What was said after the newest thing we have.
@@ -891,40 +900,54 @@ export function registerIPCHandlers(): void {
     const client = ircManager.getClient(serverId)
     if (!client) return
     const { requestChathistoryTargets } = await import('../irc/features/chathistory')
-    requestChathistoryTargets(client, `timestamp=${since}`, `timestamp=${new Date().toISOString()}`, 50)
+    requestChathistoryTargets(
+      client,
+      `timestamp=${since}`,
+      `timestamp=${new Date().toISOString()}`,
+      50
+    )
   })
 
-  handle('chathistory:catchup', async (_event, serverId: string, channel: string, after: string, limit?: number) => {
-    const client = ircManager.getClient(serverId)
-    if (!client) return
-    const { requestChathistory } = await import('../irc/features/chathistory')
-    requestChathistory(client, channel, {
-      direction: 'AFTER',
-      reference: `timestamp=${after}`,
-      limit: limit || 100
-    })
-  })
+  handle(
+    'chathistory:catchup',
+    async (_event, serverId: string, channel: string, after: string, limit?: number) => {
+      const client = ircManager.getClient(serverId)
+      if (!client) return
+      const { requestChathistory } = await import('../irc/features/chathistory')
+      requestChathistory(client, channel, {
+        direction: 'AFTER',
+        reference: `timestamp=${after}`,
+        limit: limit || 100
+      })
+    }
+  )
 
-  handle('chathistory:request', async (_event, serverId: string, channel: string, before?: string, limit?: number) => {
-    const client = ircManager.getClient(serverId)
-    if (!client) return
-    const { requestChathistory } = await import('../irc/features/chathistory')
-    const reference = before ? `timestamp=${before}` : '*'
-    requestChathistory(client, channel, {
-      direction: before ? 'BEFORE' : 'LATEST',
-      reference,
-      limit: limit || 50
-    })
-  })
+  handle(
+    'chathistory:request',
+    async (_event, serverId: string, channel: string, before?: string, limit?: number) => {
+      const client = ircManager.getClient(serverId)
+      if (!client) return
+      const { requestChathistory } = await import('../irc/features/chathistory')
+      const reference = before ? `timestamp=${before}` : '*'
+      requestChathistory(client, channel, {
+        direction: before ? 'BEFORE' : 'LATEST',
+        reference,
+        limit: limit || 50
+      })
+    }
+  )
 
   // ── Account registration ────────────────────────────────────
 
-  handle('account:register', async (_event, serverId: string, email: string | null, password: string) => {
-    const client = ircManager.getClient(serverId)
-    if (!client) throw new Error('Not connected')
-    const { registerAccount } = await import('../irc/features/account-registration')
-    return registerAccount(client, email, password)
-  })
+  handle(
+    'account:register',
+    async (_event, serverId: string, email: string | null, password: string) => {
+      const client = ircManager.getClient(serverId)
+      if (!client) throw new Error('Not connected')
+      const { registerAccount } = await import('../irc/features/account-registration')
+      return registerAccount(client, email, password)
+    }
+  )
 
   handle('account:verify', async (_event, serverId: string, account: string, code: string) => {
     const client = ircManager.getClient(serverId)
@@ -939,19 +962,22 @@ export function registerIPCHandlers(): void {
     return searchMessages(serverId, query, { channel, limit: 50 })
   })
 
-  handle('message:search-server', async (_event, serverId: string, query: string, channel?: string) => {
-    const client = ircManager.getClient(serverId)
-    if (!client) throw new Error('Not connected')
-    if (!client.state.capabilities.has('draft/search')) {
-      throw new Error('Server does not support search')
+  handle(
+    'message:search-server',
+    async (_event, serverId: string, query: string, channel?: string) => {
+      const client = ircManager.getClient(serverId)
+      if (!client) throw new Error('Not connected')
+      if (!client.state.capabilities.has('draft/search')) {
+        throw new Error('Server does not support search')
+      }
+      // Send SEARCH command — results arrive via irc:search-results event
+      if (channel) {
+        client.connection.sendRaw(`SEARCH :in:${channel} ${query}`)
+      } else {
+        client.connection.sendRaw(`SEARCH :${query}`)
+      }
     }
-    // Send SEARCH command — results arrive via irc:search-results event
-    if (channel) {
-      client.connection.sendRaw(`SEARCH :in:${channel} ${query}`)
-    } else {
-      client.connection.sendRaw(`SEARCH :${query}`)
-    }
-  })
+  )
 
   // ── Notifications ───────────────────────────────────────────
 
@@ -998,22 +1024,25 @@ export function registerIPCHandlers(): void {
 
   // ── Read markers ─────────────────────────────────────────────────
 
-  handle('read-marker:set', async (_event, serverId: string, channel: string, timestamp: string) => {
-    // Persist locally
-    setReadMarker(serverId, channel, timestamp)
+  handle(
+    'read-marker:set',
+    async (_event, serverId: string, channel: string, timestamp: string) => {
+      // Persist locally
+      setReadMarker(serverId, channel, timestamp)
 
-    // Sync with server if supported
-    const client = ircManager.getClient(serverId)
-    if (client && client.state.capabilities.has('draft/read-marker')) {
-      client.connection.send('MARKREAD', channel, `timestamp=${timestamp}`)
-      // The server will echo it, and the window hears about it that way.
-      return
+      // Sync with server if supported
+      const client = ircManager.getClient(serverId)
+      if (client && client.state.capabilities.has('draft/read-marker')) {
+        client.connection.send('MARKREAD', channel, `timestamp=${timestamp}`)
+        // The server will echo it, and the window hears about it that way.
+        return
+      }
+
+      // Without the capability there is no echo, so this is the only way the
+      // window learns the phone has read a conversation.
+      readMarkerChanged(serverId, channel, timestamp)
     }
-
-    // Without the capability there is no echo, so this is the only way the
-    // window learns the phone has read a conversation.
-    readMarkerChanged(serverId, channel, timestamp)
-  })
+  )
 
   handle('read-marker:get', async (_event, serverId: string, channel: string) => {
     return getReadMarker(serverId, channel)
@@ -1119,12 +1148,22 @@ export function registerIPCHandlers(): void {
     const fileData = await readFile(filePath)
 
     const MIME_MAP: Record<string, string> = {
-      '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
-      '.gif': 'image/gif', '.webp': 'image/webp', '.svg': 'image/svg+xml',
-      '.bmp': 'image/bmp', '.mp4': 'video/mp4', '.webm': 'video/webm',
-      '.mov': 'video/quicktime', '.avi': 'video/x-msvideo',
-      '.pdf': 'application/pdf', '.txt': 'text/plain', '.md': 'text/markdown',
-      '.log': 'text/plain', '.zip': 'application/zip',
+      '.png': 'image/png',
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.gif': 'image/gif',
+      '.webp': 'image/webp',
+      '.svg': 'image/svg+xml',
+      '.bmp': 'image/bmp',
+      '.mp4': 'video/mp4',
+      '.webm': 'video/webm',
+      '.mov': 'video/quicktime',
+      '.avi': 'video/x-msvideo',
+      '.pdf': 'application/pdf',
+      '.txt': 'text/plain',
+      '.md': 'text/markdown',
+      '.log': 'text/plain',
+      '.zip': 'application/zip'
     }
     const contentType = MIME_MAP[extname(filePath).toLowerCase()] || 'application/octet-stream'
 
@@ -1141,7 +1180,9 @@ export function registerIPCHandlers(): void {
     // connection, this URL is whatever the server said it was.
     const config = getServer(serverId)
     if (config?.saslUsername && config?.saslPassword && mayAuthenticate(filehostUrl)) {
-      const credentials = Buffer.from(`${config.saslUsername}:${config.saslPassword}`).toString('base64')
+      const credentials = Buffer.from(`${config.saslUsername}:${config.saslPassword}`).toString(
+        'base64'
+      )
       headers['Authorization'] = `Basic ${credentials}`
     }
 
@@ -1151,32 +1192,38 @@ export function registerIPCHandlers(): void {
     const httpMod = url.protocol === 'https:' ? https : http
 
     const location = await new Promise<string>((resolve, reject) => {
-      const req = httpMod.request(url, {
-        method: 'POST',
-        headers
-      }, (res) => {
-        let body = ''
-        res.on('data', (chunk: Buffer) => { body += chunk.toString() })
-        res.on('end', () => {
-          if (res.statusCode !== 201) {
-            reject(new Error(`Upload failed (${res.statusCode}): ${body}`))
-            return
-          }
-          const loc = res.headers['location'] || body.trim()
-          if (!loc) {
-            reject(new Error('Server did not return a file URL'))
-            return
-          }
-          // The draft allows a relative Location, and a relative one pasted
-          // into a channel is a link to nothing
-          const resolved = uploadedUrl(typeof loc === 'string' ? loc : null, filehostUrl)
-          if (!resolved) {
-            reject(new Error('Server did not return a usable file URL'))
-            return
-          }
-          resolve(resolved)
-        })
-      })
+      const req = httpMod.request(
+        url,
+        {
+          method: 'POST',
+          headers
+        },
+        (res) => {
+          let body = ''
+          res.on('data', (chunk: Buffer) => {
+            body += chunk.toString()
+          })
+          res.on('end', () => {
+            if (res.statusCode !== 201) {
+              reject(new Error(`Upload failed (${res.statusCode}): ${body}`))
+              return
+            }
+            const loc = res.headers['location'] || body.trim()
+            if (!loc) {
+              reject(new Error('Server did not return a file URL'))
+              return
+            }
+            // The draft allows a relative Location, and a relative one pasted
+            // into a channel is a link to nothing
+            const resolved = uploadedUrl(typeof loc === 'string' ? loc : null, filehostUrl)
+            if (!resolved) {
+              reject(new Error('Server did not return a usable file URL'))
+              return
+            }
+            resolve(resolved)
+          })
+        }
+      )
 
       req.on('error', reject)
       req.write(fileData)
@@ -1188,7 +1235,10 @@ export function registerIPCHandlers(): void {
 
   // ── Link previews ──────────────────────────────────────────────────
 
-  const linkPreviewCache = new Map<string, { data: import('@shared/types/ipc').LinkPreviewData | null; ts: number }>()
+  const linkPreviewCache = new Map<
+    string,
+    { data: import('@shared/types/ipc').LinkPreviewData | null; ts: number }
+  >()
   const PREVIEW_CACHE_TTL = 10 * 60 * 1000 // 10 minutes
   const PREVIEW_CACHE_MAX = 200
 
@@ -1209,29 +1259,46 @@ export function registerIPCHandlers(): void {
     }
 
     try {
-      const response = await net.fetch(url, {
-        headers: { 'User-Agent': 'Switchboard IRC Client/1.0' },
-        redirect: 'follow'
-      })
-
-      const contentType = response.headers.get('content-type') || ''
-      if (!contentType.includes('text/html')) {
+      // Somebody else chose this URL — it came out of a message. See
+      // `fetchForPreview`: not this machine, not this network, every redirect
+      // checked again, and the body read to a ceiling rather than swallowed.
+      const page = await fetchForPreview(url)
+      if (!page) {
         linkPreviewCache.set(url, { data: null, ts: Date.now() })
         return null
       }
-
-      // Only read first 32KB for metadata
-      const buffer = await response.arrayBuffer()
-      const html = new TextDecoder().decode(buffer.slice(0, 32768))
+      const html = page.html
 
       const get = (property: string): string | undefined => {
         // Try og: tags first, then twitter: fallback
-        const ogMatch = html.match(new RegExp(`<meta[^>]+property=["']og:${property}["'][^>]+content=["']([^"']+)["']`, 'i'))
-          || html.match(new RegExp(`<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:${property}["']`, 'i'))
+        const ogMatch =
+          html.match(
+            new RegExp(
+              `<meta[^>]+property=["']og:${property}["'][^>]+content=["']([^"']+)["']`,
+              'i'
+            )
+          ) ||
+          html.match(
+            new RegExp(
+              `<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:${property}["']`,
+              'i'
+            )
+          )
         if (ogMatch) return decodeHTMLEntities(ogMatch[1])
 
-        const twMatch = html.match(new RegExp(`<meta[^>]+name=["']twitter:${property}["'][^>]+content=["']([^"']+)["']`, 'i'))
-          || html.match(new RegExp(`<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:${property}["']`, 'i'))
+        const twMatch =
+          html.match(
+            new RegExp(
+              `<meta[^>]+name=["']twitter:${property}["'][^>]+content=["']([^"']+)["']`,
+              'i'
+            )
+          ) ||
+          html.match(
+            new RegExp(
+              `<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:${property}["']`,
+              'i'
+            )
+          )
         if (twMatch) return decodeHTMLEntities(twMatch[1])
 
         return undefined
@@ -1246,21 +1313,32 @@ export function registerIPCHandlers(): void {
       // Resolve relative image URLs
       if (image && !image.startsWith('http')) {
         try {
-          image = new URL(image, url).href
-        } catch { /* ignore */ }
+          image = new URL(image, page.url).href
+        } catch {
+          /* ignore */
+        }
       }
 
       // Get favicon
       let favicon: string | undefined
-      const iconMatch = html.match(/<link[^>]+rel=["'](?:shortcut )?icon["'][^>]+href=["']([^"']+)["']/i)
-        || html.match(/<link[^>]+href=["']([^"']+)["'][^>]+rel=["'](?:shortcut )?icon["']/i)
+      const iconMatch =
+        html.match(/<link[^>]+rel=["'](?:shortcut )?icon["'][^>]+href=["']([^"']+)["']/i) ||
+        html.match(/<link[^>]+href=["']([^"']+)["'][^>]+rel=["'](?:shortcut )?icon["']/i)
       if (iconMatch) {
         favicon = iconMatch[1]
         if (!favicon.startsWith('http')) {
-          try { favicon = new URL(favicon, url).href } catch { /* ignore */ }
+          try {
+            favicon = new URL(favicon, page.url).href
+          } catch {
+            /* ignore */
+          }
         }
       } else {
-        try { favicon = new URL('/favicon.ico', url).href } catch { /* ignore */ }
+        try {
+          favicon = new URL('/favicon.ico', page.url).href
+        } catch {
+          /* ignore */
+        }
       }
 
       // Some sites suppress the favicon request with `<link rel=icon href="data:,">`.
@@ -1274,15 +1352,48 @@ export function registerIPCHandlers(): void {
       }
 
       const data: import('@shared/types/ipc').LinkPreviewData = {
-        url, title, description, siteName, image, favicon
+        url,
+        title,
+        description,
+        siteName,
+        // The page chose these, so they get the same treatment the page did:
+        // an image the renderer is told to load is a request this machine
+        // makes, and `https://192.168.1.1/x.png` is a valid image URL.
+        image: publicOnly(image),
+        favicon: publicOnly(favicon)
       }
       linkPreviewCache.set(url, { data, ts: Date.now() })
       return data
-    } catch {
+    } catch (err) {
+      // Worth saying once. A refused address is somebody's link asking this
+      // machine to knock on a door inside the house, and a silent null reads
+      // like a site that simply had no preview.
+      if (err instanceof BlockedAddressError) {
+        console.warn(`link preview refused — ${err.message} is not on the internet`)
+      }
       linkPreviewCache.set(url, { data: null, ts: Date.now() })
       return null
     }
   })
+}
+
+/**
+ * An asset URL we are willing to ask the window to load.
+ *
+ * Only the literal case is caught here — a name that resolves to something
+ * private still resolves — because this runs while building a reply and has no
+ * business doing DNS. It stops the obvious version, which is the one a page
+ * would actually try.
+ */
+function publicOnly(value: string | undefined): string | undefined {
+  if (!value) return undefined
+  try {
+    const parsed = new URL(value)
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return undefined
+    return isPrivateAddress(parsed.hostname) ? undefined : value
+  } catch {
+    return undefined
+  }
 }
 
 /** Escape IRC message tag values per IRCv3 spec — prevents tag injection */
