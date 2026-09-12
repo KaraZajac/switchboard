@@ -2254,4 +2254,30 @@ class SharedCorpusTest {
         assertEquals("ECONNREFUSED", ConnectionError.describe("ECONNREFUSED", "irc.example.org"))
         assertEquals("Could not connect", ConnectionError.describe(null, "irc.example.org"))
     }
+
+    // ── what we keep from a metadata update ───────────────────────────
+
+    /**
+     * The value is a string a stranger chose, and a display name is drawn
+     * beside every line somebody says. Both clients have to cut in the same
+     * place, or the same profile reads differently on the two devices.
+     */
+    @Test
+    fun `keeps the same metadata the desktop keeps`() {
+        for (entry in load("metadata-keep.json")["cases"]!!.jsonArray) {
+            val case = entry.jsonObject
+            val name = case["name"]!!.jsonPrimitive.content
+            val kept = Metadata.toKeep(
+                case["key"]!!.jsonPrimitive.content,
+                case["value"]!!.jsonPrimitive.content
+            )
+            val wanted = case["keep"] as? JsonObject
+            if (wanted == null) {
+                assertNull(name, kept)
+            } else {
+                assertEquals(name, wanted["key"]!!.jsonPrimitive.content, kept?.first)
+                assertEquals(name, wanted["value"]!!.jsonPrimitive.content, kept?.second)
+            }
+        }
+    }
 }

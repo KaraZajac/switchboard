@@ -14,7 +14,10 @@ import type { ProxySettings } from '../../src/shared/socks'
 
 const { IRCConnection, useNetworkSettings } = await import('../../src/main/irc/connection')
 
-const settings: { proxy: ProxySettings | null; caPath: string | null } = { proxy: null, caPath: null }
+const settings: { proxy: ProxySettings | null; caPath: string | null } = {
+  proxy: null,
+  caPath: null
+}
 useNetworkSettings(() => settings)
 
 const servers: net.Server[] = []
@@ -46,6 +49,8 @@ interface ProxyOptions {
   dribble?: boolean
   /** Answer CONNECT with a hostname-shaped bound address rather than IPv4 */
   boundName?: string
+  /** Never answer the greeting; stream instead, as a proxy that is not one would */
+  flood?: boolean
 }
 
 /** A SOCKS5 proxy, enough of one to be talked to */
@@ -64,6 +69,18 @@ function socks5Proxy(target: () => number, options: ProxyOptions = {}): Promise<
 
     socket.on('data', (data) => {
       buffer = Buffer.concat([buffer, data])
+
+      if (options.flood) {
+        // Not a reply, and never one. A megabyte at a time until somebody
+        // stops asking.
+        const spew = () => {
+          if (socket.destroyed) return
+          if (socket.write(Buffer.alloc(64 * 1024, 0x41))) setImmediate(spew)
+          else socket.once('drain', spew)
+        }
+        spew()
+        return
+      }
 
       if (stage === 'greeting') {
         if (buffer.length < 2) return
@@ -199,7 +216,9 @@ describe('dialling through a SOCKS5 proxy', () => {
 
   it('authenticates when the proxy asks for a password', async () => {
     const irc = await ircServer()
-    const proxy = await socks5Proxy(() => irc, { password: { username: 'kara', password: 'hunter2' } })
+    const proxy = await socks5Proxy(() => irc, {
+      password: { username: 'kara', password: 'hunter2' }
+    })
     settings.proxy = {
       type: 'socks5',
       host: '127.0.0.1',
@@ -217,7 +236,9 @@ describe('dialling through a SOCKS5 proxy', () => {
 
   it('says so when the password is wrong', async () => {
     const irc = await ircServer()
-    const proxy = await socks5Proxy(() => irc, { password: { username: 'kara', password: 'hunter2' } })
+    const proxy = await socks5Proxy(() => irc, {
+      password: { username: 'kara', password: 'hunter2' }
+    })
     settings.proxy = {
       type: 'socks5',
       host: '127.0.0.1',
@@ -259,6 +280,26 @@ describe('dialling through a SOCKS5 proxy', () => {
     const line = firstLine(connection)
     connection.connect()
     expect(await line).toBe(':fake 001 kara :Welcome')
+    connection.disconnect()
+  })
+
+  /**
+   * A proxy that streams instead of answering.
+   *
+   * The handshake buffer had no ceiling, so "how much will you hold waiting
+   * for a reply?" was "everything you send" — and this runs before there is a
+   * connection to report a problem on, so the failure was a client quietly
+   * eating memory.
+   */
+  it('gives up on a proxy that talks without answering', async () => {
+    const irc = await ircServer()
+    const proxy = await socks5Proxy(() => irc, { flood: true })
+    settings.proxy = { type: 'socks5', host: '127.0.0.1', port: proxy }
+
+    const connection = new IRCConnection(config())
+    const line = firstLine(connection)
+    connection.connect()
+    await expect(line).rejects.toThrow(/never finished/i)
     connection.disconnect()
   })
 

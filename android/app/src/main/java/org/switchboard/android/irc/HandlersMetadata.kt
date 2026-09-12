@@ -162,18 +162,46 @@ internal object Metadata {
         }
     }
 
-    private fun remember(session: IrcSession, target: String, key: String, value: String) {
+    /**
+     * The most of a value we will keep.
+     *
+     * What a server advertises as its limit is not a promise — it is what the
+     * server will accept, not what it will refuse to pass on. A display name
+     * is drawn beside every line somebody says, so a megabyte of one is a
+     * problem here rather than there.
+     *
+     * Counted in characters, matching `MAX_METADATA_VALUE` in
+     * `src/shared/metadata.ts`, so both clients cut in the same place.
+     */
+    const val MAX_VALUE = 512
+
+    /**
+     * What to store for an update, or null to ignore it.
+     *
+     * Only the keys we draw: we subscribe to those six, nothing else is ever
+     * rendered, and keeping the rest is a map that grows with whatever a
+     * server feels like sending and is read by nobody. An empty value is kept
+     * rather than dropped — that is a key being cleared.
+     */
+    internal fun toKeep(key: String, value: String): Pair<String, String>? {
+        val name = key.trim().lowercase()
+        if (name !in KEYS) return null
+        return name to if (value.length > MAX_VALUE) value.take(MAX_VALUE) else value
+    }
+
+    private fun remember(session: IrcSession, key: String, target: String, value: String) {
         val store = session.state.metadata.getOrPut(session.state.casemap(target)) { mutableMapOf() }
         if (value.isEmpty()) store.remove(key) else store[key] = value
     }
 
     internal fun emitValue(session: IrcSession, target: String, key: String, value: String) {
-        remember(session, target, key, value)
+        val keep = toKeep(key, value) ?: return
+        remember(session, keep.first, target, keep.second)
         session.emit("irc:metadata", buildJsonObject {
             put("serverId", session.state.serverId)
             put("target", target)
-            put("key", key)
-            put("value", value)
+            put("key", keep.first)
+            put("value", keep.second)
         })
     }
 }

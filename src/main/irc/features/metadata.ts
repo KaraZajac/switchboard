@@ -1,5 +1,5 @@
 import { registerHandler } from '../handlers/registry'
-import { metadataCapOf } from '@shared/metadata'
+import { metadataCapOf, metadataToKeep } from '@shared/metadata'
 
 import { METADATA_KEYS } from '@shared/types/metadata'
 
@@ -85,8 +85,7 @@ export function subscribeToMetadata(client: {
   state: { availableCapabilities: Map<string, string | null>; capabilities: Set<string> }
 }): void {
   const limits = metadataLimitsOf(client)
-  const keys =
-    limits.maxSubs === null ? METADATA_KEYS : METADATA_KEYS.slice(0, limits.maxSubs)
+  const keys = limits.maxSubs === null ? METADATA_KEYS : METADATA_KEYS.slice(0, limits.maxSubs)
   if (keys.length === 0) return
 
   client.connection.send('METADATA', '*', 'SUB', ...keys)
@@ -119,14 +118,20 @@ export function syncMetadata(
 /** Keep the value on the connection so a new client can be handed the whole picture */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function remember(client: any, target: string, key: string, value: string): void {
+  // A key we do not draw, or a value longer than anything meant as one, is
+  // not kept at all — see `metadataToKeep`. Both are things a server sends
+  // and nothing checked.
+  const keep = metadataToKeep(key, value)
+  if (!keep) return
+
   const store = client.state.metadata as Map<string, Record<string, string>>
   const mapKey = client.state.casemap(target)
   const current = { ...(store.get(mapKey) ?? {}) }
 
-  if (value === '') {
-    delete current[key]
+  if (keep.value === '') {
+    delete current[keep.key]
   } else {
-    current[key] = value
+    current[keep.key] = keep.value
   }
 
   if (Object.keys(current).length === 0) {

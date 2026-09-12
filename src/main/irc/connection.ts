@@ -29,6 +29,15 @@ import {
 } from '@shared/socks'
 import { readFileSync } from 'fs'
 
+/**
+ * The most a proxy may say before it has answered.
+ *
+ * The longest reply in either protocol is a SOCKS5 one carrying a domain name:
+ * four bytes of header, a 255-byte name and a port. A kilobyte is room to
+ * spare, and a proxy still talking past it is not answering.
+ */
+const MAX_PROXY_REPLY = 1024
+
 /** How far through the proxy conversation one connection has got */
 interface SocksProgress {
   stage: 'greeting' | 'authenticating' | 'connecting'
@@ -389,6 +398,16 @@ export class IRCConnection extends EventEmitter {
     if (!state || !this.socket) return data
 
     state.buffer = Buffer.concat([state.buffer, data])
+
+    // A SOCKS reply is a couple of hundred bytes at the very most. A proxy
+    // that streams instead of answering is the same unbounded buffer the line
+    // parser used to have, one layer further down — and this one runs before
+    // there is any connection to report a problem on.
+    if (state.buffer.length > MAX_PROXY_REPLY) {
+      this.failProxy('The proxy sent more than a reply and never finished one')
+      return Buffer.alloc(0)
+    }
+
     const bytes = new Uint8Array(state.buffer)
 
     if (state.stage === 'greeting') {
