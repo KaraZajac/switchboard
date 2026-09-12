@@ -92,6 +92,42 @@
       "name": "a ghost with no password still comes out blanked",
       "line": "PRIVMSG NickServ :GHOST kara",
       "redacted": "PRIVMSG NickServ :GHOST ***"
+    },
+    {
+      "name": "an account password sent as a command, not to NickServ",
+      "line": "REGISTER * kara@example.org hunter2",
+      "redacted": "REGISTER * kara@example.org ***",
+      "$comment": "draft/account-registration. The same word as the NickServ verb and a different command: this one is top-level, so it fell past every case and the password went into the debug stream whole."
+    },
+    {
+      "name": "an account name instead of a star",
+      "line": "REGISTER kara kara@example.org hunter2",
+      "redacted": "REGISTER kara kara@example.org ***"
+    },
+    {
+      "name": "a registration with no password is left alone",
+      "line": "REGISTER * kara@example.org",
+      "redacted": "REGISTER * kara@example.org"
+    },
+    {
+      "name": "the verification code, which is a password for a minute",
+      "line": "VERIFY kara AB12CD",
+      "redacted": "VERIFY kara ***"
+    },
+    {
+      "name": "a push endpoint and the secret it is encrypted to",
+      "line": "WEBPUSH REGISTER https://push.example/abc p256dh=BKx auth=Sc1",
+      "redacted": "WEBPUSH REGISTER ***"
+    },
+    {
+      "name": "and taking one back names nothing worth hiding, but is hidden the same way",
+      "line": "WEBPUSH UNREGISTER https://push.example/abc",
+      "redacted": "WEBPUSH UNREGISTER ***"
+    },
+    {
+      "name": "a WEBPUSH with nothing after the verb",
+      "line": "WEBPUSH",
+      "redacted": "WEBPUSH"
     }
   ]
 }

@@ -55,6 +55,25 @@ export function redactLine(line: string): string {
     case 'NICKSERV':
       return redactServices(head, parts, line)
 
+    // draft/account-registration — REGISTER <account> <email> <password>.
+    // The same word as the NickServ one and a different command entirely:
+    // this is sent at the top level, so it fell through to `default` and the
+    // password went into the debug stream in full.
+    case 'REGISTER':
+      return parts.length < 4 ? line : `${head}${parts.slice(0, 3).join(' ')} ${HIDDEN}`
+
+    // VERIFY <account> <code>. The code is single-use and short-lived, and it
+    // is also the whole of what stands between somebody and the account for
+    // the minute it is alive.
+    case 'VERIFY':
+      return parts.length < 3 ? line : `${head}${parts[0]} ${parts[1]} ${HIDDEN}`
+
+    // draft/webpush — WEBPUSH REGISTER <endpoint> p256dh=… auth=…
+    // The endpoint is where our notifications get delivered and `auth` is the
+    // secret they are encrypted to. Neither belongs in a log.
+    case 'WEBPUSH':
+      return parts.length < 3 ? line : `${head}${parts[0]} ${parts[1]} ${HIDDEN}`
+
     default:
       return line
   }

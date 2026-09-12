@@ -55,6 +55,23 @@ object Redact {
 
             "PRIVMSG", "NS", "NICKSERV" -> services(head, parts, line)
 
+            // draft/account-registration — REGISTER <account> <email> <password>.
+            // The same word as the NickServ one and a different command
+            // entirely: this is sent at the top level, so it fell through to
+            // `else` and the password went into the debug stream in full.
+            "REGISTER" ->
+                if (parts.size < 4) line
+                else "$head${parts.take(3).joinToString(" ")} $HIDDEN"
+
+            // VERIFY <account> <code>. Single-use and short-lived, and also
+            // the whole of what stands between somebody and the account for
+            // the minute it is alive.
+            "VERIFY" -> if (parts.size < 3) line else "$head${parts[0]} ${parts[1]} $HIDDEN"
+
+            // draft/webpush — the endpoint is where our notifications are
+            // delivered and `auth` is the secret they are encrypted to.
+            "WEBPUSH" -> if (parts.size < 3) line else "$head${parts[0]} ${parts[1]} $HIDDEN"
+
             else -> line
         }
     }
