@@ -60,44 +60,6 @@ function createWindow(): void {
     }
   })
 
-  /*
-   * Open external links in the browser — the ones we are willing to.
-   *
-   * `shell.openExternal` hands a URL to the operating system, which will
-   * attempt whatever scheme it is given: `file:///` reads this machine, and on
-   * Windows a handler scheme can start a program. The URL is not always one
-   * the user typed — a profile's `homepage` is an IRCv3 metadata key, so it is
-   * a string any stranger on the network can set and anybody can click.
-   *
-   * Checked here rather than only where links are drawn, because this is the
-   * one door all of them go through, including ones not written yet.
-   */
-  mainWindow.webContents.setWindowOpenHandler((details) => {
-    const safe = safeExternalUrl(details.url)
-    if (safe) void shell.openExternal(safe)
-    return { action: 'deny' }
-  })
-
-  /*
-   * And nothing navigates this window away from the app.
-   *
-   * The preload hands `window.switchboard` to whatever is loaded here. A page
-   * that replaced ours would inherit it — every IPC channel the renderer has,
-   * including the ones that read the server list. Links open outside; this
-   * window only ever shows Switchboard.
-   */
-  mainWindow.webContents.on('will-navigate', (event, url) => {
-    const here = mainWindow?.webContents.getURL() ?? ''
-    if (url === here) return
-    event.preventDefault()
-    const safe = safeExternalUrl(url)
-    if (safe) void shell.openExternal(safe)
-  })
-
-  // A page cannot attach a preload of its own either, and nothing here has a
-  // webview to begin with — this is the belt to that brace.
-  mainWindow.webContents.on('will-attach-webview', (event) => event.preventDefault())
-
   // Keep the window controls in sync when the window is resized by the WM
   mainWindow.on('maximize', () => sendToRenderer('window:maximized', { maximized: true }))
   mainWindow.on('unmaximize', () => sendToRenderer('window:maximized', { maximized: false }))
@@ -387,6 +349,43 @@ app.whenReady().then(async () => {
       })
     })
   }
+
+  /*
+   * One set of rules for every window there will ever be.
+   *
+   * Three things, all on the same reasoning: the preload hands
+   * `window.switchboard` to whatever is loaded, so anything that is not
+   * Switchboard must never be loaded *here*.
+   *
+   *  - A link opens outside, and only if we are willing to open it.
+   *    `shell.openExternal` hands a URL to the operating system, which
+   *    attempts whatever scheme it is given — `file:///` reads this machine,
+   *    and on Windows a handler scheme can start a program. The URL is not
+   *    always one the user typed: a profile's `homepage` is a metadata key, so
+   *    a stranger sets it and anybody can click it.
+   *  - Nothing navigates a window away from the app.
+   *  - Nothing attaches a webview, which would come with a preload of its own.
+   *
+   * On `web-contents-created` rather than on the window, because a guard that
+   * only covers the windows written so far is a guard that stops covering.
+   */
+  app.on('web-contents-created', (_event, contents) => {
+    contents.setWindowOpenHandler((details) => {
+      const safe = safeExternalUrl(details.url)
+      if (safe) void shell.openExternal(safe)
+      return { action: 'deny' }
+    })
+
+    contents.on('will-navigate', (event, url) => {
+      // A reload of what is already showing is not navigation
+      if (url === contents.getURL()) return
+      event.preventDefault()
+      const safe = safeExternalUrl(url)
+      if (safe) void shell.openExternal(safe)
+    })
+
+    contents.on('will-attach-webview', (event) => event.preventDefault())
+  })
 
   // Create app menu
   createAppMenu()
