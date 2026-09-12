@@ -967,6 +967,14 @@ data class ServerConfig(
      */
     val performOnConnect: String? = null
 ) {
+    /** These settings, as the shared login rule wants them */
+    fun saslPlanConfig(): SaslPlan.Config = SaslPlan.Config(
+        mechanism = saslMechanism,
+        username = saslUsername,
+        password = saslPassword,
+        clientCert = clientCert
+    )
+
     /** Falls back to the nick, the way every client does */
     val ident: String get() = username.ifBlank { nick }
     val gecos: String get() = realname.ifBlank { nick }

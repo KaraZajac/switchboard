@@ -1,4 +1,5 @@
 import { registerHandler } from './handlers/registry'
+import { saslPlan } from '@shared/saslplan'
 import { REQUESTED_CAPS } from '@shared/constants'
 import { parseSTSValue, setSTSPolicy } from './features/sts'
 
@@ -119,31 +120,38 @@ registerHandler('CAP', (client, msg) => {
         client.connection.send('AWAY', client.config.preAwayMessage)
       }
 
-      // If SASL was acknowledged, we need to authenticate before CAP END
-      if (client.state.capabilities.has('sasl') && client.config.saslMechanism) {
-        // The capability value lists what the server will actually take —
-        // `sasl=PLAIN,SCRAM-SHA-256`. Sending a mechanism that is not on it
-        // gets a bare 904 and a user staring at "authentication failed" with
-        // no way to know their account was never the problem.
-        const offered = saslMechanismsFrom(client.state.availableCapabilities.get('sasl'))
-        if (offered && !offered.includes(client.config.saslMechanism)) {
-          client.events.emit('error', {
-            code: 'SASL',
-            message:
-              `This server does not offer ${client.config.saslMechanism}. ` +
-              `It accepts ${offered.join(', ')}.`
-          })
+      // If SASL was acknowledged, we authenticate before CAP END.
+      //
+      // Whether to, and with what, is `saslPlan` — shared, because this used
+      // to be decided differently here and on the phone: one config logged in
+      // on one device and sat there as a stranger on the other, and nothing on
+      // either screen said why.
+      if (client.state.capabilities.has('sasl')) {
+        const plan = saslPlan(
+          {
+            mechanism: client.config.saslMechanism,
+            username: client.config.saslUsername,
+            password: client.config.saslPassword,
+            clientCert: client.config.clientCert,
+            unreadable: client.config.unreadableSecrets
+          },
+          saslMechanismsFrom(client.state.availableCapabilities.get('sasl'))
+        )
+
+        if (plan.action === 'refuse') {
+          client.events.emit('error', { code: 'SASL', message: plan.reason })
           client.connection.send('CAP', 'END')
           client.state.capNegotiating = false
           client.events.emit('capNegotiated', Array.from(client.state.capabilities))
           break
         }
 
-        // Send AUTHENTICATE <mechanism> to begin SASL auth
-        client.connection.send('AUTHENTICATE', client.config.saslMechanism)
-        client.events.emit('capNegotiated', Array.from(client.state.capabilities))
-        // Don't send CAP END yet — SASL handler will do it after auth
-        return
+        if (plan.action === 'authenticate') {
+          client.connection.send('AUTHENTICATE', plan.mechanism)
+          client.events.emit('capNegotiated', Array.from(client.state.capabilities))
+          // Don't send CAP END yet — the SASL handler does it after the exchange
+          return
+        }
       }
 
       // No SASL needed — end negotiation
@@ -179,7 +187,7 @@ registerHandler('CAP', (client, msg) => {
         client.state.availableCapabilities.set(name, value)
 
         // Auto-request if it's in our wanted list
-        if (REQUESTED_CAPS.includes(name as typeof REQUESTED_CAPS[number])) {
+        if (REQUESTED_CAPS.includes(name as (typeof REQUESTED_CAPS)[number])) {
           newCaps.push(name)
         }
       }

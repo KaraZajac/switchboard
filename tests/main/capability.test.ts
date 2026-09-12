@@ -105,12 +105,51 @@ describe('CAP Negotiation', () => {
   it('handles CAP ACK with SASL — does NOT send CAP END yet', () => {
     const { client, sentLines, state } = createMockClient()
     client.config.saslMechanism = 'PLAIN'
+    client.config.saslPassword = 'hunter2'
 
     dispatchMessage(client, parseMessage(':server CAP * ACK :sasl multi-prefix'))
 
     expect(state.capabilities.has('sasl')).toBe(true)
+    expect(sentLines).toContain('AUTHENTICATE PLAIN')
     expect(sentLines).not.toContain('CAP END')
     // CAP END should be sent after SASL completes
+  })
+
+  /**
+   * The one that started this.
+   *
+   * Somebody fills in an account name and a password and expects to be logged
+   * in. The phone worked it out and authenticated with PLAIN; the desktop
+   * required a mechanism to have been picked from a menu and otherwise
+   * connected as a stranger, saying nothing. Same config, two behaviours.
+   */
+  it('logs in from a username and a password with no mechanism chosen', () => {
+    const { client, sentLines } = createMockClient()
+    client.config.saslMechanism = null
+    client.config.saslUsername = 'kara'
+    client.config.saslPassword = 'hunter2'
+
+    dispatchMessage(client, parseMessage(':server CAP * ACK :sasl'))
+
+    expect(sentLines).toContain('AUTHENTICATE PLAIN')
+    expect(sentLines).not.toContain('CAP END')
+  })
+
+  /** And a mechanism with nothing to send says so rather than trying anyway */
+  it('refuses a mechanism it has no password for, out loud', () => {
+    const { client, sentLines, state } = createMockClient()
+    client.config.saslMechanism = 'PLAIN'
+    client.config.saslPassword = null
+
+    const errors: { message: string }[] = []
+    client.events.on('error', (err: { message: string }) => errors.push(err))
+
+    dispatchMessage(client, parseMessage(':server CAP * ACK :sasl'))
+
+    expect(sentLines).not.toContain('AUTHENTICATE PLAIN')
+    expect(sentLines).toContain('CAP END')
+    expect(state.capNegotiating).toBe(false)
+    expect(errors.some((e) => /needs a password/i.test(e.message))).toBe(true)
   })
 
   it('handles CAP NAK — sends CAP END', () => {

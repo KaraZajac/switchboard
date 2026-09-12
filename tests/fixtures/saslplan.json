@@ -1,0 +1,200 @@
+{
+  "$comment": "Whether to log in, how, and what to say when we cannot. Read by tests/shared/saslplan.test.ts and the Android SharedCorpusTest. The two clients disagreed quietly: the phone authenticated whenever a password was saved and defaulted to PLAIN, the desktop only when a mechanism had been picked and never checked there was a password. One config logged in on one device and sat there as a stranger on the other, with no message on either.",
+  "$cases": "`config` is the network's SASL settings; `offered` is what the server advertised, or null where it named none. `action` is one of authenticate, skip or refuse; `mechanism` and `reason` go with those.",
+  "cases": [
+    {
+      "name": "a username and a password, and nothing chosen, is PLAIN",
+      "config": {
+        "mechanism": null,
+        "username": "kara",
+        "password": "hunter2",
+        "clientCert": null
+      },
+      "offered": [
+        "PLAIN",
+        "SCRAM-SHA-256"
+      ],
+      "action": "authenticate",
+      "mechanism": "PLAIN"
+    },
+    {
+      "name": "the same with no server list to check against",
+      "config": {
+        "mechanism": null,
+        "username": "kara",
+        "password": "hunter2",
+        "clientCert": null
+      },
+      "offered": null,
+      "action": "authenticate",
+      "mechanism": "PLAIN"
+    },
+    {
+      "name": "a chosen mechanism is used as chosen",
+      "config": {
+        "mechanism": "SCRAM-SHA-256",
+        "username": "kara",
+        "password": "hunter2",
+        "clientCert": null
+      },
+      "offered": [
+        "PLAIN",
+        "SCRAM-SHA-256"
+      ],
+      "action": "authenticate",
+      "mechanism": "SCRAM-SHA-256"
+    },
+    {
+      "name": "and is matched however it was typed",
+      "config": {
+        "mechanism": "scram-sha-256",
+        "username": "kara",
+        "password": "hunter2",
+        "clientCert": null
+      },
+      "offered": [
+        "PLAIN",
+        "SCRAM-SHA-256"
+      ],
+      "action": "authenticate",
+      "mechanism": "SCRAM-SHA-256"
+    },
+    {
+      "name": "nothing set up at all is not an error",
+      "config": {
+        "mechanism": null,
+        "username": null,
+        "password": null,
+        "clientCert": null
+      },
+      "offered": [
+        "PLAIN",
+        "SCRAM-SHA-256"
+      ],
+      "action": "skip"
+    },
+    {
+      "name": "a username with no password is still nothing to send",
+      "config": {
+        "mechanism": null,
+        "username": "kara",
+        "password": null,
+        "clientCert": null
+      },
+      "offered": [
+        "PLAIN",
+        "SCRAM-SHA-256"
+      ],
+      "action": "skip"
+    },
+    {
+      "name": "a mechanism chosen with no password says so",
+      "config": {
+        "mechanism": "PLAIN",
+        "username": "kara",
+        "password": null,
+        "clientCert": null
+      },
+      "offered": [
+        "PLAIN",
+        "SCRAM-SHA-256"
+      ],
+      "action": "refuse",
+      "reason": "SASL PLAIN needs a password, and this network has none saved."
+    },
+    {
+      "name": "EXTERNAL uses the certificate rather than a password",
+      "config": {
+        "mechanism": "EXTERNAL",
+        "username": null,
+        "password": null,
+        "clientCert": "-----BEGIN…"
+      },
+      "offered": [
+        "EXTERNAL"
+      ],
+      "action": "authenticate",
+      "mechanism": "EXTERNAL"
+    },
+    {
+      "name": "EXTERNAL without one says which is missing",
+      "config": {
+        "mechanism": "EXTERNAL",
+        "username": null,
+        "password": null,
+        "clientCert": null
+      },
+      "offered": [
+        "EXTERNAL"
+      ],
+      "action": "refuse",
+      "reason": "SASL EXTERNAL needs a client certificate, and this network has none set up."
+    },
+    {
+      "name": "a mechanism the server will not take, named with what it will",
+      "config": {
+        "mechanism": "SCRAM-SHA-512",
+        "username": "kara",
+        "password": "hunter2",
+        "clientCert": null
+      },
+      "offered": [
+        "PLAIN",
+        "SCRAM-SHA-256"
+      ],
+      "action": "refuse",
+      "reason": "This server does not offer SCRAM-SHA-512. It accepts PLAIN, SCRAM-SHA-256."
+    },
+    {
+      "name": "an empty list from the server is no list, not an empty one",
+      "config": {
+        "mechanism": "PLAIN",
+        "username": "kara",
+        "password": "hunter2",
+        "clientCert": null
+      },
+      "offered": [],
+      "action": "authenticate",
+      "mechanism": "PLAIN"
+    },
+    {
+      "name": "a password that cannot be read is not a password",
+      "config": {
+        "mechanism": "PLAIN",
+        "username": "kara",
+        "password": null,
+        "clientCert": null,
+        "unreadable": [
+          "saslPassword"
+        ]
+      },
+      "offered": [
+        "PLAIN",
+        "SCRAM-SHA-256"
+      ],
+      "action": "refuse",
+      "reason": "Your saved password for this network could not be read — it was encrypted by a keyring this computer no longer has. Enter it again in the network settings."
+    }
+  ],
+  "$accounts": "Who we authenticate as: the account name where there is one, and the nick otherwise.",
+  "accounts": [
+    {
+      "name": "the account name wins",
+      "username": "kara",
+      "nick": "kara_",
+      "account": "kara"
+    },
+    {
+      "name": "and the nick stands in when there is none",
+      "username": null,
+      "nick": "kara",
+      "account": "kara"
+    },
+    {
+      "name": "a blank account name is no account name",
+      "username": "   ",
+      "nick": "kara",
+      "account": "kara"
+    }
+  ]
+}

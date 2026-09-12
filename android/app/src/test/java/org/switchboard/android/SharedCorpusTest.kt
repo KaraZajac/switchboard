@@ -63,6 +63,7 @@ import org.switchboard.android.irc.IrcMessage
 import org.switchboard.android.irc.Metadata
 import org.switchboard.android.irc.Multiline
 import org.switchboard.android.irc.Sasl
+import org.switchboard.android.irc.SaslPlan
 import org.switchboard.android.ui.DEFAULT_PALETTE
 import org.switchboard.android.ui.PALETTES
 import org.switchboard.android.ui.paletteFor
@@ -2324,6 +2325,66 @@ class SharedCorpusTest {
             (case["lines"] as? JsonArray)?.let { wanted ->
                 assertEquals(name, wanted.map { it.jsonPrimitive.content }, state.lines)
             }
+        }
+    }
+
+    // ── whether to log in, and how ────────────────────────────────────
+
+    /**
+     * The two clients used to decide this differently and quietly: this one
+     * authenticated whenever a password was saved and defaulted to PLAIN, the
+     * desktop only when a mechanism had been picked. One config logged in here
+     * and sat there as a stranger at the desk, with nothing on either screen
+     * to explain it.
+     */
+    @Test
+    fun `decides how to log in the way the desktop decides`() {
+        val corpus = load("saslplan.json")
+
+        for (entry in corpus["cases"]!!.jsonArray) {
+            val case = entry.jsonObject
+            val name = case["name"]!!.jsonPrimitive.content
+            val c = case["config"]!!.jsonObject
+
+            fun text(key: String): String? = (c[key] as? JsonPrimitive)?.contentOrNull
+
+            val config = SaslPlan.Config(
+                mechanism = text("mechanism"),
+                username = text("username"),
+                password = text("password"),
+                clientCert = text("clientCert"),
+                unreadable = (c["unreadable"] as? JsonArray)
+                    ?.map { it.jsonPrimitive.content }.orEmpty()
+            )
+            val offered = (case["offered"] as? JsonArray)?.map { it.jsonPrimitive.content }
+
+            when (val plan = SaslPlan.of(config, offered)) {
+                is SaslPlan.Plan.Authenticate -> {
+                    assertEquals(name, "authenticate", case["action"]!!.jsonPrimitive.content)
+                    assertEquals(name, case["mechanism"]!!.jsonPrimitive.content, plan.mechanism)
+                }
+
+                is SaslPlan.Plan.Refuse -> {
+                    assertEquals(name, "refuse", case["action"]!!.jsonPrimitive.content)
+                    assertEquals(name, case["reason"]!!.jsonPrimitive.content, plan.reason)
+                }
+
+                SaslPlan.Plan.Skip ->
+                    assertEquals(name, "skip", case["action"]!!.jsonPrimitive.content)
+            }
+        }
+
+        for (entry in corpus["accounts"]!!.jsonArray) {
+            val case = entry.jsonObject
+            val config = SaslPlan.Config(
+                username = (case["username"] as? JsonPrimitive)?.contentOrNull,
+                password = "x"
+            )
+            assertEquals(
+                case["name"]!!.jsonPrimitive.content,
+                case["account"]!!.jsonPrimitive.content,
+                SaslPlan.account(config, case["nick"]!!.jsonPrimitive.content)
+            )
         }
     }
 }

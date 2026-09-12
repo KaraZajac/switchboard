@@ -1,3 +1,4 @@
+import { saslAccount } from '@shared/saslplan'
 import { registerHandler } from './handlers/registry'
 import { SASL_CHUNK_SIZE } from '@shared/constants'
 import { beginScramAuth, handleScramChallenge, isScramInProgress, scramDigest } from './scram'
@@ -25,10 +26,23 @@ registerHandler('AUTHENTICATE', (client, msg) => {
   }
 
   if (param === '+') {
-    const mechanism = client.config.saslMechanism
+    // The same fallback `saslPlan` used when it decided to authenticate: a
+    // config with a password and no chosen mechanism means PLAIN, and the two
+    // must agree or we announce one mechanism and speak another.
+    const mechanism =
+      client.config.saslMechanism?.trim().toUpperCase() ||
+      (client.config.saslPassword ? 'PLAIN' : null)
 
     if (mechanism === 'PLAIN') {
-      const username = client.config.saslUsername || client.config.nick
+      const username = saslAccount(
+        {
+          mechanism: client.config.saslMechanism,
+          username: client.config.saslUsername,
+          password: client.config.saslPassword,
+          clientCert: client.config.clientCert
+        },
+        client.config.nick
+      )
 
       /*
        * A password that is stored and cannot be read back is not a password.

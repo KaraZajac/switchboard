@@ -65,32 +65,36 @@ internal fun registerCapabilityHandlers() {
                     }
                 }
 
-                if (state.capabilities.contains("sasl") && session.config.saslPassword != null) {
-                    val wanted = session.config.saslMechanism ?: "PLAIN"
+                // Whether to log in, and with what, is `SaslPlan` — shared,
+                // because this used to be decided differently here and on the
+                // desktop: one config logged in on one device and sat there as
+                // a stranger on the other, and nothing on either screen said
+                // why.
+                if (state.capabilities.contains("sasl")) {
+                    val plan = SaslPlan.of(
+                        session.config.saslPlanConfig(),
+                        Sasl.mechanismsFrom(state.available["sasl"])
+                    )
 
-                    // The capability value lists what the server will actually
-                    // take — `sasl=PLAIN,SCRAM-SHA-256`. Sending a mechanism
-                    // that is not on it gets a bare 904, and a user staring at
-                    // "authentication failed" with no way to know their account
-                    // was never the problem.
-                    val offered = Sasl.mechanismsFrom(state.available["sasl"])
-                    if (offered != null && wanted !in offered) {
-                        session.emit("irc:error", buildJsonObject {
-                            put("serverId", state.serverId)
-                            put("code", "SASL")
-                            put(
-                                "message",
-                                "This server does not offer $wanted. " +
-                                    "It accepts ${offered.joinToString(", ")}."
-                            )
-                        })
-                        session.sendRaw("CAP END")
-                        return@on
+                    when (plan) {
+                        is SaslPlan.Plan.Refuse -> {
+                            session.emit("irc:error", buildJsonObject {
+                                put("serverId", state.serverId)
+                                put("code", "SASL")
+                                put("message", plan.reason)
+                            })
+                            session.sendRaw("CAP END")
+                            return@on
+                        }
+
+                        is SaslPlan.Plan.Authenticate -> {
+                            session.send("AUTHENTICATE", plan.mechanism)
+                            // CAP END waits for the SASL exchange to finish
+                            return@on
+                        }
+
+                        SaslPlan.Plan.Skip -> Unit
                     }
-
-                    session.send("AUTHENTICATE", wanted)
-                    // CAP END waits for the SASL exchange to finish
-                    return@on
                 }
                 session.sendRaw("CAP END")
             }
@@ -480,9 +484,13 @@ internal object Sasl {
     private val scram = mutableMapOf<String, Scram>()
 
     fun step(session: IrcSession, payload: String) {
-        val mechanism = (session.config.saslMechanism ?: "PLAIN").uppercase()
+        // The same fallback the plan used when it decided to authenticate: a
+        // config with a password and no chosen mechanism means PLAIN. The two
+        // must agree, or we announce one mechanism and speak another.
+        val mechanism = session.config.saslMechanism?.trim()?.uppercase()?.takeIf { it.isNotEmpty() }
+            ?: "PLAIN"
         val password = session.config.saslPassword ?: return
-        val account = session.config.saslUsername ?: session.config.nick
+        val account = SaslPlan.account(session.config.saslPlanConfig(), session.config.nick)
 
         when (mechanism) {
             "PLAIN" -> {
