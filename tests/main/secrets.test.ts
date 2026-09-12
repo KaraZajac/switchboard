@@ -14,6 +14,7 @@ vi.mock('electron', () => ({
 const {
   encryptSecret,
   decryptSecret,
+  readSecret,
   isPlaintextSecret,
   secretsProtected,
   secretsBackendDescription,
@@ -107,5 +108,44 @@ describe('credential encryption', () => {
   it('reports a real keyring as protected', () => {
     expect(secretsProtected()).toBe(true)
     expect(secretsBackendDescription()).toBe('gnome-libsecret')
+  })
+
+  /**
+   * The difference that matters.
+   *
+   * Null on its own cannot tell "nothing was saved" from "saved under a key
+   * this machine no longer has", and the connection needs to know which — one
+   * means dial without a password, the other means stop and say so. Reading it
+   * as the first is how an unreadable password became "SASL authentication
+   * failed", with the server blamed for refusing one it was never sent.
+   */
+  it('tells a missing credential from an unreadable one', () => {
+    const stored = encryptSecret('hunter2')
+
+    expect(readSecret(stored)).toEqual({ value: 'hunter2', unreadable: false })
+    expect(readSecret(null)).toEqual({ value: null, unreadable: false })
+    expect(readSecret('')).toEqual({ value: null, unreadable: false })
+    expect(readSecret(undefined)).toEqual({ value: null, unreadable: false })
+
+    setSecretBackend(
+      fakeBackend({
+        decrypt: () => {
+          throw new Error('keyring reset')
+        }
+      })
+    )
+    expect(readSecret(stored)).toEqual({ value: null, unreadable: true })
+  })
+
+  /** Legacy plaintext is readable by definition, whatever the keyring says */
+  it('never calls a plaintext value unreadable', () => {
+    setSecretBackend(
+      fakeBackend({
+        decrypt: () => {
+          throw new Error('keyring reset')
+        }
+      })
+    )
+    expect(readSecret('hunter2')).toEqual({ value: 'hunter2', unreadable: false })
   })
 })

@@ -93,17 +93,38 @@ export function encryptSecret(plain: string | null | undefined): string | null {
  * look like a server-side auth failure, so this is logged loudly instead.
  */
 export function decryptSecret(stored: string | null | undefined): string | null {
-  if (stored === null || stored === undefined || stored === '') return null
-  if (!stored.startsWith(PREFIX)) return stored // legacy plaintext
+  return readSecret(stored).value
+}
+
+/**
+ * The same, and whether the value was there but unreadable.
+ *
+ * Null on its own cannot tell "nothing was saved" from "something was saved
+ * and this machine can no longer read it", and the difference is the whole
+ * story: the first means connect without a password, the second means stop and
+ * say so. Sending an empty one instead produced a 904 and a banner blaming the
+ * server for refusing a password we never had.
+ */
+export function readSecret(stored: string | null | undefined): {
+  value: string | null
+  unreadable: boolean
+} {
+  if (stored === null || stored === undefined || stored === '') {
+    return { value: null, unreadable: false }
+  }
+  if (!stored.startsWith(PREFIX)) return { value: stored, unreadable: false } // legacy plaintext
 
   try {
-    return backend.decrypt(Buffer.from(stored.slice(PREFIX.length), 'base64'))
+    return {
+      value: backend.decrypt(Buffer.from(stored.slice(PREFIX.length), 'base64')),
+      unreadable: false
+    }
   } catch (err) {
     console.error(
       'A stored credential could not be decrypted — it was encrypted with a key this system no longer has. Re-enter it in server settings.',
       err
     )
-    return null
+    return { value: null, unreadable: true }
   }
 }
 

@@ -25,7 +25,13 @@ export interface ClientEvents {
   // Channel events
   join: (data: { channel: string; user: ChannelUser; isMe: boolean }) => void
   part: (data: { channel: string; nick: string; reason: string | null; isMe: boolean }) => void
-  kick: (data: { channel: string; nick: string; by: string; reason: string | null; isMe: boolean }) => void
+  kick: (data: {
+    channel: string
+    nick: string
+    by: string
+    reason: string | null
+    isMe: boolean
+  }) => void
   topic: (data: { channel: string; topic: string; setBy: string | null }) => void
   names: (data: { channel: string; users: ChannelUser[] }) => void
   mode: (data: { channel: string; mode: string; params: string[]; setBy: string | null }) => void
@@ -35,12 +41,7 @@ export interface ClientEvents {
   /** Somebody offered us a file, or something else DCC can carry */
   dcc: (data: { nick: string; body: string }) => void
   /** One of the channel's mask lists, whole */
-  masklist: (data: {
-    channel: string
-    mode: string
-    entries: MaskEntry[]
-    done: boolean
-  }) => void
+  masklist: (data: { channel: string; mode: string; entries: MaskEntry[]; done: boolean }) => void
 
   // Message events
   privmsg: (data: {
@@ -68,11 +69,7 @@ export interface ClientEvents {
     time: string
     tags: Record<string, string | true>
   }) => void
-  tagmsg: (data: {
-    channel: string
-    nick: string
-    tags: Record<string, string | true>
-  }) => void
+  tagmsg: (data: { channel: string; nick: string; tags: Record<string, string | true> }) => void
 
   // User events
   nick: (data: { oldNick: string; newNick: string }) => void
@@ -369,19 +366,26 @@ export class IRCClient {
     this.state.capNegotiating = true
 
     // Server password
-    if (this.config.password) {
+    //
+    // A password that is stored and cannot be read back is not one. Sending
+    // nothing is right — the network will refuse the connection and say so,
+    // which is honest — but the reason has to reach the user, or the fix
+    // (type it again) is invisible.
+    if (this.config.unreadableSecrets?.includes('password')) {
+      this.events.emit('error', {
+        code: 'SECRET',
+        command: 'PASS',
+        message:
+          'The saved password for this network could not be read — it was encrypted ' +
+          'by a keyring this computer no longer has. Enter it again in the network settings.'
+      })
+    } else if (this.config.password) {
       this.connection.send('PASS', this.config.password)
     }
 
     // NICK and USER
     this.connection.send('NICK', this.state.desiredNick)
     this.state.nick = this.state.desiredNick
-    this.connection.send(
-      'USER',
-      this.state.username,
-      '0',
-      '*',
-      this.state.realname
-    )
+    this.connection.send('USER', this.state.username, '0', '*', this.state.realname)
   }
 }

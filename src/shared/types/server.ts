@@ -15,6 +15,17 @@ export interface ServerConfig {
   saslMechanism: SASLMechanism | null
   saslUsername: string | null
   saslPassword: string | null
+  /**
+   * Credentials that are stored and cannot be read back.
+   *
+   * A moved profile or a reset keyring leaves the ciphertext behind with no
+   * key for it. Naming the fields rather than guessing lets the connection
+   * stop instead of authenticating with an empty string — which the server
+   * refuses, and which then reads as the password being wrong.
+   *
+   * Field names only. Never a value, and never why.
+   */
+  unreadableSecrets?: string[]
   autoConnect: boolean
   autoJoin: string[]
   /** Command to run after connecting, e.g. "/msg NickServ IDENTIFY user pass" */

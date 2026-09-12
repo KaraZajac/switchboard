@@ -29,17 +29,36 @@ registerHandler('AUTHENTICATE', (client, msg) => {
 
     if (mechanism === 'PLAIN') {
       const username = client.config.saslUsername || client.config.nick
+
+      /*
+       * A password that is stored and cannot be read back is not a password.
+       *
+       * `decryptSecret` returns null both for "nothing saved" and for "saved
+       * under a key this machine no longer has" — a moved profile, a reset
+       * keyring. Treating the second as the first meant authenticating with an
+       * empty string, which the server refuses, which arrived on screen as
+       * "SASL authentication failed" — the server blamed for turning down a
+       * password we never sent it.
+       */
+      if (client.config.unreadableSecrets?.includes('saslPassword')) {
+        abortSasl(
+          client,
+          'Your saved password for this network could not be read — it was ' +
+            'encrypted by a keyring this computer no longer has. Enter it again ' +
+            'in the network settings.'
+        )
+        return
+      }
+
       const password = client.config.saslPassword || ''
 
       // PLAIN format: \0<username>\0<password>
       const payload = `\0${username}\0${password}`
       const encoded = Buffer.from(payload, 'utf8').toString('base64')
       sendChunked(client, encoded)
-
     } else if (mechanism === 'EXTERNAL') {
       // EXTERNAL uses the TLS client certificate — send empty auth
       client.connection.sendRaw('AUTHENTICATE +')
-
     } else if (mechanism && scramDigest(mechanism)) {
       beginScramAuth(client, mechanism)
     }
@@ -76,6 +95,25 @@ registerHandler('901', (client, _msg) => {
   client.state.account = null
   client.events.emit('account', { nick: client.state.nick, account: null })
 })
+
+/**
+ * Give up on SASL before sending anything, and say why.
+ *
+ * `AUTHENTICATE *` is how the spec says a client abandons an exchange it has
+ * started, and CAP has to be ended either way or registration never finishes —
+ * the connection would sit there with the server waiting for a CAP END that
+ * was not coming.
+ *
+ * The connection continues unauthenticated, which is the same place a wrong
+ * password leaves you, except that this time the message says what to do.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function abortSasl(client: any, message: string): void {
+  client.connection.sendRaw('AUTHENTICATE *')
+  client.events.emit('error', { code: 'SASL', command: 'SASL', message })
+  client.connection.send('CAP', 'END')
+  client.state.capNegotiating = false
+}
 
 /**
  * RPL_SASLSUCCESS (903) — SASL authentication succeeded
