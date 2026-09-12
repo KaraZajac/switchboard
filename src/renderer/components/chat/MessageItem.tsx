@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import type { ChatMessage } from '@shared/types/message'
+import { safeExternalUrl } from '@shared/links'
 import { MessageContent } from './MessageContent'
 import { useMessageStore } from '../../stores/messageStore'
 import { useUIStore } from '../../stores/uiStore'
@@ -33,12 +34,13 @@ export function MessageItem({ message, prevMessage, onReply }: MessageItemProps)
   const isOwn = currentNick.toLowerCase() === message.nick.toLowerCase()
   const isEdited = !!message.editedAt
 
-
   // The same rule the notifier and the badge use, and the same rule the phone
   // uses — a line that lights up one of them has to light up all three.
   const highlightWords = useServerStore((s) => s.highlightWords)
   const isMention =
-    !isOwn && message.type === 'privmsg' && mentionsYou(message.content, currentNick, highlightWords)
+    !isOwn &&
+    message.type === 'privmsg' &&
+    mentionsYou(message.content, currentNick, highlightWords)
   const mentionBg = isMention ? 'bg-amber-500/8 border-l-2 border-amber-500/50' : ''
 
   const handleEditStart = () => {
@@ -50,7 +52,15 @@ export function MessageItem({ message, prevMessage, onReply }: MessageItemProps)
     const trimmed = editText.trim()
     if (trimmed && trimmed !== message.content) {
       // Optimistic update
-      useMessageStore.getState().editMessage(message.serverId, message.channel, message.id, trimmed, new Date().toISOString())
+      useMessageStore
+        .getState()
+        .editMessage(
+          message.serverId,
+          message.channel,
+          message.id,
+          trimmed,
+          new Date().toISOString()
+        )
       speak(
         window.switchboard.invoke(
           'message:edit',
@@ -100,10 +110,19 @@ export function MessageItem({ message, prevMessage, onReply }: MessageItemProps)
         </span>
         <div className="flex-1">
           <span className="italic text-gray-300">
-            <NickWithPopup nick={message.nick} serverId={message.serverId} className="font-medium text-gray-100" />{' '}
+            <NickWithPopup
+              nick={message.nick}
+              serverId={message.serverId}
+              className="font-medium text-gray-100"
+            />{' '}
             <MessageContent text={message.content} />
           </span>
-          <MessageActions message={message} onReply={onReply} isOwn={isOwn} onEdit={handleEditStart} />
+          <MessageActions
+            message={message}
+            onReply={onReply}
+            isOwn={isOwn}
+            onEdit={handleEditStart}
+          />
         </div>
       </div>
     )
@@ -115,30 +134,42 @@ export function MessageItem({ message, prevMessage, onReply }: MessageItemProps)
         <span className="mr-2 mt-0.5 min-w-[48px] text-right text-xs text-gray-500 opacity-0 group-hover:opacity-100">
           {time}
         </span>
-        <span className="text-sm text-gray-500"><MessageContent text={message.content} /></span>
+        <span className="text-sm text-gray-500">
+          <MessageContent text={message.content} />
+        </span>
       </div>
     )
   }
 
   if (isGrouped) {
     return (
-      <div className={`group relative flex items-start px-2 py-0.5 hover:bg-gray-700/25 ${mentionBg}`}>
+      <div
+        className={`group relative flex items-start px-2 py-0.5 hover:bg-gray-700/25 ${mentionBg}`}
+      >
         <span className="mr-2 mt-0.5 min-w-[48px] text-right text-xs text-gray-500 opacity-0 group-hover:opacity-100">
           {time}
         </span>
         <div className="flex-1">
           {editing ? (
-            <EditInput text={editText} onChange={setEditText} onSave={handleEditSave} onCancel={handleEditCancel} />
+            <EditInput
+              text={editText}
+              onChange={setEditText}
+              onSave={handleEditSave}
+              onCancel={handleEditCancel}
+            />
           ) : (
             <span className={isNotice ? 'text-gray-400' : 'text-gray-200'}>
               <MessageContent text={message.content} highlightNick={currentNick} />
               {isEdited && <span className="ml-1 text-[10px] text-gray-500">(edited)</span>}
             </span>
           )}
-          {Object.keys(message.reactions).length > 0 && (
-            <Reactions message={message} />
-          )}
-          <MessageActions message={message} onReply={onReply} isOwn={isOwn} onEdit={handleEditStart} />
+          {Object.keys(message.reactions).length > 0 && <Reactions message={message} />}
+          <MessageActions
+            message={message}
+            onReply={onReply}
+            isOwn={isOwn}
+            onEdit={handleEditStart}
+          />
         </div>
       </div>
     )
@@ -146,19 +177,32 @@ export function MessageItem({ message, prevMessage, onReply }: MessageItemProps)
 
   if (compactMode) {
     return (
-      <div className={`group relative flex items-start px-2 py-0.5 hover:bg-gray-700/25 ${mentionBg}`}>
-        <span className="mr-2 mt-0.5 min-w-[48px] text-right text-xs text-gray-500">
-          {time}
-        </span>
+      <div
+        className={`group relative flex items-start px-2 py-0.5 hover:bg-gray-700/25 ${mentionBg}`}
+      >
+        <span className="mr-2 mt-0.5 min-w-[48px] text-right text-xs text-gray-500">{time}</span>
         <div className="flex-1 overflow-hidden">
           {message.replyTo && (
-            <ReplyPreview serverId={message.serverId} channel={message.channel} msgid={message.replyTo} />
+            <ReplyPreview
+              serverId={message.serverId}
+              channel={message.channel}
+              msgid={message.replyTo}
+            />
           )}
           <span>
-            <NickWithPopup nick={message.nick} serverId={message.serverId} className="font-medium text-gray-100 hover:underline cursor-pointer" />
+            <NickWithPopup
+              nick={message.nick}
+              serverId={message.serverId}
+              className="font-medium text-gray-100 hover:underline cursor-pointer"
+            />
             <span className="mx-1 text-gray-200">
               {editing ? (
-                <EditInput text={editText} onChange={setEditText} onSave={handleEditSave} onCancel={handleEditCancel} />
+                <EditInput
+                  text={editText}
+                  onChange={setEditText}
+                  onSave={handleEditSave}
+                  onCancel={handleEditCancel}
+                />
               ) : (
                 <span className={isNotice ? 'text-gray-400' : ''}>
                   <MessageContent text={message.content} highlightNick={currentNick} />
@@ -167,28 +211,41 @@ export function MessageItem({ message, prevMessage, onReply }: MessageItemProps)
               )}
             </span>
           </span>
-          {Object.keys(message.reactions).length > 0 && (
-            <Reactions message={message} />
-          )}
-          <MessageActions message={message} onReply={onReply} isOwn={isOwn} onEdit={handleEditStart} />
+          {Object.keys(message.reactions).length > 0 && <Reactions message={message} />}
+          <MessageActions
+            message={message}
+            onReply={onReply}
+            isOwn={isOwn}
+            onEdit={handleEditStart}
+          />
         </div>
       </div>
     )
   }
 
   return (
-    <div className={`group relative mt-3 flex items-start px-2 py-0.5 first:mt-0 hover:bg-gray-700/25 ${mentionBg}`}>
+    <div
+      className={`group relative mt-3 flex items-start px-2 py-0.5 first:mt-0 hover:bg-gray-700/25 ${mentionBg}`}
+    >
       {/* Avatar */}
       <MessageAvatar nick={message.nick} avatarUrl={avatarUrl} />
 
       <div className="flex-1 overflow-hidden">
         {/* Reply preview */}
         {message.replyTo && (
-          <ReplyPreview serverId={message.serverId} channel={message.channel} msgid={message.replyTo} />
+          <ReplyPreview
+            serverId={message.serverId}
+            channel={message.channel}
+            msgid={message.replyTo}
+          />
         )}
 
         <div className="flex items-baseline gap-2">
-          <NickWithPopup nick={message.nick} serverId={message.serverId} className="font-medium text-gray-100 hover:underline cursor-pointer" />
+          <NickWithPopup
+            nick={message.nick}
+            serverId={message.serverId}
+            className="font-medium text-gray-100 hover:underline cursor-pointer"
+          />
           <span className="text-xs text-gray-500">{formatTimeFull(message.timestamp)}</span>
           {message.oper !== null && message.oper !== undefined && (
             <span
@@ -219,30 +276,44 @@ export function MessageItem({ message, prevMessage, onReply }: MessageItemProps)
               from {message.channelContext}
             </span>
           )}
-          {message.pending && (
-            <span className="text-xs text-gray-600">sending...</span>
-          )}
+          {message.pending && <span className="text-xs text-gray-600">sending...</span>}
         </div>
         {editing ? (
-          <EditInput text={editText} onChange={setEditText} onSave={handleEditSave} onCancel={handleEditCancel} />
+          <EditInput
+            text={editText}
+            onChange={setEditText}
+            onSave={handleEditSave}
+            onCancel={handleEditCancel}
+          />
         ) : (
           <div className={isNotice ? 'text-gray-400' : 'text-gray-200'}>
             <MessageContent text={message.content} highlightNick={currentNick} />
             {isEdited && <span className="ml-1 text-[10px] text-gray-500">(edited)</span>}
           </div>
         )}
-        {Object.keys(message.reactions).length > 0 && (
-          <Reactions message={message} />
-        )}
-        <MessageActions message={message} onReply={onReply} isOwn={isOwn} onEdit={handleEditStart} />
+        {Object.keys(message.reactions).length > 0 && <Reactions message={message} />}
+        <MessageActions
+          message={message}
+          onReply={onReply}
+          isOwn={isOwn}
+          onEdit={handleEditStart}
+        />
       </div>
     </div>
   )
 }
 
 /** Inline edit input */
-function EditInput({ text, onChange, onSave, onCancel }: {
-  text: string; onChange: (t: string) => void; onSave: () => void; onCancel: () => void
+function EditInput({
+  text,
+  onChange,
+  onSave,
+  onCancel
+}: {
+  text: string
+  onChange: (t: string) => void
+  onSave: () => void
+  onCancel: () => void
 }) {
   return (
     <div className="my-1">
@@ -251,27 +322,54 @@ function EditInput({ text, onChange, onSave, onCancel }: {
         value={text}
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onSave() }
+          if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault()
+            onSave()
+          }
           if (e.key === 'Escape') onCancel()
         }}
         className="w-full resize-none rounded bg-gray-700 px-3 py-2 text-sm text-gray-100 outline-none focus:ring-1 focus:ring-indigo-500"
         rows={1}
       />
       <div className="mt-1 flex gap-2 text-xs text-gray-500">
-        <span>escape to <button onClick={onCancel} className="text-blue-400 hover:underline">cancel</button></span>
-        <span>enter to <button onClick={onSave} className="text-blue-400 hover:underline">save</button></span>
+        <span>
+          escape to{' '}
+          <button onClick={onCancel} className="text-blue-400 hover:underline">
+            cancel
+          </button>
+        </span>
+        <span>
+          enter to{' '}
+          <button onClick={onSave} className="text-blue-400 hover:underline">
+            save
+          </button>
+        </span>
       </div>
     </div>
   )
 }
 
 /** Shows a compact preview of the message being replied to */
-function ReplyPreview({ serverId, channel, msgid }: { serverId: string; channel: string; msgid: string }) {
+function ReplyPreview({
+  serverId,
+  channel,
+  msgid
+}: {
+  serverId: string
+  channel: string
+  msgid: string
+}) {
   const originalMsg = useMessageStore((s) => s.getMessageById(serverId, channel, msgid))
 
   return (
     <div className="mb-1 flex items-center gap-1.5 text-xs">
-      <svg className="h-3 w-3 flex-shrink-0 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+      <svg
+        className="h-3 w-3 flex-shrink-0 text-gray-500"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.5"
+      >
         <path d="M9 17l-5-5 5-5" />
         <path d="M4 12h12a4 4 0 0 1 0 8h-1" />
       </svg>
@@ -290,7 +388,17 @@ function ReplyPreview({ serverId, channel, msgid }: { serverId: string; channel:
 const QUICK_EMOJIS = ['👍', '❤️', '😂', '🎉', '😢', '🤔', '👀', '🔥']
 
 /** Hover actions for a message (react, reply, edit, delete) */
-function MessageActions({ message, onReply, isOwn, onEdit }: { message: ChatMessage; onReply?: (message: ChatMessage) => void; isOwn?: boolean; onEdit?: () => void }) {
+function MessageActions({
+  message,
+  onReply,
+  isOwn,
+  onEdit
+}: {
+  message: ChatMessage
+  onReply?: (message: ChatMessage) => void
+  isOwn?: boolean
+  onEdit?: () => void
+}) {
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const pickerRef = useRef<HTMLDivElement>(null)
@@ -364,7 +472,10 @@ function MessageActions({ message, onReply, isOwn, onEdit }: { message: ChatMess
               Cancel
             </button>
             <button
-              onClick={() => { handleRedact(); setShowDeleteConfirm(false) }}
+              onClick={() => {
+                handleRedact()
+                setShowDeleteConfirm(false)
+              }}
               className="rounded bg-red-600 px-3 py-1 text-xs text-white hover:bg-red-500"
             >
               Delete
@@ -380,7 +491,13 @@ function MessageActions({ message, onReply, isOwn, onEdit }: { message: ChatMess
           className="rounded px-2 py-1 text-gray-400 hover:bg-gray-700 hover:text-gray-200"
           title="Add reaction"
         >
-          <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <svg
+            className="h-4 w-4"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
             <circle cx="12" cy="12" r="10" />
             <path d="M8 14s1.5 2 4 2 4-2 4-2" />
             <line x1="9" y1="9" x2="9.01" y2="9" />
@@ -412,7 +529,13 @@ function MessageActions({ message, onReply, isOwn, onEdit }: { message: ChatMess
           className="rounded px-2 py-1 text-gray-400 hover:bg-gray-700 hover:text-gray-200"
           title="Reply"
         >
-          <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <svg
+            className="h-4 w-4"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
             <path d="M9 17l-5-5 5-5" />
             <path d="M4 12h12a4 4 0 0 1 0 8h-1" />
           </svg>
@@ -426,7 +549,13 @@ function MessageActions({ message, onReply, isOwn, onEdit }: { message: ChatMess
           className="rounded px-2 py-1 text-gray-400 hover:bg-gray-700 hover:text-gray-200"
           title="Edit message"
         >
-          <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <svg
+            className="h-4 w-4"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
             <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
             <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
           </svg>
@@ -435,24 +564,38 @@ function MessageActions({ message, onReply, isOwn, onEdit }: { message: ChatMess
 
       {/* Delete (redact) — the author, or an operator */}
       {canRedact && (
-      <button
-        onClick={() => setShowDeleteConfirm(true)}
-        className="rounded px-2 py-1 text-gray-400 hover:bg-red-900/50 hover:text-red-400"
-        title="Delete message"
-      >
-        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M3 6h18" />
-          <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-          <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-        </svg>
-      </button>
+        <button
+          onClick={() => setShowDeleteConfirm(true)}
+          className="rounded px-2 py-1 text-gray-400 hover:bg-red-900/50 hover:text-red-400"
+          title="Delete message"
+        >
+          <svg
+            className="h-4 w-4"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
+            <path d="M3 6h18" />
+            <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+          </svg>
+        </button>
       )}
     </div>
   )
 }
 
 /** Nick with WHOIS popup on hover */
-function NickWithPopup({ nick, serverId, className }: { nick: string; serverId: string; className?: string }) {
+function NickWithPopup({
+  nick,
+  serverId,
+  className
+}: {
+  nick: string
+  serverId: string
+  className?: string
+}) {
   const popupWhoisData = useUIStore((s) =>
     s.popupWhoisData?.nick.toLowerCase() === nick.toLowerCase() ? s.popupWhoisData : null
   )
@@ -576,14 +719,20 @@ function NickWithPopup({ nick, serverId, className }: { nick: string; serverId: 
                       <span className="text-xs text-gray-400">{metadata.pronouns}</span>
                     )}
                     {popupWhoisData.isOperator && (
-                      <span className="rounded bg-red-500/20 px-1 py-0.5 text-[10px] font-semibold text-red-400">OPER</span>
+                      <span className="rounded bg-red-500/20 px-1 py-0.5 text-[10px] font-semibold text-red-400">
+                        OPER
+                      </span>
                     )}
                     {popupWhoisData.isBot && (
-                      <span className="rounded bg-indigo-500/20 px-1 py-0.5 text-[10px] font-semibold text-indigo-400">BOT</span>
+                      <span className="rounded bg-indigo-500/20 px-1 py-0.5 text-[10px] font-semibold text-indigo-400">
+                        BOT
+                      </span>
                     )}
                   </div>
                   {popupWhoisData.user && popupWhoisData.host && (
-                    <div className="truncate text-xs text-gray-500">{popupWhoisData.user}@{popupWhoisData.host}</div>
+                    <div className="truncate text-xs text-gray-500">
+                      {popupWhoisData.user}@{popupWhoisData.host}
+                    </div>
                   )}
                 </div>
               </div>
@@ -600,16 +749,24 @@ function NickWithPopup({ nick, serverId, className }: { nick: string; serverId: 
                 <div className="text-sm text-gray-300">{popupWhoisData.realname}</div>
               )}
 
-              {metadata.homepage && (
-                <a
-                  href={metadata.homepage}
-                  target="_blank"
-                  rel="noreferrer noopener"
-                  className="block truncate text-xs text-indigo-400 hover:underline"
-                >
-                  {metadata.homepage}
-                </a>
-              )}
+              {/*
+                A homepage comes from metadata, so a stranger chose the string.
+                Shown as text either way; only a link we would actually open
+                gets to be one — see `safeExternalUrl`.
+              */}
+              {metadata.homepage &&
+                (safeExternalUrl(metadata.homepage) ? (
+                  <a
+                    href={safeExternalUrl(metadata.homepage)!}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    className="block truncate text-xs text-indigo-400 hover:underline"
+                  >
+                    {metadata.homepage}
+                  </a>
+                ) : (
+                  <div className="block truncate text-xs text-gray-400">{metadata.homepage}</div>
+                ))}
 
               <div className="space-y-1 border-t border-gray-700 pt-2 text-xs">
                 {popupWhoisData.account && (
@@ -627,23 +784,37 @@ function NickWithPopup({ nick, serverId, className }: { nick: string; serverId: 
                 {popupWhoisData.idle && (
                   <div className="flex justify-between">
                     <span className="text-gray-500">Idle</span>
-                    <span className="text-gray-300">{formatIdleTime(parseInt(popupWhoisData.idle))}</span>
+                    <span className="text-gray-300">
+                      {formatIdleTime(parseInt(popupWhoisData.idle))}
+                    </span>
                   </div>
                 )}
                 {popupWhoisData.channels && (
                   <div>
                     <span className="text-gray-500">Channels</span>
-                    <div className="mt-0.5 text-gray-300 break-words">{popupWhoisData.channels}</div>
+                    <div className="mt-0.5 text-gray-300 break-words">
+                      {popupWhoisData.channels}
+                    </div>
                   </div>
                 )}
               </div>
 
               {/* Action buttons */}
-              <PopupActions nick={popupWhoisData.nick} serverId={serverId} onClose={() => setShowPopup(false)} />
+              <PopupActions
+                nick={popupWhoisData.nick}
+                serverId={serverId}
+                onClose={() => setShowPopup(false)}
+              />
             </div>
           ) : (
             <div className="flex items-center gap-2 text-sm text-gray-400">
-              <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <svg
+                className="h-4 w-4 animate-spin"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
                 <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
               </svg>
               Loading...
@@ -655,9 +826,16 @@ function NickWithPopup({ nick, serverId, className }: { nick: string; serverId: 
   )
 }
 
-
 /** Action buttons in the nick popup: Message and Add/Remove Friend */
-function PopupActions({ nick, serverId, onClose }: { nick: string; serverId: string; onClose: () => void }) {
+function PopupActions({
+  nick,
+  serverId,
+  onClose
+}: {
+  nick: string
+  serverId: string
+  onClose: () => void
+}) {
   const currentNick = useServerStore((s) => s.currentNick[serverId] ?? '')
   const isOwnNick = currentNick.toLowerCase() === nick.toLowerCase()
 
@@ -719,7 +897,9 @@ function PopupActions({ nick, serverId, onClose }: { nick: string; serverId: str
 
 function WhoisAvatar({ nick, avatarUrl }: { nick: string; avatarUrl: string | null }) {
   const [failed, setFailed] = useState(false)
-  useEffect(() => { setFailed(false) }, [avatarUrl])
+  useEffect(() => {
+    setFailed(false)
+  }, [avatarUrl])
 
   if (avatarUrl && !failed) {
     return (
@@ -734,7 +914,9 @@ function WhoisAvatar({ nick, avatarUrl }: { nick: string; avatarUrl: string | nu
     )
   }
   return (
-    <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${nickColor(nick)} text-sm font-bold text-white`}>
+    <div
+      className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${nickColor(nick)} text-sm font-bold text-white`}
+    >
       {nick.charAt(0).toUpperCase()}
     </div>
   )
@@ -743,7 +925,9 @@ function WhoisAvatar({ nick, avatarUrl }: { nick: string; avatarUrl: string | nu
 function MessageAvatar({ nick, avatarUrl }: { nick: string; avatarUrl: string | null }) {
   const [failed, setFailed] = useState(false)
 
-  useEffect(() => { setFailed(false) }, [avatarUrl])
+  useEffect(() => {
+    setFailed(false)
+  }, [avatarUrl])
 
   if (avatarUrl && !failed) {
     return (
@@ -759,7 +943,9 @@ function MessageAvatar({ nick, avatarUrl }: { nick: string; avatarUrl: string | 
   }
 
   return (
-    <div className={`mr-3 mt-0.5 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full ${nickColor(nick)} text-sm font-bold text-white`}>
+    <div
+      className={`mr-3 mt-0.5 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full ${nickColor(nick)} text-sm font-bold text-white`}
+    >
       {nick.charAt(0).toUpperCase()}
     </div>
   )
@@ -834,8 +1020,11 @@ function formatTimeFull(iso: string): string {
     if (d.toDateString() === today.toDateString()) {
       return 'Today at ' + d.toLocaleTimeString([], timeOpts)
     }
-    return d.toLocaleDateString([], { month: 'short', day: 'numeric' }) +
-      ' at ' + d.toLocaleTimeString([], timeOpts)
+    return (
+      d.toLocaleDateString([], { month: 'short', day: 'numeric' }) +
+      ' at ' +
+      d.toLocaleTimeString([], timeOpts)
+    )
   } catch {
     return ''
   }

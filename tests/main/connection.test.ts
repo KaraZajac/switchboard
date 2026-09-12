@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { ServerConfig } from '../../src/shared/types/server'
+import { MAX_INCOMING } from '../../src/shared/constants'
 
 const { fakeSockets, FakeSocket } = vi.hoisted(() => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -108,6 +109,55 @@ describe('IRCConnection transport', () => {
     // picks its own — see `decodeLine`.
     socket.emit('data', Buffer.from('PING :abc123\r\n'))
     expect(socket.written).toContain('PONG abc123\r\n')
+
+    connection.destroy()
+  })
+
+  /**
+   * A peer that never sends `\r\n`.
+   *
+   * Nothing capped the receive buffer, so the answer to "how much will you
+   * hold for me?" was "everything you have" — a client anybody can turn off by
+   * connecting it to a socket that types and never stops. The phone has had a
+   * ceiling since it was written; this is the desktop catching up.
+   */
+  it('does not grow for ever on a line that never ends', () => {
+    const connection = new IRCConnection(config({ tls: false, port: 6667 }))
+    connection.connect()
+    const socket = fakeSockets[fakeSockets.length - 1]
+    socket.emit('connect')
+
+    for (let i = 0; i < 64; i++) socket.emit('data', Buffer.alloc(64 * 1024, 0x41))
+
+    // Reaching in, because the point is the thing nobody can see from outside
+    const held = (connection as unknown as { buffer: Buffer }).buffer
+    expect(held.length).toBeLessThanOrEqual(MAX_INCOMING)
+
+    connection.destroy()
+  })
+
+  /**
+   * And what comes after it. Keeping the tail of an over-long line would make
+   * its second half the start of the next one, and half a line still parses —
+   * which is worse than losing it, because it parses into something nobody
+   * sent.
+   */
+  it('throws away the rest of an over-long line, then carries on', () => {
+    const connection = new IRCConnection(config({ tls: false, port: 6667 }))
+    const seen: string[] = []
+    connection.on('message', (msg) => seen.push(msg.command))
+    connection.connect()
+    const socket = fakeSockets[fakeSockets.length - 1]
+    socket.emit('connect')
+
+    socket.emit('data', Buffer.alloc(MAX_INCOMING + 4096, 0x41))
+    socket.emit('data', Buffer.from('PRIVMSG #tail :the rest of it\r\n'))
+    socket.emit('data', Buffer.from('NOTICE #next :and a whole one\r\n'))
+
+    // Exactly one line survives. Without the ceiling the run of A's and the
+    // PRIVMSG behind it arrive as a single line whose *command* is the run —
+    // a message nobody sent, delivered as if somebody had.
+    expect(seen).toEqual(['NOTICE'])
 
     connection.destroy()
   })

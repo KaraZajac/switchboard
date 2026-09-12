@@ -11,13 +11,15 @@ import {
 // allowlist and the sanitiser, so a stub is enough.
 vi.mock('electron', () => ({ ipcMain: { handle: () => {} } }))
 
-const { isRemoteAllowed, sanitizeForRemote, sanitizeIncomingFromRemote } =
+const { isRemoteAllowed, sanitizeForRemote, sanitizeIncomingFromRemote, handle, invokeForRemote } =
   await import('../../src/main/ipc/registry')
 
 describe('remote frame codec', () => {
   it('round-trips a frame', () => {
     const decoder = new FrameDecoder()
-    const frames = decoder.push(encodeFrame({ t: 'welcome', v: 1, name: 'Switchboard', paired: true }))
+    const frames = decoder.push(
+      encodeFrame({ t: 'welcome', v: 1, name: 'Switchboard', paired: true })
+    )
     expect(frames).toEqual([{ t: 'welcome', v: 1, name: 'Switchboard', paired: true }])
   })
 
@@ -211,5 +213,53 @@ describe('handlers a phone must not be able to call', () => {
     for (const channel of ['masklist:fetch', 'masklist:set', 'channel:modes', 'channel:set-mode']) {
       expect(isRemoteAllowed(channel)).toBe(true)
     }
+  })
+})
+
+/**
+ * Settings are allowed by key, not wholesale.
+ *
+ * `settings:get` takes a name and hands back whatever is under it, and one of
+ * those names is `proxy` — which holds a username and a password for the
+ * desktop. A paired device could read it with one call and write it with
+ * another, and writing it routes the desktop's connections through a host the
+ * phone picked. Neither is what "the phone can choose a theme" was for.
+ */
+describe('which settings a paired device may touch', () => {
+  const reads: string[] = []
+  handle('settings:get', async (_event, key: string) => {
+    reads.push(key)
+    return key === 'proxy'
+      ? { host: 'proxy.internal', username: 'kara', password: 'hunter2' }
+      : 'ok'
+  })
+  handle('settings:set', async () => 'written')
+
+  it('lets it read the ones that belong to the person', async () => {
+    for (const key of ['theme', 'mutes', 'profile', 'ignores', 'highlights', 'aliases']) {
+      await expect(invokeForRemote('settings:get', [key])).resolves.toBe('ok')
+    }
+  })
+
+  it('refuses the proxy, which is a credential for this machine', async () => {
+    const before = reads.length
+    await expect(invokeForRemote('settings:get', ['proxy'])).rejects.toThrow(/not available/i)
+    // Refused before the handler, not after: a value that was read and then
+    // dropped has still been read.
+    expect(reads.length).toBe(before)
+  })
+
+  it('refuses to write one too', async () => {
+    await expect(
+      invokeForRemote('settings:set', ['proxy', { host: 'attacker.example', port: 1080 }])
+    ).rejects.toThrow(/not available/i)
+  })
+
+  it('refuses a key nobody has heard of, rather than passing it through', async () => {
+    await expect(invokeForRemote('settings:get', ['customCaPath'])).rejects.toThrow(
+      /not available/i
+    )
+    await expect(invokeForRemote('settings:get', [''])).rejects.toThrow(/not available/i)
+    await expect(invokeForRemote('settings:get', [])).rejects.toThrow(/not available/i)
   })
 })

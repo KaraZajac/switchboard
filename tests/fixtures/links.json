@@ -1,5 +1,5 @@
 {
-  "$comment": "Finding the links in a line, shared by tests/shared/links.test.ts and the Android LinksTest. The two clients each had their own pattern and they disagreed: the desktop kept the full stop at the end of a sentence inside the URL and the phone dropped it, and both stopped dead at the first closing bracket \u2014 so every Wikipedia link with a disambiguation in it arrived truncated, on both.",
+  "$comment": "Finding the links in a line, shared by tests/shared/links.test.ts and the Android LinksTest. The two clients each had their own pattern and they disagreed: the desktop kept the full stop at the end of a sentence inside the URL and the phone dropped it, and both stopped dead at the first closing bracket — so every Wikipedia link with a disambiguation in it arrived truncated, on both.",
   "$cases": "`text` is the line; `links` are the URLs found in it, in order.",
   "cases": [
     {
@@ -131,6 +131,89 @@
       "links": [
         "https://example.com/a"
       ]
+    }
+  ],
+  "$safe": "Whether a link is one we are willing to hand to the operating system. Everything that reaches `shell.openExternal` or an ACTION_VIEW intent will be attempted by whatever handles that scheme, and a profile's `homepage` is a metadata key — a string a stranger chose. `file:///` reads the machine; on Windows a handler scheme can start a program. `url` is null where the link must not be offered at all.",
+  "safe": [
+    {
+      "name": "an ordinary https link",
+      "value": "https://example.org/page",
+      "url": "https://example.org/page"
+    },
+    {
+      "name": "plain http, because plenty of homepages still are",
+      "value": "http://example.org/",
+      "url": "http://example.org/"
+    },
+    {
+      "name": "mailto, because a contact link is a reasonable profile",
+      "value": "mailto:someone@example.org",
+      "url": "mailto:someone@example.org"
+    },
+    {
+      "name": "trimmed",
+      "value": "  https://example.org/  ",
+      "url": "https://example.org/"
+    },
+    {
+      "name": "a file URL reads this machine",
+      "value": "file:///etc/passwd",
+      "url": null
+    },
+    {
+      "name": "and so does one dressed up",
+      "value": "FILE:///C:/Windows/System32/config/SAM",
+      "url": null
+    },
+    {
+      "name": "javascript never reaches a browser from here, and must not reach the OS",
+      "value": "javascript:alert(1)",
+      "url": null
+    },
+    {
+      "name": "a Windows handler scheme can start a program",
+      "value": "ms-msdt:/id PCWDiagnostic",
+      "url": null
+    },
+    {
+      "name": "an SMB share is a credential leak on Windows",
+      "value": "smb://attacker.example/share",
+      "url": null
+    },
+    {
+      "name": "ftp is found by the linkifier and still not opened",
+      "value": "ftp://files.example.org/pub",
+      "url": null
+    },
+    {
+      "name": "data URLs are unbounded and go nowhere good",
+      "value": "data:text/html,<script>alert(1)</script>",
+      "url": null
+    },
+    {
+      "name": "not a URL at all",
+      "value": "example.org",
+      "url": null
+    },
+    {
+      "name": "http with no host is not a link to anywhere",
+      "value": "http://",
+      "url": null
+    },
+    {
+      "name": "empty",
+      "value": "",
+      "url": null
+    },
+    {
+      "name": "whitespace",
+      "value": "   ",
+      "url": null
+    },
+    {
+      "name": "too long to be a homepage",
+      "value": "https://example.org/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "url": null
     }
   ]
 }

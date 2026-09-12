@@ -1,4 +1,5 @@
 import { getSetting, setSetting } from '../storage/models/settings'
+import { SHARED_SETTINGS } from '@shared/settings'
 import { shouldAdoptVault } from '@shared/vaultorder'
 import { serversChanged, settingChanged, monitorChanged } from '../ipc/notify'
 import { getAllServers, removeServer, upsertServer } from '../storage/models/server'
@@ -48,33 +49,12 @@ export interface VaultPayload {
 /**
  * Settings that belong to the person rather than the machine.
  *
- * The theme is the obvious one — the two clients share it deliberately. Mutes
- * are the same kind of thing: a conversation you have silenced is silenced
- * because of what it is, not because of which device you silenced it on. And
- * the profile most of all: a display name and a set of pronouns are facts about
- * the person, not about the machine they were typed on or the network they
- * happened to be on at the time.
- *
- * This list is also what survives a reseal: `sharedSettings` rebuilds the
- * settings object from it, so a key the other device wrote and this one has
- * never heard of is dropped. The phone writes `profile`, so leaving it out
- * meant the profile someone set on their phone disappeared the next time the
- * desktop saved anything.
+ * Defined in `@shared/settings` and re-exported here, because the same list
+ * answers two questions: what the vault carries between devices, and what a
+ * paired device is allowed to read or write. Re-exported rather than moved
+ * outright so that everything already asking the vault still gets an answer.
  */
-export const SHARED_SETTINGS = [
-  'theme',
-  'mutes',
-  'profile',
-  'ignores',
-  'highlights',
-  'aliases',
-  // How long of nothing counts as away is a fact about the person, not about
-  // the device measuring it — and the two measure it differently, so having
-  // two settings would mean the phone and the desktop disagreeing about when
-  // you left.
-  'autoAwayMinutes',
-  'autoAwayMessage'
-] as const
+export { SHARED_SETTINGS }
 
 export interface VaultStatus {
   /** A vault exists on this device */

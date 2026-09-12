@@ -2,6 +2,7 @@ import { app, BrowserWindow, Menu, Tray, session, shell, nativeImage } from 'ele
 import { setAppVersion } from './irc/handlers/message'
 import { useNetworkSettings } from './irc/connection'
 import type { ProxySettings } from '@shared/socks'
+import { safeExternalUrl } from '@shared/links'
 import { setNotifier } from './ipc/notify'
 import { join } from 'path'
 import { autoUpdater } from 'electron-updater'
@@ -59,11 +60,43 @@ function createWindow(): void {
     }
   })
 
-  // Open external links in browser
+  /*
+   * Open external links in the browser — the ones we are willing to.
+   *
+   * `shell.openExternal` hands a URL to the operating system, which will
+   * attempt whatever scheme it is given: `file:///` reads this machine, and on
+   * Windows a handler scheme can start a program. The URL is not always one
+   * the user typed — a profile's `homepage` is an IRCv3 metadata key, so it is
+   * a string any stranger on the network can set and anybody can click.
+   *
+   * Checked here rather than only where links are drawn, because this is the
+   * one door all of them go through, including ones not written yet.
+   */
   mainWindow.webContents.setWindowOpenHandler((details) => {
-    shell.openExternal(details.url)
+    const safe = safeExternalUrl(details.url)
+    if (safe) void shell.openExternal(safe)
     return { action: 'deny' }
   })
+
+  /*
+   * And nothing navigates this window away from the app.
+   *
+   * The preload hands `window.switchboard` to whatever is loaded here. A page
+   * that replaced ours would inherit it — every IPC channel the renderer has,
+   * including the ones that read the server list. Links open outside; this
+   * window only ever shows Switchboard.
+   */
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    const here = mainWindow?.webContents.getURL() ?? ''
+    if (url === here) return
+    event.preventDefault()
+    const safe = safeExternalUrl(url)
+    if (safe) void shell.openExternal(safe)
+  })
+
+  // A page cannot attach a preload of its own either, and nothing here has a
+  // webview to begin with — this is the belt to that brace.
+  mainWindow.webContents.on('will-attach-webview', (event) => event.preventDefault())
 
   // Keep the window controls in sync when the window is resized by the WM
   mainWindow.on('maximize', () => sendToRenderer('window:maximized', { maximized: true }))
@@ -85,20 +118,24 @@ function createAppMenu(): void {
 
   const template: Electron.MenuItemConstructorOptions[] = [
     // App menu (macOS only)
-    ...(isMac ? [{
-      label: app.name,
-      submenu: [
-        { role: 'about' as const },
-        { type: 'separator' as const },
-        { role: 'services' as const },
-        { type: 'separator' as const },
-        { role: 'hide' as const },
-        { role: 'hideOthers' as const },
-        { role: 'unhide' as const },
-        { type: 'separator' as const },
-        { role: 'quit' as const }
-      ]
-    }] : []),
+    ...(isMac
+      ? [
+          {
+            label: app.name,
+            submenu: [
+              { role: 'about' as const },
+              { type: 'separator' as const },
+              { role: 'services' as const },
+              { type: 'separator' as const },
+              { role: 'hide' as const },
+              { role: 'hideOthers' as const },
+              { role: 'unhide' as const },
+              { type: 'separator' as const },
+              { role: 'quit' as const }
+            ]
+          }
+        ]
+      : []),
     // File
     {
       label: 'File',
@@ -151,12 +188,9 @@ function createAppMenu(): void {
       submenu: [
         { role: 'minimize' },
         { role: 'zoom' },
-        ...(isMac ? [
-          { type: 'separator' as const },
-          { role: 'front' as const }
-        ] : [
-          { role: 'close' as const }
-        ])
+        ...(isMac
+          ? [{ type: 'separator' as const }, { role: 'front' as const }]
+          : [{ role: 'close' as const }])
       ]
     }
   ]
@@ -410,7 +444,10 @@ async function shutdown(): Promise<void> {
   const withTimeout = (work: Promise<unknown>, ms: number) =>
     Promise.race([work, new Promise((resolve) => setTimeout(resolve, ms))])
 
-  await withTimeout(stopRemoteLink().catch(() => {}), 1500)
+  await withTimeout(
+    stopRemoteLink().catch(() => {}),
+    1500
+  )
 
   ircManager.destroyAll()
   // Checkpoints the write-ahead log and takes it away with it, so the next

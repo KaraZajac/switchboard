@@ -106,13 +106,7 @@ function trimSentence(text: string, start: number, end: number): number {
 }
 
 /** Whether the URL itself opened this bracket, which makes the closer part of it */
-function opens(
-  text: string,
-  start: number,
-  end: number,
-  opener: string,
-  closer: string
-): boolean {
+function opens(text: string, start: number, end: number, opener: string, closer: string): boolean {
   let depth = 0
   for (let at = start; at < end; at++) {
     if (text[at] === opener) depth++
@@ -120,3 +114,44 @@ function opens(
   }
   return depth > 0
 }
+
+/**
+ * Whether a link is one we are willing to hand to the operating system.
+ *
+ * Everything here ends up at `shell.openExternal` on the desktop or an
+ * `ACTION_VIEW` intent on the phone, and both of those will attempt whatever
+ * scheme they are given. That is fine for a link somebody typed in a channel —
+ * the linkifier only ever finds `http`, `https` and `ftp` — and not fine at
+ * all for a profile's `homepage`, which is a metadata key, which means it is a
+ * string a stranger chose. `file:///` reads this machine. On Windows a handler
+ * scheme can start a program.
+ *
+ * So: the two schemes a homepage is ever actually written in, plus `mailto`,
+ * because a contact link is a reasonable thing to put in a profile and it
+ * opens a composer rather than anything else.
+ *
+ * `ftp` is deliberately not here even though the linkifier finds it. Nothing
+ * modern opens one, and the difference between "the link does nothing" and
+ * "the link hands a URL to a program we did not choose" is the whole point.
+ */
+export function safeExternalUrl(value: string | null | undefined): string | null {
+  if (!value) return null
+
+  const trimmed = value.trim()
+  if (trimmed.length === 0 || trimmed.length > 2048) return null
+
+  let parsed: URL
+  try {
+    parsed = new URL(trimmed)
+  } catch {
+    return null
+  }
+
+  if (!SAFE_SCHEMES.has(parsed.protocol)) return null
+  // http and https without a host are not links to anywhere
+  if (parsed.protocol !== 'mailto:' && parsed.hostname.length === 0) return null
+
+  return parsed.toString()
+}
+
+const SAFE_SCHEMES = new Set(['http:', 'https:', 'mailto:'])

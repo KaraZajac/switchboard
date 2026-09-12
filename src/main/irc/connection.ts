@@ -1,3 +1,5 @@
+import { MAX_INCOMING } from '@shared/constants'
+import { connectionProblem } from '@shared/connectionerror'
 import { EventEmitter } from 'events'
 import { stsUpgradeFor } from './features/sts'
 import * as net from 'net'
@@ -97,7 +99,10 @@ export interface ConnectionEvents {
 export declare interface IRCConnection {
   on<K extends keyof ConnectionEvents>(event: K, listener: ConnectionEvents[K]): this
   off<K extends keyof ConnectionEvents>(event: K, listener: ConnectionEvents[K]): this
-  emit<K extends keyof ConnectionEvents>(event: K, ...args: Parameters<ConnectionEvents[K]>): boolean
+  emit<K extends keyof ConnectionEvents>(
+    event: K,
+    ...args: Parameters<ConnectionEvents[K]>
+  ): boolean
 }
 
 /**
@@ -177,6 +182,9 @@ export class IRCConnection extends EventEmitter {
   /** Bytes read but not yet ending a line. Bytes, not text: an encoding is
    *  chosen per line, and a multi-byte character can straddle two reads. */
   private buffer: Buffer = Buffer.alloc(0)
+
+  /** True while the tail of an over-long line is still being thrown away */
+  private discarding = false
   private _connected = false
   private reconnectAttempts = 0
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
@@ -239,6 +247,7 @@ export class IRCConnection extends EventEmitter {
     this.cleanup()
     this.intentionalDisconnect = false
     this.buffer = Buffer.alloc(0)
+    this.discarding = false
 
     // WebSocket transport
     if (this.config.websocketUrl) {
@@ -359,7 +368,9 @@ export class IRCConnection extends EventEmitter {
       if (!this.socket || !this.socks) return
       if (proxy.type === 'socks4') {
         this.socks.stage = 'connecting'
-        this.socket.write(Buffer.from(socks4Connect(this.config.host, this.config.port, proxy.username ?? '')))
+        this.socket.write(
+          Buffer.from(socks4Connect(this.config.host, this.config.port, proxy.username ?? ''))
+        )
         return
       }
       this.socket.write(Buffer.from(socks5Greeting(Boolean(proxy.username))))
@@ -492,8 +503,12 @@ export class IRCConnection extends EventEmitter {
       // same bytes. The parser wants terminated lines, so put it back.
       // A text frame is already UTF-8 by the WebSocket spec; a binary one
       // carries the same bytes an ordinary socket would.
-      const bytes = typeof data === 'string' ? Buffer.from(data, 'utf8') : Buffer.from(data as Buffer)
-      const trimmed = bytes.subarray(0, bytes.length - (bytes.at(-1) === 0x0a ? (bytes.at(-2) === 0x0d ? 2 : 1) : 0))
+      const bytes =
+        typeof data === 'string' ? Buffer.from(data, 'utf8') : Buffer.from(data as Buffer)
+      const trimmed = bytes.subarray(
+        0,
+        bytes.length - (bytes.at(-1) === 0x0a ? (bytes.at(-2) === 0x0d ? 2 : 1) : 0)
+      )
       this.onData(Buffer.concat([trimmed, Buffer.from('\r\n')]))
     })
 
@@ -538,7 +553,10 @@ export class IRCConnection extends EventEmitter {
 
     // Keepalive always goes now. Registration goes now too, but only while
     // nothing is waiting — which is every time it actually happens.
-    if (ALWAYS_IMMEDIATE.has(command) || (FLOOD_EXEMPT.has(command) && this.sendQueue.length === 0)) {
+    if (
+      ALWAYS_IMMEDIATE.has(command) ||
+      (FLOOD_EXEMPT.has(command) && this.sendQueue.length === 0)
+    ) {
       this.writeLine(sanitized)
       return
     }
@@ -575,10 +593,13 @@ export class IRCConnection extends EventEmitter {
 
     if (this.drainTimer) return
     const waitMs = Math.ceil(((1 - this.tokens) / SEND_RATE_PER_SECOND) * 1000)
-    this.drainTimer = setTimeout(() => {
-      this.drainTimer = null
-      this.drainQueue()
-    }, Math.max(waitMs, 10))
+    this.drainTimer = setTimeout(
+      () => {
+        this.drainTimer = null
+        this.drainQueue()
+      },
+      Math.max(waitMs, 10)
+    )
   }
 
   /** Anything still queued is not worth sending to a server we have left */
@@ -628,7 +649,10 @@ export class IRCConnection extends EventEmitter {
       // TLS verification failed — secureConnect still fires but authorized is false
       const err = (this.socket as tls.TLSSocket).authorizationError
       if (err) {
-        this.emit('error', new Error(`TLS certificate error: ${err}`))
+        // In words, where we have them: `ERR_TLS_CERT_ALTNAME_INVALID` is
+        // accurate and tells nobody that this might not be the server they
+        // meant. See `@shared/connectionerror` — the phone says the same.
+        this.emit('error', new Error(connectionProblem(String(err), this.config.host)))
         this.cleanup()
         return
       }
@@ -666,7 +690,22 @@ export class IRCConnection extends EventEmitter {
     // Keep the last (possibly incomplete) chunk in the buffer
     this.buffer = this.buffer.subarray(from)
 
+    // A line longer than this is not one any server may send, and holding on
+    // for the rest of it is how a socket that never sends \r\n becomes an
+    // out-of-memory. Drop what is held, and drop the rest of that line too —
+    // otherwise its tail arrives as the start of the next one, which is worse
+    // than losing it, because half a line still parses.
+    if (this.buffer.length > MAX_INCOMING) {
+      this.buffer = Buffer.alloc(0)
+      this.discarding = true
+    }
+
     for (const raw of lines) {
+      if (this.discarding) {
+        // The end of the line we gave up on, not a line of its own
+        this.discarding = false
+        continue
+      }
       if (raw.length === 0) continue
       const line = decodeLine(raw)
       this.emit('raw', 'in', line)

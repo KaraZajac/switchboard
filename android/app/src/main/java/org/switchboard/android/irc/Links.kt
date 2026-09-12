@@ -97,4 +97,34 @@ object Links {
         }
         return depth > 0
     }
+
+    /**
+     * Whether a link is one we are willing to hand to Android.
+     *
+     * Everything here ends up in an `ACTION_VIEW` intent, which will be
+     * attempted by whatever app claims that scheme. That is fine for a link
+     * somebody typed in a channel and not fine for a profile's `homepage`,
+     * which is a metadata key — a string a stranger chose.
+     *
+     * The Kotlin half of `safeExternalUrl` in `src/shared/links.ts`, checked
+     * against `tests/fixtures/links.json`. `ftp` is deliberately absent even
+     * though [find] returns it: nothing modern opens one, and "the link does
+     * nothing" beats "the link starts a program we did not choose".
+     */
+    fun safeExternal(value: String?): String? {
+        val trimmed = value?.trim().orEmpty()
+        if (trimmed.isEmpty() || trimmed.length > 2048) return null
+
+        val uri = runCatching { java.net.URI(trimmed) }.getOrNull() ?: return null
+        val scheme = uri.scheme?.lowercase() ?: return null
+        if (scheme !in SAFE_SCHEMES) return null
+
+        // http and https without a host are not links to anywhere. `mailto` has
+        // no host by design, so it is the exception rather than an oversight.
+        if (scheme != "mailto" && uri.host.isNullOrEmpty()) return null
+
+        return trimmed
+    }
+
+    private val SAFE_SCHEMES = setOf("http", "https", "mailto")
 }

@@ -1,4 +1,5 @@
 import { ipcMain, type IpcMainInvokeEvent } from 'electron'
+import { isSharedSetting } from '@shared/settings'
 
 /**
  * One registry for everything the UI can ask the core to do.
@@ -178,6 +179,24 @@ export function sanitizeIncomingFromRemote(channel: string, args: unknown[]): un
 export async function invokeForRemote(channel: string, args: unknown[]): Promise<unknown> {
   if (!isRemoteAllowed(channel)) {
     throw new Error(`Channel not available to paired devices: ${channel}`)
+  }
+
+  /*
+   * Settings are allowed by key, not wholesale.
+   *
+   * `settings:get` takes a name and returns whatever is under it, and one of
+   * those names is `proxy` — which holds a username and a password for this
+   * machine. A paired device could read it with a single call, and write it
+   * too, which would route this desktop's connections through a host the phone
+   * chose. Neither is what "the phone can pick a theme" was meant to allow.
+   *
+   * The list is the one that already answers this question: the settings that
+   * belong to the person rather than to the machine they were typed on.
+   */
+  if (channel === 'settings:get' || channel === 'settings:set') {
+    if (!isSharedSetting(args[0])) {
+      throw new Error(`Setting not available to paired devices: ${String(args[0])}`)
+    }
   }
   const handler = handlers.get(channel)
   if (!handler) throw new Error(`No handler for ${channel}`)

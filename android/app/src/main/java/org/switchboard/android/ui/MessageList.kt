@@ -254,7 +254,10 @@ private fun LinkCard(url: String, fetch: suspend (String) -> LinkPreview?) {
             .fillMaxWidth()
             .clip(RoundedCornerShape(6.dp))
             .background(Mantle)
-            .clickable { runCatching { opener.openUri(url) } }
+            // Only a link we are willing to hand to Android — see
+            // [Links.safeExternal]. An ACTION_VIEW intent is attempted by
+            // whatever app claims the scheme, and the string came off the wire.
+            .clickable { Links.safeExternal(url)?.let { safe -> runCatching { opener.openUri(safe) } } }
             .height(IntrinsicSize.Min)
     ) {
         Box(Modifier.width(3.dp).fillMaxHeight().background(Blue))
@@ -716,7 +719,9 @@ private fun Linkified(text: String, edited: Boolean, onLongPress: () -> Unit) {
                 onTap = { position ->
                     val offset = layout?.getOffsetForPosition(position) ?: return@detectTapGestures
                     annotated.getStringAnnotations("url", offset, offset).firstOrNull()?.let {
-                        runCatching { uriHandler.openUri(it.item) }
+                        Links.safeExternal(it.item)?.let { safe ->
+                            runCatching { uriHandler.openUri(safe) }
+                        }
                     }
                 }
             )

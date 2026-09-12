@@ -7,7 +7,10 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
@@ -200,18 +203,26 @@ fun App(
         engine.identity.ticket()?.let { connect(it, null) }
     }
 
-    // A pairing link this phone was opened with beats whatever it was doing.
-    //
-    // The payload is cleared *after* connecting, never before: clearing it
-    // changes this effect's key, and changing the key cancels the coroutine
-    // that is still in the middle of dialling.
+    /*
+     * A pairing link this phone was opened with — asked about, never obeyed.
+     *
+     * `switchboard://pair?ticket=…&code=…` is an exported intent, so anything
+     * on the phone can send one: a web page, a message, another app. It used
+     * to dial straight out and remember the ticket, which meant a link somebody
+     * tapped could quietly re-pair their phone to a stranger's desktop — and
+     * from then on that desktop is where their conversations go.
+     *
+     * The QR carries the code as well as the ticket, which is safe precisely
+     * because a QR is scanned off the screen in front of you. A link is not,
+     * and the design note in `src/shared/pairing.ts` says so. One tap is what
+     * puts a person back in front of it.
+     *
+     * The in-app scanner and the paste-a-ticket button are untouched: those
+     * are already somebody choosing.
+     */
+    var pairingAsked by remember { mutableStateOf<PairingPayload?>(null) }
     LaunchedEffect(launchPairing?.ticket) {
-        val payload = launchPairing ?: return@LaunchedEffect
-        try {
-            connect(payload.ticket, payload.code)
-        } finally {
-            onPairingConsumed()
-        }
+        pairingAsked = launchPairing
     }
 
     // Back leaves a secondary screen rather than the app. Without this, tapping
@@ -243,6 +254,38 @@ fun App(
 
     MaterialTheme(colorScheme = scheme) {
         Surface(modifier = Modifier.fillMaxSize(), color = Base) {
+            pairingAsked?.let { payload ->
+                AlertDialog(
+                    onDismissRequest = { pairingAsked = null; onPairingConsumed() },
+                    title = { Text("Pair with a desktop?") },
+                    text = {
+                        Text(
+                            "Something asked this phone to pair with a desktop running " +
+                                "Switchboard. Only continue if you have just scanned a QR " +
+                                "code on your own computer.\n\nPairing replaces whichever " +
+                                "desktop this phone is paired with now."
+                        )
+                    },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            pairingAsked = null
+                            scope.launch {
+                                try {
+                                    connect(payload.ticket, payload.code)
+                                } finally {
+                                    onPairingConsumed()
+                                }
+                            }
+                        }) { Text("Pair") }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { pairingAsked = null; onPairingConsumed() }) {
+                            Text("Not now")
+                        }
+                    }
+                )
+            }
+
             when (screen) {
                 Screen.PAIRING -> PairingScreen(
                     status = store.status,

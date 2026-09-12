@@ -193,7 +193,10 @@ class IrcConnection(
                 readLoop()
             } catch (e: Exception) {
                 android.util.Log.w("SwitchboardIrc", "${config.host}:${config.port} failed", e)
-                emitError(e.message ?: "Connection failed")
+                // In words, where we have them. A refused certificate shown as
+                // "No subjectAltNames on the certificate match" is accurate and
+                // tells nobody that this might not be the server they meant.
+                emitError(ConnectionError.describe(e.message, config.host))
             }
 
             pingJob?.cancel()
@@ -275,8 +278,26 @@ class IrcConnection(
             val factory = CertFp.socketFactory(config.clientCert)
                 ?: SSLSocketFactory.getDefault() as SSLSocketFactory
 
-            factory.createSocket(raw, config.host, config.port, true)
-                .also { (it as javax.net.ssl.SSLSocket).startHandshake() }
+            val ssl = factory.createSocket(raw, config.host, config.port, true)
+                as javax.net.ssl.SSLSocket
+
+            // Check the certificate was issued for the host we asked for.
+            //
+            // An `SSLSocket` on its own does not: the trust manager says the
+            // chain is signed by somebody the system trusts and stops there.
+            // Without this, a certificate any public CA issued for any domain
+            // at all is accepted for this one — so anybody able to sit on the
+            // connection reads the SASL password we are about to send. That is
+            // the whole of what TLS was there to prevent.
+            //
+            // `HttpsURLConnection` and OkHttp do this for you, which is why
+            // the mistake is so easy to make with a raw socket. The desktop
+            // has always been safe here: Node verifies against `servername`.
+            ssl.sslParameters = ssl.sslParameters.apply {
+                endpointIdentificationAlgorithm = "HTTPS"
+            }
+            ssl.startHandshake()
+            ssl
         } else {
             raw
         }

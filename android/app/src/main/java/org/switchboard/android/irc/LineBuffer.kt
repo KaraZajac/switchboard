@@ -93,6 +93,12 @@ class LineBuffer(private val capacity: Int = MAX_INCOMING) {
          * account, batch, and whatever else the network attaches. Sized for the
          * whole of that with room over.
          */
+        /**
+         * The most we will hold waiting for a line to finish.
+         *
+         * The desktop holds the same number in `src/shared/constants.ts`; they
+         * have to agree, or the two devices disagree about which lines exist.
+         */
         const val MAX_INCOMING = 16384
     }
 }

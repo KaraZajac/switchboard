@@ -27,6 +27,7 @@ import org.switchboard.android.irc.Aliases
 import org.switchboard.android.irc.AutoAway
 import org.switchboard.android.irc.ChanModes
 import org.switchboard.android.irc.Casemap
+import org.switchboard.android.irc.ConnectionError
 import org.switchboard.android.irc.ConnectionState
 import org.switchboard.android.irc.Dcc
 import org.switchboard.android.irc.Formatter
@@ -47,6 +48,7 @@ import org.switchboard.android.irc.Formatting
 import org.switchboard.android.irc.avatarUrl
 import org.switchboard.android.irc.Friends
 import org.switchboard.android.irc.Isupport
+import org.switchboard.android.irc.Links
 import org.switchboard.android.irc.ServerConfig
 import org.switchboard.android.irc.Reconnect
 import org.switchboard.android.irc.Powers
@@ -2181,4 +2183,75 @@ class SharedCorpusTest {
         }
     }
 
+
+    // ── links we are willing to open ──────────────────────────────────
+
+    /**
+     * A profile's homepage is a metadata key, so a stranger chose the string,
+     * and both clients hand it to something that will attempt whatever scheme
+     * it is given. The list of what we will attempt has to be the same list on
+     * both, or a link that does nothing at a desk starts a program in a pocket.
+     */
+    @Test
+    fun `opens only the links the desktop would open`() {
+        for (entry in load("links.json")["safe"]!!.jsonArray) {
+            val case = entry.jsonObject
+            val wanted = (case["url"] as? JsonPrimitive)?.contentOrNull
+            assertEquals(
+                case["name"]!!.jsonPrimitive.content,
+                wanted,
+                Links.safeExternal(case["value"]!!.jsonPrimitive.content)
+            )
+        }
+
+        assertNull("nothing at all", Links.safeExternal(null))
+    }
+
+    // ── what a connection failure is called ───────────────────────────
+
+    /**
+     * A certificate that does not match the address is what being intercepted
+     * looks like, and both clients have to say so in the same words — the
+     * event is the same and the person is the same person.
+     */
+    @Test
+    fun `explains a failed connection the way the desktop does`() {
+        val corpus = load("connectionerror.json")
+
+        for (entry in corpus["cases"]!!.jsonArray) {
+            val case = entry.jsonObject
+            val wanted = when (case["problem"]!!.jsonPrimitive.content) {
+                "wrong-host" -> ConnectionError.Problem.WRONG_HOST
+                "untrusted" -> ConnectionError.Problem.UNTRUSTED
+                "expired" -> ConnectionError.Problem.EXPIRED
+                else -> ConnectionError.Problem.OTHER
+            }
+            assertEquals(
+                case["name"]!!.jsonPrimitive.content,
+                wanted,
+                ConnectionError.problemOf(case["raw"]!!.jsonPrimitive.content)
+            )
+        }
+
+        val rawFor = mapOf(
+            "wrong-host" to "ERR_TLS_CERT_ALTNAME_INVALID",
+            "untrusted" to "SELF_SIGNED_CERT_IN_CHAIN",
+            "expired" to "CERT_HAS_EXPIRED"
+        )
+        for (entry in corpus["sentences"]!!.jsonArray) {
+            val case = entry.jsonObject
+            assertEquals(
+                case["name"]!!.jsonPrimitive.content,
+                case["text"]!!.jsonPrimitive.content,
+                ConnectionError.describe(
+                    rawFor[case["problem"]!!.jsonPrimitive.content],
+                    "irc.example.org"
+                )
+            )
+        }
+
+        // Anything we have no sentence for is passed through untouched
+        assertEquals("ECONNREFUSED", ConnectionError.describe("ECONNREFUSED", "irc.example.org"))
+        assertEquals("Could not connect", ConnectionError.describe(null, "irc.example.org"))
+    }
 }

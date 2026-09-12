@@ -109,6 +109,19 @@ export const TAG_UNESCAPE_MAP: Record<string, string> = {
   '\n': '\\n'
 }
 
+/**
+ * The most we will hold waiting for a line to finish.
+ *
+ * A line is 512 bytes plus up to 8191 of tags, so this is generous. What it is
+ * really for is the socket that never sends `\r\n` at all: without a ceiling
+ * the receive buffer grows for as long as the other end keeps typing, and a
+ * client that dies of a peer's bad manners is a client anyone can turn off.
+ *
+ * The phone holds the same number in `LineBuffer.MAX_INCOMING`; they have to
+ * agree, or the two devices disagree about which lines exist.
+ */
+export const MAX_INCOMING = 16384
+
 /** Max message tags size (bytes) */
 export const MAX_TAGS_SIZE = 8191
 
@@ -136,7 +149,16 @@ export function isChannelName(name: string): boolean {
 }
 
 /** Well-known IRC service nicks — shown in the channel sidebar, not DMs */
-export const IRC_SERVICES = new Set(['nickserv', 'chanserv', 'memoserv', 'operserv', 'botserv', 'hostserv', 'saslserv', 'ctcpserv'])
+export const IRC_SERVICES = new Set([
+  'nickserv',
+  'chanserv',
+  'memoserv',
+  'operserv',
+  'botserv',
+  'hostserv',
+  'saslserv',
+  'ctcpserv'
+])
 
 /** Check if a nick is a known IRC service */
 export function isServiceNick(name: string): boolean {

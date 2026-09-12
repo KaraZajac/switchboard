@@ -1,0 +1,89 @@
+{
+  "$comment": "What a connection failure is called, in words. Read by tests/shared/connectionerror.test.ts and the Android SharedCorpusTest. A failed handshake arrives as whatever the platform's library calls it, and both clients showed that verbatim — accurate, and not English. A certificate that does not match the address is what being intercepted looks like, so it is the one a person most needs to understand.",
+  "$cases": "`raw` is what the platform said; `problem` is what we make of it.",
+  "cases": [
+    {
+      "name": "Android says the names do not match",
+      "raw": "No subjectAltNames on the certificate match",
+      "problem": "wrong-host"
+    },
+    {
+      "name": "and the other way it says it",
+      "raw": "java.security.cert.CertificateException: No subject alternative DNS name matching irc.example.org found.",
+      "problem": "wrong-host"
+    },
+    {
+      "name": "Node says it its own way",
+      "raw": "Hostname/IP does not match certificate's altnames: Host: irc.example.org. is not in the cert's altnames",
+      "problem": "wrong-host"
+    },
+    {
+      "name": "and by code",
+      "raw": "ERR_TLS_CERT_ALTNAME_INVALID",
+      "problem": "wrong-host"
+    },
+    {
+      "name": "Android cannot build a chain",
+      "raw": "java.security.cert.CertPathValidatorException: Trust anchor for certification path not found.",
+      "problem": "untrusted"
+    },
+    {
+      "name": "Node has three ways of saying the same",
+      "raw": "SELF_SIGNED_CERT_IN_CHAIN",
+      "problem": "untrusted"
+    },
+    {
+      "name": "a leaf it cannot verify",
+      "raw": "UNABLE_TO_VERIFY_LEAF_SIGNATURE",
+      "problem": "untrusted"
+    },
+    {
+      "name": "an issuer it has never heard of",
+      "raw": "UNABLE_TO_GET_ISSUER_CERT_LOCALLY",
+      "problem": "untrusted"
+    },
+    {
+      "name": "out of date, Node",
+      "raw": "CERT_HAS_EXPIRED",
+      "problem": "expired"
+    },
+    {
+      "name": "out of date, Android",
+      "raw": "java.security.cert.CertificateExpiredException: certificate expired on 20240101000000GMT+00:00",
+      "problem": "expired"
+    },
+    {
+      "name": "an ordinary refusal is left alone",
+      "raw": "Connection refused",
+      "problem": "other"
+    },
+    {
+      "name": "and so is a closed socket",
+      "raw": "Socket closed",
+      "problem": "other"
+    },
+    {
+      "name": "nothing at all",
+      "raw": "",
+      "problem": "other"
+    }
+  ],
+  "$sentences": "And what is shown, for a server called irc.example.org.",
+  "sentences": [
+    {
+      "name": "a mismatch says so, and says nothing was sent",
+      "problem": "wrong-host",
+      "text": "The certificate irc.example.org presented is for a different address. This may not be the server you meant — nothing was sent."
+    },
+    {
+      "name": "an untrusted issuer",
+      "problem": "untrusted",
+      "text": "The certificate irc.example.org presented is signed by an authority this device does not trust. Nothing was sent."
+    },
+    {
+      "name": "an expired certificate",
+      "problem": "expired",
+      "text": "The certificate irc.example.org presented has expired. Nothing was sent."
+    }
+  ]
+}

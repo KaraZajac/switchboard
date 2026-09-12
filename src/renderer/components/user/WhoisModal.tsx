@@ -3,6 +3,7 @@ import { useUIStore } from '../../stores/uiStore'
 import { useServerStore } from '../../stores/serverStore'
 import { displayNameFor, metadataColor } from '@shared/types/metadata'
 import { avatarUrl as safeAvatarUrl } from '@shared/avatar'
+import { safeExternalUrl } from '@shared/links'
 import { nickColor } from '../../utils/nickColor'
 
 export function WhoisModal() {
@@ -27,7 +28,7 @@ export function WhoisModal() {
    * is the WHOIS it always was.
    */
   const profile = activeServerId
-    ? userMetadata[`${activeServerId}:${data.nick.toLowerCase()}`] ?? {}
+    ? (userMetadata[`${activeServerId}:${data.nick.toLowerCase()}`] ?? {})
     : {}
 
   const shownName = displayNameFor(data.nick, profile)
@@ -35,7 +36,10 @@ export function WhoisModal() {
   const avatar = safeAvatarUrl(profile.avatar)
   const pronouns = profile.pronouns?.trim()
   const status = profile.status?.trim()
+  // A homepage is a metadata key, which means a stranger chose the string.
+  // Shown as text either way; only a link we would actually open is a link.
   const homepage = profile.homepage?.trim()
+  const homepageLink = safeExternalUrl(homepage)
 
   const fields: { label: string; value: string | undefined }[] = [
     { label: 'Nickname', value: data.nick },
@@ -43,10 +47,18 @@ export function WhoisModal() {
     { label: 'Hostname', value: data.host },
     { label: 'Real Name', value: data.realname },
     { label: 'Account', value: data.account },
-    { label: 'Server', value: data.server ? `${data.server}${data.serverInfo ? ` (${data.serverInfo})` : ''}` : undefined },
+    {
+      label: 'Server',
+      value: data.server
+        ? `${data.server}${data.serverInfo ? ` (${data.serverInfo})` : ''}`
+        : undefined
+    },
     { label: 'Channels', value: data.channels },
     { label: 'Idle', value: data.idle ? formatIdle(parseInt(data.idle)) : undefined },
-    { label: 'Sign-on', value: data.signon ? new Date(parseInt(data.signon) * 1000).toLocaleString() : undefined }
+    {
+      label: 'Sign-on',
+      value: data.signon ? new Date(parseInt(data.signon) * 1000).toLocaleString() : undefined
+    }
   ]
 
   return (
@@ -96,16 +108,19 @@ export function WhoisModal() {
         {(status || homepage) && (
           <div className="space-y-2 rounded bg-gray-900 p-3">
             {status && <div className="text-sm text-gray-200">{status}</div>}
-            {homepage && (
-              <a
-                href={homepage}
-                target="_blank"
-                rel="noreferrer"
-                className="block truncate text-sm text-indigo-400 hover:underline"
-              >
-                {homepage}
-              </a>
-            )}
+            {homepage &&
+              (homepageLink ? (
+                <a
+                  href={homepageLink}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="block truncate text-sm text-indigo-400 hover:underline"
+                >
+                  {homepage}
+                </a>
+              ) : (
+                <div className="block truncate text-sm text-gray-400">{homepage}</div>
+              ))}
           </div>
         )}
 
