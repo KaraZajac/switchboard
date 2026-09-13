@@ -125,7 +125,18 @@ function applyThemeToDocument(theme: Theme): void {
 applyThemeToDocument(savedTheme)
 document.documentElement.style.setProperty('--chat-font-size', `${savedFontSize}px`)
 
-export const useUIStore = create<UIState>((set) => ({
+/** Auto-dismiss timers by toast id, so a repeat can restart one. */
+const dismissTimers = new Map<string, ReturnType<typeof setTimeout>>()
+
+function dismissLater(id: string): void {
+  clearTimeout(dismissTimers.get(id))
+  dismissTimers.set(
+    id,
+    setTimeout(() => useUIStore.getState().removeToast(id), 8000)
+  )
+}
+
+export const useUIStore = create<UIState>((set, get) => ({
   theme: savedTheme,
   settingsOpen: false,
   activeModal: null,
@@ -178,19 +189,32 @@ export const useUIStore = create<UIState>((set) => ({
   showWhois: (data) => set({ activeModal: 'whois', whoisData: data }),
   setEditServerId: (id) => set({ editServerId: id, activeModal: id ? 'edit-server' : null }),
   setDmMode: (dm) => set({ dmMode: dm }),
-  setPopupWhoisNick: (nick) => set(nick ? { popupWhoisNick: nick, popupWhoisData: null } : { popupWhoisNick: null }),
+  setPopupWhoisNick: (nick) =>
+    set(nick ? { popupWhoisNick: nick, popupWhoisData: null } : { popupWhoisNick: null }),
   setPopupWhoisData: (data) => set({ popupWhoisData: data }),
   addToast: (toast) => {
+    // The same news twice is one toast, not a stack. A server that refuses
+    // every reconnect attempt says so every few seconds, and each refusal
+    // used to add another copy until the corner of the window was nothing
+    // but the one sentence. The copy already showing gets its time back
+    // instead.
+    const showing = get().toasts.find(
+      (t) => t.title === toast.title && t.body === toast.body && t.sticky === toast.sticky
+    )
+    if (showing) {
+      if (!showing.sticky) dismissLater(showing.id)
+      return
+    }
+
     const id = `toast-${Date.now()}-${Math.random().toString(36).slice(2)}`
     set((state) => ({ toasts: [...state.toasts, { ...toast, id }] }))
-    if (toast.sticky) return
-
-    // Auto-dismiss after 8 seconds
-    setTimeout(() => {
-      useUIStore.getState().removeToast(id)
-    }, 8000)
+    if (!toast.sticky) dismissLater(id)
   },
-  removeToast: (id) => set((state) => ({ toasts: state.toasts.filter((t) => t.id !== id) })),
+  removeToast: (id) => {
+    clearTimeout(dismissTimers.get(id))
+    dismissTimers.delete(id)
+    set((state) => ({ toasts: state.toasts.filter((t) => t.id !== id) }))
+  },
 
   /**
    * Put away whatever this network was asking for.

@@ -13,7 +13,12 @@ const corpus = JSON.parse(
 const RAW_FOR: Record<string, string> = {
   'wrong-host': 'ERR_TLS_CERT_ALTNAME_INVALID',
   untrusted: 'SELF_SIGNED_CERT_IN_CHAIN',
-  expired: 'CERT_HAS_EXPIRED'
+  expired: 'CERT_HAS_EXPIRED',
+  refused: 'connect ECONNREFUSED 203.0.113.9:6697',
+  'not-found': 'getaddrinfo ENOTFOUND irc.example.org',
+  timeout: 'connect ETIMEDOUT 203.0.113.9:6697',
+  unreachable: 'connect EHOSTUNREACH 203.0.113.9:6697',
+  reset: 'read ECONNRESET'
 }
 
 describe('what a connection failure is', () => {
@@ -40,7 +45,7 @@ describe('what we say about it', () => {
    * the wrong thing confidently.
    */
   it('passes an error it does not recognise through untouched', () => {
-    expect(connectionProblem('ECONNREFUSED', 'irc.example.org')).toBe('ECONNREFUSED')
+    expect(connectionProblem('EPROTO', 'irc.example.org')).toBe('EPROTO')
     expect(connectionProblem('  Socket closed  ', 'irc.example.org')).toBe('Socket closed')
   })
 

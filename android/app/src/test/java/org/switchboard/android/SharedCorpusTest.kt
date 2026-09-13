@@ -2229,6 +2229,11 @@ class SharedCorpusTest {
                 "wrong-host" -> ConnectionError.Problem.WRONG_HOST
                 "untrusted" -> ConnectionError.Problem.UNTRUSTED
                 "expired" -> ConnectionError.Problem.EXPIRED
+                "refused" -> ConnectionError.Problem.REFUSED
+                "not-found" -> ConnectionError.Problem.NOT_FOUND
+                "timeout" -> ConnectionError.Problem.TIMEOUT
+                "unreachable" -> ConnectionError.Problem.UNREACHABLE
+                "reset" -> ConnectionError.Problem.RESET
                 else -> ConnectionError.Problem.OTHER
             }
             assertEquals(
@@ -2241,7 +2246,12 @@ class SharedCorpusTest {
         val rawFor = mapOf(
             "wrong-host" to "ERR_TLS_CERT_ALTNAME_INVALID",
             "untrusted" to "SELF_SIGNED_CERT_IN_CHAIN",
-            "expired" to "CERT_HAS_EXPIRED"
+            "expired" to "CERT_HAS_EXPIRED",
+            "refused" to "connect ECONNREFUSED 203.0.113.9:6697",
+            "not-found" to "getaddrinfo ENOTFOUND irc.example.org",
+            "timeout" to "connect ETIMEDOUT 203.0.113.9:6697",
+            "unreachable" to "connect EHOSTUNREACH 203.0.113.9:6697",
+            "reset" to "read ECONNRESET"
         )
         for (entry in corpus["sentences"]!!.jsonArray) {
             val case = entry.jsonObject
@@ -2256,7 +2266,7 @@ class SharedCorpusTest {
         }
 
         // Anything we have no sentence for is passed through untouched
-        assertEquals("ECONNREFUSED", ConnectionError.describe("ECONNREFUSED", "irc.example.org"))
+        assertEquals("EPROTO", ConnectionError.describe("EPROTO", "irc.example.org"))
         assertEquals("Could not connect", ConnectionError.describe(null, "irc.example.org"))
     }
 

@@ -125,12 +125,20 @@ export function MessageComposer({
   }, [serverId, channel, disabled])
 
   // Grow the box to fit what has been typed — one line until the text wraps,
-  // then taller line by line, and scrolling once it hits the cap.
+  // then taller line by line, and scrolling once it hits the cap. The
+  // measurement is only right for the width it was taken at: text that
+  // wrapped in a narrow window unwraps in a wide one, so it is taken again
+  // whenever the window changes size.
   useEffect(() => {
     const el = inputRef.current
     if (!el) return
-    el.style.height = 'auto'
-    el.style.height = `${Math.min(el.scrollHeight, MAX_COMPOSER_HEIGHT)}px`
+    const fit = (): void => {
+      el.style.height = 'auto'
+      el.style.height = `${Math.min(el.scrollHeight, MAX_COMPOSER_HEIGHT)}px`
+    }
+    fit()
+    window.addEventListener('resize', fit)
+    return () => window.removeEventListener('resize', fit)
   }, [text])
 
   const acceptMention = useCallback(

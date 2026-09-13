@@ -24,6 +24,16 @@ export type Problem =
   /** Trusted and matching, but out of date */
   | 'expired'
   /** Anything else, including every non-TLS failure */
+  /** The port is closed, or something between here and there is blocking it */
+  | 'refused'
+  /** The name does not resolve */
+  | 'not-found'
+  /** Nothing answered */
+  | 'timeout'
+  /** No route from this network */
+  | 'unreachable'
+  /** A connection that was made and then dropped */
+  | 'reset'
   | 'other'
 
 /** Which of the failures we have something to say about this is */
@@ -56,6 +66,47 @@ export function problemFrom(raw: string | null | undefined): Problem {
     return 'expired'
   }
 
+  // The rest are not about certificates. Node names the errno; Android
+  // writes it out, or says nothing at all and just reports how long it
+  // waited — the last of which is what a timeout looks like there.
+  if (text.includes('econnrefused') || text.includes('connection refused')) return 'refused'
+  if (
+    text.includes('enotfound') ||
+    text.includes('eai_again') ||
+    text.includes('eai_noname') ||
+    text.includes('unable to resolve host') ||
+    text.includes('no address associated') ||
+    text.includes('nodename nor servname') ||
+    text.includes('name or service not known')
+  ) {
+    return 'not-found'
+  }
+  if (
+    text.includes('ehostunreach') ||
+    text.includes('enetunreach') ||
+    text.includes('network is unreachable') ||
+    text.includes('no route to host')
+  ) {
+    return 'unreachable'
+  }
+  if (
+    text.includes('econnreset') ||
+    text.includes('connection reset') ||
+    text.includes('socket hang up') ||
+    text.includes('connection abort') ||
+    text.includes('epipe') ||
+    text.includes('broken pipe')
+  ) {
+    return 'reset'
+  }
+  if (
+    text.includes('etimedout') ||
+    text.includes('timed out') ||
+    text.includes('timeout') ||
+    /after \d+ms\s*$/.test(text)
+  ) {
+    return 'timeout'
+  }
   return 'other'
 }
 
@@ -74,6 +125,16 @@ export function connectionProblem(raw: string | null | undefined, host: string):
       return `The certificate ${host} presented is signed by an authority this device does not trust. Nothing was sent.`
     case 'expired':
       return `The certificate ${host} presented has expired. Nothing was sent.`
+    case 'refused':
+      return `${host} refused the connection. Nothing is listening on that port, or something between here and there is blocking it.`
+    case 'not-found':
+      return `${host} could not be found. Check the address, and that this device is online.`
+    case 'timeout':
+      return `${host} did not answer. It may be down, or something between here and there is dropping the connection.`
+    case 'unreachable':
+      return `There is no route to ${host} from this network.`
+    case 'reset':
+      return `The connection to ${host} was dropped.`
     default:
       return raw?.trim() || 'Could not connect'
   }

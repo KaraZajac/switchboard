@@ -25,7 +25,17 @@ object ConnectionError {
         /** Trusted and matching, but out of date */
         EXPIRED,
 
-        /** Anything else, including every non-TLS failure */
+        /** The port is closed, or something between here and there is blocking it */
+        REFUSED,
+        /** The name does not resolve */
+        NOT_FOUND,
+        /** Nothing answered */
+        TIMEOUT,
+        /** No route from this network */
+        UNREACHABLE,
+        /** A connection that was made and then dropped */
+        RESET,
+        /** Anything else */
         OTHER
     }
 
@@ -59,8 +69,52 @@ object ConnectionError {
             return Problem.EXPIRED
         }
 
+        // The rest are not about certificates. Node names the errno; Android
+        // writes it out, or says nothing at all and just reports how long it
+        // waited — the last of which is what a timeout looks like here.
+        if (text.contains("econnrefused") || text.contains("connection refused")) return Problem.REFUSED
+        if (
+            text.contains("enotfound") ||
+            text.contains("eai_again") ||
+            text.contains("eai_noname") ||
+            text.contains("unable to resolve host") ||
+            text.contains("no address associated") ||
+            text.contains("nodename nor servname") ||
+            text.contains("name or service not known")
+        ) {
+            return Problem.NOT_FOUND
+        }
+        if (
+            text.contains("ehostunreach") ||
+            text.contains("enetunreach") ||
+            text.contains("network is unreachable") ||
+            text.contains("no route to host")
+        ) {
+            return Problem.UNREACHABLE
+        }
+        if (
+            text.contains("econnreset") ||
+            text.contains("connection reset") ||
+            text.contains("socket hang up") ||
+            text.contains("connection abort") ||
+            text.contains("epipe") ||
+            text.contains("broken pipe")
+        ) {
+            return Problem.RESET
+        }
+        if (
+            text.contains("etimedout") ||
+            text.contains("timed out") ||
+            text.contains("timeout") ||
+            WAITED.containsMatchIn(text)
+        ) {
+            return Problem.TIMEOUT
+        }
         return Problem.OTHER
     }
+
+    /** Android's connect timeout: how long it waited, and nothing else */
+    private val WAITED = Regex("""after \d+ms\s*$""")
 
     /**
      * The sentence to show.
@@ -81,6 +135,16 @@ object ConnectionError {
         Problem.EXPIRED ->
             "The certificate $host presented has expired. Nothing was sent."
 
+        Problem.REFUSED ->
+            "$host refused the connection. Nothing is listening on that port, " +
+                "or something between here and there is blocking it."
+        Problem.NOT_FOUND ->
+            "$host could not be found. Check the address, and that this device is online."
+        Problem.TIMEOUT ->
+            "$host did not answer. It may be down, or something between here and " +
+                "there is dropping the connection."
+        Problem.UNREACHABLE -> "There is no route to $host from this network."
+        Problem.RESET -> "The connection to $host was dropped."
         Problem.OTHER -> raw?.trim()?.takeIf { it.isNotEmpty() } ?: "Could not connect"
     }
 }

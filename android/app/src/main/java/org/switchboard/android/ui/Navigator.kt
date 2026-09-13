@@ -1098,33 +1098,40 @@ private fun UserPanel(
         }
         Spacer(Modifier.width(9.dp))
 
+        // The pill used to share the first line with the nick. The drawer is
+        // narrow, and a pill as long as CONNECTING or TAKING OVER — the ones
+        // shown exactly when someone is looking — left the nick as a lone
+        // ellipsis. The nick has the line to itself; the pill goes with the
+        // sentence it summarises.
         Column(modifier = Modifier.weight(1f).clickable(onClick = onEditProfile)) {
+            Text(
+                profile?.displayName?.takeIf { it.isNotBlank() } ?: nick,
+                color = Text0,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
             Row(verticalAlignment = Alignment.CenterVertically) {
+                ModePill(mode, takingOver, pairedWithDesktop)
+                Spacer(Modifier.width(6.dp))
                 Text(
-                    profile?.displayName?.takeIf { it.isNotBlank() } ?: nick,
-                    color = Text0,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.SemiBold,
+                    modeDetail,
+                    color = Overlay,
+                    fontSize = 11.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f, fill = false)
                 )
-                Spacer(Modifier.width(6.dp))
-                ModePill(mode, takingOver, pairedWithDesktop)
             }
-            Text(
-                modeDetail,
-                color = Overlay,
-                fontSize = 11.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
         }
 
         // Away, which is the state a phone is in more than any other device and
         // which you could only reach by typing `/away` — a command this client
-        // could not even run until recently.
-        server?.let {
+        // could not even run until recently. Only while connected: AWAY is a
+        // command, and there is nobody to send it to before then — and the
+        // room it takes is what the connecting pill needs.
+        server?.takeIf { it.connected }?.let {
             Text(
                 if (it.away) "Back" else "Away",
                 color = if (it.away) Yellow else Overlay,

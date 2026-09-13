@@ -1,6 +1,6 @@
 {
   "$comment": "What a connection failure is called, in words. Read by tests/shared/connectionerror.test.ts and the Android SharedCorpusTest. A failed handshake arrives as whatever the platform's library calls it, and both clients showed that verbatim — accurate, and not English. A certificate that does not match the address is what being intercepted looks like, so it is the one a person most needs to understand.",
-  "$cases": "`raw` is what the platform said; `problem` is what we make of it.",
+  "$cases": "`raw` is what the platform said; `problem` is what we make of it. A refused port, a name that does not resolve, a host that never answers, one there is no route to, and a connection that was dropped each get a sentence too — those are most of the failures anyone sees, and `connect ECONNREFUSED 127.0.0.1:6697` is not one.",
   "cases": [
     {
       "name": "Android says the names do not match",
@@ -53,9 +53,9 @@
       "problem": "expired"
     },
     {
-      "name": "an ordinary refusal is left alone",
+      "name": "an ordinary refusal gets its sentence",
       "raw": "Connection refused",
-      "problem": "other"
+      "problem": "refused"
     },
     {
       "name": "and so is a closed socket",
@@ -65,6 +65,71 @@
     {
       "name": "nothing at all",
       "raw": "",
+      "problem": "other"
+    },
+    {
+      "name": "Node says the port refused",
+      "raw": "connect ECONNREFUSED 127.0.0.1:16667",
+      "problem": "refused"
+    },
+    {
+      "name": "Android says the same, at length",
+      "raw": "failed to connect to /127.0.0.1 (port 16667) from /:: (port 0) after 10000ms: ECONNREFUSED (Connection refused)",
+      "problem": "refused"
+    },
+    {
+      "name": "Node cannot find the name",
+      "raw": "getaddrinfo ENOTFOUND irc.example.org",
+      "problem": "not-found"
+    },
+    {
+      "name": "or its resolver is not answering",
+      "raw": "getaddrinfo EAI_AGAIN irc.example.org",
+      "problem": "not-found"
+    },
+    {
+      "name": "Android cannot find the name",
+      "raw": "Unable to resolve host \"irc.example.org\": No address associated with hostname",
+      "problem": "not-found"
+    },
+    {
+      "name": "Node waited and heard nothing",
+      "raw": "connect ETIMEDOUT 203.0.113.9:6697",
+      "problem": "timeout"
+    },
+    {
+      "name": "Android waited and heard nothing, which it says without the word",
+      "raw": "failed to connect to irc.example.org/203.0.113.9 (port 6697) from /:: (port 0) after 10000ms",
+      "problem": "timeout"
+    },
+    {
+      "name": "Node has no route there",
+      "raw": "connect EHOSTUNREACH 10.0.0.9:6697",
+      "problem": "unreachable"
+    },
+    {
+      "name": "Android has no network at all",
+      "raw": "Network is unreachable",
+      "problem": "unreachable"
+    },
+    {
+      "name": "Node saw the connection reset",
+      "raw": "read ECONNRESET",
+      "problem": "reset"
+    },
+    {
+      "name": "or the server hung up mid-handshake",
+      "raw": "socket hang up",
+      "problem": "reset"
+    },
+    {
+      "name": "Android saw the connection reset",
+      "raw": "Connection reset",
+      "problem": "reset"
+    },
+    {
+      "name": "a failure nobody has read yet is passed through",
+      "raw": "EPROTO",
       "problem": "other"
     }
   ],
@@ -84,6 +149,31 @@
       "name": "an expired certificate",
       "problem": "expired",
       "text": "The certificate irc.example.org presented has expired. Nothing was sent."
+    },
+    {
+      "name": "a refused port says what that usually means",
+      "problem": "refused",
+      "text": "irc.example.org refused the connection. Nothing is listening on that port, or something between here and there is blocking it."
+    },
+    {
+      "name": "a name that does not resolve",
+      "problem": "not-found",
+      "text": "irc.example.org could not be found. Check the address, and that this device is online."
+    },
+    {
+      "name": "a host that never answered",
+      "problem": "timeout",
+      "text": "irc.example.org did not answer. It may be down, or something between here and there is dropping the connection."
+    },
+    {
+      "name": "no route to the host",
+      "problem": "unreachable",
+      "text": "There is no route to irc.example.org from this network."
+    },
+    {
+      "name": "a connection that was dropped",
+      "problem": "reset",
+      "text": "The connection to irc.example.org was dropped."
     }
   ]
 }
