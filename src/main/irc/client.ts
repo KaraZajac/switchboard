@@ -1,4 +1,5 @@
 import { EventEmitter } from 'events'
+import { echoLocally } from './features/echo'
 import type { MaskEntry } from '@shared/masklists'
 import { lineBudget, splitToFit } from './features/linelen'
 import { groupTargets, targetMax } from '@shared/isupport'
@@ -208,6 +209,7 @@ export class IRCClient {
       for (const piece of splitToFit(message, lineBudget(this.state, 'PRIVMSG', group))) {
         this.connection.send('PRIVMSG', group, piece)
       }
+      echoLocally(this, group, message, 'privmsg')
     }
   }
 
@@ -219,6 +221,7 @@ export class IRCClient {
       for (const piece of splitToFit(message, lineBudget(this.state, 'NOTICE', group))) {
         this.connection.send('NOTICE', group, piece)
       }
+      echoLocally(this, group, message, 'notice')
     }
   }
 
@@ -232,6 +235,7 @@ export class IRCClient {
     for (const piece of splitToFit(text, budget)) {
       this.connection.send('PRIVMSG', target, `\x01ACTION ${piece}\x01`)
     }
+    echoLocally(this, target, text, 'action')
   }
 
   /**

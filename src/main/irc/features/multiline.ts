@@ -1,3 +1,4 @@
+import { echoLocally } from './echo'
 import { lineBudget, splitToFit } from './linelen'
 
 /**
@@ -69,7 +70,8 @@ export function splitForLimits<T extends string | { text: string }>(
 
   for (const line of lines) {
     const size = Buffer.byteLength(typeof line === 'string' ? line : line.text, 'utf8')
-    const overBytes = limits.maxBytes !== null && current.length > 0 && bytes + size > limits.maxBytes
+    const overBytes =
+      limits.maxBytes !== null && current.length > 0 && bytes + size > limits.maxBytes
     const overLines = limits.maxLines !== null && current.length >= limits.maxLines
 
     if (overBytes || overLines) {
@@ -97,6 +99,7 @@ let batchCounter = 0
 export function sendMultilineMessage(
   client: {
     connection: { send: (...args: string[]) => void; sendRaw: (line: string) => void }
+    events: { emit: (name: string, data: unknown) => void }
     state: {
       capabilities: Set<string>
       availableCapabilities: Map<string, string | null>
@@ -124,6 +127,7 @@ export function sendMultilineMessage(
     for (const part of parts) {
       client.connection.send('PRIVMSG', target, part.text)
     }
+    echoLocally(client, target, lines.join('\n'), 'privmsg')
     return
   }
 
@@ -148,4 +152,5 @@ export function sendMultilineMessage(
     })
     client.connection.send('BATCH', `-${ref}`)
   }
+  echoLocally(client, target, lines.join('\n'), 'privmsg')
 }
