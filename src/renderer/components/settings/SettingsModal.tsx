@@ -797,7 +797,13 @@ function ShortcutsTab() {
     { keys: 'Shift+Enter', action: 'New line in message' },
     { keys: 'Escape', action: 'Cancel reply / Close modal' },
     { keys: 'Tab', action: 'Complete nick / channel / command' },
-    { keys: 'Up/Down', action: 'Cycle through completions' }
+    { keys: 'Up/Down', action: 'Cycle through completions' },
+    {
+      keys: 'Up/Down',
+      action: 'Earlier / later message you sent, from the start or end of the text'
+    },
+    { keys: 'Ctrl+B / I / U / S', action: 'Bold / italic / underline / strikethrough' },
+    { keys: 'Ctrl+O', action: 'Back to plain text' }
   ]
 
   return (

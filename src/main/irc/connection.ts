@@ -748,7 +748,10 @@ export class IRCConnection extends EventEmitter {
   }
 
   private onError(err: Error): void {
-    this.emit('error', err)
+    // Same treatment as a refused certificate: `connect ECONNREFUSED
+    // 127.0.0.1:6697` is accurate and tells nobody what to do about it.
+    // Whatever the corpus has no sentence for passes through as it was.
+    this.emit('error', new Error(connectionProblem(err.message, this.config.host)))
   }
 
   private onEnd(): void {
