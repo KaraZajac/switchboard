@@ -4,6 +4,7 @@ import { parseMessage } from '../../src/main/irc/parser'
 import { ConnectionState } from '../../src/main/irc/state'
 import { dispatchMessage } from '../../src/main/irc/handlers/registry'
 import { checkBatchMembership } from '../../src/main/irc/features/batch'
+import { MAX_BATCH_MESSAGES } from '../../src/shared/constants'
 import '../../src/main/irc/features/batch'
 import '../../src/main/irc/handlers/channel'
 import '../../src/main/irc/handlers/registration'
@@ -168,5 +169,28 @@ describe('a batch we pass through', () => {
     feed(h, ':irc.example.org BATCH -n')
 
     expect(h.sent.filter((line) => line.startsWith('WHO '))).toHaveLength(1)
+  })
+})
+
+/**
+ * A batch is a promise that an end is coming. A server that opens one and
+ * never closes it was this client growing without limit.
+ */
+describe('a batch that never ends', () => {
+  it('is abandoned past the ceiling, and said so', () => {
+    const c = client()
+    const errors: unknown[] = []
+    c.events.on('error', (e: unknown) => errors.push(e))
+    dispatchMessage(c, parseMessage(':s BATCH +h chathistory #chan'))
+    expect(c.state.batches.has('h')).toBe(true)
+
+    for (let i = 0; i <= MAX_BATCH_MESSAGES; i++) {
+      checkBatchMembership(c, parseMessage('@batch=h :n!u@h PRIVMSG #chan :line'))
+    }
+
+    expect(c.state.batches.has('h')).toBe(false)
+    expect(errors.length).toBe(1)
+    // Still consumed after the drop: the overflow must not arrive as live traffic
+    expect(checkBatchMembership(c, parseMessage('@batch=h :n!u@h PRIVMSG #chan :late'))).toBe(false)
   })
 })

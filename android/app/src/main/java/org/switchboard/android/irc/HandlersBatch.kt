@@ -81,7 +81,23 @@ internal fun consumedByBatch(state: ConnectionState, message: IrcMessage): Boole
     if (!isDeferred(state, batch)) return false
 
     batch.messages.add(message)
+
+    // One that never closes, or closes after a million lines. Still
+    // "consumed": dispatching the overflow live is the loop this function
+    // exists to prevent.
+    if (batch.messages.size > BatchState.MAX_MESSAGES) {
+        abandonBatch(state, tag)
+        state.batchOverflowed = true
+    }
     return true
+}
+
+/** Drop a batch and everything nested inside it, unprocessed */
+private fun abandonBatch(state: ConnectionState, id: String) {
+    state.batches.remove(id)
+    for ((childId, child) in state.batches.toList()) {
+        if (child.parent == id) abandonBatch(state, childId)
+    }
 }
 
 private fun isDeferred(state: ConnectionState, batch: BatchState): Boolean {

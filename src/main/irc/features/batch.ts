@@ -1,5 +1,6 @@
 import { registerHandler } from '../handlers/registry'
 import { dispatchMessage } from '../handlers/registry'
+import { MAX_BATCH_MESSAGES } from '@shared/constants'
 import type { IRCMessage, IRCBatch } from '@shared/types/irc'
 
 /**
@@ -34,7 +35,6 @@ registerHandler('BATCH', (client, msg) => {
     }
 
     client.state.batches.set(batchId, batch)
-
   } else if (ref.startsWith('-')) {
     // End of batch
     const batchId = ref.slice(1)
@@ -88,7 +88,10 @@ const DEFERRED_BATCH_TYPES = new Set([
  * the same JOIN again. The client floods itself in a loop it cannot see.
  */
 export function checkBatchMembership(
-  client: { state: { batches: Map<string, IRCBatch> } },
+  client: {
+    state: { batches: Map<string, IRCBatch> }
+    events?: { emit: (name: string, data: unknown) => void }
+  },
   msg: IRCMessage
 ): boolean {
   const batchTag = msg.tags['batch']
@@ -102,7 +105,28 @@ export function checkBatchMembership(
   if (!isDeferred(client, batch)) return false
 
   batch.messages.push(msg)
+
+  // A batch is a promise that an end is coming. One that never closes, or
+  // closes after a million lines, was this client growing without limit —
+  // and it is still "consumed", because the alternative is dispatching the
+  // overflow live, which is the loop this function exists to prevent.
+  if (batch.messages.length > MAX_BATCH_MESSAGES) {
+    abandonBatch(client, batchTag)
+    client.events?.emit('error', {
+      code: 'BATCH',
+      command: 'BATCH',
+      message: `Gave up on a batch after ${MAX_BATCH_MESSAGES} messages — the server never ended it`
+    })
+  }
   return true
+}
+
+/** Drop a batch and everything nested inside it, unprocessed */
+function abandonBatch(client: { state: { batches: Map<string, IRCBatch> } }, id: string): void {
+  client.state.batches.delete(id)
+  for (const [childId, child] of client.state.batches) {
+    if (child.parent === id) abandonBatch(client, childId)
+  }
 }
 
 function isDeferred(
@@ -140,7 +164,10 @@ export function combineMultiline(
 /**
  * Process a completed batch based on its type.
  */
-function processBatch(client: { events: { emit: (event: string, ...args: unknown[]) => boolean } }, batch: IRCBatch): void {
+function processBatch(
+  client: { events: { emit: (event: string, ...args: unknown[]) => boolean } },
+  batch: IRCBatch
+): void {
   switch (batch.type) {
     case 'chathistory':
       // History replay — emit messages in order

@@ -426,7 +426,13 @@ class IrcConnection(
 
         // A message inside a batch we handle ourselves is collected, not acted
         // on: replayed history must not drive live state.
-        if (consumedByBatch(state, message)) return
+        if (consumedByBatch(state, message)) {
+            if (state.batchOverflowed) {
+                state.batchOverflowed = false
+                emitError("Gave up on a batch after ${BatchState.MAX_MESSAGES} messages — the server never ended it")
+            }
+            return
+        }
 
         Handlers.dispatch(this@IrcConnection, message)
     }

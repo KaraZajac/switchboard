@@ -63,6 +63,7 @@ import org.switchboard.android.irc.Typing
 import org.switchboard.android.irc.LineLength
 import org.switchboard.android.irc.IrcMessage
 import org.switchboard.android.irc.Metadata
+import org.switchboard.android.irc.MaskLists
 import org.switchboard.android.irc.Multiline
 import org.switchboard.android.irc.Sasl
 import org.switchboard.android.irc.SaslPlan
@@ -2432,6 +2433,67 @@ class SharedCorpusTest {
             val c = entry.jsonObject
             assertEquals(c["value"]!!.jsonPrimitive.content, c["literal"]!!.jsonPrimitive.boolean,
                 PrivateAddress.isIpLiteral(c["value"]!!.jsonPrimitive.content))
+        }
+    }
+
+    // ── the lists a channel keeps ─────────────────────────────────────
+
+    /**
+     * Bans, quiets and the two exception lists. The Kotlin twin existed and
+     * nothing checked it against the desktop, which is how the two panels
+     * could have disagreed about what `+q` even is on a given network.
+     */
+    @Test
+    fun `reads mask lists the way the desktop reads them`() {
+        val corpus = load("masklists.json")
+
+        for (entry in corpus["lists"]!!.jsonArray) {
+            val c = entry.jsonObject
+            val chanmodes = (c["chanmodes"] as? JsonPrimitive)?.contentOrNull
+            assertEquals(
+                c["name"]!!.jsonPrimitive.content,
+                c["modes"]!!.jsonArray.map { it.jsonPrimitive.content },
+                MaskLists.listsFor(chanmodes, c["prefix"]!!.jsonPrimitive.content).map { it.mode }
+            )
+        }
+
+        for (entry in corpus["labels"]!!.jsonArray) {
+            val c = entry.jsonObject
+            val list = MaskLists.listsFor(
+                c["chanmodes"]!!.jsonPrimitive.content, c["prefix"]!!.jsonPrimitive.content
+            ).firstOrNull { it.mode == c["mode"]!!.jsonPrimitive.content }
+            assertEquals(c["name"]!!.jsonPrimitive.content, c["label"]!!.jsonPrimitive.content, list?.label)
+            assertEquals(c["name"]!!.jsonPrimitive.content, c["entry"]!!.jsonPrimitive.content, list?.entry)
+        }
+
+        for (entry in corpus["replies"]!!.jsonArray) {
+            val c = entry.jsonObject
+            val name = c["name"]!!.jsonPrimitive.content
+            val reply = MaskLists.readReply(
+                c["command"]!!.jsonPrimitive.content,
+                c["params"]!!.jsonArray.map { it.jsonPrimitive.content }
+            )
+            if (c.containsKey("reply") && c["reply"] is JsonNull) {
+                assertNull(name, reply); continue
+            }
+            assertEquals(name, c["mode"]!!.jsonPrimitive.content, reply?.mode)
+            assertEquals(name, c["channel"]!!.jsonPrimitive.content, reply?.channel)
+            assertEquals(name, c["done"]!!.jsonPrimitive.boolean, reply?.done)
+            val wanted = c["entry"] as? JsonObject
+            if (wanted == null) {
+                assertNull(name, reply?.entry)
+            } else {
+                assertEquals(name, wanted["mask"]!!.jsonPrimitive.content, reply?.entry?.mask)
+                assertEquals(name, (wanted["setBy"] as? JsonPrimitive)?.contentOrNull, reply?.entry?.setBy)
+                assertEquals(name, (wanted["setAt"] as? JsonPrimitive)?.long, reply?.entry?.setAt)
+            }
+        }
+
+        for (entry in corpus["masks"]!!.jsonArray) {
+            val c = entry.jsonObject
+            val typed = c["typed"]!!.jsonPrimitive.content
+            assertEquals(c["name"]!!.jsonPrimitive.content, c["sent"]!!.jsonPrimitive.content, MaskLists.maskToSet(typed))
+            assertEquals(c["name"]!!.jsonPrimitive.content, c["isMask"]!!.jsonPrimitive.boolean, MaskLists.looksLikeMask(typed))
         }
     }
 }

@@ -134,6 +134,19 @@ export const MAX_INCOMING = 16384
  */
 export const REJOIN_AFTER_KICK_MS = 5_000
 
+/**
+ * The most messages a single batch may hold before it is abandoned.
+ *
+ * A batch is a promise that an end is coming. A server that opens one and
+ * never closes it — or closes it after a million lines — was a client
+ * growing without limit, on both devices. Nothing legitimate is anywhere
+ * near this: CHATHISTORY answers two hundred at a time and a multiline
+ * message is a few dozen lines. Past it, the batch is dropped and said so.
+ *
+ * The phone holds the same number in `BatchState`.
+ */
+export const MAX_BATCH_MESSAGES = 5_000
+
 /** Max message tags size (bytes) */
 export const MAX_TAGS_SIZE = 8191
 

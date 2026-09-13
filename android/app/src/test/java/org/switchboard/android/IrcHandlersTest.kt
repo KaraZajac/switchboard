@@ -14,6 +14,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import org.switchboard.android.irc.BatchState
 import org.switchboard.android.irc.ConnectionState
 import org.switchboard.android.irc.Handlers
 import org.switchboard.android.irc.Irc
@@ -1015,5 +1016,21 @@ class IrcHandlersTest {
         assertEquals("#test", event["channel"]!!.jsonPrimitive.content)
         assertEquals("+ntl", event["mode"]!!.jsonPrimitive.content)
         assertEquals(listOf("50"), event["params"]!!.jsonArray.map { it.jsonPrimitive.content })
+    }
+
+    /**
+     * A batch is a promise that an end is coming. One that never closes was
+     * this client growing without limit.
+     */
+    @Test
+    fun `a batch that never ends is abandoned past the ceiling`() {
+        feed(":irc.example.org BATCH +h chathistory #chan")
+        assertTrue(session.state.batches.containsKey("h"))
+
+        repeat(BatchState.MAX_MESSAGES + 1) {
+            feed("@batch=h :n!u@h PRIVMSG #chan :line")
+        }
+
+        assertFalse(session.state.batches.containsKey("h"))
     }
 }

@@ -127,5 +127,11 @@ export function parseSTSValue(value: string): { port: number; duration: number }
 
   if (isNaN(port) || isNaN(duration)) return null
 
+  // A policy is remembered on disk and steers every later connection. One
+  // naming a port that cannot exist, or a negative lifetime, would lock this
+  // client out of the network until the policy expired — which a negative
+  // duration never does. The phone has always bounded these; this did not.
+  if (port < 1 || port > 65535 || duration < 0) return null
+
   return { port, duration }
 }

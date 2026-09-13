@@ -79,6 +79,18 @@ class BatchState(
     val parent: String?
 ) {
     val messages = mutableListOf<IrcMessage>()
+
+    companion object {
+        /**
+         * The most messages a single batch may hold before it is abandoned.
+         *
+         * A batch is a promise that an end is coming. A server that opens one
+         * and never closes it was this client growing without limit. Nothing
+         * legitimate is near this — CHATHISTORY answers two hundred at a time.
+         * The desktop holds the same number in `src/shared/constants.ts`.
+         */
+        const val MAX_MESSAGES = 5_000
+    }
 }
 
 class ConnectionState(val serverId: String) {
@@ -120,6 +132,13 @@ class ConnectionState(val serverId: String) {
 
     var serverName = ""
     var away = false
+
+    /**
+     * Set when a batch grew past [BatchState.MAX_MESSAGES] and was dropped.
+     * The buffering code has no session to speak through; the read loop does,
+     * and clears this after saying so.
+     */
+    var batchOverflowed = false
 
     /** Prefix symbols from ISUPPORT PREFIX, most privileged first */
     var prefixSymbols = "@+"

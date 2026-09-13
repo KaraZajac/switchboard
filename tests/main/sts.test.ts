@@ -24,6 +24,20 @@ describe('STS (Strict Transport Security)', () => {
       expect(result).toEqual({ port: 6697, duration: 2592000 })
     })
 
+    /**
+     * A policy is remembered on disk and steers every later connection. A
+     * hostile one naming an impossible port, or a lifetime that never ends,
+     * was a way to lock a client out of a network with one capability value.
+     */
+    it('refuses a port that cannot exist or a lifetime that never ends', () => {
+      expect(parseSTSValue('port=0,duration=300')).toBeNull()
+      expect(parseSTSValue('port=65536,duration=300')).toBeNull()
+      expect(parseSTSValue('port=99999,duration=300')).toBeNull()
+      expect(parseSTSValue('port=6697,duration=-1')).toBeNull()
+      expect(parseSTSValue('port=6697,duration=0')).toEqual({ port: 6697, duration: 0 })
+      expect(parseSTSValue('port=65535,duration=1')).toEqual({ port: 65535, duration: 1 })
+    })
+
     it('returns null for invalid STS value', () => {
       expect(parseSTSValue('invalid')).toBeNull()
       expect(parseSTSValue('port=abc,duration=123')).toBeNull()
@@ -166,4 +180,3 @@ describe('remembering an STS policy', () => {
     expect(stsUpgradeFor('stale.example.org', 6667, false)).toBeNull()
   })
 })
-
