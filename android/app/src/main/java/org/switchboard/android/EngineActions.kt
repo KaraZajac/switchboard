@@ -269,7 +269,7 @@ data class ProfileSaved(val saved: Boolean, val published: Boolean, val reason: 
  * protocol layer guards against.
  */
 fun SwitchboardEngine.fetchMaskList(serverId: String, channel: String, mode: String) =
-    act(serverId, "masklist:fetch", JsonPrimitive(channel), JsonPrimitive(mode)) {
+    act(serverId, "masklist:fetch", JsonPrimitive(channel), JsonPrimitive(mode), quiet = true) {
         // Marked as loading before asking, so the first line of the answer
         // replaces what we had rather than adding to it. Without this, an
         // entry somebody else lifted stays on the list until the app restarts.
@@ -298,7 +298,10 @@ fun SwitchboardEngine.setMaskListEntry(
  * RPL_CHANNELMODEIS is the only answer to the question.
  */
 fun SwitchboardEngine.fetchChannelModes(serverId: String, channel: String) =
-    act(serverId, "channel:modes", JsonPrimitive(channel)) { it.send("MODE", channel) }
+    // Quiet, like every question the app asks on its own: opening the channel
+    // sheet while the network is being redialled used to announce "that was
+    // not sent" about a MODE query nobody typed.
+    act(serverId, "channel:modes", JsonPrimitive(channel), quiet = true) { it.send("MODE", channel) }
 
 /** Turn one of those settings on or off */
 fun SwitchboardEngine.setChannelMode(serverId: String, channel: String, args: List<String>) =
@@ -691,7 +694,9 @@ fun SwitchboardEngine.verifyAccount(serverId: String, account: String, code: Str
  * says nothing about having stopped.
  */
 fun SwitchboardEngine.watchNicks(serverId: String, nicks: List<String>) {
-    act(serverId, "monitor:add", nicks.asJson()) { it.monitorAdd(nicks) }
+    // Quiet: the list is written down below and sent again on the next
+    // connection, so nothing is lost by not being able to send it now.
+    act(serverId, "monitor:add", nicks.asJson(), quiet = true) { it.monitorAdd(nicks) }
 
     val watched = store.watchedFor(serverId).toMutableList()
     for (nick in nicks) if (watched.none { it.equals(nick, true) }) watched.add(nick)
@@ -700,7 +705,7 @@ fun SwitchboardEngine.watchNicks(serverId: String, nicks: List<String>) {
 }
 
 fun SwitchboardEngine.unwatchNicks(serverId: String, nicks: List<String>) {
-    act(serverId, "monitor:remove", nicks.asJson()) { it.monitorRemove(nicks) }
+    act(serverId, "monitor:remove", nicks.asJson(), quiet = true) { it.monitorRemove(nicks) }
 
     val watched = store.watchedFor(serverId)
         .filterNot { held -> nicks.any { it.equals(held, true) } }
@@ -858,7 +863,10 @@ suspend fun SwitchboardEngine.readMarkerFor(serverId: String, channel: String): 
 fun SwitchboardEngine.markReadUpTo(serverId: String, channel: String, timestamp: String) =
     act(
         serverId, "read-marker:set",
-        JsonPrimitive(channel), JsonPrimitive(timestamp)
+        JsonPrimitive(channel), JsonPrimitive(timestamp),
+        // Opening a channel is not sending anything, whatever the state of
+        // the socket; the marker goes across when there is one.
+        quiet = true
     ) { it.markRead(channel, timestamp) }
 
 // ── the networks themselves ──────────────────────────────────────────
