@@ -8,9 +8,11 @@ import { registerHandler } from '../handlers/registry'
  * (RFC 8291) and hands it to the service, so the service forwards something it
  * cannot read.
  *
- * The capability's value carries the server's VAPID public key, which the
- * device needs in order to subscribe with the right application server key —
- * without it, most push services will not accept the subscription.
+ * The server's VAPID public key is the `VAPID` ISUPPORT token — the device
+ * needs it to subscribe with the right application server key, and without
+ * it most push services will not accept the subscription. Early drafts put
+ * the key in the capability's value instead, so that is still read when the
+ * token is missing.
  */
 
 export interface WebPushKeys {
@@ -20,8 +22,14 @@ export interface WebPushKeys {
   auth: string
 }
 
-/** The server's VAPID key, from the capability value, if it gave one */
-export function vapidKeyFrom(capabilityValue: string | undefined): string | null {
+/** The server's VAPID key: the ISUPPORT token, else the capability value */
+export function vapidKeyFrom(
+  isupport: Record<string, string | true>,
+  capabilityValue?: string | null
+): string | null {
+  const advertised = isupport['VAPID']
+  if (typeof advertised === 'string' && advertised.length > 0) return advertised
+
   if (!capabilityValue) return null
   for (const segment of capabilityValue.split(',')) {
     const at = segment.indexOf('=')
@@ -48,7 +56,13 @@ export function registerPushEndpoint(
 ): boolean {
   if (!client.state.capabilities.has('draft/webpush')) return false
 
-  client.connection.send('WEBPUSH', 'REGISTER', endpoint, `p256dh=${keys.p256dh}`, `auth=${keys.auth}`)
+  client.connection.send(
+    'WEBPUSH',
+    'REGISTER',
+    endpoint,
+    `p256dh=${keys.p256dh}`,
+    `auth=${keys.auth}`
+  )
   return true
 }
 

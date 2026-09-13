@@ -32,7 +32,10 @@ export function WhoisModal() {
     : {}
 
   const shownName = displayNameFor(data.nick, profile)
-  const colour = metadataColor(profile.color) ?? nickColor(data.nick)
+  // A colour somebody set is a CSS value; the fallback is a Tailwind class.
+  // They were being poured into the same `backgroundColor`, and a class name
+  // is not a colour, so anyone without a profile colour got no circle at all.
+  const chosenColour = metadataColor(profile.color)
   const avatar = safeAvatarUrl(profile.avatar)
   const pronouns = profile.pronouns?.trim()
   const status = profile.status?.trim()
@@ -67,8 +70,8 @@ export function WhoisModal() {
         {/* Avatar and badges */}
         <div className="flex items-center gap-3">
           <div
-            className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full text-2xl font-bold text-gray-900"
-            style={{ backgroundColor: colour }}
+            className={`flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full text-2xl font-bold text-gray-900 ${chosenColour ? '' : nickColor(data.nick)}`}
+            style={chosenColour ? { backgroundColor: chosenColour } : undefined}
           >
             {avatar ? (
               <img src={avatar} alt="" className="h-full w-full object-cover" />
