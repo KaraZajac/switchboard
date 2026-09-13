@@ -577,8 +577,15 @@ private fun ChannelList(
             // gone. Finding a channel is the thing somebody needs first on a
             // network they have just joined, and a sidebar reading "nothing
             // joined yet" and stopping there does not help them do it.
+            //
+            // Unless there is no network yet. While the connection is still
+            // being made the channels are not "not joined", they are pending —
+            // and sending somebody off to find rooms on a network they are
+            // not on is the wrong instruction at the wrong moment.
+            val connected = store.servers[serverId]?.connected == true
             Text(
-                "Nothing joined yet — the + above finds rooms, or joins one by name.",
+                if (connected) "Nothing joined yet — the + above finds rooms, or joins one by name."
+                else "Not connected yet. Channels appear once the network answers.",
                 color = Overlay,
                 fontSize = 13.sp,
                 lineHeight = 18.sp,
