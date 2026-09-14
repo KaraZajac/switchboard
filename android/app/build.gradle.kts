@@ -13,8 +13,8 @@ android {
         applicationId = "org.switchboard.android"
         minSdk = 26
         targetSdk = 35
-        versionCode = 11
-        versionName = "2.3.0-beta"
+        versionCode = 12
+        versionName = "2.4.0-beta"
     }
 
     /**
