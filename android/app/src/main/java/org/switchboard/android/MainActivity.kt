@@ -226,6 +226,10 @@ fun App(
             val snapshot = engine.remote.call("app:renderer-ready")
             store.applySnapshot(snapshot, servers)
 
+            // Whatever this phone heard while it was the connection. The
+            // desktop kept nothing of that time, and this is the only copy.
+            engine.handOverHistory()
+
             store.activeServerId?.let { serverId ->
                 store.activeChannel?.let { channel -> loadHistory(engine, serverId, channel) }
             }

@@ -5,7 +5,7 @@
 
 import type { ServerConfig } from './server'
 import type { CertificateProblem } from '../certificate'
-import type { ChatMessage } from './message'
+import type { ChatMessage, MessageType } from './message'
 import type { ChannelUser } from './channel'
 import type { UserMetadata } from './metadata'
 import type { MaskEntry } from '../masklists'
@@ -66,6 +66,25 @@ export interface SessionSnapshot {
 }
 
 /** The shared, passphrase-protected config both devices work from */
+/**
+ * One message as a phone hands it over.
+ *
+ * Deliberately the shape the phone already builds for `irc:message`, so there
+ * is nothing to keep in step by hand: it forwards what it filed.
+ */
+export interface HandoverMessage {
+  id: string
+  channel: string
+  nick?: string
+  content: string
+  timestamp: string
+  type?: MessageType
+  account?: string | null
+  oper?: string | null
+  relayedBy?: string | null
+  replyTo?: string | null
+}
+
 export interface VaultStatusInfo {
   exists: boolean
   unlocked: boolean
@@ -136,6 +155,8 @@ export interface MainToRendererEvents {
   'irc:disconnected': { serverId: string; reason: string }
   /** The connection was lost and a retry is booked, this far away */
   'irc:reconnecting': { serverId: string; delayMs: number }
+  /** Stored history grew from somewhere other than this window — a phone handing over */
+  'history:changed': { serverId: string }
   /** The server's certificate was refused; the fingerprint is the thing to check — see `@shared/certificate` */
   'irc:certificate': { serverId: string } & CertificateProblem
   /** An irc:// link named a network we have; show this conversation on it — see `@shared/ircurl` */
@@ -357,6 +378,14 @@ export interface RendererToMainInvocations {
   ) => Promise<void>
   'account:register': (serverId: string, email: string | null, password: string) => Promise<boolean>
   'account:verify': (serverId: string, account: string, code: string) => Promise<boolean>
+  /**
+   * Messages a paired device took while it was the connection.
+   *
+   * The phone keeps nothing on disk, so what it heard while this desktop was
+   * off exists only in its memory until it hands it over. See
+   * `src/main/storage/handover.ts`.
+   */
+  'history:store': (serverId: string, messages: HandoverMessage[]) => Promise<number>
   'history:fetch': (serverId: string, channel: string, before?: string, limit?: number) => Promise<ChatMessage[]>
   'chathistory:request': (serverId: string, channel: string, before?: string, limit?: number) => Promise<void>
   /** Which conversations had traffic since `since` — the only way to find a missed DM */

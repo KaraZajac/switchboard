@@ -1,4 +1,5 @@
 import { fetchForPreview, BlockedAddressError } from '../net/safefetch'
+import { storeHandover } from '../storage/handover'
 import { logsFolder } from '../logging'
 import { mkdir } from 'fs/promises'
 import { formatFingerprint } from '@shared/certificate'
@@ -61,8 +62,7 @@ import {
   settingChanged,
   readMarkerChanged,
   conversationCleared,
-  ignoresChanged
-} from './notify'
+  ignoresChanged, historyChanged } from './notify'
 import {
   createVault,
   lockVault,
@@ -947,6 +947,23 @@ export function registerIPCHandlers(): void {
   })
 
   // ── History ──────────────────────────────────────────────────────
+
+  /**
+   * Take what a paired device heard while it was the connection.
+   *
+   * The phone has no database, so a spell holding the connections leaves the
+   * only copy of those messages in its memory. This is where they land. See
+   * `storage/handover.ts` for why none of it is taken on trust.
+   */
+  handle('history:store', async (_event, serverId: string, messages: unknown[]) => {
+    const stored = storeHandover(serverId, Array.isArray(messages) ? messages : [])
+    if (stored > 0) {
+      console.info(`Stored ${stored} message(s) handed over by a paired device`)
+      // The window is showing a conversation that just grew underneath it
+      historyChanged(serverId)
+    }
+    return stored
+  })
 
   handle(
     'history:fetch',

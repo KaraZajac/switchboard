@@ -11,6 +11,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
@@ -50,6 +51,7 @@ import org.switchboard.android.ui.applyTheme
 import org.switchboard.android.vault.VaultCrypto
 import java.util.Timer
 import java.util.TimerTask
+import org.switchboard.android.irc.HandoverQueue
 import org.switchboard.android.irc.Ignore
 import kotlinx.serialization.json.JsonArray
 import org.switchboard.android.vault.VaultStore
@@ -209,6 +211,8 @@ class SwitchboardEngine(
 
             if ((about == null || !connections.containsKey(about)) && !silenced(channel, data)) {
                 store.handleEvent(channel, data)
+                // Relayed from the desktop, which wrote it down as it sent it.
+                // Nothing to hand back.
                 if (channel == "irc:message") notifyIfWorthIt(data)
 
                 // The desktop read it. Whatever this phone was showing about
@@ -817,6 +821,73 @@ class SwitchboardEngine(
             Log.w(TAG, "$channel failed: ${e.message}")
             null
         }
+
+    /**
+     * What this phone heard while it was the connection.
+     *
+     * It has no database: the store is what is on screen and Android may stop
+     * the process at any time. So an evening spent holding the connections
+     * used to end with those messages nowhere — gone from here on the next
+     * restart, and never on the desktop at all unless the network happened to
+     * offer `chathistory` for it to catch up from.
+     *
+     * They are kept here until the desktop is reachable and then handed over.
+     * In memory on purpose: this is the same lifetime as the messages
+     * themselves, and writing a queue to disk that outlived what it describes
+     * would promise more than the rest of this client keeps.
+     */
+    private val handover = HandoverQueue(keep = HANDOVER_KEEP, batch = HANDOVER_BATCH)
+
+    /**
+     * One hand-over at a time.
+     *
+     * A batch is dropped only once the desktop has taken it, so two flushes
+     * running together would each drop what the other sent — and the second
+     * drop would throw away messages nobody had ever handed anywhere.
+     */
+    private val handoverLock = kotlinx.coroutines.sync.Mutex()
+
+    /** A message that arrived on one of this phone's own sockets */
+    private fun rememberForDesktop(data: JsonElement) {
+        val payload = data as? JsonObject ?: return
+        val serverId = (payload["serverId"] as? JsonPrimitive)?.contentOrNull() ?: return
+        val channel = (payload["channel"] as? JsonPrimitive)?.contentOrNull() ?: return
+        val message = payload["message"] as? JsonObject ?: return
+        // Ours already: the desktop wrote this one down when it sent it
+        if (message["historical"]?.jsonPrimitive?.booleanOrNull == true) return
+
+        handover.remember(serverId, channel, message)
+    }
+
+    /**
+     * Give the desktop what it missed.
+     *
+     * Safe to call whenever the link is up: the desktop writes with the
+     * message id as the key, so a batch that arrives twice — a flush that
+     * raced a reconnect, an answer this phone never heard — costs nothing.
+     * Dropped from the queue only once the desktop has actually answered.
+     */
+    internal suspend fun handOverHistory() {
+        if (!remote.isLinked || handover.size == 0) return
+
+        handoverLock.withLock { handOverPending() }
+    }
+
+    private suspend fun handOverPending() {
+        while (true) {
+            val batch = handover.peek() ?: return
+
+            val answer = ask("history:store", JsonPrimitive(batch.serverId), batch.rows)
+            if (answer == null) {
+                // The desktop did not take them; keep them for next time
+                Log.w(TAG, "handing over ${batch.count} message(s) failed; keeping them")
+                return
+            }
+
+            Log.i(TAG, "handed ${batch.count} message(s) to the desktop for ${batch.serverId}")
+            handover.drop(batch.count)
+        }
+    }
 
     /** True when this phone is talking to IRC at all */
     internal val isHolding: Boolean get() = mode == EngineMode.HOLDING
@@ -1428,7 +1499,12 @@ class SwitchboardEngine(
             // holding its own connection — the case this whole client exists
             // for — never told anyone anything. Messages arrived, the badge
             // counted them, and the phone stayed dark.
-            if (channel == "irc:message") notifyIfWorthIt(data)
+            if (channel == "irc:message") {
+                notifyIfWorthIt(data)
+                // This phone is the connection, so this message exists here and
+                // nowhere else until the desktop is told — see [handOverHistory]
+                rememberForDesktop(data)
+            }
 
             rememberMembership(channel, data)
 
@@ -1603,6 +1679,12 @@ class SwitchboardEngine(
             includingShared || !sharesConnection(serverId)
         }
 
+        // The connections may be the desktop's again; so is what was said on
+        // them. Before the early return below, because a network both devices
+        // can share leaves nothing to release and the messages still have to
+        // go somewhere.
+        scope.launch { handOverHistory() }
+
         // Asked more than once — the coordinator reconciles as well as
         // transitions — and there is nothing to say when there is nothing to
         // hand over.
@@ -1670,6 +1752,12 @@ class SwitchboardEngine(
             remote.isLinked && !primary -> EngineMode.FOLLOWING
             else -> EngineMode.OFFLINE
         }
+
+        // The link is the only way what this phone heard while it was the
+        // connection ever reaches a disk. Cheap when there is nothing waiting,
+        // and this runs on every change of state — which includes the link
+        // coming back, which is exactly when it matters.
+        if (remote.isLinked && handover.size > 0) scope.launch { handOverHistory() }
 
         // Both of us on the same networks at once, which is the ordinary case
         // wherever the server allows it: nobody is standing in for anybody, and
@@ -1954,6 +2042,12 @@ class SwitchboardEngine(
 
         /** The shared setting both clients keep mutes in */
         const val MUTES_KEY = "mutes"
+
+        /** Most messages to keep for the desktop, oldest dropped first */
+        const val HANDOVER_KEEP = 2_000
+
+        /** Most to send in one call — the desktop refuses more than this anyway */
+        const val HANDOVER_BATCH = 500
         /** The shared-settings name for the theme; [THEME_KEY] is this phone's own copy */
         const val THEME_SETTING = "theme"
         const val NOTIFY_ALL_KEY = "notifyAll"

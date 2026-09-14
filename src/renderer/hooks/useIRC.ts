@@ -119,6 +119,29 @@ export function useIRCEvents(): void {
       })
     )
 
+    /*
+     * A paired device handed over what it heard while it was the connection.
+     *
+     * Those rows went straight into the database, which this window has
+     * already read — so the conversation on screen has to be read again or
+     * the messages are there and invisible. Only the one being looked at:
+     * everything else is re-read when it is opened.
+     */
+    cleanups.push(
+      api.on('history:changed', ({ serverId }) => {
+        const channel = useChannelStore.getState().activeChannel[serverId]
+        if (!channel) return
+        void api
+          .invoke('history:fetch', serverId, channel, undefined, 50)
+          .then((messages) => {
+            if (messages && messages.length > 0) {
+              useMessageStore.getState().setMessages(serverId, channel, messages)
+            }
+          })
+          .catch(() => {})
+      })
+    )
+
     // An irc:// link, handed over by the operating system — see `@shared/ircurl`
     cleanups.push(
       api.on('link:open', ({ serverId, channel }) => {

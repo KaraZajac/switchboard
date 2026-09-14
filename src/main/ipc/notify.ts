@@ -96,6 +96,17 @@ export function conversationCleared(serverId: string, channel: string): void {
   sink?.('chat:clear', { serverId, channel })
 }
 
+/**
+ * Rows arrived for a conversation the window may be showing.
+ *
+ * A phone handing over what it heard writes straight into the database, which
+ * the window has already read from — so without this the messages are there
+ * and invisible until something else makes it look again.
+ */
+export function historyChanged(serverId: string): void {
+  sink?.('history:changed', { serverId })
+}
+
 /** The ignore list changed from somewhere other than the settings panel */
 export function ignoresChanged(list: unknown): void {
   sink?.('ignore:changed', list)
