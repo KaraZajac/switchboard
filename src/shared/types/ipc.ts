@@ -73,6 +73,10 @@ export interface VaultStatusInfo {
   updatedAt: string | null
   updatedBy: string | null
   fingerprint: string | null
+  /** The key is kept in the keychain, so a restart opens it without asking */
+  remembered: boolean
+  /** Whether this machine has a keychain to keep it in at all */
+  canRemember: boolean
 }
 
 /**
@@ -245,8 +249,8 @@ export interface RendererToMainInvocations {
   'remote:status': () => Promise<RemoteLinkStatus>
   'session:state': () => Promise<SessionSnapshot>
   'vault:status': () => Promise<VaultStatusInfo>
-  'vault:create': (passphrase: string) => Promise<VaultStatusInfo>
-  'vault:unlock': (passphrase: string) => Promise<VaultStatusInfo>
+  'vault:create': (passphrase: string, keepOpen?: boolean) => Promise<VaultStatusInfo>
+  'vault:unlock': (passphrase: string, keepOpen?: boolean) => Promise<VaultStatusInfo>
   'vault:lock': () => Promise<VaultStatusInfo>
   'remote:start': () => Promise<RemoteLinkStatus>
   'remote:stop': () => Promise<RemoteLinkStatus>

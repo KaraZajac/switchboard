@@ -83,6 +83,9 @@ class SessionCoordinatorTest {
             var resumed = 0
             var released = 0
 
+            /** The networks this device has open, which is what it hands over */
+            val holds = mutableSetOf<String>()
+
             var coordinator: SessionCoordinator = build(priority)
 
             fun build(priority: Int): SessionCoordinator = SessionCoordinator(
@@ -107,10 +110,13 @@ class SessionCoordinatorTest {
 
                     override fun release() {
                         released++
+                        holds.clear()
                         events.add("$id released the connections")
                     }
 
                     override fun vaultVersion(): Int = 3
+
+                    override fun holding(): List<String> = holds.toList()
                 },
                 clock
             )
@@ -280,6 +286,36 @@ class SessionCoordinatorTest {
 
         assertEquals(3, h.phone.coordinator.state().vaultVersion)
         assertTrue(h.phone.coordinator.state().peers.containsKey("desktop"))
+    }
+
+    @Test
+    fun `hands over a network it was already on when the desktop arrived`() {
+        val h = Harness()
+
+        // The phone dialled this itself — over a link that did not exist yet,
+        // or from an irc:// link — and only then does the desktop turn up.
+        h.desktop.start()
+        h.phone.holds.add("netslum")
+        h.phone.start()
+        h.clock.advance(DISCOVERY_MS + HEARTBEAT_INTERVAL_MS * 2)
+
+        assertEquals(SessionRole.FOLLOWER, h.phone.coordinator.state().role)
+        assertEquals(1, h.phone.released)
+        assertTrue(h.phone.holds.isEmpty())
+    }
+
+    @Test
+    fun `hands over once, however long the two sit there`() {
+        val h = Harness()
+
+        h.desktop.start()
+        h.phone.holds.add("netslum")
+        h.phone.start()
+        h.clock.advance(DISCOVERY_MS + HEARTBEAT_INTERVAL_MS * 20)
+
+        // Releasing on every heartbeat would forget what was released, and
+        // with it what to dial when this phone takes the connections back
+        assertEquals(1, h.phone.released)
     }
 
     @Test

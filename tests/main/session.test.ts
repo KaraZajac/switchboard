@@ -455,6 +455,54 @@ describe('taking over what the other device actually had', () => {
     expect(phone.coordinator.heldByPeers()).toEqual(['ergo'])
   })
 
+  it('hands over a network it was already on when the other device arrived', () => {
+    const { desktop, phone, events } = harness()
+
+    // The phone dialled this itself — over a link that did not exist yet, or
+    // from an irc:// link — and only then does the desktop turn up.
+    desktop.coordinator.start()
+    phone.state.holds.add('netslum')
+    phone.coordinator.start()
+    vi.advanceTimersByTime(DISCOVERY_MS + HEARTBEAT_INTERVAL_MS * 2)
+
+    expect(phone.coordinator.state().role).toBe('follower')
+    expect(phone.state.released).toBe(1)
+    expect([...phone.state.holds]).toEqual([])
+    expect(events).toContain('phone released the connections')
+  })
+
+  it('hands over once, however long the two sit there', () => {
+    const { desktop, phone } = harness()
+
+    desktop.coordinator.start()
+    phone.state.holds.add('netslum')
+    phone.coordinator.start()
+    vi.advanceTimersByTime(DISCOVERY_MS + HEARTBEAT_INTERVAL_MS * 20)
+
+    // Releasing on every heartbeat would forget what was released, and with it
+    // what to dial when this device takes the connections back
+    expect(phone.state.released).toBe(1)
+  })
+
+  it('hands over again after a spell of holding them', () => {
+    const { desktop, phone } = harness()
+
+    desktop.coordinator.start()
+    phone.coordinator.start()
+    vi.advanceTimersByTime(DISCOVERY_MS + HEARTBEAT_INTERVAL_MS)
+
+    // The desktop goes, the phone takes over, the desktop comes back
+    desktop.coordinator.stop()
+    vi.advanceTimersByTime(HEARTBEAT_TIMEOUT_MS + HEARTBEAT_INTERVAL_MS * 2)
+    expect(phone.coordinator.state().role).toBe('primary')
+
+    desktop.coordinator.start()
+    vi.advanceTimersByTime(DISCOVERY_CAP_MS + HEARTBEAT_INTERVAL_MS * 4)
+
+    expect(phone.coordinator.state().role).toBe('follower')
+    expect([...phone.state.holds]).toEqual([])
+  })
+
   it('a follower is not asked what it is holding, because it is holding nothing', () => {
     const { desktop, phone } = harness()
 

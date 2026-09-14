@@ -849,7 +849,10 @@ class SwitchboardEngine(
         themeId = id
         prefs.edit().putString(THEME_KEY, id).apply()
         applyTheme(id)
-        scope.launch { ask("settings:set", JsonPrimitive("theme"), JsonPrimitive(id)) }
+        // Into the shared config as well as down the link. It is a shared
+        // setting like the other ten, and a theme picked here with the desktop
+        // asleep used to be told to nobody.
+        shareSetting(THEME_SETTING to JsonPrimitive(id))
     }
 
     /**
@@ -915,9 +918,7 @@ class SwitchboardEngine(
         val key = "$serverId:${channel.lowercase()}"
         notifyAll = if (notifyAll.contains(key)) notifyAll - key else notifyAll + key
         val encoded = JsonArray(notifyAll.sorted().map { JsonPrimitive(it) })
-        vault.setSharedSetting(NOTIFY_ALL_KEY, encoded)
-        vaultVersion = vault.version
-        scope.launch { ask("settings:set", JsonPrimitive(NOTIFY_ALL_KEY), encoded) }
+        shareSetting(NOTIFY_ALL_KEY to encoded)
     }
 
     /**
@@ -1002,9 +1003,7 @@ class SwitchboardEngine(
     fun setHighlightWords(words: List<String>) {
         store.highlightWords = words
         val encoded = JsonArray(words.map { JsonPrimitive(it) })
-        vault.setSharedSetting(HIGHLIGHTS_KEY, encoded)
-        vaultVersion = vault.version
-        scope.launch { ask("settings:set", JsonPrimitive(HIGHLIGHTS_KEY), encoded) }
+        shareSetting(HIGHLIGHTS_KEY to encoded)
     }
 
     /**
@@ -1025,9 +1024,7 @@ class SwitchboardEngine(
     // same reason.
     fun setRejoinAfterKick(on: Boolean) {
         rejoinOnKick = on
-        vault.setSharedSetting(REJOIN_KEY, JsonPrimitive(on))
-        vaultVersion = vault.version
-        scope.launch { ask("settings:set", JsonPrimitive(REJOIN_KEY), JsonPrimitive(on)) }
+        shareSetting(REJOIN_KEY to JsonPrimitive(on))
     }
 
     /**
@@ -1044,9 +1041,7 @@ class SwitchboardEngine(
     fun setShowJoinsAndParts(on: Boolean) {
         showJoinsParts = on
         store.showJoinsParts = on
-        vault.setSharedSetting(SHOW_JOINS_KEY, JsonPrimitive(on))
-        vaultVersion = vault.version
-        scope.launch { ask("settings:set", JsonPrimitive(SHOW_JOINS_KEY), JsonPrimitive(on)) }
+        shareSetting(SHOW_JOINS_KEY to JsonPrimitive(on))
     }
 
     /**
@@ -1108,13 +1103,10 @@ class SwitchboardEngine(
     fun setAutoAway(minutes: Int, message: String) {
         awayAfterMinutes = minutes.coerceAtLeast(0)
         awayMessage = message
-        vault.setSharedSetting(AWAY_MINUTES_KEY, JsonPrimitive(awayAfterMinutes))
-        vault.setSharedSetting(AWAY_MESSAGE_KEY, JsonPrimitive(message))
-        vaultVersion = vault.version
-        scope.launch {
-            ask("settings:set", JsonPrimitive(AWAY_MINUTES_KEY), JsonPrimitive(awayAfterMinutes))
-            ask("settings:set", JsonPrimitive(AWAY_MESSAGE_KEY), JsonPrimitive(message))
-        }
+        shareSetting(
+            AWAY_MINUTES_KEY to JsonPrimitive(awayAfterMinutes),
+            AWAY_MESSAGE_KEY to JsonPrimitive(message)
+        )
         // Switching it off should take back the away it set now, not in half a
         // minute, and switching it on with the phone already dark should act
         // now too.
@@ -1189,9 +1181,7 @@ class SwitchboardEngine(
                 }
             }
         )
-        vault.setSharedSetting(ALIASES_KEY, encoded)
-        vaultVersion = vault.version
-        scope.launch { ask("settings:set", JsonPrimitive(ALIASES_KEY), encoded) }
+        shareSetting(ALIASES_KEY to encoded)
     }
 
     private fun readAliases(array: JsonArray): List<Aliases.Alias> = array.mapNotNull { element ->
@@ -1268,9 +1258,7 @@ class SwitchboardEngine(
     private fun applyIgnores(next: List<Ignore.Entry>) {
         ignores = next
         val encoded = writeIgnores(next)
-        vault.setSharedSetting(IGNORES_KEY, encoded)
-        vaultVersion = vault.version
-        scope.launch { ask("settings:set", JsonPrimitive(IGNORES_KEY), encoded) }
+        shareSetting(IGNORES_KEY to encoded)
     }
 
     private fun readIgnores(array: JsonArray): List<Ignore.Entry> = array.mapNotNull { element ->
@@ -1304,9 +1292,7 @@ class SwitchboardEngine(
     private fun applyMutes(next: Mutes) {
         mutes = next
         val encoded = next.toJson()
-        vault.setSharedSetting(MUTES_KEY, encoded)
-        vaultVersion = vault.version
-        scope.launch { ask("settings:set", JsonPrimitive(MUTES_KEY), encoded) }
+        shareSetting(MUTES_KEY to encoded)
     }
 
     // ── becoming, and un-becoming, the connection ─────────────────────
@@ -1558,6 +1544,29 @@ class SwitchboardEngine(
      * this way means a phone that adds a network while the desktop is asleep
      * does not have to remember to tell it later.
      */
+    /**
+     * A shared setting changed here.
+     *
+     * Written into this phone's copy of the shared config, offered to the
+     * desktop, and told to the desktop directly as well. All three, because
+     * either device can be the one that is away: the ask keeps a desktop that
+     * is listening in step at once, and the offer is what a desktop that was
+     * asleep picks up when it comes back.
+     *
+     * The offer was the missing half. A setting changed on the phone with no
+     * desktop around was sealed at a higher version nobody was ever told
+     * about, so the desktop's older offer was refused on the next link and the
+     * two stayed apart until some desktop edit overtook the phone's version —
+     * which then quietly threw the phone's change away.
+     */
+    private fun shareSetting(vararg pairs: Pair<String, JsonElement>) {
+        for ((key, value) in pairs) vault.setSharedSetting(key, value)
+        noteVaultChanged()
+        scope.launch {
+            for ((key, value) in pairs) ask("settings:set", JsonPrimitive(key), value)
+        }
+    }
+
     internal fun noteVaultChanged() {
         vaultVersion = vault.version
         // Credentials a network will accept are exactly the sort of thing that
@@ -1593,6 +1602,11 @@ class SwitchboardEngine(
         val handing = connections.filterKeys { serverId ->
             includingShared || !sharesConnection(serverId)
         }
+
+        // Asked more than once — the coordinator reconciles as well as
+        // transitions — and there is nothing to say when there is nothing to
+        // hand over.
+        if (handing.isEmpty()) return
 
         for ((serverId, connection) in handing) {
             connection.stop("Handing over to desktop")
@@ -1940,6 +1954,8 @@ class SwitchboardEngine(
 
         /** The shared setting both clients keep mutes in */
         const val MUTES_KEY = "mutes"
+        /** The shared-settings name for the theme; [THEME_KEY] is this phone's own copy */
+        const val THEME_SETTING = "theme"
         const val NOTIFY_ALL_KEY = "notifyAll"
 
         /** And the one they keep the ignore list in */

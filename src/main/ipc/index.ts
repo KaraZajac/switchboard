@@ -122,8 +122,12 @@ export function registerIPCHandlers(): void {
   handle('session:state', async () => sessionState())
 
   handle('vault:status', async () => vaultStatus())
-  handle('vault:create', async (_event, passphrase: string) => createVault(passphrase))
-  handle('vault:unlock', async (_event, passphrase: string) => unlockVault(passphrase))
+  handle('vault:create', async (_event, passphrase: string, keepOpen?: boolean) =>
+    createVault(passphrase, keepOpen ?? true)
+  )
+  handle('vault:unlock', async (_event, passphrase: string, keepOpen?: boolean) =>
+    unlockVault(passphrase, keepOpen ?? true)
+  )
   handle('vault:lock', async () => lockVault())
   handle('remote:start', async () => startRemoteLink())
   handle('remote:stop', async () => stopRemoteLink())

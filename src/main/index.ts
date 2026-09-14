@@ -9,6 +9,7 @@ import { autoUpdater } from 'electron-updater'
 import { registerIPCHandlers } from './ipc/index'
 import { ircManager } from './irc/manager'
 import { parseIrcUrl } from '@shared/ircurl'
+import { restoreVault } from './vault/vault'
 import { initDatabase, closeDatabase } from './storage/database'
 import { loadSTSPolicies, persistSTSPoliciesWith } from './irc/features/sts'
 import { allSTSPolicies, saveSTSPolicy, forgetSTSPolicy } from './storage/models/sts'
@@ -273,7 +274,15 @@ function openIrcLink(raw: string): void {
   mainWindow?.show()
   mainWindow?.focus()
 
-  const known = getAllServers().find((server) => server.host.toLowerCase() === link.host.toLowerCase())
+  // Host *and* port. Matching on the host alone put an `irc://host:6667` link
+  // onto whichever network happened to be listed first at that address, which
+  // for anyone running more than one server on a box is the wrong one. A link
+  // that names no port matches any network at that address, since the default
+  // is a guess rather than something the user typed.
+  const sameHost = getAllServers().filter(
+    (server) => server.host.toLowerCase() === link.host.toLowerCase()
+  )
+  const known = sameHost.find((server) => server.port === link.port) ?? sameHost[0]
   if (!known) {
     sendToRenderer('link:add-server', { host: link.host, port: link.port, tls: link.tls, channel: link.channel })
     return
@@ -347,6 +356,11 @@ app.whenReady().then(async () => {
     // launch, which is exactly what the policy exists to close.
     persistSTSPoliciesWith({ save: saveSTSPolicy, forget: forgetSTSPolicy })
     loadSTSPolicies(allSTSPolicies())
+
+    // Open the shared config with the key the keychain kept, if the user asked
+    // for that. Without it every restart left the vault locked — and a locked
+    // vault silently stops servers, settings and channels reaching the phone.
+    restoreVault()
 
     // Credentials used to be written to disk in the clear; encrypt anything
     // left over from an older build before anything else reads them.

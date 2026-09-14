@@ -121,6 +121,18 @@ class SessionCoordinator(
     private var role = SessionRole.PRIMARY
     private var since: String? = null
     private var claiming = false
+
+    /**
+     * The primary we last handed the connections to.
+     *
+     * A device can be a follower and still be holding: it was on the network
+     * before the other one arrived, or it started as a follower because a
+     * desktop was paired. Nothing used to notice, so both devices sat on the
+     * same network under two nicks. Remembering which host we deferred to
+     * makes the hand-over happen once when that host appears, rather than on
+     * every heartbeat it sends.
+     */
+    private var deferredTo: String? = null
     private val peers = LinkedHashMap<String, PeerInfo>()
 
     private var heartbeat: Cancellable? = null
@@ -264,9 +276,11 @@ class SessionCoordinator(
         }
     }
 
-    private fun livePrimary(): PeerInfo? {
+    private fun livePrimary(): Map.Entry<String, PeerInfo>? {
         val cutoff = clock.now() - HEARTBEAT_TIMEOUT_MS
-        return peers.values.firstOrNull { it.role == SessionRole.PRIMARY && it.lastSeen >= cutoff }
+        return peers.entries.firstOrNull {
+            it.value.role == SessionRole.PRIMARY && it.value.lastSeen >= cutoff
+        }
     }
 
     /**
@@ -278,20 +292,31 @@ class SessionCoordinator(
     private fun evaluate() {
         val primary = livePrimary()
 
-        if (role == SessionRole.PRIMARY && primary != null && primary.priority > priority) {
+        if (role == SessionRole.PRIMARY && primary != null && primary.value.priority > priority) {
             // A better host is already up; step aside without being asked.
             becomeFollower()
             return
         }
 
-        if (role == SessionRole.PRIMARY && primary != null && primary.priority < priority) {
+        if (role == SessionRole.PRIMARY && primary != null && primary.value.priority < priority) {
             // Two primaries, and we outrank. Tell them to let go.
             transport.send(SessionFrame.Claim(priority))
             return
         }
 
-        if (role == SessionRole.FOLLOWER && primary != null && primary.priority < priority) {
+        if (role == SessionRole.FOLLOWER && primary != null && primary.value.priority < priority) {
             claim()
+            return
+        }
+
+        if (role == SessionRole.FOLLOWER && primary != null && primary.value.priority > priority) {
+            // Following a better host. If this phone is still on the network —
+            // which it is when it was already there as the desktop arrived —
+            // hand over now. Once per host, not once per heartbeat.
+            if (deferredTo != primary.key) {
+                deferredTo = primary.key
+                if (connections.holding().isNotEmpty()) connections.release()
+            }
             return
         }
 
@@ -322,6 +347,7 @@ class SessionCoordinator(
     }
 
     private fun becomePrimary() {
+        deferredTo = null
         role = SessionRole.PRIMARY
         since = isoNow()
         claiming = false
@@ -333,6 +359,7 @@ class SessionCoordinator(
     private fun becomeFollower() {
         role = SessionRole.FOLLOWER
         since = null
+        deferredTo = livePrimary()?.key
         connections.release()
         emit()
     }

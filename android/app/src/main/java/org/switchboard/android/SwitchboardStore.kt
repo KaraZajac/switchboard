@@ -537,6 +537,14 @@ class SwitchboardStore {
     val heldByDesktop = mutableSetOf<String>()
 
     fun applySnapshot(snapshot: JsonElement, serverList: JsonElement) {
+        // What each network is meant to be in, from the shared config. A
+        // snapshot is only true as of the instant it was taken, and the
+        // instant it is taken is `irc:connected` — before the desktop has
+        // joined anything. Channels joined during the round trip were then
+        // overwritten by that empty list and vanished here while the desktop
+        // sat in them. The config is the other half of the truth.
+        val configured = mutableMapOf<String, List<String>>()
+
         serverList.jsonArray.forEach { entry ->
             val server = entry.jsonObject
             val id = server["id"]?.str() ?: return@forEach
@@ -546,6 +554,9 @@ class SwitchboardStore {
                 host = server["host"]?.str() ?: "",
                 nick = server["nick"]?.str() ?: ""
             )
+            configured[id] = (server["autoJoin"] as? JsonArray)
+                ?.mapNotNull { it.str() }
+                .orEmpty()
         }
 
         heldByDesktop.clear()
@@ -600,10 +611,16 @@ class SwitchboardStore {
             //
             // Channels are the desktop's to declare; conversations with people
             // are this phone's own knowledge, and are kept.
-            val keep = channels[id].orEmpty().filterNot { isChannel(it.name) }
-            channels[id] = list + keep.filterNot { held ->
-                list.any { it.name.equals(held.name, true) }
+            // Conversations with people are this phone's own knowledge; so are
+            // the channels the config says belong to this network, which cover
+            // the gap between the snapshot being taken and the joins landing.
+            val keep = channels[id].orEmpty().filterNot { held ->
+                isChannel(held.name) && configured[id]?.any { it.equals(held.name, true) } != true
             }
+            val wanted = configured[id].orEmpty().map { Channel(name = it) }
+
+            channels[id] = (list + keep + wanted)
+                .distinctBy { it.name.lowercase() }
 
             // Whatever the desktop already knows about people's profiles
             live["metadata"]?.jsonObject?.forEach { (nick, profile) ->

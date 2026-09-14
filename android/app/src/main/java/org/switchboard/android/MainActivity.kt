@@ -312,7 +312,10 @@ fun App(
         val link = launchLink ?: return@LaunchedEffect
         onLinkConsumed()
         val servers = engine.listServers()
-        val known = servers.firstOrNull { it.host.equals(link.host, ignoreCase = true) }
+        // Host *and* port — see the desktop's `openIrcLink`. Two networks on
+        // one address is ordinary for anyone running their own server.
+        val sameHost = servers.filter { it.host.equals(link.host, ignoreCase = true) }
+        val known = sameHost.firstOrNull { it.port == link.port } ?: sameHost.firstOrNull()
         val target = link.channel ?: link.nick
         if (known != null) {
             if (store.servers[known.id]?.connected != true) engine.connectServer(known.id)

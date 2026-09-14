@@ -32,6 +32,7 @@ import {
   type SessionState
 } from '../session/coordinator'
 import { exportVault, importVault, onVaultChanged, vaultStatus } from '../vault/vault'
+import { setDeviceNotifier } from '../ipc/notify'
 import { shouldAdoptVault } from '@shared/vaultorder'
 import type { VaultEnvelope } from '../vault/crypto'
 
@@ -228,6 +229,10 @@ export async function startRemoteLink(): Promise<RemoteStatus> {
     broadcast({ t: 'event', channel, data })
   })
 
+  // What the window is told that did not come from a connection — a read
+  // marker set here on a server with no `draft/read-marker` to echo it
+  setDeviceNotifier((channel, data) => broadcast({ t: 'event', channel, data }))
+
   // A config change on this device is offered to the others straight away
   onVaultChanged((version) => {
     const updatedAt = exportVault()?.updatedAt
@@ -243,6 +248,7 @@ export async function startRemoteLink(): Promise<RemoteStatus> {
 }
 
 export async function stopRemoteLink(): Promise<RemoteStatus> {
+  setDeviceNotifier(null)
   setSetting(LINK_ENABLED, false)
   stopping = true
   pairing = null
@@ -474,6 +480,17 @@ function handlePeerFrame(
 ): void {
   switch (frame.t) {
     case 'heartbeat':
+      session.handleFrame(peerId, frame)
+
+      // Every beat carries the sender's vault version, so a desktop that was
+      // shut while the phone changed something notices it is behind without
+      // being told twice. The phone has always done this; the desktop only
+      // ever acted on an explicit offer, and a phone that made its change
+      // while unlinked had no way to send one — so that change sat on the
+      // phone until some edit here overtook it and wiped it out.
+      if (frame.vaultVersion > vaultStatus().version) send({ t: 'vault-request' })
+      return
+
     case 'claim':
     case 'yielded':
     case 'goodbye':

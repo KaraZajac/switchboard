@@ -282,6 +282,10 @@ function VaultPanel({
   const [confirmation, setConfirmation] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  // Default on, as it is on the phone. Without it every restart leaves the
+  // vault locked, and a locked vault quietly stops the two devices sharing
+  // anything at all.
+  const [keepOpen, setKeepOpen] = useState(true)
 
   if (!vault) return null
 
@@ -299,7 +303,11 @@ function VaultPanel({
 
     setBusy(true)
     try {
-      await window.switchboard.invoke(vault.exists ? 'vault:unlock' : 'vault:create', passphrase)
+      await window.switchboard.invoke(
+        vault.exists ? 'vault:unlock' : 'vault:create',
+        passphrase,
+        keepOpen && vault.canRemember
+      )
       setPassphrase('')
       setConfirmation('')
       await onChanged()
@@ -349,6 +357,11 @@ function VaultPanel({
               Your servers and passwords sync to paired devices, sealed with this passphrase.
               Check the fingerprint matches on the other device.
             </div>
+            <div className="mt-0.5">
+              {vault.remembered
+                ? 'Stays unlocked when Switchboard restarts — the key is held in this computer’s keychain.'
+                : 'Locks again when Switchboard restarts, and nothing syncs until you enter the passphrase.'}
+            </div>
           </>
         ) : vault.exists ? (
           'Locked. Enter the passphrase to sync config with your other devices.'
@@ -392,6 +405,24 @@ function VaultPanel({
               placeholder="Confirm passphrase"
               className="w-full rounded bg-gray-800 px-2.5 py-1.5 text-sm text-gray-100 outline-none ring-1 ring-gray-700 focus:ring-indigo-500"
             />
+          )}
+          {vault.canRemember && (
+            <label className="flex items-start gap-2 text-xs text-gray-400">
+              <input
+                type="checkbox"
+                checked={keepOpen}
+                onChange={(e) => setKeepOpen(e.target.checked)}
+                className="mt-0.5"
+              />
+              <span>
+                Stay unlocked on this computer
+                <span className="block text-gray-500">
+                  Keeps you from typing this every time Switchboard restarts, and keeps the
+                  two devices in step meanwhile. The key is held in the keychain, beside the
+                  one for your message history.
+                </span>
+              </span>
+            </label>
           )}
           {error && <div className="text-xs text-red-400">{error}</div>}
           <button

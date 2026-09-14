@@ -1,4 +1,11 @@
 import { randomBytes } from 'crypto'
+import {
+  forgetVaultKey,
+  keychainAvailable,
+  recallVaultKey,
+  rememberVaultKey,
+  vaultKeyRemembered
+} from './key'
 import { getSetting, setSetting } from '../storage/models/settings'
 import { SHARED_SETTINGS } from '@shared/settings'
 import { shouldAdoptVault } from '@shared/vaultorder'
@@ -67,9 +74,17 @@ export interface VaultStatus {
   updatedBy: string | null
   /** Short hash of the key, for checking two devices share a passphrase */
   fingerprint: string | null
+  /** The key is kept in the keychain, so a restart opens it without asking */
+  remembered: boolean
+  /** Whether this machine has a keychain to keep it in at all */
+  canRemember: boolean
 }
 
-// The key lives only in memory: locking the app is a restart away, and a key on
+// The key lives in memory, and — when the user asked for it — wrapped by the
+// keychain beside the database key, so a restart does not silently stop the
+// two devices sharing anything. See `./key`.
+// The old note, kept because the reasoning still applies to the passphrase
+// itself: locking the app is a restart away, and a key on
 // disk would defeat the point of asking for a passphrase.
 let sessionKey: Buffer | null = null
 
@@ -115,37 +130,65 @@ export function vaultStatus(): VaultStatus {
     version: envelope?.version ?? 0,
     updatedAt: envelope?.updatedAt ?? null,
     updatedBy: envelope?.updatedBy ?? null,
-    fingerprint: open && sessionKey ? keyFingerprint(sessionKey) : null
+    fingerprint: open && sessionKey ? keyFingerprint(sessionKey) : null,
+    remembered: vaultKeyRemembered(),
+    canRemember: keychainAvailable()
   }
 }
 
 /** Create the vault for the first time from whatever is configured locally. */
-export function createVault(passphrase: string): VaultStatus {
+export function createVault(passphrase: string, keepOpen = true): VaultStatus {
   if (readEnvelope()) throw new Error('A vault already exists on this device')
 
   const salt = generateSalt()
   sessionKey = deriveKey(passphrase, salt)
   const envelope = seal(sessionKey, salt, 1)
   writeEnvelope(envelope)
+  if (keepOpen) rememberVaultKey(sessionKey)
   announce?.(envelope.version)
   return vaultStatus()
 }
 
 /** Open the existing vault and adopt its contents locally. */
-export function unlockVault(passphrase: string): VaultStatus {
+export function unlockVault(passphrase: string, keepOpen = true): VaultStatus {
   const envelope = readEnvelope()
   if (!envelope) throw new Error('There is no vault on this device yet')
 
   const key = deriveKeyFor(envelope, passphrase)
   const payload = openVault<VaultPayload>(envelope, key) // throws if wrong
   sessionKey = key
+  if (keepOpen) rememberVaultKey(key)
 
   applyPayload(payload)
   return vaultStatus()
 }
 
+/**
+ * Open it again on launch with the key the keychain kept.
+ *
+ * Deliberately without applying the payload. On this device the database is
+ * the working copy and the envelope is sealed from it, so re-applying an
+ * envelope that predates a change made here would undo it. Anything the phone
+ * changed meanwhile arrives the usual way: it advertises a higher version in
+ * its heartbeat and this device asks for it.
+ */
+export function restoreVault(): VaultStatus {
+  if (sessionKey) return vaultStatus()
+  if (!readEnvelope()) return vaultStatus()
+
+  const key = recallVaultKey()
+  if (!key) return vaultStatus()
+
+  sessionKey = key
+  console.info('Shared config unlocked from the keychain')
+  return vaultStatus()
+}
+
 export function lockVault(): VaultStatus {
   sessionKey = null
+  // Locking on purpose means locked after a restart too, or the button does
+  // not do what it says
+  forgetVaultKey()
   return vaultStatus()
 }
 

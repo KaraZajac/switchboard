@@ -16,9 +16,24 @@ type Sink = (channel: string, data: unknown) => void
 
 let sink: Sink | null = null
 
+/**
+ * The other place these have to go.
+ *
+ * Some of what happens here is not the window's business alone — a phone
+ * showing the same conversations needs to hear it too. The IRC events reach it
+ * already, because the link subscribes to the manager; these do not go through
+ * the manager, so without a second sink they stopped at the window.
+ */
+let devices: Sink | null = null
+
 /** Called once, by whoever owns the window */
 export function setNotifier(next: Sink | null): void {
   sink = next
+}
+
+/** Called by the remote link while it is listening */
+export function setDeviceNotifier(next: Sink | null): void {
+  devices = next
 }
 
 /**
@@ -63,6 +78,10 @@ export function settingChanged(key: string): void {
  */
 export function readMarkerChanged(serverId: string, channel: string, timestamp: string): void {
   sink?.('irc:read-marker', { serverId, channel, timestamp })
+  // And to the phone. On a server that does echo `MARKREAD` both devices hear
+  // it from there, but on one that does not this was the window's news alone —
+  // so a conversation read at the desk stayed bold on the phone for ever.
+  devices?.('irc:read-marker', { serverId, channel, timestamp })
 }
 
 /**

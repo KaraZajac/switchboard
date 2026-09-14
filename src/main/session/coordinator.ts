@@ -118,6 +118,18 @@ export class SessionCoordinator {
   /** Set while we are still looking around, so a late peer can extend the wait */
   private discoveryTimer: ReturnType<typeof setTimeout> | null = null
   private discoveryDeadline = 0
+  /**
+   * The primary we last handed the connections to.
+   *
+   * A device can be a follower and still be holding: it was on the network
+   * before the other one arrived, or it started as a follower because a peer
+   * was paired. Nothing used to notice, so both devices sat on the same
+   * network under two nicks — the exact thing the discovery window exists to
+   * prevent, arrived at from the other direction. Remembering which host we
+   * deferred to makes the hand-over happen once when that host appears,
+   * rather than on every heartbeat it sends.
+   */
+  private deferredTo: string | null = null
 
   constructor(
     private readonly priority: number,
@@ -289,10 +301,10 @@ export class SessionCoordinator {
     if (changed) this.emit()
   }
 
-  private livePrimary(): { priority: number } | null {
+  private livePrimary(): { id: string; priority: number } | null {
     const cutoff = Date.now() - HEARTBEAT_TIMEOUT_MS
-    for (const peer of this.peers.values()) {
-      if (peer.role === 'primary' && peer.lastSeen >= cutoff) return peer
+    for (const [id, peer] of this.peers) {
+      if (peer.role === 'primary' && peer.lastSeen >= cutoff) return { id, priority: peer.priority }
     }
     return null
   }
@@ -322,6 +334,17 @@ export class SessionCoordinator {
     if (this.role === 'follower' && primary && primary.priority < this.priority) {
       // We outrank the current primary — ask it to hand over.
       this.claim()
+      return
+    }
+
+    if (this.role === 'follower' && primary && primary.priority > this.priority) {
+      // Following a better host. If this device is still on the network —
+      // which it is when it was already there as that host arrived — hand
+      // over now. Once per host, not once per heartbeat: see `deferredTo`.
+      if (this.deferredTo !== primary.id) {
+        this.deferredTo = primary.id
+        if (this.connections.holding().length > 0) this.connections.release()
+      }
       return
     }
 
@@ -367,6 +390,7 @@ export class SessionCoordinator {
 
   private becomePrimary(): void {
     this.endDiscovery()
+    this.deferredTo = null
     this.role = 'primary'
     this.since = new Date().toISOString()
     this.claiming = false
@@ -378,6 +402,7 @@ export class SessionCoordinator {
   private becomeFollower(): void {
     this.role = 'follower'
     this.since = null
+    this.deferredTo = this.livePrimary()?.id ?? null
     this.connections.release()
     this.emit()
   }

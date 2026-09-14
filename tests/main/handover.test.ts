@@ -13,13 +13,19 @@ const servers = vi.hoisted(() => ({
   list: [] as Array<{
     id: string
     autoConnect: boolean
+    autoJoin?: string[]
     saslMechanism?: string | null
     saslPassword?: string | null
   }>
 }))
 
 vi.mock('../../src/main/storage/models/server', () => ({
-  getAllServers: () => servers.list
+  getAllServers: () => servers.list,
+  getServer: (id: string) => servers.list.find((server) => server.id === id),
+  updateServer: (id: string, changes: Record<string, unknown>) => {
+    const server = servers.list.find((entry) => entry.id === id)
+    if (server) Object.assign(server, changes)
+  }
 }))
 vi.mock('../../src/main/storage/models/channel', () => ({
   getJoinedChannels: () => [],
@@ -28,6 +34,14 @@ vi.mock('../../src/main/storage/models/channel', () => ({
 }))
 vi.mock('../../src/main/storage/models/monitor', () => ({
   getMonitorList: () => []
+}))
+
+/** What the shared config was told, so a join can be checked for telling it */
+const vault = vi.hoisted(() => ({ reseals: 0 }))
+vi.mock('../../src/main/vault/vault', () => ({
+  resealVault: () => {
+    vault.reseals++
+  }
 }))
 
 const { IRCManager } = await import('../../src/main/irc/manager')
@@ -147,5 +161,53 @@ describe('handing over a network both devices can share', () => {
     manager.releaseConnections()
 
     expect(clients.size).toBe(0)
+  })
+})
+
+/**
+ * A channel joined here has to reach the phone, and the phone reads its
+ * channels out of the shared config — so joining has to reseal it. It did
+ * not: the config was only ever resealed by the settings and server-editing
+ * handlers, so a channel joined on the desktop stayed on the desktop until
+ * some unrelated edit happened to carry it across.
+ */
+describe('telling the other device about a channel', () => {
+  const joinFor = (manager: unknown, id: string, channel: string): void =>
+    (manager as { rememberJoin: (s: string, c: string) => void }).rememberJoin(id, channel)
+
+  const partFor = (manager: unknown, id: string, channel: string): void =>
+    (manager as { forgetJoin: (s: string, c: string) => void }).forgetJoin(id, channel)
+
+  beforeEach(() => {
+    vault.reseals = 0
+    servers.list = [{ id: 'a', autoConnect: true, autoJoin: [] }]
+  })
+
+  it('reseals the shared config when a channel is joined', () => {
+    const { manager } = managerWithFakeClients([])
+
+    joinFor(manager, 'a', '#lobby')
+
+    expect(servers.list[0].autoJoin).toEqual(['#lobby'])
+    expect(vault.reseals).toBe(1)
+  })
+
+  it('and when one is left', () => {
+    const { manager } = managerWithFakeClients([])
+
+    joinFor(manager, 'a', '#lobby')
+    partFor(manager, 'a', '#lobby')
+
+    expect(servers.list[0].autoJoin).toEqual([])
+    expect(vault.reseals).toBe(2)
+  })
+
+  it('says nothing when the channel is already listed', () => {
+    const { manager } = managerWithFakeClients([])
+
+    joinFor(manager, 'a', '#lobby')
+    joinFor(manager, 'a', '#LOBBY')
+
+    expect(vault.reseals).toBe(1)
   })
 })

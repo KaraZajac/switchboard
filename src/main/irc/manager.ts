@@ -14,6 +14,7 @@ import { getAllServers, getServer, updateServer } from '../storage/models/server
 import { getJoinedChannels, markChannelJoined, markChannelParted } from '../storage/models/channel'
 import { subscribeToMetadata, metadataValueFits } from './features/metadata'
 import { serversChanged } from '../ipc/notify'
+import { resealVault } from '../vault/vault'
 import { METADATA_KEYS, type UserMetadata } from '@shared/types/metadata'
 import { v4 as uuid } from 'uuid'
 import { friendListKind, friendListLines, friendListStatusLine } from '@shared/friends'
@@ -102,6 +103,10 @@ export class IRCManager {
 
     updateServer(serverId, { autoJoin: [...config.autoJoin, channel] })
     serversChanged()
+    // And into the shared config, or the phone never hears about a channel
+    // joined here — it reads its channel list out of the vault, and the vault
+    // was only ever resealed by the settings and server-editing handlers.
+    resealVault()
   }
 
   /**
@@ -120,6 +125,7 @@ export class IRCManager {
       autoJoin: config.autoJoin.filter((name) => foldCase(name) !== foldCase(channel))
     })
     serversChanged()
+    resealVault()
   }
 
   /**
@@ -197,7 +203,14 @@ export class IRCManager {
         .map((server) => server.id)
     )
 
-    this.released = [...this.clients.keys()].filter((serverId) => !shared.has(serverId))
+    const releasing = [...this.clients.keys()].filter((serverId) => !shared.has(serverId))
+
+    // Nothing to hand over. Deliberately without touching `released`: this is
+    // asked more than once, and forgetting what we let go of would mean
+    // dialling only the auto-connect list when we take the connections back.
+    if (releasing.length === 0) return
+
+    this.released = releasing
     for (const serverId of this.released) {
       this.disconnect(serverId)
     }
