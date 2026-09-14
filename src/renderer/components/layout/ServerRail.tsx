@@ -1,3 +1,4 @@
+import { Plus } from 'lucide-react'
 import { useState } from 'react'
 import { useServerStore } from '../../stores/serverStore'
 import { useChannelStore } from '../../stores/channelStore'
@@ -52,7 +53,7 @@ export function ServerRail() {
   }
 
   return (
-    <div className="flex w-[72px] shrink-0 flex-col items-center bg-gray-950 py-3 no-select">
+    <div className="flex w-[72px] shrink-0 flex-col items-center gap-2 bg-gray-950 py-3 no-select">
       {/* Direct messages */}
       <RailItem
         active={dmMode}
@@ -152,9 +153,7 @@ export function ServerRail() {
         {/* Add a server */}
         <RailItem label="Add a server" onClick={() => openModal('add-server')}>
           <span className="flex h-full w-full items-center justify-center bg-gray-800 text-green-400 transition-colors group-hover:bg-green-600 group-hover:text-white">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-              <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
-            </svg>
+            <Plus size={24} strokeWidth={2} aria-hidden="true" />
           </span>
         </RailItem>
       </div>
@@ -187,7 +186,7 @@ const STATUS_DOT: Record<ConnectionStatus, string> = {
 }
 
 function RailSeparator() {
-  return <div className="my-2 h-0.5 w-8 shrink-0 rounded-full bg-gray-800" />
+  return <div className="h-0.5 w-8 shrink-0 rounded-full bg-gray-800" />
 }
 
 interface RailItemProps {
@@ -220,7 +219,7 @@ function RailItem({
   onContextMenu
 }: RailItemProps) {
   return (
-    <div className="group relative shrink-0 py-0.5">
+    <div className="group relative shrink-0">
       {/* Left edge pill */}
       <span
         className={`absolute -left-3 top-1/2 w-1 -translate-y-1/2 rounded-r-full bg-gray-100 transition-all duration-200 ${pillHeight(
@@ -259,7 +258,7 @@ function RailItem({
             height: badgeDiameter(badge) + 6,
             fontSize: badgeDiameter(badge) > 22 ? 10 : 11
           }}
-          className={`pointer-events-none absolute -bottom-1.5 -right-1.5 flex items-center justify-center rounded-full border-[3px] border-gray-950 font-bold leading-none text-white ${
+          className={`pointer-events-none absolute -bottom-1 -right-1 flex items-center justify-center rounded-full border-[3px] border-gray-950 font-bold leading-none text-white ${
             badgeMuted ? 'bg-gray-600' : 'bg-red-500'
           }`}
         >
@@ -270,7 +269,7 @@ function RailItem({
       {/* Connection status */}
       {status && badge === 0 && (
         <span
-          className={`pointer-events-none absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full border-[3px] border-gray-950 ${STATUS_DOT[status]}`}
+          className={`pointer-events-none absolute bottom-0 right-0 h-4 w-4 rounded-full border-[3px] border-gray-950 ${STATUS_DOT[status]}`}
         />
       )}
 

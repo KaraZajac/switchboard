@@ -1,3 +1,6 @@
+import { Plus, X } from 'lucide-react'
+import { IconButton } from '../common/IconButton'
+import { SectionHeader } from '../common/SectionHeader'
 import { useState, useCallback } from 'react'
 import { useUserStore, type MonitoredNick } from '../../stores/userStore'
 import { useServerStore } from '../../stores/serverStore'
@@ -17,6 +20,7 @@ export function FriendList() {
   )
 
   const [addingNick, setAddingNick] = useState(false)
+  const [collapsed, setCollapsed] = useState(false)
   const [newNick, setNewNick] = useState('')
 
   const online = monitoredNicks.filter((m) => m.online)
@@ -48,43 +52,25 @@ export function FriendList() {
   }, [activeServerId])
 
   if (connectionStatus !== 'connected') return null
+  const header = (
+    <SectionHeader
+      label="Friends"
+      collapsed={collapsed}
+      onToggle={() => setCollapsed((c) => !c)}
+      action={{ icon: Plus, label: 'Add friend', onClick: () => setAddingNick(true) }}
+    />
+  )
   if (monitoredNicks.length === 0 && !addingNick) {
     return (
       <div>
-        <div className="mb-0.5 mt-3 flex items-center justify-between pl-[15px] pr-1">
-          <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">
-            Friends
-          </span>
-          <button
-            onClick={() => setAddingNick(true)}
-            className="rounded p-0.5 text-gray-400 hover:bg-gray-700 hover:text-gray-200"
-            title="Add friend"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
-            </svg>
-          </button>
-        </div>
+        {header}
       </div>
     )
   }
 
   return (
     <div>
-      <div className="mb-0.5 mt-3 flex items-center justify-between pl-[15px] pr-1">
-        <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">
-          Friends
-        </span>
-        <button
-          onClick={() => setAddingNick(true)}
-          className="rounded p-0.5 text-gray-400 hover:bg-gray-700 hover:text-gray-200"
-          title="Add friend"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
-          </svg>
-        </button>
-      </div>
+      {header}
 
       {addingNick && (
         <form
@@ -109,9 +95,9 @@ export function FriendList() {
         </form>
       )}
 
-      {online.length > 0 && (
+      {!collapsed && online.length > 0 && (
         <div className="mb-1">
-          <span className="px-1 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+          <span className="block px-2 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
             Online — {online.length}
           </span>
           {online.map((m) => (
@@ -126,9 +112,9 @@ export function FriendList() {
         </div>
       )}
 
-      {offline.length > 0 && (
+      {!collapsed && offline.length > 0 && (
         <div className="mb-1">
-          <span className="px-1 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+          <span className="block px-2 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
             Offline — {offline.length}
           </span>
           {offline.map((m) => (
@@ -171,15 +157,16 @@ function FriendEntry({ nick, online, onRemove, onClick }: { nick: string; online
         {nick}
       </span>
       {hover && (
-        <button
-          onClick={(e) => { e.stopPropagation(); onRemove(nick) }}
-          className="rounded p-0.5 text-gray-500 hover:text-red-400"
-          title="Remove friend"
-        >
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
-          </svg>
-        </button>
+        <IconButton
+          size="sm"
+          icon={X}
+          label="Remove friend"
+          danger
+          onClick={(e) => {
+            e.stopPropagation()
+            onRemove(nick)
+          }}
+        />
       )}
     </div>
   )

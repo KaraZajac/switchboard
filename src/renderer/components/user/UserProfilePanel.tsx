@@ -1,3 +1,6 @@
+import { Settings } from 'lucide-react'
+import { IconButton } from '../common/IconButton'
+import { useUIStore } from '../../stores/uiStore'
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
 import { resolveProfile, hasOverride, overrideFrom } from '@shared/profile'
 import { hasMetadata } from '@shared/metadata'
@@ -91,9 +94,10 @@ export function UserProfilePanel() {
 
   return (
     <div className="relative bg-gray-950">
+      <div className="flex items-center pr-2">
       <button
         onClick={() => setShowPopup(!showPopup)}
-        className="flex w-full items-center gap-2 px-3 py-2 hover:bg-gray-700/50"
+        className="flex min-w-0 flex-1 items-center gap-2 px-4 py-2 text-left hover:bg-gray-700/50"
       >
         {/* Avatar */}
         {avatarUrl ? (
@@ -111,16 +115,13 @@ export function UserProfilePanel() {
             {isAway ? awayMessage : myMetadata.status || 'Online'}
           </div>
         </div>
-
-        {/* Settings gear */}
-        <svg
-          className="h-4 w-4 shrink-0 text-gray-400 hover:text-gray-200"
-          viewBox="0 0 24 24"
-          fill="currentColor"
-        >
-          <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.49.49 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 0 0-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.49.49 0 0 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z" />
-        </svg>
       </button>
+      <IconButton
+        icon={Settings}
+        label="Settings"
+        onClick={() => useUIStore.getState().openModal('settings')}
+      />
+      </div>
 
       {/* Edit popup */}
       {showPopup && (

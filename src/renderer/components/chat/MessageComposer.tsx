@@ -1,3 +1,17 @@
+import {
+  Bold,
+  CornerUpLeft,
+  ImagePlay,
+  Italic,
+  Loader2,
+  Palette,
+  Plus,
+  Smile,
+  Underline,
+  X,
+  type LucideIcon
+} from 'lucide-react'
+import { ICON, IconButton } from '../common/IconButton'
 import { useState, useRef, useCallback, useEffect, type KeyboardEvent } from 'react'
 import type { ReplyTarget } from '../../stores/messageStore'
 import type { ChannelUser } from '@shared/types/channel'
@@ -571,34 +585,18 @@ export function MessageComposer({
       {/* Reply preview bar */}
       {replyTarget && (
         <div className="mb-1 flex items-center gap-2 rounded-t-lg bg-gray-700/50 px-4 py-2">
-          <svg
-            className="h-4 w-4 flex-shrink-0 text-gray-400"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-          >
-            <path d="M9 17l-5-5 5-5" />
-            <path d="M4 12h12a4 4 0 0 1 0 8h-1" />
-          </svg>
+          <CornerUpLeft size={ICON.sm} strokeWidth={2} className="shrink-0 text-gray-400" aria-hidden="true" />
           <span className="text-xs text-gray-400">Replying to</span>
           <span className="text-xs font-medium text-gray-200">{replyTarget.nick}</span>
           <span className="flex-1 truncate text-xs text-gray-500">{replyTarget.content}</span>
-          <button
-            onClick={onCancelReply}
-            className="flex-shrink-0 rounded p-0.5 text-gray-400 hover:bg-gray-600 hover:text-gray-200"
-          >
-            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
-            </svg>
-          </button>
+          <IconButton size="sm" surface="raised" icon={X} label="Cancel reply" onClick={onCancelReply} />
         </div>
       )}
 
       <div className={`relative rounded-lg bg-gray-700 ${replyTarget ? 'rounded-t-none' : ''}`}>
         {/* :emoji name being typed */}
         {emojiMatches.length > 0 && emojiQuery !== null && (
-          <div className="absolute bottom-full left-0 z-20 mb-1 w-72 overflow-hidden rounded-lg border border-gray-600 bg-gray-800 py-1 shadow-xl">
+          <div className="absolute bottom-full left-0 z-30 mb-2 w-72 overflow-hidden rounded-lg bg-gray-900 py-1 shadow-xl ring-1 ring-gray-700">
             {emojiMatches.map((entry, i) => (
               <button
                 key={entry.name}
@@ -621,7 +619,7 @@ export function MessageComposer({
         {mentionCandidates.length > 0 && mentionQuery !== null && (
           <div
             ref={mentionRef}
-            className="absolute bottom-full left-0 z-20 mb-1 w-64 overflow-hidden rounded-lg border border-gray-600 bg-gray-800 py-1 shadow-xl"
+            className="absolute bottom-full left-0 z-30 mb-2 w-72 overflow-hidden rounded-lg bg-gray-900 py-1 shadow-xl ring-1 ring-gray-700"
           >
             {mentionCandidates.map((nick, i) => (
               <button
@@ -645,7 +643,7 @@ export function MessageComposer({
         <div className="flex items-end">
           {/* Upload button */}
           {hasFilehost && (
-            <button
+            <IconButton
               onClick={async () => {
                 if (uploading || disabled) return
                 setUploading(true)
@@ -663,32 +661,11 @@ export function MessageComposer({
                 }
               }}
               disabled={disabled || uploading}
-              className="mb-2 ml-2 rounded p-1.5 text-gray-400 hover:bg-gray-600 hover:text-gray-200 disabled:opacity-50"
-              title="Upload a file"
-            >
-              {uploading ? (
-                <svg
-                  className="h-5 w-5 animate-spin"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                >
-                  <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
-                </svg>
-              ) : (
-                <svg
-                  className="h-5 w-5"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                >
-                  <line x1="12" y1="5" x2="12" y2="19" />
-                  <line x1="5" y1="12" x2="19" y2="12" />
-                </svg>
-              )}
-            </button>
+              icon={uploading ? Loader2 : Plus}
+              label="Upload a file"
+              surface="raised"
+              className={`mb-2 ml-2 ${uploading ? '[&>svg]:animate-spin' : ''}`}
+            />
           )}
 
           <textarea
@@ -730,61 +707,50 @@ export function MessageComposer({
             Formatting. The keyboard shortcuts are the ones every client has
             used since mIRC, but a shortcut nobody can see is barely a feature.
           */}
-          <div className="mb-2 flex items-center">
+          <div className="mb-2 mr-2 flex items-center gap-0.5">
             {(
               [
-                ['bold', 'B', 'font-bold', 'Bold (Ctrl+B)'],
-                ['italic', 'I', 'font-serif italic', 'Italic (Ctrl+I)'],
-                ['underline', 'U', 'underline', 'Underline (Ctrl+U)']
-              ] as [FormattingMark, string, string, string][]
-            ).map(([which, glyph, style, title]) => (
-              <button
+                ['bold', Bold, 'Bold (Ctrl+B)'],
+                ['italic', Italic, 'Italic (Ctrl+I)'],
+                ['underline', Underline, 'Underline (Ctrl+U)']
+              ] as [FormattingMark, LucideIcon, string][]
+            ).map(([which, icon, title]) => (
+              <IconButton
                 key={which}
-                onClick={() => applyMark(which)}
+                icon={icon}
+                label={title}
+                surface="raised"
                 disabled={disabled}
-                title={title}
-                className={`h-7 w-7 rounded text-sm text-gray-400 hover:bg-gray-600 hover:text-gray-200 disabled:opacity-50 ${style}`}
-              >
-                {glyph}
-              </button>
+                onClick={() => applyMark(which)}
+              />
             ))}
-
-            <button
-              onClick={() => setShowColours(!showColours)}
+            <IconButton
+              icon={Palette}
+              label="Colour"
+              surface="raised"
               disabled={disabled}
-              title="Colour"
-              className="flex h-7 w-7 items-center justify-center rounded text-gray-400 hover:bg-gray-600 hover:text-gray-200 disabled:opacity-50"
-            >
-              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9c.83 0 1.5-.67 1.5-1.5 0-.39-.15-.74-.39-1.01a1.49 1.49 0 0 1 1.14-2.49H16c2.76 0 5-2.24 5-5 0-4.42-4.03-8-9-8zm-5.5 9a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm3-4a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm5 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm3 4a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3z" />
-              </svg>
-            </button>
+              active={showColours}
+              onClick={() => setShowColours(!showColours)}
+            />
+            {/* Emoji picker, for the face you know and cannot name */}
+            <IconButton
+              icon={Smile}
+              label="Emoji"
+              surface="raised"
+              disabled={disabled}
+              active={showEmojiPicker}
+              onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+            />
+            {/* GIF button */}
+            <IconButton
+              icon={ImagePlay}
+              label="Search GIFs"
+              surface="raised"
+              disabled={disabled}
+              active={showGifPicker}
+              onClick={() => setShowGifPicker(!showGifPicker)}
+            />
           </div>
-
-          {/* Emoji picker, for the face you know and cannot name */}
-          <button
-            onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-            disabled={disabled}
-            className="mb-2 mr-1 rounded p-1.5 text-gray-400 hover:bg-gray-600 hover:text-gray-200 disabled:opacity-50"
-            title="Emoji"
-            type="button"
-          >
-            <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm3.5-9a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm-7 0a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm3.5 6.5c2.33 0 4.31-1.46 5.11-3.5H6.89c.8 2.04 2.78 3.5 5.11 3.5z" />
-            </svg>
-          </button>
-
-          {/* GIF button */}
-          <button
-            onClick={() => setShowGifPicker(!showGifPicker)}
-            disabled={disabled}
-            className="mb-2 mr-2 rounded p-1.5 text-gray-400 hover:bg-gray-600 hover:text-gray-200 disabled:opacity-50"
-            title="Search GIFs"
-          >
-            <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14zm-7-2h2v-4h-2v2h-2v-2H8v4h2v-2h2v2zm4-4h2v-2h-2v2zm0 4h2v-2h-2v2z" />
-            </svg>
-          </button>
         </div>
 
         {/*

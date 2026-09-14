@@ -1,3 +1,5 @@
+import { Plus, X } from 'lucide-react'
+import { IconButton } from '../common/IconButton'
 import { useState, useRef, useEffect } from 'react'
 import { useServerStore } from '../../stores/serverStore'
 import { useChannelStore } from '../../stores/channelStore'
@@ -82,15 +84,7 @@ export function DMSidebar() {
       {/* Header */}
       <div className="flex h-12 items-center justify-between border-b border-gray-700 px-4 shadow-sm">
         <span className="font-semibold">Direct Messages</span>
-        <button
-          onClick={() => setShowInput(!showInput)}
-          className="rounded p-0.5 text-gray-400 hover:bg-gray-700 hover:text-gray-200"
-          title="New message"
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
-          </svg>
-        </button>
+        <IconButton size="sm" icon={Plus} label="New message" active={showInput} onClick={() => setShowInput(!showInput)} />
       </div>
 
       {/* New DM input */}
@@ -159,18 +153,16 @@ export function DMSidebar() {
               </button>
 
               {/* Close button on hover */}
-              <button
+              <IconButton
+                size="sm"
+                icon={X}
+                label="Close conversation"
+                className="absolute right-1 top-1/2 hidden -translate-y-1/2 group-hover:inline-flex"
                 onClick={(e) => {
                   e.stopPropagation()
                   handleClose(dm.serverId, dm.nick)
                 }}
-                className="absolute right-1 top-1/2 hidden -translate-y-1/2 rounded p-0.5 text-gray-500 hover:bg-gray-600 hover:text-gray-300 group-hover:block"
-                title="Close conversation"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
-                </svg>
-              </button>
+              />
             </div>
           )
         })}

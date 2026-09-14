@@ -1,3 +1,5 @@
+import { X } from 'lucide-react'
+import { IconButton } from '../common/IconButton'
 import { useEffect, useRef, useState } from 'react'
 import { EMOJI, emojiCandidates } from '@shared/emoji'
 
@@ -46,14 +48,7 @@ export function EmojiPicker({
           placeholder="Search by name — smile, tada, cat…"
           className="flex-1 bg-transparent text-sm text-gray-100 placeholder-gray-500 outline-none"
         />
-        <button
-          onClick={onClose}
-          className="text-gray-500 hover:text-gray-300"
-          title="Close"
-          type="button"
-        >
-          ×
-        </button>
+        <IconButton size="sm" icon={X} label="Close" onClick={onClose} />
       </div>
       <div className="grid max-h-64 grid-cols-8 gap-0.5 overflow-y-auto p-2">
         {shown.map((entry) => (

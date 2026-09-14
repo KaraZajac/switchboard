@@ -1,3 +1,6 @@
+import { BellOff, ChevronDown, Hash, Plus, Server, Shield } from 'lucide-react'
+import { ICON } from '../common/IconButton'
+import { SectionHeader } from '../common/SectionHeader'
 import { useState, useCallback, useMemo } from 'react'
 import { useServerStore } from '../../stores/serverStore'
 import { useChannelStore } from '../../stores/channelStore'
@@ -80,7 +83,7 @@ export function ChannelSidebar() {
           const rect = e.currentTarget.getBoundingClientRect()
           setServerMenu(serverMenu ? null : { x: rect.left + 8, y: rect.bottom + 2 })
         }}
-        className="flex h-12 shrink-0 items-center justify-between gap-2 border-b border-gray-950/70 px-4 text-left shadow-sm transition-colors hover:bg-gray-700/30"
+        className="flex h-12 shrink-0 items-center justify-between gap-2 border-b border-gray-700 px-4 text-left shadow-sm transition-colors hover:bg-gray-700/30"
         title="Server options"
       >
         <span className="truncate font-semibold text-gray-100">{server?.name || 'No Server'}</span>
@@ -99,16 +102,12 @@ export function ChannelSidebar() {
               }
             />
           )}
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="currentColor"
-            className={`text-gray-400 transition-transform ${serverMenu ? 'rotate-180' : ''}`}
+          <ChevronDown
+            size={ICON.sm}
+            strokeWidth={2}
             aria-hidden="true"
-          >
-            <path d="M7 10l5 5 5-5z" />
-          </svg>
+            className={`text-gray-400 transition-transform ${serverMenu ? 'rotate-180' : ''}`}
+          />
         </span>
       </button>
 
@@ -125,36 +124,16 @@ export function ChannelSidebar() {
         )}
 
         {(channels.length > 0 || connectionStatus === 'connected') && (
-          <div className="mb-0.5 mt-3 flex items-center justify-between pl-0.5 pr-1">
-            <button
-              onClick={() => setChannelsCollapsed((c) => !c)}
-              className="flex items-center gap-0.5 text-xs font-semibold uppercase tracking-wide text-gray-400 transition-colors hover:text-gray-200"
-              title={channelsCollapsed ? 'Show channels' : 'Hide channels'}
-            >
-              <svg
-                width="12"
-                height="12"
-                viewBox="0 0 24 24"
-                fill="currentColor"
-                className={`transition-transform ${channelsCollapsed ? '-rotate-90' : ''}`}
-                aria-hidden="true"
-              >
-                <path d="M7 10l5 5 5-5z" />
-              </svg>
-              Channels
-            </button>
-            {connectionStatus === 'connected' && (
-              <button
-                onClick={() => setShowBrowser(true)}
-                className="rounded p-0.5 text-gray-400 transition-colors hover:bg-gray-700 hover:text-gray-100"
-                title="Browse channels"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
-                </svg>
-              </button>
-            )}
-          </div>
+          <SectionHeader
+            label="Channels"
+            collapsed={channelsCollapsed}
+            onToggle={() => setChannelsCollapsed((c) => !c)}
+            action={
+              connectionStatus === 'connected'
+                ? { icon: Plus, label: 'Browse channels', onClick: () => setShowBrowser(true) }
+                : undefined
+            }
+          />
         )}
 
         {!channelsCollapsed &&
@@ -176,7 +155,7 @@ export function ChannelSidebar() {
                 <button
                   onClick={() => handleChannelClick(ch.name)}
                   onContextMenu={(e) => handleContextMenu(e, ch.name, ch.muted)}
-                  className={`mb-0.5 flex h-8 w-full items-center gap-1.5 rounded-md px-2 text-left transition-colors ${
+                  className={`mb-0.5 flex h-8 w-full items-center gap-2 rounded-md px-2 text-left transition-colors ${
                     isActive
                       ? 'bg-gray-700 text-white'
                       : hasUnread
@@ -186,18 +165,12 @@ export function ChannelSidebar() {
                           : 'text-gray-400 hover:bg-gray-700/40 hover:text-gray-200'
                   }`}
                 >
-                  <span className="text-lg leading-none text-gray-500">#</span>
+                  <Hash size={ICON.sm} strokeWidth={2} className="shrink-0 text-gray-500" aria-hidden="true" />
                   <span className={`flex-1 truncate ${hasUnread && !isActive ? 'font-semibold' : ''}`}>
                     {ch.name.replace(/^#/, '')}
                   </span>
                   {ch.muted && (
-                    <svg
-                      className="h-3.5 w-3.5 shrink-0 text-gray-500"
-                      viewBox="0 0 24 24"
-                      fill="currentColor"
-                    >
-                      <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51A8.796 8.796 0 0 0 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06a8.99 8.99 0 0 0 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z" />
-                    </svg>
+                    <BellOff size={ICON.sm} strokeWidth={2} className="shrink-0 text-gray-500" aria-hidden="true" />
                   )}
                   {badge && (
                     <span
@@ -365,18 +338,8 @@ function serviceEntries(
 }
 
 function ServiceIcon({ type }: { type: 'server' | 'service' }) {
-  if (type === 'server') {
-    return (
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className="shrink-0 text-gray-500">
-        <path d="M20 3H4c-1.1 0-2 .9-2 2v4c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 6H4V5h16v4zm0 4H4c-1.1 0-2 .9-2 2v4c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2v-4c0-1.1-.9-2-2-2zm0 6H4v-4h16v4zM6 7.5c.55 0 1-.45 1-1s-.45-1-1-1-1 .45-1 1 .45 1 1 1zm0 8c.55 0 1-.45 1-1s-.45-1-1-1-1 .45-1 1 .45 1 1 1z" />
-      </svg>
-    )
-  }
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className="shrink-0 text-gray-500">
-      <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z" />
-    </svg>
-  )
+  const Icon = type === 'server' ? Server : Shield
+  return <Icon size={ICON.sm} strokeWidth={2} className="shrink-0 text-gray-500" aria-hidden="true" />
 }
 
 interface ServiceItemsProps {

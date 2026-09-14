@@ -112,7 +112,7 @@ export function GifPicker({ onSelect, onClose }: GifPickerProps) {
   return (
     <div
       ref={panelRef}
-      className="absolute bottom-full right-0 z-50 mb-2 w-96 rounded-lg border border-gray-700 bg-gray-800 shadow-xl"
+      className="absolute bottom-full right-0 z-30 mb-2 w-96 rounded-lg bg-gray-900 shadow-xl ring-1 ring-gray-700"
     >
       {/* Tabs */}
       <div className="flex border-b border-gray-700 px-2 pt-2">
