@@ -96,6 +96,8 @@ fun Navigator(
     onLeave: (serverId: String, channel: String) -> Unit,
     isChannelMuted: (serverId: String, channel: String) -> Boolean,
     onToggleChannelMute: (serverId: String, channel: String) -> Unit,
+    notifiesAll: (serverId: String, channel: String) -> Boolean,
+    onToggleNotifyAll: (serverId: String, channel: String) -> Unit,
     onOpenSettings: () -> Unit,
     onEditProfile: () -> Unit,
     onToggleAway: (serverId: String, away: Boolean) -> Unit,
@@ -132,6 +134,8 @@ fun Navigator(
                     onLeave = onLeave,
                     isChannelMuted = isChannelMuted,
                     onToggleChannelMute = onToggleChannelMute,
+                    notifiesAll = notifiesAll,
+                    onToggleNotifyAll = onToggleNotifyAll,
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -492,6 +496,8 @@ private fun ChannelList(
     onLeave: (serverId: String, channel: String) -> Unit,
     isChannelMuted: (serverId: String, channel: String) -> Boolean,
     onToggleChannelMute: (serverId: String, channel: String) -> Unit,
+    notifiesAll: (serverId: String, channel: String) -> Boolean,
+    onToggleNotifyAll: (serverId: String, channel: String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var joining by remember { mutableStateOf(false) }
@@ -658,11 +664,16 @@ private fun ChannelList(
                 ChannelMenu(
                     name = channel.name,
                     muted = muted,
+                    everyLine = serverId != null && notifiesAll(serverId, channel.name),
                     expanded = channelMenu == channel.name,
                     onDismiss = { channelMenu = null },
                     onMute = {
                         channelMenu = null
                         serverId?.let { onToggleChannelMute(it, channel.name) }
+                    },
+                    onNotifyAll = {
+                        channelMenu = null
+                        serverId?.let { onToggleNotifyAll(it, channel.name) }
                     },
                     onLeave = {
                         channelMenu = null
@@ -932,9 +943,12 @@ private fun DirectMessageList(
 private fun ChannelMenu(
     name: String,
     muted: Boolean,
+    /** Every line rings here, not only your name */
+    everyLine: Boolean,
     expanded: Boolean,
     onDismiss: () -> Unit,
     onMute: () -> Unit,
+    onNotifyAll: () -> Unit,
     onLeave: () -> Unit
 ) {
     DropdownMenu(
@@ -950,6 +964,16 @@ private fun ChannelMenu(
         DropdownMenuItem(
             text = { Text(if (muted) "Unmute" else "Mute", color = Text0, fontSize = 14.sp) },
             onClick = onMute
+        )
+        DropdownMenuItem(
+            text = {
+                Text(
+                    if (everyLine) "Notify for mentions only" else "Notify for every message",
+                    color = Text0,
+                    fontSize = 14.sp
+                )
+            },
+            onClick = onNotifyAll
         )
         DropdownMenuItem(
             text = { Text("Leave", color = Red, fontSize = 14.sp) },

@@ -18,12 +18,16 @@ import { METADATA_KEYS, type UserMetadata } from '@shared/types/metadata'
 import { v4 as uuid } from 'uuid'
 import { friendListKind, friendListLines, friendListStatusLine } from '@shared/friends'
 import { resolveProfile, keysToClear } from '@shared/profile'
+import { secretsMasked } from '@shared/services'
+import { eventLine } from '@shared/events'
+import { isServiceNick } from '@shared/constants'
 import { performLines } from '@shared/aliases'
 import { logMessage } from '../storage/logfile'
 import { noteDccOffer } from './features/dcc'
 import { runCommand } from './commands'
 import { isIgnored, type IgnoreEntry, type IgnoreScope } from '@shared/ignore'
 import { getSetting } from '../storage/models/settings'
+import { logMessage as writeLogLine } from '../logging'
 
 /** The vault key both clients keep the person's own profile under */
 const DEFAULT_PROFILE = 'profile'
@@ -33,6 +37,8 @@ const IGNORE_LIST = 'ignores'
 
 /** Whether to go back to a channel after being kicked out of it */
 const REJOIN_ON_KICK = 'rejoinOnKick'
+/** Whether joins, parts and quits are lines in the conversation — see `@shared/events` */
+const SHOW_JOINS_PARTS = 'showJoinsParts'
 
 /** How long to wait before doing so — shared, so the phone waits the same */
 const REJOIN_DELAY_MS = REJOIN_AFTER_KICK_MS
@@ -352,6 +358,18 @@ export class IRCManager {
    * The same event a server echo produces, so nothing downstream needs to know
    * which of the two it was.
    */
+  /**
+   * What a line of ours to services is kept as: its password gone.
+   *
+   * Applied where a message becomes a stored one, live or replayed, so the
+   * secret never reaches the database or the window. See `secretsMasked`.
+   */
+  private kept(client: IRCClient, channel: string, nick: string, content: string): string {
+    if (!isServiceNick(channel)) return content
+    if (client.state.casemap(nick) !== client.state.casemap(client.state.nick)) return content
+    return secretsMasked(channel, content)
+  }
+
   announceMetadata(serverId: string, target: string, key: string, value: string): void {
     this.send('irc:metadata', { serverId, target, key, value })
   }
@@ -415,6 +433,15 @@ export class IRCManager {
   }
 
   private send(channel: string, data: unknown): void {
+    // Every line that reaches the window is a line for the log — see `logging.ts`
+    if (channel === 'irc:message') {
+      const { serverId, channel: target, message } = data as {
+        serverId: string
+        channel: string
+        message: ChatMessage
+      }
+      writeLogLine(serverId, target, message)
+    }
     if (this.mainWindow && !this.mainWindow.isDestroyed()) {
       this.mainWindow.webContents.send(channel, data)
     }
@@ -533,6 +560,14 @@ export class IRCManager {
 
     client.events.on('disconnected', (reason) => {
       this.send('irc:disconnected', { serverId, reason })
+    })
+
+    client.events.on('reconnecting', (delayMs) => {
+      this.send('irc:reconnecting', { serverId, delayMs })
+    })
+
+    client.events.on('certificate', (problem) => {
+      this.send('irc:certificate', { serverId, ...problem })
     })
 
     client.events.on('connectionError', (error) => {
@@ -700,7 +735,7 @@ export class IRCManager {
         channel: data.channel,
         nick: data.nick,
         userHost: data.userHost,
-        content: data.content,
+        content: this.kept(client, data.channel, data.nick, data.content),
         type: data.type,
         tags: data.tags as Record<string, string>,
         replyTo: data.replyTo || null,
@@ -838,14 +873,16 @@ export class IRCManager {
 
     // Chathistory batch (including draft/event-playback events)
     client.events.on('chathistoryBatch', (data: { target: string; messages: IRCMessage[] }) => {
+      // The noisy three only where they are wanted, the same as live — a
+      // reconnect used to replay every join and quit into a conversation
+      // that showed none of them as they happened.
+      const showJoins = getSetting<boolean>(SHOW_JOINS_PARTS) === true
       const chatMessages: ChatMessage[] = data.messages
         .filter(
           (m) =>
             m.command === 'PRIVMSG' ||
             m.command === 'NOTICE' ||
-            m.command === 'JOIN' ||
-            m.command === 'PART' ||
-            m.command === 'QUIT' ||
+            ((m.command === 'JOIN' || m.command === 'PART' || m.command === 'QUIT') && showJoins) ||
             m.command === 'NICK' ||
             m.command === 'TOPIC' ||
             m.command === 'KICK'
@@ -863,7 +900,7 @@ export class IRCManager {
               channel: data.target,
               nick: '',
               userHost: null,
-              content: `${nick} joined the channel`,
+              content: eventLine({ kind: 'join', nick }),
               type: 'system' as const,
               tags: {},
               replyTo: null,
@@ -875,14 +912,14 @@ export class IRCManager {
             }
           }
           if (m.command === 'PART') {
-            const reason = m.params[1] ? ` (${m.params[1]})` : ''
+            const reason = m.params[1] || null
             return {
               id: typeof m.tags['msgid'] === 'string' ? m.tags['msgid'] : uuid(),
               serverId,
               channel: data.target,
               nick: '',
               userHost: null,
-              content: `${nick} left the channel${reason}`,
+              content: eventLine({ kind: 'part', nick, reason }),
               type: 'system' as const,
               tags: {},
               replyTo: null,
@@ -894,14 +931,14 @@ export class IRCManager {
             }
           }
           if (m.command === 'QUIT') {
-            const reason = m.params[0] ? ` (${m.params[0]})` : ''
+            const reason = m.params[0] || null
             return {
               id: typeof m.tags['msgid'] === 'string' ? m.tags['msgid'] : uuid(),
               serverId,
               channel: data.target,
               nick: '',
               userHost: null,
-              content: `${nick} quit${reason}`,
+              content: eventLine({ kind: 'quit', nick, reason }),
               type: 'system' as const,
               tags: {},
               replyTo: null,
@@ -919,7 +956,7 @@ export class IRCManager {
               channel: data.target,
               nick: '',
               userHost: null,
-              content: `${nick} is now known as ${m.params[0]}`,
+              content: eventLine({ kind: 'nick', nick, detail: m.params[0] }),
               type: 'system' as const,
               tags: {},
               replyTo: null,
@@ -937,7 +974,7 @@ export class IRCManager {
               channel: data.target,
               nick: '',
               userHost: null,
-              content: `${nick} changed the topic to: ${m.params[1] || ''}`,
+              content: eventLine({ kind: 'topic', nick, detail: m.params[1] || '' }),
               type: 'system' as const,
               tags: {},
               replyTo: null,
@@ -949,14 +986,14 @@ export class IRCManager {
             }
           }
           if (m.command === 'KICK') {
-            const reason = m.params[2] ? ` (${m.params[2]})` : ''
+            const reason = m.params[2] || null
             return {
               id: typeof m.tags['msgid'] === 'string' ? m.tags['msgid'] : uuid(),
               serverId,
               channel: data.target,
               nick: '',
               userHost: null,
-              content: `${m.params[1]} was kicked by ${nick}${reason}`,
+              content: eventLine({ kind: 'kick', nick: m.params[1] || '', detail: nick, reason }),
               type: 'system' as const,
               tags: {},
               replyTo: null,
@@ -979,7 +1016,7 @@ export class IRCManager {
             channel: data.target,
             nick,
             userHost: m.source ? `${m.source.user || ''}@${m.source.host || ''}` : null,
-            content,
+            content: this.kept(client, data.target, nick, content),
             type: isAction ? 'action' : m.command === 'NOTICE' ? 'notice' : 'privmsg',
             tags: m.tags as Record<string, string>,
             replyTo: typeof m.tags['+reply'] === 'string' ? m.tags['+reply'] : null,
@@ -1103,7 +1140,7 @@ export class IRCManager {
             channel: m.params[0] || '',
             nick: m.source?.nick || '',
             userHost: m.source ? `${m.source.user || ''}@${m.source.host || ''}` : null,
-            content,
+            content: this.kept(client, m.params[0] || '', m.source?.nick || '', content),
             type: (isAction ? 'action' : m.command === 'NOTICE' ? 'notice' : 'privmsg') as
               | 'action'
               | 'notice'

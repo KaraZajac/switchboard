@@ -1,4 +1,5 @@
 import { registerHandler } from './registry'
+import { nextNickToTry } from '@shared/nicks'
 
 /**
  * RPL_WELCOME (001) — Registration successful
@@ -153,9 +154,11 @@ registerHandler('433', (client, msg) => {
   client.state.nickRefusedReason = msg.params[2] || 'the server refused it'
 
   if (client.state.registrationState !== 'connected') {
-    // During registration, try an alternative nick
-    const attempted = msg.params[1]
-    const altNick = attempted + '_'
+    // During registration, try the next of the user's alternatives — and
+    // an underscore once those run out. See `@shared/nicks`.
+    const attempted = msg.params[1] || client.state.nick
+    const altNick = nextNickToTry(attempted, client.config.altNicks ?? [], client.state.triedNicks)
+    client.state.triedNicks.push(attempted)
     client.state.nick = altNick
     client.connection.send('NICK', altNick)
 

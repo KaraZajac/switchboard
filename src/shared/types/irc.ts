@@ -41,4 +41,6 @@ export interface IRCBatch {
   params: string[]
   messages: IRCMessage[]
   parent: string | null
+  /** The tags on the opening BATCH line — for a multiline message, its msgid and time live here */
+  tags?: Record<string, string | true>
 }

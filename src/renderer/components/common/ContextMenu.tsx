@@ -67,7 +67,11 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
               onClose()
             }}
             disabled={item.disabled}
-            className={`w-full px-3 py-1.5 text-left text-sm ${
+            // `block`, not the inline-block a button is by default: when the
+            // items sit inline, the menu's intrinsic width is every label in a
+            // run laid side by side, and a menu with nine items stretched most
+            // of the way across the window.
+            className={`block w-full whitespace-nowrap px-3 py-1.5 text-left text-sm ${
               item.disabled
                 ? 'cursor-not-allowed text-gray-600'
                 : item.danger

@@ -59,6 +59,7 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -69,6 +70,7 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.LaunchedEffect
 import org.switchboard.android.irc.Completion
+import org.switchboard.android.irc.Emoji
 import org.switchboard.android.irc.Typing
 import org.switchboard.android.EngineMode
 import org.switchboard.android.Message
@@ -76,6 +78,7 @@ import org.switchboard.android.SwitchboardStore
 import org.switchboard.android.isChannel
 import org.switchboard.android.isConsole
 import org.switchboard.android.SwitchboardEngine
+import org.switchboard.android.trustCertificate
 import org.switchboard.android.attach
 import org.switchboard.android.canAttach
 import org.switchboard.android.connectServer
@@ -150,6 +153,13 @@ fun ChatScreen(
             focus.clearFocus()
             keyboard?.hide()
         }
+    }
+
+    // A conversation picked from outside the drawer — a notification, search —
+    // is what the drawer was for, so it goes. Picking from inside it already
+    // closed it; this covers the rest, or the tap landed behind the list.
+    LaunchedEffect(store.activeServerId, store.activeChannel) {
+        if (channelDrawer.isOpen) channelDrawer.close()
     }
 
     /*
@@ -267,6 +277,10 @@ fun ChatScreen(
                                 },
                                 onToggleChannelMute = { serverId, channel ->
                                     engine.toggleChannelMute(serverId, channel)
+                                },
+                                notifiesAll = { serverId, channel -> engine.notifiesAll(serverId, channel) },
+                                onToggleNotifyAll = { serverId, channel ->
+                                    engine.toggleNotifyAll(serverId, channel)
                                 },
                                 onOpenSettings = onOpenSettings,
                                 onEditProfile = {
@@ -428,6 +442,55 @@ private fun Conversation(
                     onOpenAccount(prompt.serverId)
                 },
                 onDismiss = { store.clearIdentifyPrompt() }
+            )
+        }
+
+        // A certificate nobody vouches for. The connection is going nowhere
+        // until this is answered, so it stays — with the fingerprint, which
+        // is the one thing the user can check. See [TrustedCertificate].
+        store.certificatePrompt?.let { prompt ->
+            val trusting = rememberCoroutineScope()
+            Banner(
+                text = prompt.text,
+                detail = prompt.detail,
+                color = Yellow,
+                action = "Trust it",
+                onClick = {
+                    trusting.launch { engine.trustCertificate(prompt.serverId, prompt.fingerprint) }
+                },
+                onDismiss = { store.certificatePrompt = null }
+            )
+        }
+
+        // Something shared from another app. It waits here while the user
+        // finds the conversation it is for, then goes as a message — text as
+        // it is, a picture through the network's filehost.
+        store.pendingShare?.let { share ->
+            val here = store.activeServerId?.let { s -> store.activeChannel?.let { c -> s to c } }
+            val sending = rememberCoroutineScope()
+            val context = LocalContext.current
+            val what = share.text?.let { "“${it.take(60)}${if (it.length > 60) "…" else ""}”" } ?: "a picture"
+            Banner(
+                text = if (here != null) "Shared from another app: $what. Send it to ${here.second}?"
+                else "Shared from another app: $what. Open the conversation it is for.",
+                color = Blue,
+                action = if (here != null) "Send here" else null,
+                onClick = {
+                    val (serverId, channel) = here ?: return@Banner
+                    share.text?.let { engine.say(serverId, channel, it) }
+                    val image = share.image
+                    if (image == null) {
+                        store.pendingShare = null
+                    } else {
+                        // The banner stays until the upload is done: its scope
+                        // is what runs the upload, and goes when it goes
+                        sending.launch {
+                            engine.attach(serverId, image, context)?.let { link -> engine.say(serverId, channel, link) }
+                            store.pendingShare = null
+                        }
+                    }
+                },
+                onDismiss = { store.pendingShare = null }
             )
         }
 
@@ -877,6 +940,8 @@ private fun Banner(
     color: Color,
     action: String? = null,
     onClick: (() -> Unit)? = null,
+    /** A line under the text in a typeface it can be read from — a fingerprint, a code */
+    detail: String? = null,
     /**
      * Put it away without doing the thing it suggests.
      *
@@ -897,13 +962,28 @@ private fun Banner(
     ) {
         Box(modifier = Modifier.size(7.dp).background(color, CircleShape))
         Spacer(Modifier.width(9.dp))
-        Text(
-            text,
-            color = color,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Medium,
-            modifier = Modifier.weight(1f)
-        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text,
+                color = color,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium
+            )
+            if (detail != null) {
+                Text(
+                    detail,
+                    color = color,
+                    fontSize = 11.sp,
+                    fontFamily = FontFamily.Monospace,
+                    lineHeight = 15.sp,
+                    modifier = Modifier
+                        .padding(top = 4.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(Crust.copy(alpha = 0.5f))
+                        .padding(horizontal = 6.dp, vertical = 3.dp)
+                )
+            }
+        }
         if (action != null && onClick != null) {
             Text(action, color = color, fontSize = 12.sp, fontWeight = FontWeight.Bold)
         }
@@ -966,13 +1046,23 @@ private fun Composer(
     }
     val draft = field.text
 
-    val partial = draft.substringAfterLast(' ')
-    val suggestions = remember(partial, people) { completionsFor(partial, people) }
+    // Only once an `@` is typed — see [mentionsFor]
+    val suggestions = remember(draft, people) { mentionsFor(draft, people) }
+
+    // `:smi` offers smile — see [Emoji]. The keyboard has a picker of its
+    // own; this is for the name you know.
+    val emojiSuggestions = remember(draft) {
+        Emoji.query(draft)?.let { Emoji.candidates(it) } ?: emptyList()
+    }
 
     fun complete(nick: String) {
-        val next = completedDraft(draft, nick)
+        val next = mentionedDraft(draft, nick)
         field = TextFieldValue(next, TextRange(next.length))
     }
+
+    // The GIF picker, the desktop's on a phone — see [GifPickerSheet]. What
+    // it picks goes straight out as a message, as it does there.
+    var showGifs by remember { mutableStateOf(false) }
 
     // Say we are typing on a keystroke, and take it back when the message goes
     // or the box is emptied. Not on a timer: a half-written message left on
@@ -1014,7 +1104,9 @@ private fun Composer(
     fun send() {
         val text = draft.trim()
         if (text.isEmpty()) return
-        onSend(text)
+        // `:tada:` goes out as the party popper — see [Emoji]. Not in a
+        // command, whose arguments mean what they say.
+        onSend(if (text.startsWith("/")) text else Emoji.replaceShortcodes(text))
         history = History.remember(history, text)
         histories[historyKey] = history
         field = TextFieldValue("")
@@ -1102,6 +1194,7 @@ private fun Composer(
             FormatButton("I", FontWeight.Normal, italic = true) { format("italic") }
             FormatButton("U", FontWeight.Normal, underline = true) { format("underline") }
             FormatButton("A", FontWeight.Normal, tint = Blue) { showColours = !showColours }
+            FormatButton("GIF", FontWeight.Bold) { showGifs = true }
 
             // Only when there is something to go back to, so the row stays
             // quiet in a conversation you have not spoken in.
@@ -1110,6 +1203,43 @@ private fun Composer(
                 if (History.browsing(history)) {
                     FormatButton("↓", FontWeight.Normal) { step(back = false) }
                 }
+            }
+        }
+    }
+
+    if (showGifs) {
+        GifPickerSheet(
+            onPick = { url ->
+                onSend(url)
+                note(Typing.Event.SENT)
+                showGifs = false
+            },
+            onDismiss = { showGifs = false }
+        )
+    }
+
+    if (emojiSuggestions.isNotEmpty()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .padding(start = 12.dp, end = 12.dp, top = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            for (entry in emojiSuggestions) {
+                Text(
+                    "${entry.emoji} ${entry.name}",
+                    color = Text0,
+                    fontSize = 13.sp,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Surface0)
+                        .clickable {
+                            val next = Emoji.complete(draft, entry.emoji)
+                            field = TextFieldValue(next, TextRange(next.length))
+                        }
+                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                )
             }
         }
     }
@@ -1231,26 +1361,22 @@ private fun Composer(
 }
 
 /**
- * Whoever matches the word being typed.
+ * Whoever an `@` could mean.
  *
- * Tab completion is how people address each other on IRC, and a phone has no
- * tab — but it does have somewhere to put the answers, and typing a nick
- * exactly on a touchscreen is harder than on a keyboard, not easier. Two
- * characters before offering anything, so the row does not appear over the
- * whole roster the moment somebody types a letter.
+ * The row used to offer names for any two letters typed, which put a box over
+ * the keyboard while somebody typed "bu" on the way to "but". Now the `@` is
+ * the intent — the way Discord and Slack mention — and `@b` narrows to the
+ * b's. Nothing without one; everyone here with one alone. The same rule as
+ * the desktop's popup, from the same corpus.
  */
-internal fun completionsFor(partial: String, people: List<String>): List<String> =
-    Completion.matching(partial, people)
+internal fun mentionsFor(draft: String, people: List<String>): List<String> {
+    val query = Completion.mentionQuery(draft) ?: return emptyList()
+    return Completion.mentionCandidates(query, people)
+}
 
-/**
- * The draft with the half-typed name finished.
- *
- * "robin: " when it is the first word and "robin " otherwise — the convention
- * every IRC client follows, and what makes the highlight land on the right
- * person rather than reading as a passing mention.
- */
-internal fun completedDraft(draft: String, nick: String): String =
-    Completion.complete(draft, nick)
+/** The draft with the mention finished — `@robin ` — ready to go on typing */
+internal fun mentionedDraft(draft: String, nick: String): String =
+    Completion.mentioned(draft, nick)
 
 /** One letter that turns a formatting code on or off */
 @Composable

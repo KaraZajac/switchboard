@@ -62,4 +62,43 @@ object Services {
             line.contains("password accepted") ||
             line.contains("now recognized")
     }
+
+    /**
+     * The services commands whose arguments are a password, or a proof of one.
+     *
+     * `IDENTIFY`, `REGISTER`, `GHOST` and the rest take the password on the
+     * line, and the line is a message like any other: echoed back by the
+     * server, filed under the NickServ conversation, kept in history. A
+     * password kept in plain text in the message history is a password on
+     * disk in a file that is not the one meant to hold it. `SET PASSWORD`
+     * keeps its second word, which names the setting rather than the secret.
+     */
+    private val SECRET_COMMANDS = setOf(
+        "identify", "id", "register", "ghost", "recover", "release", "regain",
+        "drop", "verify", "confirm", "login", "auth", "sidentify", "group", "set"
+    )
+
+    private const val MASK = "•••"
+
+    /**
+     * What a line said to services is kept and shown as.
+     *
+     * Only to a services bot, only for the commands that carry a secret, and
+     * only when there is anything after the verb to hide. Everything else — a
+     * message to a person that happens to say "identify", `NickServ INFO kara`
+     * — is left as it was. The desktop half is `secretsMasked` in
+     * `src/shared/services.ts`, and both are checked against the corpus.
+     */
+    fun secretsMasked(target: String, text: String): String {
+        if (!isServices(target)) return text
+        val words = text.trim().split(Regex("\\s+"))
+        if (words.size < 2) return text
+        val verb = words[0].lowercase()
+        if (verb !in SECRET_COMMANDS) return text
+        if (verb == "set") {
+            if (words[1].lowercase() != "password" || words.size < 3) return text
+            return "${words[0]} ${words[1]} $MASK"
+        }
+        return "${words[0]} $MASK"
+    }
 }

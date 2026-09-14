@@ -9,6 +9,7 @@ import {
   metadataColor,
   type UserMetadata
 } from '@shared/types/metadata'
+import { wording } from '../../utils/speak'
 
 /** Avatar image with fallback to letter initial on error */
 function AvatarImg({ src, nick, size = 'h-8 w-8', textSize = 'text-sm' }: { src: string; nick: string; size?: string; textSize?: string }) {
@@ -293,7 +294,7 @@ function ProfileEditPopup({
 
       onClose()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save')
+      setError(wording(err) || 'The profile could not be saved.')
     } finally {
       setSaving(false)
     }
@@ -351,7 +352,7 @@ function ProfileEditPopup({
 
         {/* draft/metadata-2 profile */}
         <div className="space-y-2 border-t border-gray-800 pt-3">
-          <div className="flex items-baseline justify-between">
+          <div className="flex items-baseline justify-between gap-2">
             <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">
               Profile
             </span>

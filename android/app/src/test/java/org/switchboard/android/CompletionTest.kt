@@ -3,64 +3,77 @@ package org.switchboard.android
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import org.switchboard.android.ui.completedDraft
-import org.switchboard.android.ui.completionsFor
+import org.switchboard.android.ui.mentionedDraft
+import org.switchboard.android.ui.mentionsFor
 
 /**
  * Finishing somebody's name.
  *
- * Tab completion is how people address each other on IRC and a phone has no
- * tab, so the answers go in a row above the composer. Getting the *ending*
- * right matters as much as the matching: "robin: " at the start of a line is
- * what makes the highlight land on robin rather than reading as a passing
- * mention of them.
+ * A phone has no Tab key, so the answers go in a row above the composer —
+ * and only once an `@` is typed, because a row that appeared for any two
+ * letters sat over the keyboard while people typed ordinary words. Getting
+ * the *ending* right matters as much as the matching: the `@` stays, the
+ * name is spelt the way the channel spells it, and a space follows so the
+ * sentence can go on.
  */
 class CompletionTest {
 
     private val room = listOf("robin", "Robert", "mara", "rob")
 
     @Test
-    fun `a prefix offers everyone it could be`() {
-        assertEquals(listOf("rob", "Robert", "robin"), completionsFor("ro", room))
+    fun `nothing is offered until an @ is typed`() {
+        assertTrue(mentionsFor("ro", room).isEmpty())
+        assertTrue(mentionsFor("robin", room).isEmpty())
+        assertTrue(mentionsFor("", room).isEmpty())
+    }
+
+    @Test
+    fun `an @ alone offers everyone here`() {
+        assertEquals(listOf("mara", "rob", "Robert", "robin"), mentionsFor("@", room))
+    }
+
+    @Test
+    fun `the letters after the @ narrow it down`() {
+        assertEquals(listOf("rob", "Robert", "robin"), mentionsFor("hi @r", room))
+        assertEquals(listOf("Robert", "robin"), mentionsFor("hi @robe", room).plus(mentionsFor("hi @robi", room)))
+    }
+
+    @Test
+    fun `a name typed out in full still shows, to be finished`() {
+        // Unlike Tab completion: the row is how the mention gets its ending
+        assertEquals(listOf("rob", "Robert", "robin"), mentionsFor("hi @rob", room))
     }
 
     @Test
     fun `case does not have to match`() {
-        assertEquals(listOf("Robert"), completionsFor("rober", room))
-        assertEquals(listOf("Robert"), completionsFor("ROBER", room))
+        assertEquals(listOf("Robert"), mentionsFor("@ROBE", room))
     }
 
     @Test
-    fun `one letter is not enough to offer anything`() {
-        assertTrue(completionsFor("r", room).isEmpty())
-        assertTrue(completionsFor("", room).isEmpty())
-    }
-
-    @Test
-    fun `a name already finished is not offered back`() {
-        assertEquals(listOf("Robert", "robin"), completionsFor("rob", room))
+    fun `an address is not a mention`() {
+        assertTrue(mentionsFor("write to me@ro", room).isEmpty())
     }
 
     @Test
     fun `a busy channel does not fill the screen`() {
         val crowd = (1..40).map { "person$it" }
-        assertEquals(6, completionsFor("person", crowd).size)
+        assertEquals(10, mentionsFor("@person", crowd).size)
     }
 
     // ── what the box ends up saying ──────────────────────────────────
 
     @Test
-    fun `a name at the start of a line is addressed to them`() {
-        assertEquals("robin: ", completedDraft("rob", listOf("robin").first()))
-    }
-
-    @Test
-    fun `a name in the middle of a sentence is just a name`() {
-        assertEquals("ask robin ", completedDraft("ask rob", "robin"))
+    fun `the name replaces what was typed after the @`() {
+        assertEquals("@robin ", mentionedDraft("@rob", "robin"))
     }
 
     @Test
     fun `the rest of the sentence is left alone`() {
-        assertEquals("did you ask Robert ", completedDraft("did you ask rober", "Robert"))
+        assertEquals("did you ask @Robert ", mentionedDraft("did you ask @rober", "Robert"))
+    }
+
+    @Test
+    fun `a bare @ is finished too`() {
+        assertEquals("thanks @mara ", mentionedDraft("thanks @", "mara"))
     }
 }

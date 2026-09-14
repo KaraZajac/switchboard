@@ -28,6 +28,7 @@ internal fun registerUserHandlers() {
 
         session.emit("irc:nick", buildJsonObject {
             put("serverId", state.serverId)
+            put("time", message.tags["time"])
             put("oldNick", from)
             put("newNick", to)
             put("isMe", mine)
@@ -41,6 +42,7 @@ internal fun registerUserHandlers() {
 
         session.emit("irc:quit", buildJsonObject {
             put("serverId", state.serverId)
+            put("time", message.tags["time"])
             put("nick", nick)
             put("reason", message.param(0))
         })

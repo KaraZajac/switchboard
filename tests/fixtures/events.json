@@ -1,0 +1,76 @@
+{
+  "$comment": "What a channel event says, in words. Shared by tests/shared/events.test.ts and the Android SharedCorpusTest, so a kick reads the same on both devices and the desktop's playback says what it would have said live.",
+  "lines": [
+    {
+      "name": "a join",
+      "kind": "join",
+      "nick": "bunny",
+      "line": "bunny joined the channel"
+    },
+    {
+      "name": "a part with a reason",
+      "kind": "part",
+      "nick": "bunny",
+      "reason": "lunch",
+      "line": "bunny left the channel (lunch)"
+    },
+    {
+      "name": "a part without one",
+      "kind": "part",
+      "nick": "bunny",
+      "line": "bunny left the channel"
+    },
+    {
+      "name": "a quit",
+      "kind": "quit",
+      "nick": "bunny",
+      "reason": "Ping timeout: 240 seconds",
+      "line": "bunny quit (Ping timeout: 240 seconds)"
+    },
+    {
+      "name": "a rename",
+      "kind": "nick",
+      "nick": "bunny",
+      "detail": "bunny_afk",
+      "line": "bunny is now known as bunny_afk"
+    },
+    {
+      "name": "a kick names the kicked first",
+      "kind": "kick",
+      "nick": "bunny",
+      "detail": "robin",
+      "reason": "spam",
+      "line": "bunny was kicked by robin (spam)"
+    },
+    {
+      "name": "a kick by nobody in particular",
+      "kind": "kick",
+      "nick": "bunny",
+      "detail": "",
+      "line": "bunny was kicked by someone"
+    },
+    {
+      "name": "a topic change",
+      "kind": "topic",
+      "nick": "robin",
+      "detail": "Release day",
+      "line": "robin changed the topic to: Release day"
+    },
+    {
+      "name": "a topic cleared",
+      "kind": "topic",
+      "nick": "robin",
+      "detail": "",
+      "line": "robin cleared the topic"
+    }
+  ],
+  "$hidden": "Which kinds the joins-and-parts switch hides when it is off.",
+  "hidden": {
+    "join": true,
+    "part": true,
+    "quit": true,
+    "nick": false,
+    "kick": false,
+    "topic": false
+  }
+}

@@ -14,6 +14,7 @@ import {
   DEFAULT_REALNAME
 } from '@shared/constants'
 import { certificateProblem, readCertificate } from '@shared/certfp'
+import { wording } from '../../utils/speak'
 
 interface AddServerModalProps {
   editServer?: ServerConfig
@@ -27,10 +28,12 @@ export function AddServerModal({ editServer }: AddServerModalProps = {}) {
 
   const isEdit = !!editServer
 
-  const [name, setName] = useState(editServer?.name ?? '')
-  const [host, setHost] = useState(editServer?.host ?? '')
-  const [port, setPort] = useState((editServer?.port ?? DEFAULT_PORT_TLS).toString())
-  const [tls, setTls] = useState(editServer?.tls ?? true)
+  // What an irc:// link said, when that is how this form was opened
+  const prefill = useUIStore((s) => s.addServerPrefill)
+  const [name, setName] = useState(editServer?.name ?? prefill?.host ?? '')
+  const [host, setHost] = useState(editServer?.host ?? prefill?.host ?? '')
+  const [port, setPort] = useState((editServer?.port ?? prefill?.port ?? DEFAULT_PORT_TLS).toString())
+  const [tls, setTls] = useState(editServer?.tls ?? prefill?.tls ?? true)
   const [nick, setNick] = useState(editServer?.nick ?? DEFAULT_NICK)
   const [username, setUsername] = useState(editServer?.username ?? DEFAULT_USERNAME)
   const [realname, setRealname] = useState(editServer?.realname ?? DEFAULT_REALNAME)
@@ -39,14 +42,23 @@ export function AddServerModal({ editServer }: AddServerModalProps = {}) {
   const [saslUsername, setSaslUsername] = useState(editServer?.saslUsername ?? '')
   const [saslPassword, setSaslPassword] = useState(editServer?.saslPassword ?? '')
   const [autoConnect, setAutoConnect] = useState(editServer?.autoConnect ?? false)
-  const [autoJoin, setAutoJoin] = useState(editServer?.autoJoin?.join(', ') ?? '')
+  const [autoJoin, setAutoJoin] = useState(editServer?.autoJoin?.join(', ') ?? prefill?.channel ?? '')
+  // Nicks to try when the first is taken — see `@shared/nicks`
+  const [altNicks, setAltNicks] = useState(editServer?.altNicks?.join(', ') ?? '')
   const [identifyCommand, setIdentifyCommand] = useState(editServer?.identifyCommand ?? '')
   const [performOnConnect, setPerformOnConnect] = useState(editServer?.performOnConnect ?? '')
   const [clientCert, setClientCert] = useState(editServer?.clientCert ?? '')
+  // A certificate trusted by its fingerprint — see `@shared/certificate`.
+  // Shown so it can be forgotten; it is only ever set from the offer that
+  // appears when a connection is refused.
+  const [trustedCert, setTrustedCert] = useState<string | null>(
+    editServer?.trustedCertificate ?? null
+  )
   const [websocketUrl, setWebsocketUrl] = useState(editServer?.websocketUrl ?? '')
   const [showAdvanced, setShowAdvanced] = useState(isEdit)
   // A new server starts at the list of networks; editing one never does.
-  const [picking, setPicking] = useState(!isEdit)
+  // Straight to the form when an irc:// link already said where — see `@shared/ircurl`
+  const [picking, setPicking] = useState(!isEdit && !prefill)
 
   // Seed a new server with the OS account name — "Switchboard" as everyone's
   // nickname is a poor first impression, and it collides on busy networks.
@@ -80,6 +92,10 @@ export function AddServerModal({ editServer }: AddServerModalProps = {}) {
       port: parseInt(port) || DEFAULT_PORT_TLS,
       tls,
       nick: nick.trim(),
+      altNicks: altNicks
+        .split(',')
+        .map((n) => n.trim())
+        .filter(Boolean),
       username: username.trim() || nick.trim(),
       realname: realname.trim() || nick.trim(),
       password: password || null,
@@ -94,6 +110,7 @@ export function AddServerModal({ editServer }: AddServerModalProps = {}) {
       identifyCommand: identifyCommand.trim() || null,
       performOnConnect: performOnConnect.trim() || null,
       clientCert: clientCert.trim() || null,
+      trustedCertificate: trustedCert,
       websocketUrl: websocketUrl.trim() || null
     }
 
@@ -115,7 +132,7 @@ export function AddServerModal({ editServer }: AddServerModalProps = {}) {
         closeModal()
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save server')
+      setError(wording(err) || 'The server could not be saved.')
     }
   }
 
@@ -211,6 +228,21 @@ export function AddServerModal({ editServer }: AddServerModalProps = {}) {
             placeholder="MyNick"
             className="w-full rounded bg-gray-900 px-3 py-2 text-gray-100 outline-none ring-1 ring-gray-700 focus:ring-indigo-500"
             required
+          />
+        </div>
+
+        {/* Nicks to try when the first is taken */}
+        <div>
+          <label className="mb-1 block text-sm font-medium text-gray-300">
+            Other nicks to try
+          </label>
+          <input
+            type="text"
+            value={altNicks}
+            onChange={(e) => setAltNicks(e.target.value)}
+            placeholder="MyNick2, MyNick_"
+            title="Tried in order when the first is taken"
+            className="w-full rounded bg-gray-900 px-3 py-2 text-gray-100 outline-none ring-1 ring-gray-700 focus:ring-indigo-500"
           />
         </div>
 
@@ -323,6 +355,26 @@ export function AddServerModal({ editServer }: AddServerModalProps = {}) {
 
             {saslMechanism === 'EXTERNAL' && (
               <ClientCertificateField value={clientCert} onChange={setClientCert} />
+            )}
+
+            {trustedCert && (
+              <div className="rounded-md border border-gray-700 bg-gray-800/60 px-3 py-2">
+                <div className="text-sm font-medium text-gray-300">Trusted certificate</div>
+                <div className="mt-0.5 font-mono text-xs break-all text-gray-400">
+                  SHA-256 {trustedCert}
+                </div>
+                <div className="mt-1 text-xs text-gray-500">
+                  This server’s own certificate, accepted by its fingerprint. Forget it and the
+                  next connection will ask again.
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setTrustedCert(null)}
+                  className="mt-2 rounded bg-gray-700 px-2 py-1 text-xs text-gray-200 hover:bg-gray-600"
+                >
+                  Forget
+                </button>
+              </div>
             )}
 
             {/* Identify command */}

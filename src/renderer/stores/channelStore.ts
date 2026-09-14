@@ -24,6 +24,12 @@ interface ChannelState {
   channels: Record<string, ChannelInfo[]>
   /** Muted channels: `serverId:channel` -> expiry timestamp (0 = permanent) */
   mutedChannels: Record<string, number>
+  /**
+   * Conversations where every line notifies, not only a mention — keyed
+   * like the mutes. A shared setting (`notifyAll`), so the phone rings for
+   * the same channels.
+   */
+  notifyAll: Record<string, true>
   /** Currently active channel per server: serverId -> channelName */
   activeChannel: Record<string, string>
   /** Read marker timestamps: `serverId:channel` -> ISO timestamp */
@@ -37,6 +43,9 @@ interface ChannelState {
   incrementUnread: (serverId: string, name: string, mention?: boolean) => void
   clearUnread: (serverId: string, name: string) => void
   toggleMute: (serverId: string, name: string, durationMs?: number) => void
+  toggleNotifyAll: (serverId: string, name: string) => void
+  notifiesAll: (serverId: string, name: string) => boolean
+  hydrateNotifyAll: (keys: string[]) => void
   /** Apply saved mutes at startup, before any channel has been joined */
   hydrateMutes: (muted: Record<string, number>) => void
   renameChannel: (serverId: string, oldName: string, newName: string) => void
@@ -45,9 +54,10 @@ interface ChannelState {
   clearServerChannels: (serverId: string) => void
 }
 
-export const useChannelStore = create<ChannelState>((set) => ({
+export const useChannelStore = create<ChannelState>((set, get) => ({
   channels: {},
   mutedChannels: {},
+  notifyAll: {},
   activeChannel: {},
   readMarkers: {},
 
@@ -191,6 +201,23 @@ export const useChannelStore = create<ChannelState>((set) => ({
       }
       return { readMarkers: updated }
     }),
+
+  toggleNotifyAll: (serverId, name) =>
+    set((state) => {
+      const key = muteKey(serverId, name)
+      const notifyAll = { ...state.notifyAll }
+      if (notifyAll[key]) {
+        delete notifyAll[key]
+      } else {
+        notifyAll[key] = true
+      }
+      return { notifyAll }
+    }),
+
+  notifiesAll: (serverId, name) => Boolean(get().notifyAll[muteKey(serverId, name)]),
+
+  hydrateNotifyAll: (keys) =>
+    set({ notifyAll: Object.fromEntries(keys.map((key) => [key, true as const])) }),
 
   toggleMute: (serverId, name, durationMs) =>
     set((state) => {

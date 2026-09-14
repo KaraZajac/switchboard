@@ -100,6 +100,7 @@ internal fun registerChannelHandlers() {
 
         session.emit("irc:join", buildJsonObject {
             put("serverId", state.serverId)
+            put("time", message.tags["time"])
             put("channel", channel.name)
             put("isMe", mine)
             put("user", userJson(channel.user(nick)!!))
@@ -133,6 +134,7 @@ internal fun registerChannelHandlers() {
 
         session.emit("irc:part", buildJsonObject {
             put("serverId", state.serverId)
+            put("time", message.tags["time"])
             put("channel", name)
             put("nick", nick)
             put("isMe", mine)
@@ -151,6 +153,7 @@ internal fun registerChannelHandlers() {
 
         session.emit("irc:kick", buildJsonObject {
             put("serverId", state.serverId)
+            put("time", message.tags["time"])
             put("channel", name)
             put("nick", target)
             put("by", message.nick)
@@ -169,6 +172,7 @@ internal fun registerChannelHandlers() {
         }
         session.emit("irc:topic", buildJsonObject {
             put("serverId", state.serverId)
+            put("time", message.tags["time"])
             put("channel", name)
             put("topic", topic)
             put("setBy", message.nick)
@@ -181,6 +185,7 @@ internal fun registerChannelHandlers() {
         session.state.findChannel(name)?.topic = message.param(2)
         session.emit("irc:topic", buildJsonObject {
             put("serverId", session.state.serverId)
+            put("time", message.tags["time"])
             put("channel", name)
             put("topic", message.param(2))
         })
@@ -203,6 +208,7 @@ internal fun registerChannelHandlers() {
         }
         session.emit("irc:topic", buildJsonObject {
             put("serverId", session.state.serverId)
+            put("time", message.tags["time"])
             put("channel", name)
             put("topic", "")
         })

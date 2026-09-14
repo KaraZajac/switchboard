@@ -1,6 +1,7 @@
 import { registerHandler } from '../handlers/registry'
 import type { ChannelUser } from '@shared/types/channel'
 import { advertises } from '@shared/isupport'
+import { parsePrefix } from '@shared/powers'
 
 /**
  * WHOX — Extended WHO responses.
@@ -68,12 +69,13 @@ registerHandler('354', (client, msg) => {
     : 'B'
   const isBot = botMode.length > 0 && flags.includes(botMode)
 
+  // The status symbols are whatever this network's PREFIX names, not a fixed
+  // five: a network with a founder rank we have not heard of would otherwise
+  // show its founder as nobody in particular.
+  const { symbols } = parsePrefix(client.state.isupport['PREFIX'] as string | undefined)
   const prefixes: string[] = []
-  const prefixChars = ['~', '&', '@', '%', '+']
   for (const char of flags) {
-    if (prefixChars.includes(char)) {
-      prefixes.push(char)
-    }
+    if (symbols.includes(char)) prefixes.push(char)
   }
 
   ch.setUser(nick, {
@@ -82,7 +84,11 @@ registerHandler('354', (client, msg) => {
     host,
     account,
     realname,
-    prefixes,
+    // A reply that names no status keeps what NAMES said. The spec puts the
+    // channel prefixes in the flags, but a server that leaves them out — and
+    // one does — was stripping the @ from every op the moment WHO answered,
+    // while the phone, which keeps them, showed the ops it had been told of.
+    prefixes: prefixes.length > 0 ? prefixes : undefined,
     away: isAway,
     isBot
   })

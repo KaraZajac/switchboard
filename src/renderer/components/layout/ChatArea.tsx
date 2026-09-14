@@ -29,6 +29,9 @@ export function ChatArea() {
   const connectionStatus = useServerStore((s) =>
     activeServerId ? s.connectionStatus[activeServerId] ?? 'disconnected' : 'disconnected'
   )
+  const ourNick = useServerStore((s) =>
+    activeServerId ? s.currentNick[activeServerId] ?? null : null
+  )
 
   const key = activeServerId && activeChannel
     ? `${activeServerId}:${activeChannel.toLowerCase()}`
@@ -145,6 +148,27 @@ export function ChatArea() {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
     }
   }, [messages.length, autoScroll])
+
+  // Pictures arrive after the lines they are in. The list was scrolled to
+  // the bottom before their bytes came, and each one that then loaded pushed
+  // the newest lines out of view — a conversation with a few pictures in it
+  // opened a screen above its own end. Whatever grows the content while we
+  // are at the bottom keeps us there; a link card filling in counts too.
+  const contentRef = useRef<HTMLDivElement>(null)
+  const autoScrollRef = useRef(autoScroll)
+  autoScrollRef.current = autoScroll
+  useEffect(() => {
+    const content = contentRef.current
+    const scroller = scrollRef.current
+    if (!content || !scroller) return
+    const observer = new ResizeObserver(() => {
+      if (autoScrollRef.current && !isRestoringScroll.current) {
+        scroller.scrollTop = scroller.scrollHeight
+      }
+    })
+    observer.observe(content)
+    return () => observer.disconnect()
+  }, [key])
 
   const loadOlderMessages = useCallback(async () => {
     if (!activeServerId || !activeChannel || loadingHistory || historyExhausted) return
@@ -267,18 +291,12 @@ export function ChatArea() {
     )
   }
 
-  // Not connected
-  if (connectionStatus !== 'connected') {
-    return (
-      <div className="flex flex-1 items-center justify-center">
-        <div className="text-center">
-          <p className="text-gray-500">
-            {connectionStatus === 'connecting' ? 'Connecting...' : 'Not connected to server'}
-          </p>
-        </div>
-      </div>
-    )
-  }
+  // Not connected is not a reason to hide the conversation. It used to be:
+  // the moment a connection dropped, everything said in the channel was
+  // replaced by "Not connected to server", and came back when the server
+  // did — a blip on the wire read as the client losing the history. What
+  // was said is still there; the composer says it cannot send, and the line
+  // above it says why.
 
   // In the DM view with no conversation open, the channel behind it is not what
   // the sidebar is showing — prompt for a conversation instead.
@@ -301,6 +319,18 @@ export function ChatArea() {
     return <ServerMessages serverId={activeServerId} />
   }
 
+  // The first line since the read marker that somebody else wrote. Joins,
+  // parts and quits are not news either — least of all our own, which the
+  // server plays back after every reconnect.
+  const firstUnread = initialReadMarker.current
+    ? messages.findIndex(
+        (m) =>
+          m.timestamp > (initialReadMarker.current as string) &&
+          m.type !== 'system' &&
+          m.nick !== ourNick
+      )
+    : -1
+
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
       {/* Messages */}
@@ -310,7 +340,7 @@ export function ChatArea() {
         className="chat-messages flex flex-1 flex-col overflow-y-auto px-4 py-2"
       >
         {/* mt-auto keeps a short conversation pinned to the bottom */}
-        <div className="mt-auto">
+        <div ref={contentRef} className="mt-auto">
         {/* Loading history indicator */}
         {loadingHistory && (
           <div className="flex justify-center py-2">
@@ -350,12 +380,10 @@ export function ChatArea() {
         {messages.map((msg, i) => {
           const prev = i > 0 ? messages[i - 1] : null
 
-          // Show "New messages" divider
-          const showDivider =
-            initialReadMarker.current &&
-            prev &&
-            prev.timestamp <= initialReadMarker.current &&
-            msg.timestamp > initialReadMarker.current
+          // Show "New messages" divider — above the first line since the
+          // marker that somebody else wrote. A line we sent is not news to
+          // us, and the divider used to sit above it the moment it went out.
+          const showDivider = i > 0 && i === firstUnread
 
           // A day boundary gets its own divider, and always starts a fresh
           // message header rather than grouping onto yesterday's last line.
@@ -412,6 +440,16 @@ export function ChatArea() {
       {/* Typing indicator */}
       <TypingIndicator nicks={typingNicks} />
 
+      {connectionStatus !== 'connected' && (
+        <div className="mx-4 mb-1 rounded-md bg-gray-700/60 px-3 py-1.5 text-xs text-gray-300">
+          {connectionStatus === 'connecting'
+            ? 'Connecting…'
+            : connectionStatus === 'reconnecting'
+              ? 'Not connected. Trying again — nothing written here will be sent until it is.'
+              : 'Not connected to this network. Nothing written here will be sent until it is.'}
+        </div>
+      )}
+
       {/* Composer */}
       <MessageComposer
         serverId={activeServerId}
@@ -448,20 +486,27 @@ function ServerMessages({ serverId }: { serverId: string }) {
             <p className="text-gray-500">Server console — use /commands here</p>
           </div>
         ) : (
-          messages.map((msg) => (
-            <div key={msg.id} className="mb-4">
-              {msg.type === 'motd' && (
-                <div className="rounded bg-gray-800/50 p-4">
-                  <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">
-                    Message of the Day
-                  </div>
-                  <pre className="whitespace-pre-wrap font-mono text-sm text-gray-300">
-                    {msg.content}
-                  </pre>
+          messages.map((msg) =>
+            msg.type === 'motd' ? (
+              <div key={msg.id} className="mb-4 rounded bg-gray-800/50 p-4">
+                <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">
+                  Message of the Day
                 </div>
-              )}
-            </div>
-          ))
+                <pre className="whitespace-pre-wrap font-mono text-sm text-gray-300">
+                  {msg.content}
+                </pre>
+              </div>
+            ) : (
+              // Everything else the server says to us — its notices while
+              // connecting, the answer to a command typed here. Only the MOTD
+              // was drawn, so the rest was filed and never shown.
+              <div key={msg.id} className="flex items-baseline gap-2 py-0.5 font-mono text-sm">
+                <span className="shrink-0 text-xs text-gray-600">{consoleTime(msg.timestamp)}</span>
+                {msg.nick && <span className="shrink-0 text-gray-400">{msg.nick}</span>}
+                <span className="whitespace-pre-wrap break-words text-gray-300">{msg.content}</span>
+              </div>
+            )
+          )
         )}
       </div>
 
@@ -478,6 +523,15 @@ function ServerMessages({ serverId }: { serverId: string }) {
       </div>
     </div>
   )
+}
+
+/** The time of a console line, as short as it can be */
+function consoleTime(iso: string): string {
+  try {
+    return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  } catch {
+    return ''
+  }
 }
 
 /** Same calendar day in the viewer's timezone */

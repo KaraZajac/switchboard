@@ -73,6 +73,10 @@ export function addServer(config: Omit<ServerConfig, 'id' | 'sortOrder'>): strin
     ]
   )
 
+  // Columns that came later than the INSERT above knows about
+  if (config.altNicks && config.altNicks.length > 0) {
+    db.run('UPDATE servers SET alt_nicks = ? WHERE id = ?', [JSON.stringify(config.altNicks), id])
+  }
   return id
 }
 
@@ -128,6 +132,14 @@ export function updateServer(id: string, updates: Partial<ServerConfig>): void {
   if (updates.clientCert !== undefined) {
     fields.push('client_cert = ?')
     values.push(encryptSecret(updates.clientCert))
+  }
+  if (updates.trustedCertificate !== undefined) {
+    fields.push('trusted_cert = ?')
+    values.push(updates.trustedCertificate)
+  }
+  if (updates.altNicks !== undefined) {
+    fields.push('alt_nicks = ?')
+    values.push(JSON.stringify(updates.altNicks))
   }
   if (updates.autoConnect !== undefined) {
     fields.push('auto_connect = ?')
@@ -272,6 +284,17 @@ function secretsOf(raw: {
   }
 }
 
+/** A JSON list column, or nothing */
+function parseList(raw: string | null | undefined): string[] {
+  if (!raw) return []
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === 'string') : []
+  } catch {
+    return []
+  }
+}
+
 function rowToConfig(row: unknown[]): ServerConfig {
   return {
     id: row[0] as string,
@@ -291,8 +314,11 @@ function rowToConfig(row: unknown[]): ServerConfig {
     avatarUrl: (row[19] as string) || null,
     preAwayMessage: (row[20] as string) || null,
     profile: parseProfile(row[21] as string | null),
-    // Added last, by migration 014, so it is the last column SELECT * returns
+    // Added by migrations 014 and 015, in that order, so these are the last
+    // columns SELECT * returns
     performOnConnect: (row[23] as string) || null,
+    trustedCertificate: (row[24] as string) || null,
+    altNicks: parseList(row[25] as string | null),
     ...secretsOf({
       password: row[5],
       saslPassword: row[11],
@@ -322,6 +348,8 @@ function objectToConfig(row: Record<string, unknown>): ServerConfig {
     preAwayMessage: (row['pre_away_message'] as string) || null,
     profile: parseProfile(row['profile_metadata'] as string | null),
     performOnConnect: (row['perform_on_connect'] as string) || null,
+    trustedCertificate: (row['trusted_cert'] as string) || null,
+    altNicks: parseList(row['alt_nicks'] as string | null),
     ...secretsOf({
       password: row['password'],
       saslPassword: row['sasl_password'],

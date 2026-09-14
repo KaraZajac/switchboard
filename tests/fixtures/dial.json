@@ -1,5 +1,5 @@
 {
-  "$comment": "Whether a change to a network means dialling it again, shared by tests/shared/dial.test.ts and the Android SharedCorpusTest. Editing a server wrote the new settings down and left the running connection alone, so changing the address and pressing save left you connected to the old one \u2014 with the list showing the new address and a green dot beside it.",
+  "$comment": "Whether a change to a network means dialling it again, shared by tests/shared/dial.test.ts and the Android SharedCorpusTest. Editing a server wrote the new settings down and left the running connection alone, so changing the address and pressing save left you connected to the old one — with the list showing the new address and a green dot beside it.",
   "$cases": "`before` is the running connection's settings, `after` the edit. `redial` is whether the connection has to be made again.",
   "cases": [
     {
@@ -111,6 +111,32 @@
         "tls": true
       },
       "after": {},
+      "redial": false
+    },
+    {
+      "name": "a certificate newly trusted, so the dial that failed can be made again",
+      "before": {
+        "host": "irc.home.lan",
+        "port": 6697,
+        "tls": true,
+        "trustedCertificate": null
+      },
+      "after": {
+        "trustedCertificate": "AB:12:CD:34"
+      },
+      "redial": true
+    },
+    {
+      "name": "the same trusted certificate written again",
+      "before": {
+        "host": "irc.home.lan",
+        "port": 6697,
+        "tls": true,
+        "trustedCertificate": "AB:12:CD:34"
+      },
+      "after": {
+        "trustedCertificate": "AB:12:CD:34"
+      },
       "redial": false
     }
   ]

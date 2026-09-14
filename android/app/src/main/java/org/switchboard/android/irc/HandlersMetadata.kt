@@ -292,6 +292,9 @@ internal fun registerErrorHandlers() {
         "473" to "Channel is invite-only",
         "474" to "You are banned from that channel",
         "475" to "Wrong channel key",
+        // What creating a channel takes on rIRCd: without this the join of a
+        // channel that did not exist yet simply did not happen, silently
+        "477" to "You need to be logged in to an account to join that channel",
         "482" to "You need to be a channel operator"
     )
 

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import QRCode from 'qrcode'
 import type { RemoteLinkStatus, SessionSnapshot, VaultStatusInfo } from '@shared/types/ipc'
-import { encodePairingUri } from '@shared/pairing'
+import { encodePairingUri, QR_PIXELS_PER_MODULE, QR_QUIET_MODULES } from '@shared/pairing'
+import { wording } from '../../utils/speak'
 
 /**
  * Pairing and device management for the remote link.
@@ -128,9 +129,14 @@ export function DevicesTab() {
       {/* Pairing */}
       {status.pairing && status.ticket ? (
         <div className="rounded border border-indigo-500/40 bg-gray-900/50 p-4">
-          <div className="flex flex-col items-center gap-3 sm:flex-row sm:items-start">
+          {/*
+            Stacked, not side by side: the code is drawn big enough for a
+            camera to read (see QR_PIXELS_PER_MODULE), and beside its caption it
+            was wider than the panel and scrolled sideways.
+          */}
+          <div className="flex flex-col items-center gap-3">
             <TicketQR ticket={status.ticket} code={status.pairing.code} />
-            <div className="min-w-0 flex-1 text-center sm:text-left">
+            <div className="min-w-0 text-center">
               <div className="text-sm text-gray-200">Scan this in Switchboard on your phone</div>
               <div className="mt-0.5 text-xs text-gray-500">
                 The code below is in the QR too — scanning is all it takes.
@@ -232,8 +238,9 @@ function TicketQR({ ticket, code }: { ticket: string; code: string }) {
     const canvas = canvasRef.current
     if (!canvas) return
     QRCode.toCanvas(canvas, encodePairingUri(ticket, code), {
-      width: 160,
-      margin: 1,
+      // Sized by the content, not fixed: see QR_PIXELS_PER_MODULE
+      scale: QR_PIXELS_PER_MODULE,
+      margin: QR_QUIET_MODULES,
       color: { dark: '#0b0b12', light: '#ffffff' }
     }).catch(() => setFailed(true))
   }, [ticket, code])
@@ -246,7 +253,13 @@ function TicketQR({ ticket, code }: { ticket: string; code: string }) {
     )
   }
 
-  return <canvas ref={canvasRef} className="shrink-0 rounded bg-white p-1" aria-label="Pairing QR code" />
+  return (
+    <canvas
+      ref={canvasRef}
+      className="h-auto max-w-full shrink-0 rounded bg-white p-1"
+      aria-label="Pairing QR code"
+    />
+  )
 }
 
 /**
@@ -291,7 +304,7 @@ function VaultPanel({
       setConfirmation('')
       await onChanged()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'That did not work')
+      setError(wording(err) || 'That did not work')
     } finally {
       setBusy(false)
     }

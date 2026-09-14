@@ -17,6 +17,22 @@ export interface PairingPayload {
   code: string | null
 }
 
+/**
+ * How the QR is drawn.
+ *
+ * `scale` is pixels per module, and it is the only number that matters to a
+ * phone camera: a module has to cover several sensor pixels after the
+ * picture has been scaled down for analysis. The code used to be drawn 160
+ * pixels wide whatever it held, and a real ticket makes a code of some sixty
+ * modules a side — under three pixels each, which a camera across a desk
+ * cannot resolve. So the width follows the content instead. Error
+ * correction stays at the library's default (M): a QR is read off the screen
+ * in front of you, and the extra modules of a higher level would cost more
+ * than the damage tolerance is worth.
+ */
+export const QR_PIXELS_PER_MODULE = 6
+export const QR_QUIET_MODULES = 2
+
 /** Build the URI a desktop encodes into its QR code. */
 export function encodePairingUri(ticket: string, code: string | null): string {
   const params = new URLSearchParams({ ticket })

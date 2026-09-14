@@ -6,11 +6,17 @@ import { useChannelStore } from '../../stores/channelStore'
 import { MessageContent } from './MessageContent'
 import type { ChatMessage } from '@shared/types/message'
 
+// Stable, for the same reason as the channel browser's empty list: a selector
+// must hand back the same value while nothing has changed, or React re-renders
+// until it gives up. Search opened on a network still connecting had no
+// capability list yet, and the window died.
+const NO_CAPABILITIES: string[] = []
+
 export function SearchModal() {
   const closeModal = useUIStore((s) => s.closeModal)
   const activeServerId = useServerStore((s) => s.activeServerId)
   const capabilities = useServerStore((s) =>
-    activeServerId ? s.capabilities[activeServerId] ?? [] : []
+    activeServerId ? (s.capabilities[activeServerId] ?? NO_CAPABILITIES) : NO_CAPABILITIES
   )
   const hasServerSearch = capabilities.includes('draft/search')
   const activeChannel = useChannelStore((s) =>

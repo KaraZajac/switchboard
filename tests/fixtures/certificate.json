@@ -1,0 +1,58 @@
+{
+  "$comment": "A server certificate nobody vouches for, pinned by its SHA-256. Shared by tests/shared/certificate.test.ts and the Android SharedCorpusTest: the fingerprint is written down once and compared on both devices, so both must spell and compare it the same way.",
+  "$format": "What a fingerprint looks like once tidied: hex pairs, colons, upper case.",
+  "format": [
+    {
+      "name": "bare lower-case hex, as a digest comes out",
+      "raw": "ab12cd34",
+      "shown": "AB:12:CD:34"
+    },
+    {
+      "name": "already colon-separated is left as it is",
+      "raw": "AB:12:CD:34",
+      "shown": "AB:12:CD:34"
+    },
+    {
+      "name": "spaces and mixed case from a copy-paste",
+      "raw": "ab 12 Cd 34",
+      "shown": "AB:12:CD:34"
+    },
+    {
+      "name": "prose keeps only the letters that happen to be hex, which is why it is checked by eye",
+      "raw": "not a fingerprint",
+      "shown": "AF:E"
+    },
+    {
+      "name": "empty",
+      "raw": "",
+      "shown": ""
+    }
+  ],
+  "$same": "Whether two spellings name the same certificate.",
+  "same": [
+    {
+      "name": "colons against bare hex",
+      "a": "AB:12:CD:34",
+      "b": "ab12cd34",
+      "same": true
+    },
+    {
+      "name": "a different certificate",
+      "a": "AB:12:CD:34",
+      "b": "AB:12:CD:35",
+      "same": false
+    },
+    {
+      "name": "nothing trusted yet",
+      "a": null,
+      "b": "AB:12",
+      "same": false
+    },
+    {
+      "name": "two empties are not a match",
+      "a": "",
+      "b": "",
+      "same": false
+    }
+  ]
+}

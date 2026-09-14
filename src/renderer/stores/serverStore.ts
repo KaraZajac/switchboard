@@ -8,7 +8,7 @@ interface ServerState {
   /** Currently active (selected) server ID */
   activeServerId: string | null
   /** Connection status per server */
-  connectionStatus: Record<string, 'disconnected' | 'connecting' | 'connected'>
+  connectionStatus: Record<string, 'disconnected' | 'connecting' | 'reconnecting' | 'connected'>
   /** Server capabilities */
   capabilities: Record<string, string[]>
   /**
@@ -75,7 +75,7 @@ interface ServerState {
   updateServer: (id: string, updates: Partial<ServerConfig>) => void
   removeServer: (id: string) => void
   setActiveServer: (id: string | null) => void
-  setConnectionStatus: (id: string, status: 'disconnected' | 'connecting' | 'connected') => void
+  setConnectionStatus: (id: string, status: 'disconnected' | 'connecting' | 'reconnecting' | 'connected') => void
   setCapabilities: (id: string, caps: string[], values?: Record<string, string>) => void
   setCurrentNick: (id: string, nick: string) => void
   setUserMetadata: (serverId: string, nick: string, key: string, value: string) => void

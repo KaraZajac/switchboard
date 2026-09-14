@@ -88,7 +88,9 @@ export function channelModesFor(
           : {
               letter,
               kind,
-              label: `+${letter}`,
+              // Not `+z`: the panel prints the letter after the label, and
+              // a mode named after itself read "+z +z"
+              label: `Mode ${letter}`,
               hint: `A mode this network calls +${letter}.`,
               placeholder: kind === 'flag' ? undefined : 'Value'
             }

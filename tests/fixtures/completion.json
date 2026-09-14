@@ -1,5 +1,5 @@
 {
-  "$comment": "Finishing a half-typed name, shared by tests/shared/completion.test.ts and the Android CompletionTest. The two clients complete differently on purpose \u2014 the desktop cycles with Tab, the phone offers a row to tap \u2014 but not about the answer. They differed: the phone put a colon after anything completed at the start of a line, including a channel, so tapping #switchboard gave '#switchboard: '.",
+  "$comment": "Finishing a half-typed name, shared by tests/shared/completion.test.ts and the Android CompletionTest. The two clients complete differently on purpose — the desktop cycles with Tab, the phone offers a row to tap — but not about the answer. They differed: the phone put a colon after anything completed at the start of a line, including a channel, so tapping #switchboard gave '#switchboard: '.",
   "$matches": "`partial` is what has been typed, `people` who is here, `completions` what to offer.",
   "matches": [
     {
@@ -136,6 +136,134 @@
       "draft": "hello there ro",
       "completion": "robin",
       "result": "hello there robin "
+    }
+  ],
+  "$mentions": "A mention being typed: `query` is what follows a trailing `@` (null when nothing is being mentioned), `candidates` who it could be. Any length after the `@`; nothing at all without one.",
+  "mentions": [
+    {
+      "name": "nothing without an @, however far along the word is",
+      "draft": "bu",
+      "people": [
+        "bunny",
+        "Bob"
+      ],
+      "query": null,
+      "candidates": []
+    },
+    {
+      "name": "the @ alone offers everyone here",
+      "draft": "@",
+      "people": [
+        "robin",
+        "Bob",
+        "bunny"
+      ],
+      "query": "",
+      "candidates": [
+        "Bob",
+        "bunny",
+        "robin"
+      ]
+    },
+    {
+      "name": "@b narrows to the b's",
+      "draft": "hi @b",
+      "people": [
+        "bunny",
+        "Bob",
+        "klea"
+      ],
+      "query": "b",
+      "candidates": [
+        "Bob",
+        "bunny"
+      ]
+    },
+    {
+      "name": "case does not have to match",
+      "draft": "@BU",
+      "people": [
+        "bunny"
+      ],
+      "query": "BU",
+      "candidates": [
+        "bunny"
+      ]
+    },
+    {
+      "name": "an @ inside a word is an address, not a mention",
+      "draft": "mail me@ex",
+      "people": [
+        "expo"
+      ],
+      "query": null,
+      "candidates": []
+    },
+    {
+      "name": "a name typed out in full still shows, to be finished",
+      "draft": "@bunny",
+      "people": [
+        "bunny"
+      ],
+      "query": "bunny",
+      "candidates": [
+        "bunny"
+      ]
+    },
+    {
+      "name": "only the last word counts",
+      "draft": "@bunny said hi @k",
+      "people": [
+        "bunny",
+        "klea"
+      ],
+      "query": "k",
+      "candidates": [
+        "klea"
+      ]
+    },
+    {
+      "name": "no one matching is an empty row, not the whole channel",
+      "draft": "@zz",
+      "people": [
+        "bunny",
+        "klea"
+      ],
+      "query": "zz",
+      "candidates": []
+    }
+  ],
+  "$mentioned": "The draft once a suggestion is picked: what followed the @ replaced by the name as the channel spells it, the @ kept, and a space to go on typing.",
+  "mentioned": [
+    {
+      "name": "the name replaces what was typed after the @",
+      "draft": "@bu",
+      "nick": "bunny",
+      "result": "@bunny "
+    },
+    {
+      "name": "mid-sentence the rest is left alone",
+      "draft": "hi @bu",
+      "nick": "bunny",
+      "result": "hi @bunny "
+    },
+    {
+      "name": "a bare @ is finished too",
+      "draft": "hi @",
+      "nick": "bunny",
+      "result": "hi @bunny "
+    },
+    {
+      "name": "the name is taken as the channel spells it",
+      "draft": "@BOB",
+      "nick": "Bob",
+      "result": "@Bob "
+    },
+    {
+      "name": "without a mention the draft is untouched",
+      "draft": "bu",
+      "nick": "bunny",
+      "result": "bu"
     }
   ]
 }

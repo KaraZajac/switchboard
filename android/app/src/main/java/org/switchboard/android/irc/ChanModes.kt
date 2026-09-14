@@ -74,8 +74,10 @@ object ChanModes {
                 modes += if (known != null) {
                     Mode(mode, kind, known.first, known.second, known.third)
                 } else {
+                    // Not "+z": the sheet prints the letter after the label,
+                    // and a mode named after itself read "+z +z"
                     Mode(
-                        mode, kind, "+$mode", "A mode this network calls +$mode.",
+                        mode, kind, "Mode $mode", "A mode this network calls +$mode.",
                         if (kind == Kind.FLAG) null else "Value"
                     )
                 }

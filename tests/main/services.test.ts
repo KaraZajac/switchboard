@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import fs from 'node:fs'
 import path from 'node:path'
 import { isServiceNick } from '@shared/constants'
-import { asksForIdentification, confirmsIdentification } from '@shared/services'
+import { asksForIdentification, confirmsIdentification, secretsMasked } from '@shared/services'
 
 /**
  * Knowing NickServ when you see it.
@@ -14,6 +14,7 @@ import { asksForIdentification, confirmsIdentification } from '@shared/services'
 const corpus: {
   nicks: { name: string; nick: string; isServices: boolean }[]
   prompts: { name: string; text: string; asks: boolean; confirms: boolean }[]
+  secrets: { name: string; target: string; text: string; shown: string }[]
 } = JSON.parse(fs.readFileSync(path.join(__dirname, '../fixtures/services.json'), 'utf8'))
 
 describe('who speaks for the network', () => {
@@ -28,5 +29,11 @@ describe('what services are asking for', () => {
       expect(asksForIdentification(c.text)).toBe(c.asks)
       expect(confirmsIdentification(c.text)).toBe(c.confirms)
     })
+  }
+})
+
+describe('what a line to services is kept as', () => {
+  for (const c of corpus.secrets) {
+    it(c.name, () => expect(secretsMasked(c.target, c.text)).toBe(c.shown))
   }
 })

@@ -53,6 +53,12 @@ export function ChannelSidebar() {
     useChannelStore.getState().removeChannel(activeServerId, channelName)
   }, [activeServerId])
 
+  // Every line, or only your name — see `notifyAll` in the channel store
+  const handleToggleNotifyAll = useCallback((channelName: string) => {
+    if (!activeServerId) return
+    useChannelStore.getState().toggleNotifyAll(activeServerId, channelName)
+  }, [activeServerId])
+
   const handleToggleMute = useCallback((channelName: string, durationMs?: number) => {
     if (!activeServerId) return
     useChannelStore.getState().toggleMute(activeServerId, channelName, durationMs)
@@ -82,9 +88,15 @@ export function ChannelSidebar() {
           {connectionStatus !== 'connected' && (
             <span
               className={`h-2 w-2 rounded-full ${
-                connectionStatus === 'connecting' ? 'bg-yellow-500' : 'bg-gray-600'
+                connectionStatus === 'disconnected' ? 'bg-gray-600' : 'bg-yellow-500'
               }`}
-              title={connectionStatus === 'connecting' ? 'Connecting' : 'Not connected'}
+              title={
+                connectionStatus === 'connecting'
+                  ? 'Connecting'
+                  : connectionStatus === 'reconnecting'
+                    ? 'Not connected, trying again'
+                    : 'Not connected'
+              }
             />
           )}
           <svg
@@ -213,12 +225,33 @@ export function ChannelSidebar() {
           </p>
         )}
 
-        {connectionStatus !== 'connected' && (
-          <p className="px-2 py-4 text-center text-sm text-gray-500">
-            {connectionStatus === 'connecting'
-              ? 'Connecting...'
-              : 'Not connected'}
-          </p>
+        {connectionStatus === 'connecting' && (
+          <p className="px-2 py-4 text-center text-sm text-gray-500">Connecting…</p>
+        )}
+
+        {/*
+          The way back on, where the eye goes. "Not connected" on its own
+          left the one thing to do behind a dropdown arrow most people never
+          opened; the network was simply off, with nothing to press.
+        */}
+        {(connectionStatus === 'disconnected' || connectionStatus === 'reconnecting') && (
+          <div className="flex flex-col items-center gap-2 px-2 py-4">
+            <p className="text-sm text-gray-500">
+              {connectionStatus === 'reconnecting'
+                ? 'Not connected. Trying again…'
+                : 'Not connected'}
+            </p>
+            <button
+              onClick={() => {
+                if (!activeServerId) return
+                useServerStore.getState().setConnectionStatus(activeServerId, 'connecting')
+                window.switchboard.invoke('server:connect', activeServerId)
+              }}
+              className="rounded-md bg-indigo-600 px-3 py-1 text-sm font-medium text-white transition-colors hover:bg-indigo-500"
+            >
+              {connectionStatus === 'reconnecting' ? 'Try now' : 'Connect'}
+            </button>
+          </div>
         )}
 
         {/* Friend list (MONITOR) */}
@@ -265,6 +298,15 @@ export function ChannelSidebar() {
                 }
               ]
             : [
+                {
+                  label:
+                    activeServerId &&
+                    useChannelStore.getState().notifiesAll(activeServerId, contextMenu.channelName)
+                      ? 'Notify for mentions only'
+                      : 'Notify for every message',
+                  onClick: () => handleToggleNotifyAll(contextMenu.channelName)
+                },
+                { label: '', onClick: () => {}, separator: true },
                 {
                   label: 'Mute for 15 minutes',
                   onClick: () => handleToggleMute(contextMenu.channelName, 15 * 60 * 1000)

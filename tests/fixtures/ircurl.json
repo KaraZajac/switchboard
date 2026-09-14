@@ -1,0 +1,114 @@
+{
+  "$comment": "What an irc:// link means, shared by tests/shared/ircurl.test.ts and the Android SharedCorpusTest. `link` is null for anything that is not one.",
+  "cases": [
+    {
+      "name": "a channel on a plain port",
+      "url": "irc://irc.example.org/#lobby",
+      "link": {
+        "host": "irc.example.org",
+        "port": 6667,
+        "tls": false,
+        "channel": "#lobby",
+        "nick": null
+      }
+    },
+    {
+      "name": "ircs means TLS on 6697",
+      "url": "ircs://irc.example.org/lobby",
+      "link": {
+        "host": "irc.example.org",
+        "port": 6697,
+        "tls": true,
+        "channel": "#lobby",
+        "nick": null
+      }
+    },
+    {
+      "name": "a port of its own",
+      "url": "irc://irc.example.org:16667/#lobby",
+      "link": {
+        "host": "irc.example.org",
+        "port": 16667,
+        "tls": false,
+        "channel": "#lobby",
+        "nick": null
+      }
+    },
+    {
+      "name": "the server alone",
+      "url": "irc://irc.example.org",
+      "link": {
+        "host": "irc.example.org",
+        "port": 6667,
+        "tls": false,
+        "channel": null,
+        "nick": null
+      }
+    },
+    {
+      "name": "a trailing slash is still the server alone",
+      "url": "irc://irc.example.org/",
+      "link": {
+        "host": "irc.example.org",
+        "port": 6667,
+        "tls": false,
+        "channel": null,
+        "nick": null
+      }
+    },
+    {
+      "name": "an escaped hash",
+      "url": "irc://irc.example.org/%23lobby",
+      "link": {
+        "host": "irc.example.org",
+        "port": 6667,
+        "tls": false,
+        "channel": "#lobby",
+        "nick": null
+      }
+    },
+    {
+      "name": "a person, with the isnick flag",
+      "url": "irc://irc.example.org/robin,isnick",
+      "link": {
+        "host": "irc.example.org",
+        "port": 6667,
+        "tls": false,
+        "channel": null,
+        "nick": "robin"
+      }
+    },
+    {
+      "name": "a key on the end is not part of the name",
+      "url": "irc://irc.example.org/#private?secret",
+      "link": {
+        "host": "irc.example.org",
+        "port": 6667,
+        "tls": false,
+        "channel": "#private",
+        "nick": null
+      }
+    },
+    {
+      "name": "upper-case scheme",
+      "url": "IRC://irc.example.org/#lobby",
+      "link": {
+        "host": "irc.example.org",
+        "port": 6667,
+        "tls": false,
+        "channel": "#lobby",
+        "nick": null
+      }
+    },
+    {
+      "name": "a web address is not one",
+      "url": "https://irc.example.org/#lobby",
+      "link": null
+    },
+    {
+      "name": "nothing after the scheme is nothing",
+      "url": "irc://",
+      "link": null
+    }
+  ]
+}

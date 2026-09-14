@@ -16,6 +16,7 @@ import kotlinx.serialization.json.put
 import java.io.OutputStream
 import java.net.InetSocketAddress
 import java.net.Socket
+import javax.net.ssl.SSLContext
 import javax.net.ssl.SSLSocketFactory
 
 /**
@@ -97,6 +98,8 @@ class IrcConnection(
      * reattached is a minute of staring at CONNECTING for no reason.
      */
     private val retryNow = Channel<Unit>(capacity = Channel.CONFLATED)
+    /** The last dial was refused over the certificate — see [TrustedCertificate] */
+    private var certificateRefused = false
 
     val serverId: String get() = config.id
     val currentNick: String get() = state.nick
@@ -193,10 +196,28 @@ class IrcConnection(
                 readLoop()
             } catch (e: Exception) {
                 android.util.Log.w("SwitchboardIrc", "${config.host}:${config.port} failed", e)
-                // In words, where we have them. A refused certificate shown as
-                // "No subjectAltNames on the certificate match" is accurate and
-                // tells nobody that this might not be the server they meant.
-                emitError(ConnectionError.describe(e.message, config.host))
+                val untrusted = generateSequence<Throwable>(e) { it.cause }
+                    .filterIsInstance<UntrustedCertificate>()
+                    .firstOrNull()
+                if (untrusted != null) {
+                    // Dialling again cannot change the answer. Say what was
+                    // refused, with the fingerprint, and wait to be told.
+                    certificateRefused = true
+                    emit("irc:certificate", buildJsonObject {
+                        put("serverId", config.id)
+                        put("host", config.host)
+                        put("fingerprint", untrusted.fingerprint)
+                        put("subject", untrusted.subject)
+                        put("issuer", untrusted.issuer)
+                        put("validTo", untrusted.validTo)
+                        put("reason", untrusted.reason)
+                    })
+                } else {
+                    // In words, where we have them. A refused certificate shown as
+                    // "No subjectAltNames on the certificate match" is accurate and
+                    // tells nobody that this might not be the server they meant.
+                    emitError(ConnectionError.describe(e.message, config.host))
+                }
             }
 
             pingJob?.cancel()
@@ -234,7 +255,14 @@ class IrcConnection(
                 put("ms", backoff)
             })
 
-            withTimeoutOrNull(backoff) { retryNow.receive() }
+            if (certificateRefused) {
+                // Until somebody trusts the certificate or edits the server —
+                // either of which nudges this — there is nothing to retry
+                retryNow.receive()
+                certificateRefused = false
+            } else {
+                withTimeoutOrNull(backoff) { retryNow.receive() }
+            }
 
             waitingUntil = 0L
             emit("irc:waiting", buildJsonObject {
@@ -275,8 +303,13 @@ class IrcConnection(
             // A client certificate, where one is set up. SASL EXTERNAL has
             // nothing to authenticate with unless the handshake presents it,
             // which is why choosing that mechanism used to end in 904.
-            val factory = CertFp.socketFactory(config.clientCert)
-                ?: SSLSocketFactory.getDefault() as SSLSocketFactory
+            // Trust decided by hand — see [TrustedCertificate]: what the
+            // system accepts goes through, the one certificate the user
+            // chose goes through, and anything else is refused with its
+            // fingerprint attached so the refusal can become an offer.
+            val trust = TrustedCertificate.trustManager(config.trustedCertificate)
+            val factory = CertFp.socketFactory(config.clientCert, trust)
+                ?: SSLContext.getInstance("TLS").apply { init(null, arrayOf(trust), null) }.socketFactory
 
             val ssl = factory.createSocket(raw, config.host, config.port, true)
                 as javax.net.ssl.SSLSocket
@@ -971,7 +1004,15 @@ data class ServerConfig(
      * what every other client's "perform" does. Separate from
      * [identifyCommand] because that one is a credential and these are not.
      */
-    val performOnConnect: String? = null
+    val performOnConnect: String? = null,
+    /**
+     * The SHA-256 fingerprint of a server certificate the user chose to
+     * trust, or null — see [TrustedCertificate]. A fact about the server,
+     * not a secret, so it travels with the config to the other device.
+     */
+    val trustedCertificate: String? = null,
+    /** Nicks to try, in order, when [nick] is taken — see [Nicks] */
+    val altNicks: List<String> = emptyList()
 ) {
     /** These settings, as the shared login rule wants them */
     fun saslPlanConfig(): SaslPlan.Config = SaslPlan.Config(

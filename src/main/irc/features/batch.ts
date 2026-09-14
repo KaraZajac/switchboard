@@ -31,7 +31,8 @@ registerHandler('BATCH', (client, msg) => {
       type,
       params,
       messages: [],
-      parent
+      parent,
+      tags: msg.tags
     }
 
     client.state.batches.set(batchId, batch)
@@ -213,7 +214,18 @@ function processBatch(
       const parts = batch.messages.filter((m) => m.command === 'PRIVMSG')
       if (parts.length === 0) break
 
-      dispatchMessage(client, { ...parts[0], params: [target, combineMultiline(parts)] })
+      // The message's own tags are on the BATCH line, not on its parts: that
+      // is where the spec puts msgid, time and account for the whole. Built
+      // from the first part alone, the message got an invented id — and an
+      // edit, a reaction or a deletion naming the real one found nothing,
+      // on this client and on the phone alike.
+      const { batch: _outer, ...opening } = batch.tags ?? {}
+      const { batch: _inner, ...own } = parts[0].tags
+      void _outer
+      void _inner
+      const tags = { ...opening, ...own }
+
+      dispatchMessage(client, { ...parts[0], tags, params: [target, combineMultiline(parts)] })
       break
     }
 

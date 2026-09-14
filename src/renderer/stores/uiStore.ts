@@ -54,12 +54,16 @@ type TimeFormat = '12h' | '24h'
 export type ToastAction =
   | { kind: 'join'; label: string; serverId: string; channel: string }
   | { kind: 'account'; label: string; serverId: string }
+  /** Trust this one certificate and dial again — see `@shared/certificate` */
+  | { kind: 'trust'; label: string; serverId: string; fingerprint: string }
 
 export interface Toast {
   id: string
   title: string
   body: string
   action?: ToastAction
+  /** A line under the body in a typeface it can be read from — a fingerprint, a code */
+  detail?: string
   /**
    * Whether it goes away on its own.
    *
@@ -83,6 +87,8 @@ interface UIState {
   timeFormat: TimeFormat
   notificationsEnabled: boolean
   notificationSound: boolean
+  /** Joins, parts and quits as lines in the conversation — a mirror of the shared setting */
+  showJoinsParts: boolean
   whoisData: WhoisData | null
   editServerId: string | null
   dmMode: boolean
@@ -94,6 +100,9 @@ interface UIState {
   // Actions
   setTheme: (theme: Theme) => void
   openModal: (modal: Modal) => void
+  /** What an irc:// link said, for the add-network form to start from — see `@shared/ircurl` */
+  addServerPrefill: { host: string; port: number; tls: boolean; channel: string | null } | null
+  openAddServer: (prefill: { host: string; port: number; tls: boolean; channel: string | null }) => void
   showAccount: (serverId: string) => void
   closeModal: () => void
   toggleUserList: () => void
@@ -103,6 +112,7 @@ interface UIState {
   setTimeFormat: (format: TimeFormat) => void
   setNotificationsEnabled: (enabled: boolean) => void
   setNotificationSound: (enabled: boolean) => void
+  setShowJoinsParts: (on: boolean) => void
   showWhois: (data: WhoisData) => void
   setEditServerId: (id: string | null) => void
   setPopupWhoisNick: (nick: string | null) => void
@@ -147,6 +157,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   timeFormat: savedTimeFormat,
   notificationsEnabled: true,
   notificationSound: true,
+  showJoinsParts: false,
   whoisData: null,
   editServerId: null,
   dmMode: false,
@@ -164,7 +175,9 @@ export const useUIStore = create<UIState>((set, get) => ({
     set({ theme })
   },
 
-  openModal: (modal) => set({ activeModal: modal }),
+  openModal: (modal) => set({ activeModal: modal, addServerPrefill: null }),
+  addServerPrefill: null,
+  openAddServer: (prefill) => set({ activeModal: 'add-server', addServerPrefill: prefill }),
   closeModal: () =>
     set({ activeModal: null, whoisData: null, editServerId: null, accountServerId: null }),
 
@@ -186,6 +199,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   },
   setNotificationsEnabled: (enabled) => set({ notificationsEnabled: enabled }),
   setNotificationSound: (enabled) => set({ notificationSound: enabled }),
+  setShowJoinsParts: (on) => set({ showJoinsParts: on }),
   showWhois: (data) => set({ activeModal: 'whois', whoisData: data }),
   setEditServerId: (id) => set({ editServerId: id, activeModal: id ? 'edit-server' : null }),
   setDmMode: (dm) => set({ dmMode: dm }),

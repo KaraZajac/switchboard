@@ -8,6 +8,7 @@ import { join } from 'path'
 import { autoUpdater } from 'electron-updater'
 import { registerIPCHandlers } from './ipc/index'
 import { ircManager } from './irc/manager'
+import { parseIrcUrl } from '@shared/ircurl'
 import { initDatabase, closeDatabase } from './storage/database'
 import { loadSTSPolicies, persistSTSPoliciesWith } from './irc/features/sts'
 import { allSTSPolicies, saveSTSPolicy, forgetSTSPolicy } from './storage/models/sts'
@@ -258,6 +259,63 @@ setNotifier(sendToRenderer)
 // Track whether we're quitting vs just closing the window
 let isQuitting = false
 
+/**
+ * An `irc://` link, from the command line or the operating system.
+ *
+ * A network we already have is joined — connected first, if it has to be —
+ * and the window is pointed at the channel. One we do not have opens the
+ * add-network form with the address filled in, because a nick is the
+ * user's to choose. See `@shared/ircurl`.
+ */
+function openIrcLink(raw: string): void {
+  const link = parseIrcUrl(raw)
+  if (!link) return
+  mainWindow?.show()
+  mainWindow?.focus()
+
+  const known = getAllServers().find((server) => server.host.toLowerCase() === link.host.toLowerCase())
+  if (!known) {
+    sendToRenderer('link:add-server', { host: link.host, port: link.port, tls: link.tls, channel: link.channel })
+    return
+  }
+
+  const target = link.channel ?? link.nick
+  const client = ircManager.getClient(known.id)
+  if (client && client.state.registrationState === 'connected') {
+    if (link.channel) client.join(link.channel)
+  } else {
+    // Joined on arrival, along with whatever the network always joins
+    const autoJoin = link.channel && !known.autoJoin.includes(link.channel) ? [...known.autoJoin, link.channel] : known.autoJoin
+    ircManager.connect({ ...known, autoJoin })
+  }
+  if (target) sendToRenderer('link:open', { serverId: known.id, channel: target })
+}
+
+/** The first irc:// link among the arguments a launch or a second launch brought */
+function ircLinkIn(argv: string[]): string | undefined {
+  return argv.find((arg) => /^ircs?:\/\//i.test(arg))
+}
+
+// One window per profile. A second launch — the way a browser hands over an
+// irc:// link on Linux and Windows — is passed to the one already running.
+if (!app.requestSingleInstanceLock()) {
+  app.quit()
+} else {
+  app.on('second-instance', (_event, argv) => {
+    if (mainWindow?.isMinimized()) mainWindow.restore()
+    mainWindow?.show()
+    mainWindow?.focus()
+    const link = ircLinkIn(argv)
+    if (link) openIrcLink(link)
+  })
+  // macOS hands the link over this way instead
+  app.on('open-url', (event, url) => {
+    event.preventDefault()
+    if (app.isReady()) openIrcLink(url)
+    else app.whenReady().then(() => setTimeout(() => openIrcLink(url), 1_500))
+  })
+}
+
 app.whenReady().then(async () => {
   // What a CTCP VERSION gets told, before anything can be asked
   setAppVersion(app.getVersion(), process.platform)
@@ -395,6 +453,18 @@ app.whenReady().then(async () => {
 
   // Create tray icon
   createTray()
+
+  // Links on web pages: `irc://` and `ircs://` open here, the way they open
+  // in every other desktop client
+  for (const scheme of ['irc', 'ircs']) {
+    try {
+      app.setAsDefaultProtocolClient(scheme)
+    } catch {
+      // A platform that will not let us — nothing to do about it
+    }
+  }
+  const launchLink = ircLinkIn(process.argv)
+  if (launchLink) setTimeout(() => openIrcLink(launchLink), 3_000)
 
   // Set up auto-updater
   setupAutoUpdater()

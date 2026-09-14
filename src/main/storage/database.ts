@@ -374,6 +374,20 @@ function runMigrations(): void {
     db.run('ALTER TABLE servers ADD COLUMN perform_on_connect TEXT DEFAULT NULL')
     db.run("INSERT INTO migrations (name) VALUES ('014_perform_on_connect')")
   }
+
+  // A server certificate the user chose to trust, by its SHA-256 — see
+  // `@shared/certificate`. Not a secret: a fingerprint is what the server
+  // shows everybody.
+  if (!applied.has('015_trusted_cert')) {
+    db.run('ALTER TABLE servers ADD COLUMN trusted_cert TEXT DEFAULT NULL')
+    db.run("INSERT INTO migrations (name) VALUES ('015_trusted_cert')")
+  }
+
+  // Nicks to try when the first is taken, as a JSON list — see `@shared/nicks`
+  if (!applied.has('016_alt_nicks')) {
+    db.run('ALTER TABLE servers ADD COLUMN alt_nicks TEXT DEFAULT NULL')
+    db.run("INSERT INTO migrations (name) VALUES ('016_alt_nicks')")
+  }
 }
 
 /** Whether the search index exists — it does not on a build without FTS5 */

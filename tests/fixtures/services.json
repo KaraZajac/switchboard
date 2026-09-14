@@ -1,17 +1,43 @@
 {
   "$comment": "What NickServ is asking for, shared by tests/main/services.test.ts and the Android SharedCorpusTest. Both clients offer the login screen at the same moment, so both have to recognise the same sentences — a prompt one device acts on and the other ignores is two clients.",
-
   "$nicks": "Which nicks speak for the network rather than for a person.",
   "nicks": [
-    { "name": "NickServ", "nick": "NickServ", "isServices": true },
-    { "name": "lowercase", "nick": "nickserv", "isServices": true },
-    { "name": "ChanServ", "nick": "ChanServ", "isServices": true },
-    { "name": "SaslServ", "nick": "SaslServ", "isServices": true },
-    { "name": "an ordinary person", "nick": "robin", "isServices": false },
-    { "name": "somebody whose name merely starts the same way", "nick": "nickservant", "isServices": false },
-    { "name": "and one that merely contains it", "nick": "servicedesk", "isServices": false }
+    {
+      "name": "NickServ",
+      "nick": "NickServ",
+      "isServices": true
+    },
+    {
+      "name": "lowercase",
+      "nick": "nickserv",
+      "isServices": true
+    },
+    {
+      "name": "ChanServ",
+      "nick": "ChanServ",
+      "isServices": true
+    },
+    {
+      "name": "SaslServ",
+      "nick": "SaslServ",
+      "isServices": true
+    },
+    {
+      "name": "an ordinary person",
+      "nick": "robin",
+      "isServices": false
+    },
+    {
+      "name": "somebody whose name merely starts the same way",
+      "nick": "nickservant",
+      "isServices": false
+    },
+    {
+      "name": "and one that merely contains it",
+      "nick": "servicedesk",
+      "isServices": false
+    }
   ],
-
   "$prompts": "`asks` is whether this is the moment to offer the login screen; `confirms` is whether it says we already got in.",
   "prompts": [
     {
@@ -68,6 +94,81 @@
       "text": "Channel #lobby is registered to robin.",
       "asks": false,
       "confirms": false
+    }
+  ],
+  "$secrets": "What a line said to services is kept and shown as. `target` is who it was sent to; `shown` is what both clients keep in place of `text`. Only a services bot, only the commands that carry a secret, and only with something after the verb to hide.",
+  "secrets": [
+    {
+      "name": "an identify with the account named",
+      "target": "NickServ",
+      "text": "IDENTIFY kara hunter2",
+      "shown": "IDENTIFY •••"
+    },
+    {
+      "name": "an identify with the password alone",
+      "target": "NickServ",
+      "text": "IDENTIFY hunter2",
+      "shown": "IDENTIFY •••"
+    },
+    {
+      "name": "a registration, email and all",
+      "target": "NickServ",
+      "text": "REGISTER hunter2 kara@example.org",
+      "shown": "REGISTER •••"
+    },
+    {
+      "name": "however the verb was typed",
+      "target": "nickserv",
+      "text": "identify hunter2",
+      "shown": "identify •••"
+    },
+    {
+      "name": "a password change keeps the setting's name",
+      "target": "NickServ",
+      "text": "SET PASSWORD hunter3",
+      "shown": "SET PASSWORD •••"
+    },
+    {
+      "name": "any other setting is not a secret",
+      "target": "NickServ",
+      "text": "SET HIDE EMAIL ON",
+      "shown": "SET HIDE EMAIL ON"
+    },
+    {
+      "name": "taking a nick back",
+      "target": "NickServ",
+      "text": "GHOST kara hunter2",
+      "shown": "GHOST •••"
+    },
+    {
+      "name": "a verification code is a proof of the password",
+      "target": "NickServ",
+      "text": "VERIFY REGISTER kara abc123",
+      "shown": "VERIFY •••"
+    },
+    {
+      "name": "asking about a nick gives nothing away",
+      "target": "NickServ",
+      "text": "INFO kara",
+      "shown": "INFO kara"
+    },
+    {
+      "name": "the verb on its own",
+      "target": "NickServ",
+      "text": "IDENTIFY",
+      "shown": "IDENTIFY"
+    },
+    {
+      "name": "a person is not services, whatever the words",
+      "target": "robin",
+      "text": "IDENTIFY hunter2",
+      "shown": "IDENTIFY hunter2"
+    },
+    {
+      "name": "ChanServ takes passwords too",
+      "target": "ChanServ",
+      "text": "IDENTIFY #lobby hunter2",
+      "shown": "IDENTIFY •••"
     }
   ]
 }

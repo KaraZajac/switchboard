@@ -1,0 +1,68 @@
+{
+  "$comment": "Which nick to try when the one asked for is taken: the user's alternatives in order, each once, then an underscore. Shared by tests/shared/nicks.test.ts and the Android SharedCorpusTest.",
+  "cases": [
+    {
+      "name": "the first alternative",
+      "attempted": "kara",
+      "alternatives": [
+        "kara_",
+        "kara2"
+      ],
+      "tried": [],
+      "next": "kara_"
+    },
+    {
+      "name": "the second, once the first was refused too",
+      "attempted": "kara_",
+      "alternatives": [
+        "kara_",
+        "kara2"
+      ],
+      "tried": [
+        "kara"
+      ],
+      "next": "kara2"
+    },
+    {
+      "name": "an underscore when they run out",
+      "attempted": "kara2",
+      "alternatives": [
+        "kara_",
+        "kara2"
+      ],
+      "tried": [
+        "kara",
+        "kara_"
+      ],
+      "next": "kara2_"
+    },
+    {
+      "name": "no alternatives at all",
+      "attempted": "kara",
+      "alternatives": [],
+      "tried": [],
+      "next": "kara_"
+    },
+    {
+      "name": "an alternative equal to what was just refused is skipped",
+      "attempted": "kara",
+      "alternatives": [
+        "Kara",
+        "kara2"
+      ],
+      "tried": [],
+      "next": "kara2"
+    },
+    {
+      "name": "blanks in the list are ignored",
+      "attempted": "kara",
+      "alternatives": [
+        "",
+        "  ",
+        "kara2"
+      ],
+      "tried": [],
+      "next": "kara2"
+    }
+  ]
+}

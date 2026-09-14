@@ -7,6 +7,9 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
+import androidx.camera.core.resolutionselector.ResolutionSelector
+import androidx.camera.core.resolutionselector.ResolutionStrategy
+import android.util.Size
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
@@ -248,6 +251,21 @@ private fun CameraPreview(
                     // Only the newest frame matters; a backlog would decode
                     // images of where the phone used to be pointing.
                     .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                    // More pixels than the 640×480 default. A pairing code
+                    // is some sixty modules a side, and at the distance a
+                    // phone is held from a monitor each module got a pixel
+                    // or two of a small frame — the camera opened, the code
+                    // was never read. 720p keeps the decode under a frame.
+                    .setResolutionSelector(
+                        ResolutionSelector.Builder()
+                            .setResolutionStrategy(
+                                ResolutionStrategy(
+                                    Size(1280, 720),
+                                    ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER
+                                )
+                            )
+                            .build()
+                    )
                     .build()
 
                 analysis.setAnalyzer(executor) { image ->

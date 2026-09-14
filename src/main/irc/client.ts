@@ -1,4 +1,5 @@
 import { EventEmitter } from 'events'
+import type { CertificateProblem } from '@shared/certificate'
 import { echoLocally } from './features/echo'
 import type { MaskEntry } from '@shared/masklists'
 import { lineBudget, splitToFit } from './features/linelen'
@@ -21,6 +22,8 @@ export interface ClientEvents {
   // Connection lifecycle
   registered: (data: { nick: string; message: string }) => void
   disconnected: (reason: string) => void
+  reconnecting: (delayMs: number) => void
+  certificate: (problem: CertificateProblem) => void
   connectionError: (error: Error) => void
 
   // Channel events
@@ -340,6 +343,9 @@ export class IRCClient {
       if (checkBatchMembership(this, msg)) return
       dispatchMessage(this, msg)
     })
+
+    this.connection.on('reconnecting', (delayMs) => this.events.emit('reconnecting', delayMs))
+    this.connection.on('certificate', (problem) => this.events.emit('certificate', problem))
 
     this.connection.on('disconnected', (reason) => {
       this.state.registrationState = 'disconnected'

@@ -55,6 +55,19 @@ export interface ServerConfig {
    * to a paired device by the same rule.
    */
   clientCert: string | null
+  /**
+   * The SHA-256 fingerprint of a server certificate the user chose to trust,
+   * or null. A private network's self-signed certificate is refused by every
+   * root store; this is how it is accepted anyway — that one certificate, not
+   * the whole idea of verification. Shared between devices, because it is a
+   * fact about the server rather than a secret. See `@shared/certificate`.
+   */
+  trustedCertificate?: string | null
+  /**
+   * Nicks to try, in order, when the one above is taken — see
+   * `@shared/nicks`. An underscore goes on the end once these run out.
+   */
+  altNicks?: string[]
 }
 
 /** Runtime server state (not persisted) */

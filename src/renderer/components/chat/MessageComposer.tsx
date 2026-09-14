@@ -13,8 +13,21 @@ import {
 import { IRC_COMMANDS } from '@shared/constants'
 import { typingToSend, type TypingEvent } from '@shared/typing'
 import { GifPicker } from './GifPicker'
+import { EmojiPicker } from './EmojiPicker'
+import {
+  emojiQuery as emojiOf,
+  emojiCandidates,
+  emojified,
+  withShortcodesReplaced,
+  type EmojiEntry
+} from '@shared/emoji'
 import { useServerStore } from '../../stores/serverStore'
-import { completionSuffix } from '@shared/completion'
+import {
+  completionSuffix,
+  mentionQuery as mentionOf,
+  mentionCandidates as whoCouldBeMeant,
+  mentioned
+} from '@shared/completion'
 import { mark, colourise, IRC_PALETTE, type FormattingMark } from '@shared/formatting'
 
 /** Composer grows with its content up to this height, then scrolls */
@@ -63,6 +76,8 @@ export function MessageComposer({
   const [showGifPicker, setShowGifPicker] = useState(false)
   const [showColours, setShowColours] = useState(false)
   const [uploading, setUploading] = useState(false)
+  // A file is being dragged over the box — see `uploadFile`
+  const [dragging, setDragging] = useState(false)
   const hasFilehost = !!useServerStore((s) => s.filehostUrls[serverId])
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const lastTypingSent = useRef(0)
@@ -92,20 +107,30 @@ export function MessageComposer({
     prefix: string
   }>({ active: false, candidates: [], index: 0, start: 0, prefix: '' })
 
-  // @mention autocomplete state
+  // The mention being typed: what follows a trailing `@`, or null. One rule
+  // with the phone — `mentionQuery` in `@shared/completion` — so both offer
+  // the same names at the same moment.
   const [mentionQuery, setMentionQuery] = useState<string | null>(null)
-  const [mentionStart, setMentionStart] = useState(0)
   const [mentionIndex, setMentionIndex] = useState(0)
   const mentionRef = useRef<HTMLDivElement>(null)
 
   const mentionCandidates =
     mentionQuery !== null
-      ? users
-          .map((u) => u.nick)
-          .filter((nick) => nick.toLowerCase().startsWith(mentionQuery.toLowerCase()))
-          .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
-          .slice(0, 10)
+      ? whoCouldBeMeant(
+          mentionQuery,
+          users.map((u) => u.nick)
+        )
       : []
+
+  // An emoji name being typed — `:smi` — offered the same way a mention is.
+  // See `@shared/emoji`; the phone offers the same names from the same table.
+  const [emojiQuery, setEmojiQuery] = useState<string | null>(null)
+  const [emojiIndex, setEmojiIndex] = useState(0)
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false)
+  const emojiMatches: EmojiEntry[] = emojiQuery !== null ? emojiCandidates(emojiQuery) : []
+  useEffect(() => {
+    setEmojiIndex(0)
+  }, [emojiQuery])
 
   // Reset mention index when candidates change
   useEffect(() => {
@@ -141,23 +166,96 @@ export function MessageComposer({
     return () => window.removeEventListener('resize', fit)
   }, [text])
 
-  const acceptMention = useCallback(
-    (nick: string) => {
-      const before = text.slice(0, mentionStart)
-      const after = text.slice(inputRef.current?.selectionStart || text.length)
-      setText(before + nick + ' ' + after.trimStart())
-      setMentionQuery(null)
-      // Focus back and move cursor after inserted nick
+  /**
+   * A picture pasted from the clipboard or dropped on the box.
+   *
+   * Goes up the same way the button sends a chosen file, and its address
+   * goes out as the message. Pasting a screenshot is how everybody shares
+   * one on Discord and The Lounge; here a button and a file dialog were the
+   * only way, and a screenshot is rarely a file you want to go looking for.
+   */
+  const uploadFile = useCallback(
+    async (file: File) => {
+      if (!hasFilehost || uploading || disabled) return
+      setUploading(true)
+      try {
+        const bytes = new Uint8Array(await file.arrayBuffer())
+        // The clipboard names a pasted image "image.png"; a bare blob has no name at all
+        const name =
+          file.name || (file.type.startsWith('image/') ? `pasted.${file.type.split('/')[1]}` : 'upload')
+        const result = await window.switchboard.invoke(
+          'file:upload-bytes',
+          serverId,
+          name,
+          file.type,
+          bytes
+        )
+        if (result) {
+          const { registerUploadFilename } = await import('../../utils/linkify')
+          registerUploadFilename(result.url, result.filename)
+          onSend(result.url)
+        }
+      } catch (err) {
+        console.error('Upload failed:', err)
+      } finally {
+        setUploading(false)
+      }
+    },
+    [hasFilehost, uploading, disabled, serverId, onSend]
+  )
+
+  const acceptEmoji = useCallback(
+    (entry: EmojiEntry) => {
+      const cursor = inputRef.current?.selectionStart ?? text.length
+      const finished = emojified(text.slice(0, cursor), entry.emoji)
+      setText(finished + text.slice(cursor))
+      setEmojiQuery(null)
       setTimeout(() => {
         if (inputRef.current) {
-          const pos = mentionStart + nick.length + 1
-          inputRef.current.selectionStart = pos
-          inputRef.current.selectionEnd = pos
+          inputRef.current.selectionStart = finished.length
+          inputRef.current.selectionEnd = finished.length
           inputRef.current.focus()
         }
       }, 0)
     },
-    [text, mentionStart]
+    [text]
+  )
+
+  /** Put an emoji from the picker where the cursor is */
+  const insertEmoji = useCallback(
+    (emoji: string) => {
+      const el = inputRef.current
+      const at = el?.selectionStart ?? text.length
+      const next = text.slice(0, at) + emoji + text.slice(at)
+      setText(next)
+      setShowEmojiPicker(false)
+      setTimeout(() => {
+        if (el) {
+          el.selectionStart = at + emoji.length
+          el.selectionEnd = at + emoji.length
+          el.focus()
+        }
+      }, 0)
+    },
+    [text]
+  )
+
+  const acceptMention = useCallback(
+    (nick: string) => {
+      const cursor = inputRef.current?.selectionStart ?? text.length
+      const finished = mentioned(text.slice(0, cursor), nick)
+      setText(finished + text.slice(cursor).trimStart())
+      setMentionQuery(null)
+      // Focus back and move the cursor to just after the name
+      setTimeout(() => {
+        if (inputRef.current) {
+          inputRef.current.selectionStart = finished.length
+          inputRef.current.selectionEnd = finished.length
+          inputRef.current.focus()
+        }
+      }, 0)
+    },
+    [text]
   )
 
   /**
@@ -225,6 +323,30 @@ export function MessageComposer({
         }
       }
 
+      // The emoji list, when one is open: the same keys as the mention list
+      if (emojiMatches.length > 0 && emojiQuery !== null) {
+        if (e.key === 'ArrowDown') {
+          e.preventDefault()
+          setEmojiIndex((i) => (i + 1) % emojiMatches.length)
+          return
+        }
+        if (e.key === 'ArrowUp') {
+          e.preventDefault()
+          setEmojiIndex((i) => (i - 1 + emojiMatches.length) % emojiMatches.length)
+          return
+        }
+        if (e.key === 'Tab' || e.key === 'Enter') {
+          e.preventDefault()
+          acceptEmoji(emojiMatches[emojiIndex])
+          return
+        }
+        if (e.key === 'Escape') {
+          e.preventDefault()
+          setEmojiQuery(null)
+          return
+        }
+      }
+
       // Handle mention popup navigation
       if (mentionCandidates.length > 0 && mentionQuery !== null) {
         if (e.key === 'ArrowDown') {
@@ -252,12 +374,15 @@ export function MessageComposer({
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault()
         if (text.trim() && !disabled) {
+          // `:tada:` goes out as the party popper — see `@shared/emoji`. Not
+          // in a command, whose arguments mean what they say.
+          const said = text.startsWith('/') ? text.trim() : withShortcodesReplaced(text.trim())
           if (replyTarget && onSendReply) {
-            onSendReply(text.trim(), replyTarget.id)
+            onSendReply(said, replyTarget.id)
           } else {
-            onSend(text.trim())
+            onSend(said)
           }
-          history.current = remember(history.current, text.trim())
+          history.current = remember(history.current, said)
           keep(key, history.current)
           setText('')
           noteTyping('sent')
@@ -329,6 +454,10 @@ export function MessageComposer({
       mentionQuery,
       mentionIndex,
       acceptMention,
+      emojiMatches,
+      emojiQuery,
+      emojiIndex,
+      acceptEmoji,
       applyMark
     ]
   )
@@ -421,7 +550,24 @@ export function MessageComposer({
   const sendTypingDone = useCallback(() => noteTyping('cleared'), [noteTyping])
 
   return (
-    <div className="px-4 pb-6 pt-0">
+    <div
+      className={`px-4 pb-6 pt-0 ${dragging ? 'rounded-lg ring-2 ring-inset ring-indigo-500/60' : ''}`}
+      // Dropping a file on an Electron window otherwise navigates to it, so
+      // the default is always prevented; the upload only happens where the
+      // network has somewhere to put it
+      onDragOver={(e) => {
+        e.preventDefault()
+        if (hasFilehost && e.dataTransfer.types.includes('Files')) setDragging(true)
+      }}
+      onDragLeave={() => setDragging(false)}
+      onDrop={(e) => {
+        e.preventDefault()
+        setDragging(false)
+        const file = e.dataTransfer.files[0]
+        if (file) void uploadFile(file)
+      }}
+      title={dragging ? 'Drop to upload' : undefined}
+    >
       {/* Reply preview bar */}
       {replyTarget && (
         <div className="mb-1 flex items-center gap-2 rounded-t-lg bg-gray-700/50 px-4 py-2">
@@ -450,6 +596,27 @@ export function MessageComposer({
       )}
 
       <div className={`relative rounded-lg bg-gray-700 ${replyTarget ? 'rounded-t-none' : ''}`}>
+        {/* :emoji name being typed */}
+        {emojiMatches.length > 0 && emojiQuery !== null && (
+          <div className="absolute bottom-full left-0 z-20 mb-1 w-72 overflow-hidden rounded-lg border border-gray-600 bg-gray-800 py-1 shadow-xl">
+            {emojiMatches.map((entry, i) => (
+              <button
+                key={entry.name}
+                onMouseDown={(e) => {
+                  e.preventDefault()
+                  acceptEmoji(entry)
+                }}
+                className={`flex w-full items-center gap-3 px-3 py-1.5 text-left text-sm ${
+                  i === emojiIndex ? 'bg-indigo-500/30 text-white' : 'text-gray-300 hover:bg-gray-700'
+                }`}
+              >
+                <span className="text-lg">{entry.emoji}</span>
+                <span className="font-mono text-xs text-gray-400">:{entry.name}:</span>
+              </button>
+            ))}
+          </div>
+        )}
+
         {/* @mention autocomplete popup */}
         {mentionCandidates.length > 0 && mentionQuery !== null && (
           <div
@@ -527,21 +694,23 @@ export function MessageComposer({
           <textarea
             ref={inputRef}
             value={text}
+            onPaste={(e) => {
+              const file = e.clipboardData.files[0]
+              if (file && hasFilehost) {
+                e.preventDefault()
+                void uploadFile(file)
+              }
+            }}
             onChange={(e) => {
               const val = e.target.value
               setText(val)
               completionState.current.active = false
 
-              // Detect @mention query
-              const cursor = e.target.selectionStart || val.length
-              const beforeCursor = val.slice(0, cursor)
-              const atMatch = beforeCursor.match(/@(\w*)$/)
-              if (atMatch) {
-                setMentionQuery(atMatch[1])
-                setMentionStart(cursor - atMatch[1].length)
-              } else {
-                setMentionQuery(null)
-              }
+              // A mention or an emoji name being typed, up to the cursor
+              const cursor = e.target.selectionStart ?? val.length
+              const mention = mentionOf(val.slice(0, cursor))
+              setMentionQuery(mention)
+              setEmojiQuery(mention === null ? emojiOf(val.slice(0, cursor)) : null)
 
               if (val.trim()) {
                 sendTyping()
@@ -592,6 +761,19 @@ export function MessageComposer({
             </button>
           </div>
 
+          {/* Emoji picker, for the face you know and cannot name */}
+          <button
+            onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+            disabled={disabled}
+            className="mb-2 mr-1 rounded p-1.5 text-gray-400 hover:bg-gray-600 hover:text-gray-200 disabled:opacity-50"
+            title="Emoji"
+            type="button"
+          >
+            <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm3.5-9a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm-7 0a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm3.5 6.5c2.33 0 4.31-1.46 5.11-3.5H6.89c.8 2.04 2.78 3.5 5.11 3.5z" />
+            </svg>
+          </button>
+
           {/* GIF button */}
           <button
             onClick={() => setShowGifPicker(!showGifPicker)}
@@ -634,6 +816,10 @@ export function MessageComposer({
               None
             </button>
           </div>
+        )}
+
+        {showEmojiPicker && (
+          <EmojiPicker onSelect={insertEmoji} onClose={() => setShowEmojiPicker(false)} />
         )}
 
         {/* GIF picker panel */}

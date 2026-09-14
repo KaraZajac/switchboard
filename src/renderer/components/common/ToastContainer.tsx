@@ -17,7 +17,13 @@ export function ToastContainer() {
         >
           <div className="flex-1 min-w-0">
             <div className="text-sm font-semibold text-gray-100">{toast.title}</div>
-            <div className="mt-0.5 text-sm text-gray-400">{toast.body}</div>
+            {/* break-words: a certificate fingerprint is one long token, and it wrapped nowhere */}
+            <div className="mt-0.5 text-sm break-words text-gray-400">{toast.body}</div>
+            {toast.detail && (
+              <div className="mt-1.5 rounded bg-gray-900/70 px-2 py-1 font-mono text-[11px] leading-4 break-all text-gray-300 select-text">
+                {toast.detail}
+              </div>
+            )}
             {toast.action && (
               <button
                 onClick={() => {
@@ -26,6 +32,12 @@ export function ToastContainer() {
                     window.switchboard.invoke('channel:join', action.serverId, action.channel)
                     useChannelStore.getState().addChannel(action.serverId, action.channel)
                     useChannelStore.getState().setActiveChannel(action.serverId, action.channel)
+                  } else if (action.kind === 'trust') {
+                    void window.switchboard.invoke(
+                      'server:trust-certificate',
+                      action.serverId,
+                      action.fingerprint
+                    )
                   } else {
                     useUIStore.getState().showAccount(action.serverId)
                   }

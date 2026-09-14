@@ -3,6 +3,7 @@ import { useServerStore } from '../../stores/serverStore'
 import { useChannelStore } from '../../stores/channelStore'
 import { FormattedText } from '../chat/MessageContent'
 import { stripFormatting } from '@shared/formatting'
+import { wording } from '../../utils/speak'
 
 interface ChannelEntry {
   name: string
@@ -14,10 +15,20 @@ interface ChannelBrowserProps {
   onClose: () => void
 }
 
+// One empty list for every server that has none. A selector that answers
+// with a fresh `[]` is a new value every time React asks, and React asks
+// until it stops changing — which is never, and the window died with
+// "maximum update depth exceeded" the moment the browser opened on a network
+// that had not joined anything yet.
+const NO_CHANNELS: never[] = []
+
 export function ChannelBrowser({ onClose }: ChannelBrowserProps) {
   const activeServerId = useServerStore((s) => s.activeServerId)
+  const connectionStatus = useServerStore((s) =>
+    activeServerId ? (s.connectionStatus[activeServerId] ?? 'disconnected') : 'disconnected'
+  )
   const joinedChannels = useChannelStore((s) =>
-    activeServerId ? s.channels[activeServerId] ?? [] : []
+    activeServerId ? (s.channels[activeServerId] ?? NO_CHANNELS) : NO_CHANNELS
   )
 
   const [channels, setChannels] = useState<ChannelEntry[]>([])
@@ -37,6 +48,16 @@ export function ChannelBrowser({ onClose }: ChannelBrowserProps) {
   useEffect(() => {
     if (!activeServerId) return
 
+    // Nothing to list until we are on the network. Asking anyway got the
+    // answer back as "Error invoking remote method 'channel:list': Error: Not
+    // connected", which is the main process talking to us, not to the person.
+    if (connectionStatus !== 'connected') {
+      setChannels([])
+      setError('Not connected to this network. Connect, and the channels will be here.')
+      setLoading(false)
+      return
+    }
+
     setLoading(true)
     setError(null)
 
@@ -48,10 +69,10 @@ export function ChannelBrowser({ onClose }: ChannelBrowserProps) {
         setLoading(false)
       })
       .catch((err) => {
-        setError(err instanceof Error ? err.message : 'Failed to fetch channel list')
+        setError(wording(err) || 'The channel list did not arrive.')
         setLoading(false)
       })
-  }, [activeServerId])
+  }, [activeServerId, connectionStatus])
 
   // Matched against the topic as it reads, not as it arrived: a topic full of
   // colour codes would otherwise match on "4" and never on the word beside it.

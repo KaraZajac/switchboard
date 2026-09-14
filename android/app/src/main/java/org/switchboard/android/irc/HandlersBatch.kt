@@ -52,7 +52,8 @@ internal fun registerBatchHandlers() {
                 id = id,
                 type = message.param(1).orEmpty(),
                 params = message.params.drop(2),
-                parent = message.tag("batch")
+                parent = message.tag("batch"),
+                tags = message.tags
             )
             return@on
         }
@@ -172,14 +173,21 @@ private fun processBatch(session: IrcSession, batch: BatchState) {
             val from = first.nick ?: return
             val conversation = if (state.isMe(target)) from else target
 
+            // The message's own tags are on the BATCH line, not on its parts:
+            // that is where the spec puts msgid and time for the whole. Read
+            // off the first part alone the message got an invented id, and an
+            // edit, a reaction or a deletion naming the real one found nothing.
+            val id = batch.tags["msgid"] ?: messageId(first, state.serverId)
+            val timestamp = ServerTime.of(batch.tags["time"] ?: first.tag("time"))
+
             session.emit("irc:message", buildJsonObject {
                 put("serverId", state.serverId)
                 put("channel", conversation)
                 put("message", buildJsonObject {
-                    put("id", messageId(first, state.serverId))
+                    put("id", id)
                     put("nick", from)
                     put("content", text)
-                    put("timestamp", timestampOf(first))
+                    put("timestamp", timestamp)
                     put("type", "privmsg")
                 })
             })

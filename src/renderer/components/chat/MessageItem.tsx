@@ -94,7 +94,7 @@ export function MessageItem({ message, prevMessage, onReply }: MessageItemProps)
   if (isDeleted) {
     return (
       <div className="flex items-start px-2 py-0.5">
-        <span className="mr-2 mt-0.5 min-w-[48px] text-right text-xs text-gray-500 opacity-0">
+        <span className="mt-0.5 w-14 shrink-0 overflow-hidden pr-2 text-right text-[11px] leading-4 whitespace-nowrap text-gray-500 opacity-0">
           {time}
         </span>
         <span className="text-sm italic text-gray-600">this message was deleted</span>
@@ -105,7 +105,7 @@ export function MessageItem({ message, prevMessage, onReply }: MessageItemProps)
   if (isAction) {
     return (
       <div className="group relative flex items-start px-2 py-0.5 hover:bg-gray-700/25">
-        <span className="mr-2 mt-0.5 min-w-[48px] text-right text-xs text-gray-500 opacity-0 group-hover:opacity-100">
+        <span className="mt-0.5 w-14 shrink-0 overflow-hidden pr-2 text-right text-[11px] leading-4 whitespace-nowrap text-gray-500 opacity-0 group-hover:opacity-100">
           {time}
         </span>
         <div className="flex-1">
@@ -131,7 +131,7 @@ export function MessageItem({ message, prevMessage, onReply }: MessageItemProps)
   if (isSystem) {
     return (
       <div className="group relative flex items-start px-2 py-0.5 hover:bg-gray-700/25">
-        <span className="mr-2 mt-0.5 min-w-[48px] text-right text-xs text-gray-500 opacity-0 group-hover:opacity-100">
+        <span className="mt-0.5 w-14 shrink-0 overflow-hidden pr-2 text-right text-[11px] leading-4 whitespace-nowrap text-gray-500 opacity-0 group-hover:opacity-100">
           {time}
         </span>
         <span className="text-sm text-gray-500">
@@ -146,7 +146,7 @@ export function MessageItem({ message, prevMessage, onReply }: MessageItemProps)
       <div
         className={`group relative flex items-start px-2 py-0.5 hover:bg-gray-700/25 ${mentionBg}`}
       >
-        <span className="mr-2 mt-0.5 min-w-[48px] text-right text-xs text-gray-500 opacity-0 group-hover:opacity-100">
+        <span className="mt-0.5 w-14 shrink-0 overflow-hidden pr-2 text-right text-[11px] leading-4 whitespace-nowrap text-gray-500 opacity-0 group-hover:opacity-100">
           {time}
         </span>
         <div className="flex-1">
@@ -180,7 +180,7 @@ export function MessageItem({ message, prevMessage, onReply }: MessageItemProps)
       <div
         className={`group relative flex items-start px-2 py-0.5 hover:bg-gray-700/25 ${mentionBg}`}
       >
-        <span className="mr-2 mt-0.5 min-w-[48px] text-right text-xs text-gray-500">{time}</span>
+        <span className="mt-0.5 w-14 shrink-0 overflow-hidden pr-2 text-right text-[11px] leading-4 whitespace-nowrap text-gray-500">{time}</span>
         <div className="flex-1 overflow-hidden">
           {message.replyTo && (
             <ReplyPreview
@@ -936,7 +936,7 @@ function MessageAvatar({ nick, avatarUrl }: { nick: string; avatarUrl: string | 
         alt={nick}
         referrerPolicy="no-referrer"
         crossOrigin="anonymous"
-        className="mr-3 mt-0.5 h-10 w-10 flex-shrink-0 rounded-full object-cover"
+        className="mr-4 mt-0.5 h-10 w-10 flex-shrink-0 rounded-full object-cover"
         onError={() => setFailed(true)}
       />
     )
@@ -944,7 +944,7 @@ function MessageAvatar({ nick, avatarUrl }: { nick: string; avatarUrl: string | 
 
   return (
     <div
-      className={`mr-3 mt-0.5 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full ${nickColor(nick)} text-sm font-bold text-white`}
+      className={`mr-4 mt-0.5 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full ${nickColor(nick)} text-sm font-bold text-white`}
     >
       {nick.charAt(0).toUpperCase()}
     </div>

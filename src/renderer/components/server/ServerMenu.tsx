@@ -28,7 +28,7 @@ export function ServerMenu({ serverId, x, y, onClose, extraItems = [] }: ServerM
           onClick: () => window.switchboard.invoke('server:disconnect', serverId)
         }
       : {
-          label: status === 'connecting' ? 'Reconnect' : 'Connect',
+          label: status === 'disconnected' ? 'Connect' : 'Reconnect',
           onClick: () => {
             store.setConnectionStatus(serverId, 'connecting')
             window.switchboard.invoke('server:connect', serverId)

@@ -242,6 +242,8 @@ private fun ServerForm(
     var port by remember { mutableStateOf((existing?.port ?: 6697).toString()) }
     var tls by remember { mutableStateOf(existing?.tls ?: true) }
     var nick by remember { mutableStateOf(existing?.nick.orEmpty()) }
+    // Nicks to try when the first is taken — see [org.switchboard.android.irc.Nicks]
+    var altNicks by remember { mutableStateOf(existing?.altNicks?.joinToString(", ").orEmpty()) }
     var saslUser by remember { mutableStateOf(existing?.saslUsername.orEmpty()) }
     var saslPass by remember { mutableStateOf("") }
     var clientCert by remember { mutableStateOf(existing?.clientCert.orEmpty()) }
@@ -296,6 +298,9 @@ private fun ServerForm(
             }
 
             Field("Nickname", "yourname", nick) { nick = it }
+            // Tried in order when the first is taken; the hint stays one line so
+            // the box stays the height of the others
+            Field("Other nicks to try", "yourname2, yourname_", altNicks) { altNicks = it }
             Field("Account (SASL)", "Leave blank if you do not have one", saslUser) { saslUser = it }
             Field(
                 "Account password",
@@ -329,6 +334,7 @@ private fun ServerForm(
                             port = port.toIntOrNull() ?: 6697,
                             tls = tls,
                             nick = nick.trim(),
+                            altNicks = altNicks.split(",").map { it.trim() }.filter { it.isNotEmpty() },
                             username = existing?.username.orEmpty(),
                             realname = existing?.realname.orEmpty(),
                             saslMechanism = when {
@@ -343,6 +349,9 @@ private fun ServerForm(
                             // Blank means "leave it alone"; the engine drops it
                             saslPassword = saslPass.ifBlank { existing?.saslPassword },
                             clientCert = clientCert.trim().ifBlank { null },
+                            // Kept: it was said yes to once, from the offer
+                            // that appears when a connection is refused
+                            trustedCertificate = existing?.trustedCertificate,
                             password = existing?.password,
                             identifyCommand = existing?.identifyCommand,
                             autoConnect = autoConnect,

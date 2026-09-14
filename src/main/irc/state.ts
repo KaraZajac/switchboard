@@ -29,6 +29,9 @@ export class ConnectionState {
    */
   pendingNick: string | null = null
 
+  /** Nicks refused during this registration, so each alternative is tried once — see `@shared/nicks` */
+  triedNicks: string[] = []
+
   /**
    * Our own `user@host`, once the server has shown it to us.
    *
@@ -49,6 +52,9 @@ export class ConnectionState {
 
   /** CAP REQ lines still waiting for an ACK or NAK */
   pendingCapRequests = 0
+
+  /** A multi-line CAP LS being gathered, name to value, until the last line */
+  pendingCapLs: Map<string, string | null> = new Map()
 
   /** Username sent during registration */
   username = ''
@@ -123,6 +129,7 @@ export class ConnectionState {
     this.registrationState = 'disconnected'
     this.nick = ''
     this.pendingNick = null
+    this.triedNicks = []
     this.userHost = null
     this.nickRefusedReason = null
     this.serverName = ''
@@ -130,6 +137,7 @@ export class ConnectionState {
     this.availableCapabilities.clear()
     this.capNegotiating = false
     this.pendingCapRequests = 0
+    this.pendingCapLs.clear()
     this.isupport = {}
     this.metadata.clear()
     this.channels.clear()

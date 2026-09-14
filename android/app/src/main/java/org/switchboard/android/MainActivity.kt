@@ -1,6 +1,11 @@
 package org.switchboard.android
 
 import android.content.Intent
+import org.switchboard.android.PendingShare
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.delay
+import org.switchboard.android.irc.ServerConfig
+import org.switchboard.android.irc.IrcUrl
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -66,6 +71,13 @@ class MainActivity : ComponentActivity() {
     /** A pairing link the phone was opened with, consumed once */
     private var launchPairing by mutableStateOf<PairingPayload?>(null)
 
+    /** The conversation a tapped notification was about, consumed once */
+    private var launchConversation by mutableStateOf<Conversation?>(null)
+    /** An irc:// link the system handed over — see [IrcUrl] */
+    private var launchLink by mutableStateOf<IrcUrl.Link?>(null)
+    /** Text or a picture shared from another app, waiting for a conversation */
+    private var launchShare by mutableStateOf<PendingShare?>(null)
+
     private val askNotifications = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { /* the service runs either way; without this its notification is silent */ }
@@ -84,6 +96,9 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         launchPairing = pairingFrom(intent)
+        launchConversation = conversationFrom(intent)
+        launchLink = linkFrom(intent)
+        launchShare = shareFrom(intent)
 
         // Android 13+ will not show the foreground-service notification without
         // this, and a foreground service with no visible notification is a
@@ -98,19 +113,66 @@ class MainActivity : ComponentActivity() {
         SwitchboardService.start(this)
 
         setContent {
-            App(engine, lifecycleScope, launchPairing) { launchPairing = null }
+            App(
+                engine,
+                lifecycleScope,
+                launchPairing,
+                onPairingConsumed = { launchPairing = null },
+                launchConversation = launchConversation,
+                onConversationConsumed = { launchConversation = null },
+                launchLink = launchLink,
+                onLinkConsumed = { launchLink = null },
+                launchShare = launchShare,
+                onShareConsumed = { launchShare = null }
+            )
         }
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        setIntent(intent)
         // Scanned with the system camera while we were already open
         pairingFrom(intent)?.let { launchPairing = it }
+        // A notification tapped while we were already open
+        conversationFrom(intent)?.let { launchConversation = it }
+        linkFrom(intent)?.let { launchLink = it }
+        shareFrom(intent)?.let { launchShare = it }
+    }
+
+    /** An irc:// or ircs:// link, if that is what opened us */
+    private fun linkFrom(intent: Intent?): IrcUrl.Link? {
+        if (intent?.action != Intent.ACTION_VIEW) return null
+        val scheme = intent.data?.scheme?.lowercase() ?: return null
+        if (scheme != "irc" && scheme != "ircs") return null
+        return intent.dataString?.let { IrcUrl.parse(it) }
+    }
+
+    /** Text or a picture another app shared with us */
+    private fun shareFrom(intent: Intent?): PendingShare? {
+        if (intent?.action != Intent.ACTION_SEND) return null
+        val text = intent.getStringExtra(Intent.EXTRA_TEXT)
+        @Suppress("DEPRECATION")
+        val stream = intent.getParcelableExtra<android.net.Uri>(Intent.EXTRA_STREAM)
+        if (text.isNullOrBlank() && stream == null) return null
+        return PendingShare(text = text?.trim()?.takeIf { it.isNotEmpty() }, image = stream)
     }
 
     private fun pairingFrom(intent: Intent?): PairingPayload? {
         if (intent?.action != Intent.ACTION_VIEW) return null
         return intent.dataString?.let { Pairing.parse(it) }
+    }
+
+    /**
+     * What a notification named, if this intent came from one.
+     *
+     * The tap intent carried the conversation from the day notifications were
+     * written, and nothing read it: a tap opened Switchboard on whatever was
+     * up last and left you to find the message yourself.
+     */
+    private fun conversationFrom(intent: Intent?): Conversation? {
+        val serverId = intent?.getStringExtra(Notifier.EXTRA_SERVER) ?: return null
+        val channel = intent.getStringExtra(Notifier.EXTRA_CHANNEL) ?: return null
+        return Conversation(serverId, channel)
     }
 
     // Nothing is torn down here on purpose: leaving this screen must not take
@@ -119,12 +181,21 @@ class MainActivity : ComponentActivity() {
 
 private enum class Screen { PAIRING, SCANNING, CHAT, SETTINGS, SEARCH, BROWSE, SERVERS, ACCOUNT }
 
+/** One conversation on one network, as a notification names it */
+data class Conversation(val serverId: String, val channel: String)
+
 @Composable
 fun App(
     engine: SwitchboardEngine,
     scope: CoroutineScope,
     launchPairing: PairingPayload? = null,
-    onPairingConsumed: () -> Unit = {}
+    onPairingConsumed: () -> Unit = {},
+    launchConversation: Conversation? = null,
+    onConversationConsumed: () -> Unit = {},
+    launchLink: IrcUrl.Link? = null,
+    onLinkConsumed: () -> Unit = {},
+    launchShare: PendingShare? = null,
+    onShareConsumed: () -> Unit = {}
 ) {
     var screen by remember {
         mutableStateOf(
@@ -223,6 +294,90 @@ fun App(
     var pairingAsked by remember { mutableStateOf<PairingPayload?>(null) }
     LaunchedEffect(launchPairing?.ticket) {
         pairingAsked = launchPairing
+    }
+
+    /*
+     * A notification tapped: go where it was about.
+     *
+     * Straight to the conversation, whichever screen was up. On a cold start
+     * the store is still filling from the vault, so wait for the network to
+     * exist rather than selecting into nothing — the same wait a join gets.
+     * The name is matched against what the store knows so a channel keeps its
+     * spelling; a nick not seen yet is opened as it was said.
+     */
+    // An irc:// link. A network we have is joined, connected first if it
+    // has to be; one we do not have is added with the nick from another,
+    // since a link is how somebody was told to come and see. See [IrcUrl].
+    LaunchedEffect(launchLink) {
+        val link = launchLink ?: return@LaunchedEffect
+        onLinkConsumed()
+        val servers = engine.listServers()
+        val known = servers.firstOrNull { it.host.equals(link.host, ignoreCase = true) }
+        val target = link.channel ?: link.nick
+        if (known != null) {
+            if (store.servers[known.id]?.connected != true) engine.connectServer(known.id)
+            if (link.channel != null) {
+                // Joined once the network answers, or now if it already has
+                withTimeoutOrNull(20_000) {
+                    while (store.servers[known.id]?.connected != true) delay(250)
+                }
+                engine.join(known.id, link.channel)
+            }
+            if (target != null) {
+                store.dmMode = !isChannel(target)
+                store.select(known.id, target)
+                screen = Screen.CHAT
+            }
+        } else {
+            val nick = servers.firstOrNull()?.nick ?: "switchboard"
+            val id = engine.addServer(
+                ServerConfig(
+                    id = "",
+                    name = link.host,
+                    host = link.host,
+                    port = link.port,
+                    tls = link.tls,
+                    nick = nick,
+                    autoJoin = listOfNotNull(link.channel)
+                )
+            )
+            if (id != null) {
+                engine.connectServer(id)
+                if (target != null) {
+                    store.dmMode = !isChannel(target)
+                    store.select(id, target)
+                }
+                screen = Screen.CHAT
+            }
+        }
+    }
+
+    // Something shared from another app: held until the user picks the
+    // conversation it is for, which the chat screen offers a button for
+    LaunchedEffect(launchShare) {
+        val share = launchShare ?: return@LaunchedEffect
+        onShareConsumed()
+        store.pendingShare = share
+        screen = Screen.CHAT
+    }
+
+    LaunchedEffect(launchConversation) {
+        val (serverId, channel) = launchConversation ?: return@LaunchedEffect
+        onConversationConsumed()
+        repeat(40) {
+            if (store.servers.containsKey(serverId)) {
+                val known = store.channelsFor(serverId)
+                    .firstOrNull { it.name.equals(channel, ignoreCase = true) }?.name ?: channel
+                // The rail's mode follows the conversation: a direct message
+                // is read from the messages list, a channel from its network
+                store.dmMode = !isChannel(known)
+                store.select(serverId, known)
+                loadHistory(engine, serverId, known)
+                screen = Screen.CHAT
+                return@LaunchedEffect
+            }
+            kotlinx.coroutines.delay(250)
+        }
     }
 
     // Back leaves a secondary screen rather than the app. Without this, tapping

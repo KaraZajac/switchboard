@@ -227,20 +227,49 @@ registerHandler('774', (client, msg) => {
   )
 })
 
-// Incoming METADATA notification from server
+/** The words that can follow the target in the command a client sends */
+const SUBCOMMANDS = new Set(['GET', 'LIST', 'SET', 'CLEAR', 'SUB', 'UNSUB', 'SUBS', 'SYNC'])
+
+/**
+ * Incoming METADATA notification from the server.
+ *
+ * The spec's shape is `METADATA <target> <key> <visibility> [:<value>]` —
+ * what a server sends everyone sharing a channel with the target when a key
+ * changes, and what a SYNC batch is made of. No value means the key was
+ * cleared. That is also the only shape a metadata-2 server has: the numerics
+ * are for answering *our* commands, and rIRCd sends them to a subscriber only
+ * where the client negotiated metadata-3.
+ *
+ * This handler used to look for `METADATA <target> SET <key> :<value>` — the
+ * command echoed back — and drop everything else. Every other person's name,
+ * pronouns and picture arrived in the spec's shape and were thrown away, so a
+ * network that spoke only metadata-2 showed nobody's profile but your own,
+ * while the phone, which read the spec's shape, showed everybody's.
+ */
 registerHandler('METADATA', (client, msg) => {
-  // :nick!user@host METADATA <target> <subcommand> <key> [<visibility>] :<value>
   const target = msg.params[0] || ''
-  const subcommand = msg.params[1] || ''
+  const second = msg.params[1] || ''
+  if (!target || !second) return
 
-  if (subcommand.toUpperCase() === 'SET') {
-    const key = msg.params[2] || ''
-    if (!key) return
-
-    // "METADATA <target> SET <key>" with no value means the key was cleared
-    const value = msg.params.length < 4 ? '' : cleanValue(msg.params[msg.params.length - 1] ?? '')
-
-    remember(client, target, key, value)
-    client.events.emit('metadata', { target, key, value })
+  let key: string
+  let value: string
+  if (SUBCOMMANDS.has(second.toUpperCase())) {
+    // `METADATA <target> SET <key> [<visibility>] [:<value>]`, the command
+    // shape, which some servers relay as the notification
+    if (second.toUpperCase() !== 'SET') return
+    key = msg.params[2] || ''
+    value = msg.params.length < 4 ? '' : cleanValue(msg.params[msg.params.length - 1] ?? '')
+  } else {
+    // `METADATA <target> <key> <visibility> [:<value>]`
+    key = second
+    value = msg.params.length < 4 ? '' : cleanValue(msg.params[msg.params.length - 1] ?? '')
   }
+  if (!key) return
+
+  // The echo of a clear we asked for, answered with the key where the value
+  // goes — see `isEchoOfClear`
+  const settled = isEchoOfClear(client, key, value) ? '' : value
+
+  remember(client, target, key, settled)
+  client.events.emit('metadata', { target, key, value: settled })
 })

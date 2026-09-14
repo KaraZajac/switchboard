@@ -1,0 +1,297 @@
+{
+  "$comment": "Which of the several files in a Klipy answer to draw and to send. Shared by tests/shared/klipy.test.ts and the Android SharedCorpusTest: a GIF picked on one device is a link the other has to show, so both must pick the same file.",
+  "$picks": "`preview` is the small animated file for a thumbnail, `share` the one sent as the message, `video` whether the item is a video with no image alongside.",
+  "picks": [
+    {
+      "name": "a gif with every size: small webp to draw, HD gif to send",
+      "item": {
+        "url": "https://klipy.com/gifs/abc",
+        "title": "a cat",
+        "slug": "abc",
+        "file": {
+          "hd": {
+            "gif": {
+              "url": "https://static.klipy.com/ii/abc/hd.gif"
+            },
+            "webp": {
+              "url": "https://static.klipy.com/ii/abc/hd.webp"
+            },
+            "mp4": {
+              "url": "https://static.klipy.com/ii/abc/hd.mp4"
+            }
+          },
+          "md": {
+            "gif": {
+              "url": "https://static.klipy.com/ii/abc/md.gif"
+            },
+            "webp": {
+              "url": "https://static.klipy.com/ii/abc/md.webp"
+            }
+          },
+          "sm": {
+            "gif": {
+              "url": "https://static.klipy.com/ii/abc/sm.gif"
+            },
+            "webp": {
+              "url": "https://static.klipy.com/ii/abc/sm.webp"
+            }
+          },
+          "xs": {
+            "webp": {
+              "url": "https://static.klipy.com/ii/abc/xs.webp"
+            }
+          }
+        }
+      },
+      "preview": "https://static.klipy.com/ii/abc/sm.webp",
+      "share": "https://static.klipy.com/ii/abc/hd.gif",
+      "video": false
+    },
+    {
+      "name": "no small size falls back to medium",
+      "item": {
+        "url": "https://klipy.com/gifs/d",
+        "file": {
+          "md": {
+            "gif": {
+              "url": "https://static.klipy.com/d/md.gif"
+            }
+          },
+          "hd": {
+            "webp": {
+              "url": "https://static.klipy.com/d/hd.webp"
+            }
+          }
+        }
+      },
+      "preview": "https://static.klipy.com/d/md.gif",
+      "share": "https://static.klipy.com/d/hd.webp",
+      "video": false
+    },
+    {
+      "name": "a clip with only a video",
+      "item": {
+        "url": "https://klipy.com/clips/x",
+        "title": "c",
+        "slug": "x",
+        "file": {
+          "mp4": "https://static.klipy.com/x/clip.mp4"
+        }
+      },
+      "preview": "https://static.klipy.com/x/clip.mp4",
+      "share": "https://static.klipy.com/x/clip.mp4",
+      "video": true
+    },
+    {
+      "name": "a clip with a gif as well is not a video",
+      "item": {
+        "url": "https://klipy.com/clips/y",
+        "file": {
+          "mp4": "https://static.klipy.com/y/clip.mp4",
+          "gif": "https://static.klipy.com/y/clip.gif"
+        }
+      },
+      "preview": "https://static.klipy.com/y/clip.gif",
+      "share": "https://static.klipy.com/y/clip.gif",
+      "video": false
+    },
+    {
+      "name": "a nested size with only an mp4 is a video",
+      "item": {
+        "url": "https://klipy.com/gifs/v",
+        "file": {
+          "sm": {
+            "mp4": {
+              "url": "https://static.klipy.com/v/sm.mp4"
+            }
+          }
+        }
+      },
+      "preview": "https://static.klipy.com/v/sm.mp4",
+      "share": "https://static.klipy.com/v/sm.mp4",
+      "video": true
+    },
+    {
+      "name": "nothing but the page is the page",
+      "item": {
+        "url": "https://klipy.com/gifs/p",
+        "title": "p"
+      },
+      "preview": "https://klipy.com/gifs/p",
+      "share": "https://klipy.com/gifs/p",
+      "video": false
+    },
+    {
+      "name": "a still meme",
+      "item": {
+        "url": "https://klipy.com/memes/m",
+        "file": {
+          "sm": {
+            "png": {
+              "url": "https://static.klipy.com/m/sm.png"
+            }
+          },
+          "hd": {
+            "png": {
+              "url": "https://static.klipy.com/m/hd.png"
+            }
+          }
+        }
+      },
+      "preview": "https://static.klipy.com/m/sm.png",
+      "share": "https://static.klipy.com/m/hd.png",
+      "video": false
+    }
+  ],
+  "$results": "Where the items are in an answer: trending puts them under `data`, search under `data.data`.",
+  "results": [
+    {
+      "name": "trending: a plain array",
+      "json": {
+        "data": [
+          {
+            "url": "https://klipy.com/gifs/abc",
+            "title": "a cat",
+            "slug": "abc",
+            "file": {
+              "hd": {
+                "gif": {
+                  "url": "https://static.klipy.com/ii/abc/hd.gif"
+                },
+                "webp": {
+                  "url": "https://static.klipy.com/ii/abc/hd.webp"
+                },
+                "mp4": {
+                  "url": "https://static.klipy.com/ii/abc/hd.mp4"
+                }
+              },
+              "md": {
+                "gif": {
+                  "url": "https://static.klipy.com/ii/abc/md.gif"
+                },
+                "webp": {
+                  "url": "https://static.klipy.com/ii/abc/md.webp"
+                }
+              },
+              "sm": {
+                "gif": {
+                  "url": "https://static.klipy.com/ii/abc/sm.gif"
+                },
+                "webp": {
+                  "url": "https://static.klipy.com/ii/abc/sm.webp"
+                }
+              },
+              "xs": {
+                "webp": {
+                  "url": "https://static.klipy.com/ii/abc/xs.webp"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "count": 1
+    },
+    {
+      "name": "search: an array inside data",
+      "json": {
+        "data": {
+          "data": [
+            {
+              "url": "https://klipy.com/gifs/abc",
+              "title": "a cat",
+              "slug": "abc",
+              "file": {
+                "hd": {
+                  "gif": {
+                    "url": "https://static.klipy.com/ii/abc/hd.gif"
+                  },
+                  "webp": {
+                    "url": "https://static.klipy.com/ii/abc/hd.webp"
+                  },
+                  "mp4": {
+                    "url": "https://static.klipy.com/ii/abc/hd.mp4"
+                  }
+                },
+                "md": {
+                  "gif": {
+                    "url": "https://static.klipy.com/ii/abc/md.gif"
+                  },
+                  "webp": {
+                    "url": "https://static.klipy.com/ii/abc/md.webp"
+                  }
+                },
+                "sm": {
+                  "gif": {
+                    "url": "https://static.klipy.com/ii/abc/sm.gif"
+                  },
+                  "webp": {
+                    "url": "https://static.klipy.com/ii/abc/sm.webp"
+                  }
+                },
+                "xs": {
+                  "webp": {
+                    "url": "https://static.klipy.com/ii/abc/xs.webp"
+                  }
+                }
+              }
+            },
+            {
+              "url": "https://klipy.com/gifs/abc",
+              "title": "a cat",
+              "slug": "abc",
+              "file": {
+                "hd": {
+                  "gif": {
+                    "url": "https://static.klipy.com/ii/abc/hd.gif"
+                  },
+                  "webp": {
+                    "url": "https://static.klipy.com/ii/abc/hd.webp"
+                  },
+                  "mp4": {
+                    "url": "https://static.klipy.com/ii/abc/hd.mp4"
+                  }
+                },
+                "md": {
+                  "gif": {
+                    "url": "https://static.klipy.com/ii/abc/md.gif"
+                  },
+                  "webp": {
+                    "url": "https://static.klipy.com/ii/abc/md.webp"
+                  }
+                },
+                "sm": {
+                  "gif": {
+                    "url": "https://static.klipy.com/ii/abc/sm.gif"
+                  },
+                  "webp": {
+                    "url": "https://static.klipy.com/ii/abc/sm.webp"
+                  }
+                },
+                "xs": {
+                  "webp": {
+                    "url": "https://static.klipy.com/ii/abc/xs.webp"
+                  }
+                }
+              }
+            }
+          ],
+          "total": 2
+        }
+      },
+      "count": 2
+    },
+    {
+      "name": "an answer with nothing usable",
+      "json": {
+        "data": "no"
+      },
+      "count": 0
+    },
+    {
+      "name": "not even an object",
+      "json": "oops",
+      "count": 0
+    }
+  ]
+}

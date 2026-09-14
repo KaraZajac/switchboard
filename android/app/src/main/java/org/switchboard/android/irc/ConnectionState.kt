@@ -76,7 +76,9 @@ class BatchState(
     val id: String,
     val type: String,
     val params: List<String>,
-    val parent: String?
+    val parent: String?,
+    /** The tags on the opening BATCH line — a multiline message's msgid and time live here */
+    val tags: Map<String, String?> = emptyMap()
 ) {
     val messages = mutableListOf<IrcMessage>()
 
@@ -107,6 +109,9 @@ class ConnectionState(val serverId: String) {
      * still called something it is not for the rest of the session.
      */
     var pendingNick: String? = null
+
+    /** Nicks refused during this registration, so each alternative is tried once — see [Nicks] */
+    val triedNicks = mutableListOf<String>()
 
     /**
      * Why the server refused the nick we asked for, if it did.
@@ -228,6 +233,7 @@ class ConnectionState(val serverId: String) {
     fun reset(startingNick: String) {
         nick = startingNick
         desiredNick = startingNick
+        triedNicks.clear()
         account = null
         registered = false
         serverName = ""

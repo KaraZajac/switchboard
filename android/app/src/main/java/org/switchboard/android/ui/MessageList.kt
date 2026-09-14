@@ -67,6 +67,11 @@ import org.switchboard.android.isChannel
 import org.switchboard.android.irc.Formatting
 import org.switchboard.android.irc.Links
 import org.switchboard.android.mentionsYou
+import androidx.compose.foundation.layout.sizeIn
+import androidx.compose.ui.layout.ContentScale
+import coil.compose.AsyncImagePainter
+import coil.compose.SubcomposeAsyncImage
+import coil.compose.SubcomposeAsyncImageContent
 
 /**
  * The conversation.
@@ -289,6 +294,90 @@ private fun LinkCard(url: String, fetch: suspend (String) -> LinkPreview?) {
     }
 }
 
+/**
+ * A picture somebody linked, drawn where the link is.
+ *
+ * The desktop has done this since the start; the phone showed the address
+ * and, if the site offered one, a card with its title — and a picture has no
+ * title, so nothing. Kept to a size that leaves the conversation readable
+ * and opened in full by a tap. A Klipy clip is a short video: it is drawn as
+ * its first frame with a play mark, because an mp4 in a scrolling list is
+ * not something to start playing on its own.
+ *
+ * A grey block holds the place while the bytes arrive, so the list does not
+ * jump when they do; if they never do, the address is shown instead, which
+ * matters for a Klipy line where the address is all the message was.
+ */
+@Composable
+private fun InlinePicture(url: String, video: Boolean) {
+    val opener = LocalUriHandler.current
+    var loaded by remember(url) { mutableStateOf(false) }
+
+    Spacer(Modifier.height(6.dp))
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .clickable { Links.safeExternal(url)?.let { safe -> runCatching { opener.openUri(safe) } } }
+    ) {
+        SubcomposeAsyncImage(
+            model = url,
+            contentDescription = if (video) "A clip" else "A picture",
+            contentScale = ContentScale.Fit,
+            onState = { state -> if (state is AsyncImagePainter.State.Success) loaded = true },
+            modifier = Modifier.sizeIn(maxWidth = 320.dp, maxHeight = 240.dp)
+        ) {
+            when (painter.state) {
+                is AsyncImagePainter.State.Loading, AsyncImagePainter.State.Empty -> Box(
+                    Modifier.size(width = 200.dp, height = 120.dp).background(Surface0)
+                )
+
+                is AsyncImagePainter.State.Error -> Text(
+                    url,
+                    color = Blue,
+                    fontSize = 15.sp,
+                    textDecoration = TextDecoration.Underline
+                )
+
+                else -> SubcomposeAsyncImageContent()
+            }
+        }
+        if (video && loaded) {
+            Text(
+                "▶",
+                color = Text0,
+                fontSize = 20.sp,
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .background(Crust.copy(alpha = 0.6f), RoundedCornerShape(50))
+                    .padding(horizontal = 14.dp, vertical = 6.dp)
+            )
+        }
+    }
+}
+
+/** A join, a part, a kick, a rename or a topic change — see [org.switchboard.android.irc.Events] */
+@Composable
+private fun SystemLine(message: Message) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 60.dp, end = 16.dp, top = 3.dp, bottom = 3.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            message.content,
+            color = Overlay,
+            fontSize = 13.sp,
+            fontStyle = FontStyle.Italic,
+            lineHeight = 18.sp,
+            modifier = Modifier.weight(1f)
+        )
+        parseTime(message.timestamp)?.let {
+            Text(TIME_FORMAT.format(it), color = Overlay, fontSize = 11.sp, modifier = Modifier.padding(start = 8.dp))
+        }
+    }
+}
+
 /** Where you left off, in the colour of something that wants noticing */
 @Composable
 private fun UnreadDivider() {
@@ -384,6 +473,14 @@ private fun MessageRow(
     onPreview: suspend (String) -> LinkPreview?
 ) {
     var showActions by remember(message.id) { mutableStateOf(false) }
+
+    // A line about the room rather than from anyone in it: no avatar, no
+    // name, and the desktop's grey italic
+    if (message.type == "system") {
+        SystemLine(message)
+        return
+    }
+
     val profile = if (serverId != null) {
         store.metadataFor(serverId, message.nick)
     } else {
@@ -474,6 +571,20 @@ private fun MessageRow(
                 Spacer(Modifier.height(2.dp))
             }
 
+            // Pictures are drawn, not just linked — see [InlinePicture]. A
+            // Klipy address on its own is the GIF and nothing else, the way
+            // Discord shows the ones its own picker sends.
+            val links = remember(body) { Links.find(body) }
+            val pictures = remember(body) {
+                links.map { it.url }
+                    .filter { Links.isImage(it) || (Links.isKlipyMedia(it) && Links.isVideo(it)) }
+                    .distinct()
+                    .take(4)
+            }
+            val onlyAPicture = links.size == 1 &&
+                Links.isKlipyMedia(links[0].url) &&
+                body.substring(links[0].start, links[0].end) == body.trim()
+
             when {
                 action -> Text(
                     "$name $body",
@@ -492,13 +603,21 @@ private fun MessageRow(
                     fontStyle = FontStyle.Italic
                 )
 
+                onlyAPicture -> Unit
+
                 else -> Linkified(body, message.editedAt != null) { showActions = true }
             }
 
+            if (message.redactedBy == null) {
+                for (url in pictures) InlinePicture(url, video = Links.isVideo(url))
+            }
+
             // What a link points at, on the same accent bar the desktop uses.
-            // Only the first: a message full of URLs should not become a wall
-            // of cards on a phone screen.
-            Links.find(body).firstOrNull()?.url?.let { url -> LinkCard(url, onPreview) }
+            // Only the first that is not a picture — a picture is its own
+            // preview — and only one: a message full of URLs should not
+            // become a wall of cards on a phone screen.
+            links.firstOrNull { !Links.isImage(it.url) && !Links.isVideo(it.url) }
+                ?.url?.let { url -> LinkCard(url, onPreview) }
 
             if (message.reactions.isNotEmpty()) {
                 Spacer(Modifier.height(5.dp))

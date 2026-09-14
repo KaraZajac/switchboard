@@ -4,6 +4,7 @@
  */
 
 import type { ServerConfig } from './server'
+import type { CertificateProblem } from '../certificate'
 import type { ChatMessage } from './message'
 import type { ChannelUser } from './channel'
 import type { UserMetadata } from './metadata'
@@ -129,6 +130,14 @@ export interface MainToRendererEvents {
   'ignore:changed': IgnoreEntry[]
   'irc:connected': { serverId: string; nick: string; account: string | null }
   'irc:disconnected': { serverId: string; reason: string }
+  /** The connection was lost and a retry is booked, this far away */
+  'irc:reconnecting': { serverId: string; delayMs: number }
+  /** The server's certificate was refused; the fingerprint is the thing to check — see `@shared/certificate` */
+  'irc:certificate': { serverId: string } & CertificateProblem
+  /** An irc:// link named a network we have; show this conversation on it — see `@shared/ircurl` */
+  'link:open': { serverId: string; channel: string }
+  /** An irc:// link named a network we do not have; offer to add it */
+  'link:add-server': { host: string; port: number; tls: boolean; channel: string | null }
   'irc:message': { serverId: string; channel: string; message: ChatMessage }
   'irc:join': { serverId: string; channel: string; user: ChannelUser; isMe: boolean }
   'irc:part': { serverId: string; channel: string; nick: string; reason: string | null; isMe: boolean }
@@ -223,6 +232,11 @@ export interface RendererToMainInvocations {
   'server:disconnect': (serverId: string) => Promise<void>
   'server:add': (config: ServerConfig) => Promise<string>
   'server:update': (serverId: string, config: Partial<ServerConfig>) => Promise<void>
+  /** Trust this one certificate for this server, and dial it again — see `@shared/certificate` */
+  'server:trust-certificate': (serverId: string, fingerprint: string) => Promise<void>
+  /** Where the plain-text logs go, and a way to open it — see `logging.ts` */
+  'logs:folder': () => Promise<string>
+  'logs:open': () => Promise<void>
   'server:remove': (serverId: string) => Promise<void>
   'server:list': () => Promise<ServerConfig[]>
   /** Renderer has attached its event listeners: releases auto-connect, returns live state */
@@ -356,6 +370,13 @@ export interface RendererToMainInvocations {
   'updater:check': () => Promise<{ available: boolean; version?: string }>
   'link-preview:fetch': (url: string) => Promise<LinkPreviewData | null>
   'file:upload': (serverId: string) => Promise<{ url: string; filename: string } | null>
+  /** The same upload for bytes that came from the clipboard or a drop, with no path to open */
+  'file:upload-bytes': (
+    serverId: string,
+    fileName: string,
+    contentType: string,
+    data: Uint8Array
+  ) => Promise<{ url: string; filename: string } | null>
   'message:search-server': (serverId: string, query: string, channel?: string) => Promise<void>
   'monitor:add': (serverId: string, nicks: string[]) => Promise<void>
   'monitor:remove': (serverId: string, nicks: string[]) => Promise<void>

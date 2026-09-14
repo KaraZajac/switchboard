@@ -95,6 +95,7 @@ export const REMOTE_ALLOWED = new Set([
   // sanitizeIncomingFromRemote rather than by withholding the whole feature.
   'server:add',
   'server:update',
+  'server:trust-certificate',
   'server:remove',
   'settings:set'
 ])

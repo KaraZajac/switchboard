@@ -872,6 +872,47 @@ describe('WHOX Handler', () => {
     expect(user.prefixes).toContain('@')
   })
 
+  it('keeps the status NAMES gave when the reply names none', () => {
+    const { client, state } = createMockClient()
+    const ch = state.getChannel('#general')
+    ch.setUser('Alice', { nick: 'Alice', prefixes: ['@'] })
+
+    // The spec puts the channel prefixes in the flags; a server that leaves
+    // them out must not turn an op into nobody
+    dispatchMessage(client, parseMessage(
+      `:server 354 TestUser ${WHOX_TOKEN} #general alice host.com irc.net Alice H 0 :Alice Real`
+    ))
+
+    const user = ch.users.get('alice')!
+    expect(user.prefixes).toEqual(['@'])
+    expect(user.account).toBeNull()
+    expect(user.realname).toBe('Alice Real')
+  })
+
+  it('takes the status the reply names over what NAMES gave', () => {
+    const { client, state } = createMockClient()
+    const ch = state.getChannel('#general')
+    ch.setUser('Alice', { nick: 'Alice', prefixes: ['+'] })
+
+    dispatchMessage(client, parseMessage(
+      `:server 354 TestUser ${WHOX_TOKEN} #general alice host.com irc.net Alice H@ 0 :Alice Real`
+    ))
+
+    expect(ch.users.get('alice')!.prefixes).toEqual(['@'])
+  })
+
+  it("reads the network's own status symbols, not a fixed five", () => {
+    const { client, state } = createMockClient()
+    state.isupport['PREFIX'] = '(qaohv)~&@%+'
+    const ch = state.getChannel('#general')
+
+    dispatchMessage(client, parseMessage(
+      `:server 354 TestUser ${WHOX_TOKEN} #general alice host.com irc.net Alice H*~ 0 :Alice Real`
+    ))
+
+    expect(ch.users.get('alice')!.prefixes).toEqual(['~'])
+  })
+
   it('ignores WHOX responses with wrong token', () => {
     const { client, state } = createMockClient()
     const ch = state.getChannel('#general')

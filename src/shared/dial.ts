@@ -23,10 +23,12 @@ interface Dialled {
   port?: number
   tls?: boolean
   websocketUrl?: string | null
+  /** Trusting a certificate is what makes the next dial succeed — see `@shared/certificate` */
+  trustedCertificate?: string | null
 }
 
 export function dialChanged(before: Dialled, after: Dialled): boolean {
-  for (const field of ['host', 'port', 'tls', 'websocketUrl'] as const) {
+  for (const field of ['host', 'port', 'tls', 'websocketUrl', 'trustedCertificate'] as const) {
     // An absent field in the update means "leave it alone", not "clear it"
     if (after[field] === undefined) continue
     if (before[field] !== after[field]) return true

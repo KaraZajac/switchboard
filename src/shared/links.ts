@@ -155,3 +155,23 @@ export function safeExternalUrl(value: string | null | undefined): string | null
 }
 
 const SAFE_SCHEMES = new Set(['http:', 'https:', 'mailto:'])
+
+/**
+ * What a link points at, from the only thing a client has to go on: the
+ * address. A picture is shown as a picture, a Klipy address as the GIF it is
+ * and nothing else, a video as a link — on both clients, which is why this
+ * is here rather than in either renderer. The Kotlin half is in `Links.kt`,
+ * and both are checked against `tests/fixtures/links.json`.
+ */
+export function isImageUrl(url: string): boolean {
+  return /\.(jpe?g|png|gif|webp|svg|bmp|ico)(\?.*)?$/i.test(url)
+}
+
+export function isVideoUrl(url: string): boolean {
+  return /\.(mp4|webm)(\?.*)?$/i.test(url)
+}
+
+/** A GIF the picker sent: drawn inline with no address shown, the way Discord does its own */
+export function isKlipyMediaUrl(url: string): boolean {
+  return /^https?:\/\/static\.klipy\.com\//i.test(url)
+}

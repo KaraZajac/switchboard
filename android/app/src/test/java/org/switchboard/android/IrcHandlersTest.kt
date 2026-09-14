@@ -94,6 +94,37 @@ class IrcHandlersTest {
     private fun JsonObject.str(key: String) = this[key]?.jsonPrimitive?.contentOrNull
     private fun JsonObject.bool(key: String) = this[key]?.jsonPrimitive?.booleanOrNull
 
+    // ── WHOX ─────────────────────────────────────────────────────────
+
+    @Test
+    fun `WHO keeps the status NAMES gave when its reply names none`() {
+        register("multi-prefix")
+        feed(":kara!kara@host.example JOIN #chan")
+        feed(":irc.example.org 353 kara = #chan :@alice kara")
+        feed(":irc.example.org 366 kara #chan :End of /NAMES list")
+
+        // The spec puts the channel prefixes in the flags; a server that
+        // leaves them out must not turn an op into nobody. The desktop does
+        // the same.
+        feed(":irc.example.org 354 kara 742 #chan alice host.example irc.example.org alice H 0 :Alice")
+
+        val alice = session.state.findChannel("#chan")!!.users["alice"]!!
+        assertEquals(listOf("@"), alice.prefixes)
+        assertEquals("Alice", alice.realname)
+        assertNull(alice.account)
+    }
+
+    @Test
+    fun `WHO's own status wins over what NAMES gave`() {
+        register("multi-prefix")
+        feed(":kara!kara@host.example JOIN #chan")
+        feed(":irc.example.org 353 kara = #chan :+alice kara")
+        feed(":irc.example.org 366 kara #chan :End of /NAMES list")
+        feed(":irc.example.org 354 kara 742 #chan alice host.example irc.example.org alice H@ 0 :Alice")
+
+        assertEquals(listOf("@"), session.state.findChannel("#chan")!!.users["alice"]!!.prefixes)
+    }
+
     // ── Registration ─────────────────────────────────────────────────
 
     @Test
@@ -654,6 +685,20 @@ class IrcHandlersTest {
 
         val message = session.eventsOn("irc:message").single()["message"]!!.jsonObject
         assertEquals("first line\nsecond line", message.str("content"))
+    }
+
+    @Test
+    fun `a multiline message keeps the id and time the BATCH line carries`() {
+        register("batch", "draft/multiline")
+        feed("@msgid=whole;time=2026-09-13T22:06:23.988Z :irc.example.org BATCH +m draft/multiline #chan")
+        feed("@batch=m :alice!u@h PRIVMSG #chan :first line")
+        feed("@batch=m :alice!u@h PRIVMSG #chan :second line")
+        feed(":irc.example.org BATCH -m")
+
+        // What the server will name in an edit, a reaction or a REDACT
+        val message = session.eventsOn("irc:message").single()["message"]!!.jsonObject
+        assertEquals("whole", message.str("id"))
+        assertEquals("2026-09-13T22:06:23.988Z", message.str("timestamp"))
     }
 
     @Test

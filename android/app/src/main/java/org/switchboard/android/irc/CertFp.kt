@@ -11,6 +11,7 @@ import java.util.Base64
 import javax.net.ssl.KeyManagerFactory
 import javax.net.ssl.SSLContext
 import javax.net.ssl.SSLSocketFactory
+import javax.net.ssl.X509TrustManager
 
 /**
  * Logging in with a certificate instead of a password.
@@ -104,7 +105,7 @@ object CertFp {
      * read — in which case the connection goes ahead without one rather than
      * failing to happen at all, and SASL EXTERNAL reports the refusal itself.
      */
-    fun socketFactory(pem: String?): SSLSocketFactory? {
+    fun socketFactory(pem: String?, trust: X509TrustManager? = null): SSLSocketFactory? {
         val identity = read(pem) ?: return null
 
         return runCatching {
@@ -140,7 +141,7 @@ object CertFp {
                 .apply { init(store, CHARS) }
 
             SSLContext.getInstance("TLS")
-                .apply { init(managers.keyManagers, null, null) }
+                .apply { init(managers.keyManagers, trust?.let { arrayOf(it) }, null) }
                 .socketFactory
         }.getOrNull()
     }

@@ -19,6 +19,9 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.switchboard.android.irc.Formatting
 import org.switchboard.android.irc.Services
+import org.switchboard.android.irc.Events
+import org.switchboard.android.irc.ConnectionError
+import org.switchboard.android.irc.TrustedCertificate
 import org.switchboard.android.irc.MaskLists
 import org.switchboard.android.irc.Powers
 
@@ -127,6 +130,12 @@ data class ServerRefusal(val text: String, val subject: String?, val at: Long)
 
 /** A network wanting us to log in, in its own words where it gave any */
 data class IdentifyPrompt(val serverId: String, val text: String)
+
+/** Text or a picture another app shared with us, waiting for a conversation to go to */
+data class PendingShare(val text: String?, val image: android.net.Uri?)
+
+/** A server's certificate was refused; the fingerprint is the thing to check — see [TrustedCertificate] */
+data class CertificatePrompt(val serverId: String, val fingerprint: String, val text: String, val detail: String)
 
 /**
  * The network's answer to REGISTER or VERIFY.
@@ -237,6 +246,15 @@ class SwitchboardStore {
      * network. Held here so the conversation can say so and offer the way in.
      */
     var identifyPrompt by mutableStateOf<IdentifyPrompt?>(null)
+
+    /**
+     * A certificate nobody vouches for, waiting to be trusted or not. Stays
+     * until acted on: the connection is going nowhere either way.
+     */
+    var certificatePrompt by mutableStateOf<CertificatePrompt?>(null)
+
+    /** Something shared from another app, until it is sent somewhere or let go */
+    var pendingShare by mutableStateOf<PendingShare?>(null)
 
     fun clearIdentifyPrompt() { identifyPrompt = null }
 
@@ -613,6 +631,35 @@ class SwitchboardStore {
 
     // ── Live events, mirroring the desktop's own handlers ─────────────
 
+
+    /**
+     * Whether joins, parts and quits are lines in the conversation. A mirror
+     * of the engine's shared setting, kept here because this is where the
+     * events arrive — see [Events].
+     */
+    var showJoinsParts by mutableStateOf(false)
+
+    /** A line about the room rather than from anyone in it — a join, a kick, a topic change */
+    private fun note(serverId: String, channel: String, text: String, time: String?) {
+        val conversation = key(serverId, channel)
+        val line = Message(
+            id = java.util.UUID.randomUUID().toString(),
+            nick = "",
+            content = text,
+            timestamp = time ?: java.time.Instant.now().toString(),
+            type = "system"
+        )
+        messages[conversation] = (messages[conversation] ?: emptyList())
+            .toMutableList().also { it.insertByTime(line) }.capped()
+    }
+
+    /** Every channel on the server this person is in, for a quit or a rename */
+    private fun channelsWith(serverId: String, nick: String): List<String> =
+        members.keys
+            .filter { it.startsWith("$serverId:") }
+            .filter { conversation -> members[conversation]?.any { it.nick.equals(nick, true) } == true }
+            .map { it.substringAfter(':') }
+
     fun handleEvent(channelName: String, data: JsonElement) {
         if (data !is JsonObject) return
         val serverId = data["serverId"]?.str() ?: return
@@ -684,6 +731,13 @@ class SwitchboardStore {
                     channels[serverId] = list + Channel(channel)
                 }
 
+                val mine = data["isMe"]?.jsonPrimitive?.booleanOrNull == true
+                if (!mine && showJoinsParts) {
+                    data["user"]?.jsonObject?.get("nick")?.str()?.let { nick ->
+                        note(serverId, channel, Events.line("join", nick), data["time"]?.str())
+                    }
+                }
+
                 // Same again for a join that arrives before anything is
                 // selected, and for the first channel on the server we are
                 // looking at.
@@ -701,7 +755,18 @@ class SwitchboardStore {
             "irc:part", "irc:kick" -> {
                 val channel = data["channel"]?.str() ?: return
                 val nick = data["nick"]?.str() ?: return
-                if (data["isMe"]?.jsonPrimitive?.booleanOrNull == true) {
+                val mine = data["isMe"]?.jsonPrimitive?.booleanOrNull == true
+                if (channelName == "irc:kick") {
+                    // Always: being thrown out is not noise, least of all when it is you
+                    note(
+                        serverId, channel,
+                        Events.line("kick", nick, data["by"]?.str(), data["reason"]?.str()),
+                        data["time"]?.str()
+                    )
+                } else if (!mine && showJoinsParts) {
+                    note(serverId, channel, Events.line("part", nick, reason = data["reason"]?.str()), data["time"]?.str())
+                }
+                if (mine) {
                     channels[serverId] = (channels[serverId] ?: mutableListOf())
                         .filterNot { it.name.equals(channel, true) }
                         .toMutableStateList()
@@ -715,6 +780,11 @@ class SwitchboardStore {
 
             "irc:quit" -> {
                 val nick = data["nick"]?.str() ?: return
+                if (showJoinsParts) {
+                    for (channel in channelsWith(serverId, nick)) {
+                        note(serverId, channel, Events.line("quit", nick, reason = data["reason"]?.str()), data["time"]?.str())
+                    }
+                }
                 members.keys.filter { it.startsWith("$serverId:") }.forEach { conversation ->
                     members[conversation] = (members[conversation] ?: return@forEach)
                         .filterNot { it.nick.equals(nick, true) }
@@ -725,6 +795,9 @@ class SwitchboardStore {
             "irc:nick" -> {
                 val oldNick = data["oldNick"]?.str() ?: return
                 val newNick = data["newNick"]?.str() ?: return
+                for (channel in channelsWith(serverId, oldNick)) {
+                    note(serverId, channel, Events.line("nick", oldNick, newNick), data["time"]?.str())
+                }
                 members.keys.filter { it.startsWith("$serverId:") }.forEach { conversation ->
                     members[conversation] = (members[conversation] ?: return@forEach)
                         .map { if (it.nick.equals(oldNick, true)) it.copy(nick = newNick) else it }
@@ -755,11 +828,22 @@ class SwitchboardStore {
                 channels[serverId] = (channels[serverId] ?: return)
                     .map { if (it.name.equals(channel, true)) it.copy(topic = data["topic"]?.str()) else it }
                     .toMutableStateList()
+                // Said by somebody, so a change — the topic that comes with
+                // joining arrives with nobody's name on it
+                data["setBy"]?.str()?.let { by ->
+                    note(serverId, channel, Events.line("topic", by, data["topic"]?.str().orEmpty()), data["time"]?.str())
+                }
             }
 
             "irc:message" -> {
                 val channel = data["channel"]?.str() ?: return
-                val message = data["message"]?.jsonObject?.toMessage() ?: return
+                val arrived = data["message"]?.jsonObject?.toMessage() ?: return
+                // A line of ours to services is kept with its password gone —
+                // live, echoed or replayed, this is where every one is filed.
+                val mine = servers[serverId]?.nick?.equals(arrived.nick, ignoreCase = true) == true
+                val message = if (mine && Services.isServices(channel)) {
+                    arrived.copy(content = Services.secretsMasked(channel, arrived.content))
+                } else arrived
                 val conversation = key(serverId, channel)
 
                 // A direct message is the first anyone hears of that
@@ -927,6 +1011,23 @@ class SwitchboardStore {
                 updateMessage(serverId, channel, target) {
                     it.copy(redactedBy = data["by"]?.str() ?: "someone")
                 }
+            }
+
+            "irc:certificate" -> {
+                val fingerprint = data["fingerprint"]?.str() ?: return
+                val host = data["host"]?.str() ?: servers[serverId]?.name ?: "the server"
+                val subject = data["subject"]?.str()?.takeIf { it.isNotBlank() }
+                val who = if (subject != null) " It says it is for $subject." else ""
+                // Named, because the banner shows over whatever conversation is
+                // open, which may be on another network entirely
+                val network = servers[serverId]?.name?.takeIf { it.isNotBlank() } ?: host
+                certificatePrompt = CertificatePrompt(
+                    serverId,
+                    fingerprint,
+                    "$network: " + ConnectionError.describe(data["reason"]?.str(), host) + who +
+                        " Trust it only if the fingerprint below matches what the server's operator told you.",
+                    "SHA-256 ${TrustedCertificate.format(fingerprint)}"
+                )
             }
 
             "irc:error" -> {

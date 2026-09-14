@@ -38,7 +38,13 @@ export const SHARED_SETTINGS = [
   // not about the machine — and one the two devices must agree on, or what
   // happens after a kick depends on which of them happened to be holding the
   // connection at the time.
-  'rejoinOnKick'
+  'rejoinOnKick',
+  // Whether joins, parts and quits are lines in the conversation. How you
+  // like to read a channel, not a fact about the screen it is read on.
+  'showJoinsParts',
+  // Conversations where every line rings the bell, not only your name.
+  // Which channel is the one you cannot miss a word of is a fact about you.
+  'notifyAll'
 ] as const
 
 export type SharedSetting = (typeof SHARED_SETTINGS)[number]

@@ -183,6 +183,21 @@ registerHandler('475', (client, msg) => {
   })
 })
 
+/**
+ * ERR_NEEDREGGEDNICK (477) — the channel wants you logged in.
+ *
+ * On rIRCd that is what creating a channel takes, so somebody joining a
+ * channel that does not exist yet was refused — and nothing was listening,
+ * so the join simply did not happen: no channel, no error, nothing to press.
+ */
+registerHandler('477', (client, msg) => {
+  client.events.emit('error', {
+    code: '477',
+    command: msg.params[1] || '',
+    message: msg.params[2] || 'You need to be logged in to an account to join that channel'
+  })
+})
+
 /** ERR_CHANNELISFULL (471) */
 registerHandler('471', (client, msg) => {
   client.events.emit('error', {

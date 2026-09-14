@@ -48,4 +48,27 @@ export async function initMutePersistence(): Promise<void> {
 
   useServerStore.subscribe(save)
   useChannelStore.subscribe(save)
+
+  // The channels where every line rings — the same shape of thing, its own
+  // key, so a phone that predates it keeps the mutes it knows about intact
+  await reloadNotifyAll()
+  let lastNotify = JSON.stringify(Object.keys(useChannelStore.getState().notifyAll).sort())
+  useChannelStore.subscribe(() => {
+    const next = JSON.stringify(Object.keys(useChannelStore.getState().notifyAll).sort())
+    if (next === lastNotify) return
+    lastNotify = next
+    api.invoke('settings:set', NOTIFY_ALL_KEY, JSON.parse(next)).catch(() => {})
+  })
+}
+
+const NOTIFY_ALL_KEY = 'notifyAll'
+
+/** Read the shared list again — after the phone changed it, or at start */
+export async function reloadNotifyAll(): Promise<void> {
+  const api = window.switchboard
+  if (!api) return
+  const saved = (await api.invoke('settings:get', NOTIFY_ALL_KEY).catch(() => null)) as unknown
+  if (Array.isArray(saved)) {
+    useChannelStore.getState().hydrateNotifyAll(saved.filter((k): k is string => typeof k === 'string'))
+  }
 }

@@ -19,4 +19,6 @@ fun dialChanged(before: ServerConfig, after: ServerConfig): Boolean =
     before.host != after.host ||
         before.port != after.port ||
         before.tls != after.tls ||
-        before.websocketUrl != after.websocketUrl
+        before.websocketUrl != after.websocketUrl ||
+        // Trusting a certificate is what makes the next dial succeed
+        before.trustedCertificate != after.trustedCertificate

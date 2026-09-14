@@ -343,7 +343,9 @@ class SwitchboardEngine(
         // A direct message is always for you; in a channel, your name has to
         // come up as a word rather than as part of a longer one.
         val direct = !channel.startsWith("#") && !channel.startsWith("&")
-        val mentioned = direct || mentionsYou(text, me, store.highlightWords)
+        val mentioned = direct ||
+            notifyAll.contains(conversationKey) ||
+            mentionsYou(text, me, store.highlightWords)
 
         notifier.show(
             conversationKey = conversationKey,
@@ -653,6 +655,9 @@ class SwitchboardEngine(
             }
 
         (vault.setting(MUTES_KEY) as? JsonObject)?.let { mutes = Mutes.fromJson(it) }
+        (vault.setting(NOTIFY_ALL_KEY) as? JsonArray)?.let { list ->
+            notifyAll = list.mapNotNull { (it as? JsonPrimitive)?.contentOrNull }.toSet()
+        }
         (vault.setting(IGNORES_KEY) as? JsonArray)?.let { ignores = readIgnores(it) }
         (vault.setting(HIGHLIGHTS_KEY) as? JsonArray)?.let { array ->
             store.highlightWords = array.mapNotNull { (it as? JsonPrimitive)?.content }
@@ -666,6 +671,10 @@ class SwitchboardEngine(
         }
         (vault.setting(REJOIN_KEY) as? JsonPrimitive)?.let {
             rejoinOnKick = it.booleanOrNull ?: false
+        }
+        (vault.setting(SHOW_JOINS_KEY) as? JsonPrimitive)?.let {
+            showJoinsParts = it.booleanOrNull ?: false
+            store.showJoinsParts = showJoinsParts
         }
 
         for (server in vault.servers()) {
@@ -892,6 +901,26 @@ class SwitchboardEngine(
     }
 
     /**
+     * Conversations where every line rings, not only your name — keyed like
+     * the mutes. Shared with the desktop: which channel you cannot miss a
+     * word of is a fact about you, not about the phone.
+     */
+    var notifyAll by mutableStateOf<Set<String>>(emptySet())
+        private set
+
+    fun notifiesAll(serverId: String, channel: String): Boolean =
+        notifyAll.contains("$serverId:${channel.lowercase()}")
+
+    fun toggleNotifyAll(serverId: String, channel: String) {
+        val key = "$serverId:${channel.lowercase()}"
+        notifyAll = if (notifyAll.contains(key)) notifyAll - key else notifyAll + key
+        val encoded = JsonArray(notifyAll.sorted().map { JsonPrimitive(it) })
+        vault.setSharedSetting(NOTIFY_ALL_KEY, encoded)
+        vaultVersion = vault.version
+        scope.launch { ask("settings:set", JsonPrimitive(NOTIFY_ALL_KEY), encoded) }
+    }
+
+    /**
      * Hold it, seal it, and tell the desktop.
      *
      * The vault write is what makes this survive a restart on a phone with no
@@ -999,6 +1028,25 @@ class SwitchboardEngine(
         vault.setSharedSetting(REJOIN_KEY, JsonPrimitive(on))
         vaultVersion = vault.version
         scope.launch { ask("settings:set", JsonPrimitive(REJOIN_KEY), JsonPrimitive(on)) }
+    }
+
+    /**
+     * Whether joins, parts and quits are lines in the conversation.
+     *
+     * Off by default: the member list already says who is here, and in a
+     * busy channel these bury the talk. Shared with the desktop, because how
+     * you like to read a channel is not a fact about the screen — see
+     * [org.switchboard.android.irc.Events].
+     */
+    var showJoinsParts by mutableStateOf(false)
+        private set
+
+    fun setShowJoinsAndParts(on: Boolean) {
+        showJoinsParts = on
+        store.showJoinsParts = on
+        vault.setSharedSetting(SHOW_JOINS_KEY, JsonPrimitive(on))
+        vaultVersion = vault.version
+        scope.launch { ask("settings:set", JsonPrimitive(SHOW_JOINS_KEY), JsonPrimitive(on)) }
     }
 
     /**
@@ -1892,6 +1940,7 @@ class SwitchboardEngine(
 
         /** The shared setting both clients keep mutes in */
         const val MUTES_KEY = "mutes"
+        const val NOTIFY_ALL_KEY = "notifyAll"
 
         /** And the one they keep the ignore list in */
         const val IGNORES_KEY = "ignores"
@@ -1911,6 +1960,7 @@ class SwitchboardEngine(
 
         /** And whether a kick means going back */
         const val REJOIN_KEY = "rejoinOnKick"
+        const val SHOW_JOINS_KEY = "showJoinsParts"
 
         /**
          * How long to wait before going back.

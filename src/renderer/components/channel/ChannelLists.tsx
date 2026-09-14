@@ -7,6 +7,7 @@ import { useUserStore } from '../../stores/userStore'
 import { maskListsFor, maskToSet, type MaskEntry } from '@shared/masklists'
 import { channelModesFor, modeChange, type ChannelMode } from '@shared/chanmodes'
 import { canModerate } from '@shared/powers'
+import { wording } from '../../utils/speak'
 
 /**
  * A channel's settings, and the lists it keeps.
@@ -99,7 +100,7 @@ export function ChannelLists() {
         await window.switchboard.invoke('masklist:set', serverId, channel, mode, mask, adding)
         if (adding) setTyped('')
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'That did not work')
+        setError(wording(err) || 'That did not work')
       }
     },
     [serverId, channel, mode]

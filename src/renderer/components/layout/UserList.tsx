@@ -43,8 +43,14 @@ export function UserList() {
     activeServerId ? s.currentNick[activeServerId] || '' : ''
   )
 
+  // A name typed into the box at the top narrows the list. A channel with
+  // four hundred people in it is not somewhere to scroll for one of them.
+  const [filter, setFilter] = useState('')
+  const wanted = filter.trim().toLowerCase()
+  const shown = wanted ? users.filter((u) => u.nick.toLowerCase().includes(wanted)) : users
+
   // Group users by highest prefix
-  const groups = groupUsersByPrefix(users)
+  const groups = groupUsersByPrefix(shown)
   const [contextMenu, setContextMenu] = useState<UserContextState | null>(null)
 
   const handleContextMenu = useCallback((e: React.MouseEvent, user: ChannelUser) => {
@@ -190,6 +196,18 @@ export function UserList() {
 
   return (
     <div className="w-60 shrink-0 overflow-y-auto bg-gray-900 px-2 py-3 no-select">
+      {users.length > 8 && (
+        <input
+          type="text"
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+          placeholder="Find someone"
+          className="mb-2 w-full rounded bg-gray-800 px-2 py-1 text-sm text-gray-100 placeholder-gray-500 outline-none ring-1 ring-gray-700 focus:ring-indigo-500"
+        />
+      )}
+      {wanted && shown.length === 0 && (
+        <div className="px-2 py-2 text-xs text-gray-500">Nobody here called that.</div>
+      )}
       {groups.map((group) => (
         <div key={group.label}>
           <div className="mb-1 mt-4 px-2 text-xs font-semibold uppercase tracking-wide text-gray-400 first:mt-0">

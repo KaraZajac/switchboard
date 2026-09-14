@@ -49,4 +49,43 @@ object Completion {
         val head = draft.substring(0, draft.lastIndexOf(' ') + 1)
         return head + completion + suffix(head.isEmpty(), completion)
     }
+
+    /**
+     * A mention being typed.
+     *
+     * Suggestions used to appear for any two letters typed, which meant a
+     * box popping up over the keyboard while somebody typed "bu" on the way
+     * to "but". Now the `@` is the intent: `@` alone offers everyone here,
+     * `@b` narrows to the b's. An `@` inside a word — an email — is not one.
+     */
+    private val MENTION = Regex("(?:^|\\s)@([^\\s@]*)$")
+
+    /** The name after a trailing `@`, or null when nothing is being mentioned */
+    fun mentionQuery(draft: String): String? = MENTION.find(draft)?.groupValues?.get(1)
+
+    /**
+     * Who matches a mention so far. Any length, unlike Tab completion: the
+     * `@` already said what was meant. A name typed out in full still shows.
+     */
+    fun mentionCandidates(query: String, people: List<String>, limit: Int = 10): List<String> {
+        val wanted = query.lowercase()
+        return people
+            .filter { it.lowercase().startsWith(wanted) }
+            .sortedBy { it.lowercase() }
+            .take(limit)
+    }
+
+    /**
+     * The draft with the mention finished: what followed the `@` replaced by
+     * the name as the channel spells it, and a space to go on typing.
+     *
+     * The `@` stays. It is what was typed, it is how Discord and Slack write
+     * a mention, and a nick is still a nick to the other side's highlighter
+     * with an `@` in front of it — `@` is not a character a nick can contain.
+     */
+    fun mentioned(draft: String, nick: String): String {
+        val match = MENTION.find(draft) ?: return draft
+        val at = match.range.first + if (match.value.startsWith("@")) 0 else 1
+        return draft.substring(0, at) + "@" + nick + " "
+    }
 }

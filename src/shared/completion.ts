@@ -62,3 +62,53 @@ export function completedDraft(draft: string, completion: string): string {
   const head = draft.slice(0, lastSpace + 1)
   return head + completion + completionSuffix(head.length === 0, completion)
 }
+
+/**
+ * A mention being typed.
+ *
+ * Suggestions used to appear for any two letters typed, which meant a box
+ * popping up over the keyboard while somebody typed "bu" on the way to
+ * "but". Now the `@` is the intent: `@` alone offers everyone here, `@b`
+ * narrows to the b's. An `@` inside a word — an email address — is not one.
+ */
+const MENTION = /(?:^|\s)@([^\s@]*)$/
+
+/** The name after a trailing `@`, or null when nothing is being mentioned */
+export function mentionQuery(draft: string): string | null {
+  const match = MENTION.exec(draft)
+  return match ? match[1] : null
+}
+
+/**
+ * Who matches a mention so far.
+ *
+ * Any length, unlike Tab completion: the `@` already said what was meant. A
+ * name typed out in full still shows, so the row can be tapped to finish it.
+ */
+export function mentionCandidates(
+  query: string,
+  people: readonly string[],
+  limit = 10
+): string[] {
+  const wanted = query.toLowerCase()
+  return people
+    .filter((name) => name.toLowerCase().startsWith(wanted))
+    .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))
+    .slice(0, limit)
+}
+
+/**
+ * The draft with the mention finished: what followed the `@` replaced by the
+ * name as the channel spells it, and a space to go on typing.
+ *
+ * The `@` stays. It is what was typed, it is how Discord and Slack write a
+ * mention, and a nick is still a nick to the other side's highlighter with an
+ * `@` in front of it — `@` is not a character a nick can contain, so the
+ * boundary check in `namesYou` treats it as the edge of the word.
+ */
+export function mentioned(draft: string, nick: string): string {
+  const match = MENTION.exec(draft)
+  if (!match) return draft
+  const at = match.index + (match[0].startsWith('@') ? 0 : 1)
+  return draft.slice(0, at) + '@' + nick + ' '
+}

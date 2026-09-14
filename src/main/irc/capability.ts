@@ -16,12 +16,13 @@ import { parseSTSValue, setSTSPolicy } from './features/sts'
  * 6. Client sends: CAP END
  */
 
-// Accumulator for multi-line CAP LS responses
-let pendingCapLs: Map<string, string | null> = new Map()
-
 registerHandler('CAP', (client, msg) => {
   // params: <nick-or-*> <subcommand> [* (multiline)] :<cap list>
   const subcommand = msg.params[1]?.toUpperCase()
+
+  // What the server will put in front of its answer. The REQ has to leave
+  // room for it — see `requestCapabilities`.
+  const reply = { server: msg.prefix ?? '', nick: msg.params[0] ?? '*' }
 
   switch (subcommand) {
     case 'LS': {
@@ -30,6 +31,11 @@ registerHandler('CAP', (client, msg) => {
       const capStr = isMultiline ? msg.params[3] : msg.params[2]
 
       if (!capStr) break
+
+      // The accumulator lives on the connection, not the module: two networks
+      // connecting at once — which is every launch with more than one — would
+      // otherwise pour their lists into one map and each ask for the other's.
+      const pendingCapLs = client.state.pendingCapLs
 
       // Parse capabilities: "cap1 cap2=value cap3"
       for (const token of capStr.split(' ')) {
@@ -70,7 +76,7 @@ registerHandler('CAP', (client, msg) => {
             client.config.port = sts.port
             client.config.tls = true
             client.connection.disconnect('STS upgrade required')
-            pendingCapLs = new Map()
+            pendingCapLs.clear()
             return
           }
         }
@@ -85,10 +91,10 @@ registerHandler('CAP', (client, msg) => {
       }
 
       // Reset accumulator
-      pendingCapLs = new Map()
+      pendingCapLs.clear()
 
       if (toRequest.length > 0) {
-        requestCapabilities(client, toRequest)
+        requestCapabilities(client, toRequest, reply)
       } else {
         // Nothing to negotiate — end cap negotiation
         client.connection.send('CAP', 'END')
@@ -98,8 +104,11 @@ registerHandler('CAP', (client, msg) => {
     }
 
     case 'ACK': {
-      // Server acknowledged our requested caps
-      const capStr = msg.params[2] || ''
+      // Server acknowledged our requested caps. Like LS, an ACK may be spread
+      // over several lines, a `*` before the list meaning more are coming;
+      // the spec says not to act until the last of the set arrives.
+      const ackContinues = msg.params[2] === '*'
+      const capStr = (ackContinues ? msg.params[3] : msg.params[2]) || ''
       for (const cap of capStr.split(' ')) {
         if (!cap) continue
         // A leading '-' means the cap was removed (from CAP NEW/DEL flow)
@@ -109,6 +118,7 @@ registerHandler('CAP', (client, msg) => {
           client.state.capabilities.add(cap)
         }
       }
+      if (ackContinues) break
 
       // A long wish list goes out as several CAP REQ lines; registration must
       // not proceed until the last one has been answered.
@@ -193,7 +203,7 @@ registerHandler('CAP', (client, msg) => {
       }
 
       if (newCaps.length > 0) {
-        requestCapabilities(client, newCaps)
+        requestCapabilities(client, newCaps, reply)
       }
       break
     }
@@ -226,15 +236,6 @@ registerHandler('CAP', (client, msg) => {
 const MAX_LINE_BYTES = 512
 
 /**
- * Ask for capabilities, in as many CAP REQ lines as it takes.
- *
- * A wish list that has grown past the line limit is not a small problem: the
- * server answers `417 ERR_INPUTTOOLONG`, registration never completes, and the
- * client simply never connects. The capability-negotiation spec requires the
- * split, and each CAP REQ is atomic — the server ACKs or NAKs a whole line — so
- * splitting changes nothing except that it fits.
- */
-/**
  * The mechanisms the server named, or null if it named none.
  *
  * `sasl` with no value means the server will take whatever it takes and has
@@ -250,14 +251,58 @@ export function saslMechanismsFrom(value: string | null | undefined): string[] |
   return named.length > 0 ? named : null
 }
 
+/**
+ * The longest a server name can be when we have not yet heard it.
+ *
+ * RFC 1035 caps a single hostname label at 63 octets; a server name is
+ * normally one hostname of a few labels, and a placeholder this generous
+ * costs a second REQ line only on a network that offers a great many
+ * capabilities — which is exactly where the room is needed.
+ */
+const UNKNOWN_SERVER_NAME_BYTES = 63
+
+/**
+ * How the server will answer: `:<server> CAP <nick> ACK :<what we asked>`.
+ *
+ * Everything we know about that at REQ time, which is the prefix and the
+ * nick parameter of the CAP LS we are answering. Before registration most
+ * servers put `*` where the nick goes, some put the nick already; the budget
+ * takes the longer.
+ */
+export interface CapReplyShape {
+  server: string
+  nick: string
+}
+
+/**
+ * Ask for capabilities, in as many CAP REQ lines as it takes.
+ *
+ * A wish list that has grown past the line limit is not a small problem: the
+ * server answers `417 ERR_INPUTTOOLONG`, registration never completes, and the
+ * client simply never connects. The capability-negotiation spec requires the
+ * split, and each CAP REQ is atomic — the server ACKs or NAKs a whole line — so
+ * splitting changes nothing except that it fits.
+ *
+ * It is the *answer* that has to fit, not the question. The spec: "Clients
+ * SHOULD ensure that their list of requested capabilities is not too long to
+ * be replied to with a single ACK or NAK message." The ACK repeats the list
+ * behind `:irc.example.org CAP * ACK :`, which is longer than our `CAP REQ :`
+ * by the server's name and then some. A REQ that fit with two bytes to spare
+ * came back as an ACK cut off mid-word at the limit, and the capability that
+ * was cut — the last one asked for — was silently never enabled.
+ */
 export function requestCapabilities(
   client: {
     connection: { send: (...args: string[]) => void }
     state: { pendingCapRequests: number }
   },
-  caps: string[]
+  caps: string[],
+  reply?: CapReplyShape
 ): void {
-  const budget = MAX_LINE_BYTES - Buffer.byteLength('CAP REQ :') - 2 // CRLF
+  const server = reply?.server || '?'.repeat(UNKNOWN_SERVER_NAME_BYTES)
+  const nick = (reply?.nick || '*').length > 1 ? reply!.nick : '*'
+  const ackPrefix = `:${server} CAP ${nick} ACK :`
+  const budget = MAX_LINE_BYTES - Buffer.byteLength(ackPrefix) - 2 // CRLF
 
   const lines: string[] = []
   let current = ''

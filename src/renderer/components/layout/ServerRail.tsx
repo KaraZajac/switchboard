@@ -8,7 +8,7 @@ import { isChannelName } from '@shared/constants'
 import { railLook, badgeLabel, badgeDiameter } from '@shared/unread'
 import { nickColor } from '../../utils/nickColor'
 
-type ConnectionStatus = 'connected' | 'connecting' | 'disconnected'
+type ConnectionStatus = 'connected' | 'connecting' | 'reconnecting' | 'disconnected'
 
 /**
  * Height of the pill on the left edge of a rail icon.
@@ -82,7 +82,10 @@ export function ServerRail() {
         {servers.map((server) => {
           const isActive = server.id === activeServerId && !dmMode
           const status: ConnectionStatus = connectionStatus[server.id] || 'disconnected'
-          const initial = server.name.charAt(0).toUpperCase()
+          // Two letters, as the phone does: with one, every network starting
+          // with the same letter looked identical, and two "S" tiles side by
+          // side told nobody which was which
+          const initial = server.name.slice(0, 2).toUpperCase()
           const iconUrl = networkIcons[server.id]
           const isMuted = mutedServers[server.id] !== undefined
           const serverChannels = allChannels[server.id] || []
@@ -121,7 +124,7 @@ export function ServerRail() {
               }}
             >
               <span
-                className={`flex h-full w-full items-center justify-center overflow-hidden text-lg font-semibold text-white transition-opacity ${
+                className={`flex h-full w-full items-center justify-center overflow-hidden text-sm font-bold tracking-wide text-white transition-opacity ${
                   iconUrl ? 'bg-gray-700' : nickColor(server.name)
                 } ${status === 'connected' ? '' : 'opacity-50 grayscale'}`}
               >
@@ -172,12 +175,14 @@ export function ServerRail() {
 const STATUS_LABEL: Record<ConnectionStatus, string> = {
   connected: 'Connected',
   connecting: 'Connecting…',
+  reconnecting: 'Not connected, trying again',
   disconnected: 'Not connected'
 }
 
 const STATUS_DOT: Record<ConnectionStatus, string> = {
   connected: 'bg-green-500',
   connecting: 'bg-yellow-500',
+  reconnecting: 'bg-yellow-500',
   disconnected: 'bg-gray-600'
 }
 

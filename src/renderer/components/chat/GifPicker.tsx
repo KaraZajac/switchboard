@@ -1,104 +1,23 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 
-const API_KEY = '1xQDx9n6q39fXn2j7FbcqMfkyMycbdhu2TuekgY2olcinbjC5lhty6JV7ue1mK0l'
-const API_BASE = `https://api.klipy.com/api/v1/${API_KEY}`
+import {
+  KLIPY_TABS,
+  type KlipyTab,
+  type KlipyItem,
+  klipyTrendingUrl,
+  klipySearchUrl,
+  previewUrl,
+  shareUrl,
+  hasVideo,
+  parseResults
+} from '@shared/klipy'
 
-type ContentTab = 'gifs' | 'stickers' | 'clips' | 'static-memes' | 'emojis'
-
-const TABS: { id: ContentTab; label: string }[] = [
-  { id: 'gifs', label: 'GIFs' },
-  { id: 'stickers', label: 'Stickers' },
-  { id: 'clips', label: 'Clips' },
-  { id: 'static-memes', label: 'Memes' },
-  { id: 'emojis', label: 'Emoji' },
-]
-
-/** File format entry from Klipy API */
-interface FileFormat {
-  url: string
-  width: number
-  height: number
-  size: number
-}
-
-/** Size variant containing multiple formats */
-interface SizeVariant {
-  gif?: FileFormat
-  webp?: FileFormat
-  mp4?: FileFormat
-  webm?: FileFormat
-  jpg?: FileFormat
-  png?: FileFormat
-}
-
-/** Klipy API item — clips use flat file URLs, other types use nested size variants */
-interface KlipyItem {
-  url: string
-  title: string
-  slug: string
-  file: {
-    hd?: SizeVariant
-    md?: SizeVariant
-    sm?: SizeVariant
-    xs?: SizeVariant
-    // Flat format used by clips
-    mp4?: string
-    gif?: string
-    webp?: string
-    png?: string
-    jpg?: string
-  }
-}
+type ContentTab = KlipyTab
+const TABS = KLIPY_TABS
 
 interface GifPickerProps {
   onSelect: (url: string) => void
   onClose: () => void
-}
-
-/** Check if the file object uses flat format (clips) vs nested size variants */
-function isFlat(file: KlipyItem['file']): boolean {
-  return typeof file.mp4 === 'string' || typeof file.gif === 'string' || typeof file.webp === 'string'
-}
-
-/** Get the best preview URL (small animated format for thumbnails) */
-function getPreviewUrl(item: KlipyItem): string {
-  const f = item.file
-  if (!f) return item.url
-  // Flat format (clips): prefer webp/gif for preview, fall back to mp4
-  if (isFlat(f)) {
-    return (f.webp as string) || (f.gif as string) || (f.mp4 as string) || item.url
-  }
-  // Nested format: prefer sm/md size in webp/gif
-  const variant = f.sm || f.md || f.hd || f.xs
-  if (!variant) return item.url
-  return variant.webp?.url || variant.gif?.url || variant.png?.url || variant.mp4?.url || item.url
-}
-
-/** Get the best share URL (HD animated) */
-function getShareUrl(item: KlipyItem): string {
-  const f = item.file
-  if (!f) return item.url
-  // Flat format (clips): prefer gif/mp4 for sharing
-  if (isFlat(f)) {
-    return (f.gif as string) || (f.mp4 as string) || (f.webp as string) || item.url
-  }
-  // Nested format: prefer hd size
-  const variant = f.hd || f.md || f.sm
-  if (!variant) return item.url
-  return variant.gif?.url || variant.webp?.url || variant.mp4?.url || variant.png?.url || item.url
-}
-
-/** Check if item has video (mp4) as its primary format */
-function hasVideo(item: KlipyItem): boolean {
-  const f = item.file
-  if (!f) return false
-  // Flat format: video if mp4 exists and no gif/webp/png
-  if (isFlat(f)) {
-    return !!(f.mp4 && !f.gif && !f.webp && !f.png)
-  }
-  // Nested format
-  const variant = f.sm || f.md || f.hd
-  return !!(variant?.mp4?.url && !variant?.gif?.url && !variant?.webp?.url && !variant?.png?.url)
 }
 
 export function GifPicker({ onSelect, onClose }: GifPickerProps) {
@@ -147,7 +66,7 @@ export function GifPicker({ onSelect, onClose }: GifPickerProps) {
   const fetchTrending = async (tab: ContentTab) => {
     try {
       setLoading(true)
-      const res = await fetch(`${API_BASE}/${tab}/trending?per_page=20`)
+      const res = await fetch(klipyTrendingUrl(tab))
       if (!res.ok) return
       const json = await res.json()
       setResults(parseResults(json))
@@ -165,9 +84,7 @@ export function GifPicker({ onSelect, onClose }: GifPickerProps) {
     }
     try {
       setLoading(true)
-      const res = await fetch(
-        `${API_BASE}/${tab}/search?q=${encodeURIComponent(q)}&per_page=20`
-      )
+      const res = await fetch(klipySearchUrl(tab, q))
       if (!res.ok) return
       const json = await res.json()
       setResults(parseResults(json))
@@ -178,15 +95,6 @@ export function GifPicker({ onSelect, onClose }: GifPickerProps) {
     }
   }
 
-  const parseResults = (json: Record<string, unknown>): KlipyItem[] => {
-    const data = json.data
-    if (Array.isArray(data)) return data
-    if (data && typeof data === 'object' && 'data' in data) {
-      const inner = (data as Record<string, unknown>).data
-      if (Array.isArray(inner)) return inner
-    }
-    return []
-  }
 
   const handleQueryChange = useCallback((value: string) => {
     setQuery(value)
@@ -272,7 +180,7 @@ export function GifPicker({ onSelect, onClose }: GifPickerProps) {
             <button
               key={item.slug || i}
               onClick={() => {
-                onSelect(getShareUrl(item))
+                onSelect(shareUrl(item))
                 onClose()
               }}
               className="group relative overflow-hidden rounded-md hover:ring-2 hover:ring-indigo-500"
@@ -280,7 +188,7 @@ export function GifPicker({ onSelect, onClose }: GifPickerProps) {
             >
               {hasVideo(item) ? (
                 <video
-                  src={getPreviewUrl(item)}
+                  src={previewUrl(item)}
                   muted
                   loop
                   autoPlay
@@ -289,7 +197,7 @@ export function GifPicker({ onSelect, onClose }: GifPickerProps) {
                 />
               ) : (
                 <img
-                  src={getPreviewUrl(item)}
+                  src={previewUrl(item)}
                   alt={item.title}
                   loading="lazy"
                   className="h-28 w-full object-cover"

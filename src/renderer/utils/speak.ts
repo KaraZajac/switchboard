@@ -13,12 +13,18 @@ import { useUIStore } from '../stores/uiStore'
  */
 export function speak(attempt: Promise<unknown>, what = 'That was not sent'): void {
   attempt.catch((err: unknown) => {
-    const reason = err instanceof Error ? err.message : String(err)
-    useUIStore.getState().addToast({
-      title: what,
-      // Electron wraps a thrown Error with its own preamble; the sentence the
-      // main process wrote is the part worth showing.
-      body: reason.replace(/^Error invoking remote method '[^']+':\s*(Error:\s*)?/, '')
-    })
+    useUIStore.getState().addToast({ title: what, body: wording(err) })
   })
+}
+
+/**
+ * The sentence the main process wrote, without Electron's wrapping.
+ *
+ * A rejected `invoke` arrives as "Error invoking remote method 'channel:list':
+ * Error: Not connected" — the method name and the class are for us, the part
+ * after them is for the person reading.
+ */
+export function wording(err: unknown): string {
+  const reason = err instanceof Error ? err.message : String(err)
+  return reason.replace(/^Error invoking remote method '[^']+':\s*(Error:\s*)?/, '')
 }

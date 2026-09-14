@@ -1,11 +1,12 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'fs'
 import { join } from 'path'
-import { findLinks, safeExternalUrl } from '../../src/shared/links'
+import { findLinks, safeExternalUrl, isImageUrl, isVideoUrl, isKlipyMediaUrl } from '../../src/shared/links'
 
 const corpus = JSON.parse(readFileSync(join(__dirname, '../fixtures/links.json'), 'utf8')) as {
   cases: { name: string; text: string; links: string[] }[]
   safe: { name: string; value: string; url: string | null }[]
+  media: { name: string; url: string; image: boolean; video: boolean; klipy: boolean }[]
 }
 
 describe('shared link corpus', () => {
@@ -51,4 +52,14 @@ describe('links we are willing to open', () => {
       if (safe !== null) expect(found.url.startsWith('http')).toBe(true)
     }
   })
+})
+
+describe('what an address points at', () => {
+  for (const c of corpus.media) {
+    it(c.name, () => {
+      expect(isImageUrl(c.url)).toBe(c.image)
+      expect(isVideoUrl(c.url)).toBe(c.video)
+      expect(isKlipyMediaUrl(c.url)).toBe(c.klipy)
+    })
+  }
 })

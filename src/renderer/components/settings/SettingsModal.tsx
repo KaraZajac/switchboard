@@ -14,6 +14,7 @@ import {
 } from '@shared/ignore'
 import { validAliasName, type Alias } from '@shared/aliases'
 import { DEFAULT_AWAY_MESSAGE } from '@shared/autoaway'
+import { wording } from '../../utils/speak'
 
 type Tab =
   | 'servers'
@@ -24,11 +25,13 @@ type Tab =
   | 'devices'
   | 'network'
   | 'shortcuts'
+  | 'behaviour'
 
 const TABS: { key: Tab; label: string }[] = [
   { key: 'servers', label: 'Servers' },
   { key: 'appearance', label: 'Appearance' },
   { key: 'notifications', label: 'Notifications' },
+  { key: 'behaviour', label: 'Behaviour' },
   { key: 'ignored', label: 'Ignored' },
   { key: 'aliases', label: 'Aliases' },
   { key: 'devices', label: 'Devices' },
@@ -67,6 +70,7 @@ export function SettingsModal() {
           {activeTab === 'servers' && <ServersTab />}
           {activeTab === 'appearance' && <AppearanceTab />}
           {activeTab === 'notifications' && <NotificationsTab />}
+          {activeTab === 'behaviour' && <BehaviourTab />}
           {activeTab === 'ignored' && <IgnoredTab />}
           {activeTab === 'aliases' && <AliasesTab />}
           {activeTab === 'devices' && <DevicesTab />}
@@ -390,28 +394,6 @@ function NotificationsTab() {
 
   const removeWord = async (word: string) => save(words.filter((one) => one !== word))
 
-  const [awayMinutes, setAwayMinutes] = useState(0)
-  const [awayMessage, setAwayMessage] = useState('')
-  const [rejoin, setRejoin] = useState(false)
-
-  useEffect(() => {
-    void window.switchboard
-      .invoke('settings:get', 'autoAwayMinutes')
-      .then((value) => setAwayMinutes(Number(value) || 0))
-    void window.switchboard
-      .invoke('settings:get', 'autoAwayMessage')
-      .then((value) => setAwayMessage(typeof value === 'string' ? value : ''))
-    void window.switchboard
-      .invoke('settings:get', 'rejoinOnKick')
-      .then((value) => setRejoin(value === true))
-  }, [])
-
-  const saveAway = async (minutes: number, message: string) => {
-    setAwayMinutes(minutes)
-    setAwayMessage(message)
-    await window.switchboard.invoke('settings:set', 'autoAwayMinutes', minutes)
-    await window.switchboard.invoke('settings:set', 'autoAwayMessage', message)
-  }
 
   return (
     <div className="space-y-4">
@@ -482,12 +464,65 @@ function NotificationsTab() {
         )}
       </div>
 
+      <div className="rounded bg-gray-900 p-3">
+        <div className="text-xs text-gray-400">
+          Per-channel mute: right-click a channel in the sidebar to mute/unmute notifications for
+          that channel.
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * How the client behaves on your behalf.
+ *
+ * Away when idle and rejoining after a kick lived under Notifications, which
+ * is where nobody would look for either — they are about presence, not about
+ * being told things. Other clients keep them with the chat settings, and so
+ * does this one now.
+ */
+function BehaviourTab() {
+  const [awayMinutes, setAwayMinutes] = useState(0)
+  const [awayMessage, setAwayMessage] = useState('')
+  const [rejoin, setRejoin] = useState(false)
+  const showJoins = useUIStore((s) => s.showJoinsParts)
+  // Plain-text logs on disk — machine-local, see `logging.ts` in the main process
+  const [logToDisk, setLogToDisk] = useState(false)
+  const [logsFolder, setLogsFolder] = useState('')
+
+  useEffect(() => {
+    void window.switchboard
+      .invoke('settings:get', 'autoAwayMinutes')
+      .then((value) => setAwayMinutes(Number(value) || 0))
+    void window.switchboard
+      .invoke('settings:get', 'autoAwayMessage')
+      .then((value) => setAwayMessage(typeof value === 'string' ? value : ''))
+    void window.switchboard
+      .invoke('settings:get', 'rejoinOnKick')
+      .then((value) => setRejoin(value === true))
+    void window.switchboard
+      .invoke('settings:get', 'logToDisk')
+      .then((value) => setLogToDisk(value === true))
+    void window.switchboard.invoke('logs:folder').then((folder) => setLogsFolder(folder))
+  }, [])
+
+  const saveAway = async (minutes: number, message: string) => {
+    setAwayMinutes(minutes)
+    setAwayMessage(message)
+    await window.switchboard.invoke('settings:set', 'autoAwayMinutes', minutes)
+    await window.switchboard.invoke('settings:set', 'autoAwayMessage', message)
+  }
+
+  return (
+    <div className="space-y-4">
+      <h3 className="text-sm font-semibold text-gray-300">Behaviour</h3>
       {/*
         Your away message is otherwise only ever what you last set by hand,
         which for most people is nothing — so the network thinks you are at the
         keyboard at four in the morning.
       */}
-      <div className="space-y-2 border-t border-gray-800 pt-3">
+      <div className="space-y-2">
         <div className="flex items-center justify-between">
           <div>
             <div className="text-sm text-gray-200">Away when idle</div>
@@ -545,12 +580,57 @@ function NotificationsTab() {
         />
       </div>
 
-      <div className="rounded bg-gray-900 p-3">
-        <div className="text-xs text-gray-400">
-          Per-channel mute: right-click a channel in the sidebar to mute/unmute notifications for
-          that channel.
+      {/*
+        The noisy three. Off by default: the member list already says who is
+        here, and in a busy channel these bury the talk. Renames, kicks and
+        topic changes are always shown — they are rarer, and they matter.
+      */}
+      <div className="flex items-center justify-between border-t border-gray-800 pt-3">
+        <div>
+          <div className="text-sm text-gray-200">Show joins, parts and quits</div>
+          <div className="text-xs text-gray-500">
+            A line in the conversation when somebody arrives or leaves. Shared with your phone.
+          </div>
         </div>
+        <ToggleSwitch
+          checked={showJoins}
+          onChange={(on) => {
+            useUIStore.getState().setShowJoinsParts(on)
+            void window.switchboard.invoke('settings:set', 'showJoinsParts', on)
+          }}
+        />
       </div>
+
+      {/*
+        A file per channel that grows as it happens, the way every other
+        client's logs do. Off unless asked for: it is a copy of everything
+        said, on disk, in the clear. This computer's, not shared.
+      */}
+      <div className="flex items-center justify-between border-t border-gray-800 pt-3">
+        <div>
+          <div className="text-sm text-gray-200">Write plain-text logs</div>
+          <div className="text-xs text-gray-500">
+            One file per conversation, in{' '}
+            <button
+              type="button"
+              onClick={() => void window.switchboard.invoke('logs:open')}
+              className="text-indigo-400 hover:underline"
+              title={logsFolder}
+            >
+              the logs folder
+            </button>
+            . Only on this computer.
+          </div>
+        </div>
+        <ToggleSwitch
+          checked={logToDisk}
+          onChange={(on) => {
+            setLogToDisk(on)
+            void window.switchboard.invoke('settings:set', 'logToDisk', on)
+          }}
+        />
+      </div>
+
     </div>
   )
 }
@@ -867,7 +947,7 @@ function IgnoredTab() {
       setList(await window.switchboard.invoke('ignore:add', typed, network, DEFAULT_SCOPE))
       setTyped('')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'That did not work')
+      setError(wording(err) || 'That did not work')
     }
   }
 

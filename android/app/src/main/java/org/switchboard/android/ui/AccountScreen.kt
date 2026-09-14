@@ -49,6 +49,11 @@ import org.switchboard.android.accountView
 import org.switchboard.android.identifyWithServices
 import org.switchboard.android.logsInAutomatically
 import org.switchboard.android.registerAccount
+import org.switchboard.android.disconnectServer
+import org.switchboard.android.connectServer
+import org.switchboard.android.registerWithServices
+import org.switchboard.android.irc.Services
+import org.switchboard.android.SERVER_CONSOLE
 import org.switchboard.android.rememberAccount
 import org.switchboard.android.verifyAccount
 
@@ -85,6 +90,16 @@ fun AccountScreen(engine: SwitchboardEngine, serverId: String, onClose: () -> Un
     var busy by remember { mutableStateOf(false) }
     var note by remember { mutableStateOf<String?>(null) }
     var remembered by remember(serverId) { mutableStateOf(engine.logsInAutomatically(serverId)) }
+    // An account made somewhere else, on a network that makes its own
+    var loginAccount by remember { mutableStateOf(server?.nick.orEmpty()) }
+    var loginPassword by remember { mutableStateOf("") }
+
+    // What NickServ has said, newest last. Its answers go to a conversation
+    // nobody is looking at; while this screen is up they belong under the
+    // question.
+    val servicesSaid = store.messagesFor(serverId, SERVER_CONSOLE)
+        .filter { Services.isServices(it.nick) }
+        .takeLast(3)
 
     // The network's answer to REGISTER or VERIFY arrives whenever it arrives.
     val reply = store.accountReply?.takeIf { it.serverId == serverId }
@@ -201,6 +216,36 @@ fun AccountScreen(engine: SwitchboardEngine, serverId: String, onClose: () -> Un
                                 )
                             }
                         }
+
+                        // Registering is not the only way to have an account
+                        // here: it may have been made on the desktop, or on
+                        // another client. SASL logs in as a connection is
+                        // made, so the credentials are saved and a new
+                        // connection made.
+                        if (abilities.saslMechanisms.isNotEmpty()) {
+                            Spacer(Modifier.height(24.dp))
+                            Explain(
+                                "Already have an account here, made on another device or " +
+                                    "another client? Log in with it and this network will do it " +
+                                    "for you every time you connect."
+                            )
+                            Field("Account", "Usually your nick", loginAccount) { loginAccount = it }
+                            Field("Password", "", loginPassword, secret = true) { loginPassword = it }
+                            Spacer(Modifier.height(16.dp))
+                            Action(
+                                "Log in",
+                                enabled = loginAccount.isNotBlank() && loginPassword.isNotBlank() && !busy
+                            ) {
+                                scope.launch {
+                                    engine.rememberAccount(serverId, loginAccount, loginPassword)
+                                    loginPassword = ""
+                                    remembered = true
+                                    engine.disconnectServer(serverId)
+                                    engine.connectServer(serverId)
+                                    note = "Saved. Reconnecting to log in as $loginAccount."
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -224,16 +269,37 @@ fun AccountScreen(engine: SwitchboardEngine, serverId: String, onClose: () -> Un
                             note = "Sent. NickServ will answer in a moment."
                         }
                     }
-                    Spacer(Modifier.height(10.dp))
+                    Spacer(Modifier.height(24.dp))
                     Explain(
-                        "No account yet? Send NickServ a message saying " +
-                            "REGISTER <password> <email>."
+                        "No account yet? NickServ can make one for the nick you are using " +
+                            "now, ${server?.nick.orEmpty()}, with the password above. Most " +
+                            "networks ask for an email to confirm it."
                     )
+                    Field("Email", "For registering", email, KeyboardType.Email) { email = it }
+                    Spacer(Modifier.height(16.dp))
+                    Action(
+                        "Register ${server?.nick.orEmpty()} with NickServ",
+                        enabled = password.isNotBlank() && !busy
+                    ) {
+                        scope.launch {
+                            engine.registerWithServices(serverId, password, email.takeIf { it.isNotBlank() })
+                            note = "Sent. NickServ answers below; some networks email a code to confirm with."
+                        }
+                    }
                 }
             }
 
             reply?.let { Outcome(it.text ?: it.status, failed = it.failed) }
             note?.let { Outcome(it, failed = false) }
+
+            if (servicesSaid.isNotEmpty()) {
+                Spacer(Modifier.height(16.dp))
+                Text("NICKSERV SAYS", color = Overlay, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                for (line in servicesSaid) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(line.content, color = Text0, fontSize = 13.sp)
+                }
+            }
 
             Spacer(Modifier.height(32.dp))
         }

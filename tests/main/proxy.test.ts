@@ -61,6 +61,10 @@ function socks5Proxy(target: () => number, options: ProxyOptions = {}): Promise<
   return listen((socket) => {
     let stage: 'greeting' | 'auth' | 'connect' = 'greeting'
     let buffer = Buffer.alloc(0)
+    // The client under test hangs up on a proxy that misbehaves, which is the
+    // point; a write in flight when it does comes back as ECONNRESET, and
+    // with nobody listening that was an unhandled error in an unrelated test.
+    socket.on('error', () => {})
 
     const reply = (bytes: Buffer) => {
       if (!options.dribble) return void socket.write(bytes)

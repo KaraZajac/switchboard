@@ -1,4 +1,4 @@
-import { useEffect, useCallback, Component, type ReactNode } from 'react'
+import { useEffect, useCallback, Component, type ErrorInfo, type ReactNode } from 'react'
 import { AppLayout } from './components/layout/AppLayout'
 import { ToastContainer } from './components/common/ToastContainer'
 import { useIRCEvents } from './hooks/useIRC'
@@ -7,17 +7,40 @@ import type { UserMetadata } from '@shared/types/metadata'
 import { initMutePersistence } from './stores/mutePersistence'
 import { useUIStore } from './stores/uiStore'
 
-class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
-  state: { error: Error | null } = { error: null }
+class ErrorBoundary extends Component<
+  { children: ReactNode },
+  { error: Error | null; componentStack: string | null }
+> {
+  state: { error: Error | null; componentStack: string | null } = {
+    error: null,
+    componentStack: null
+  }
   static getDerivedStateFromError(error: Error) {
     return { error }
+  }
+  // The JS stack of a render error points into React's own scheduler; the
+  // component stack is the part that says which of our components did it.
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error('Render error:', error, info.componentStack)
+    this.setState({ componentStack: info.componentStack ?? null })
   }
   render() {
     if (this.state.error) {
       return (
-        <div style={{ padding: 40, color: '#ff6b6b', fontFamily: 'monospace' }}>
+        <div
+          style={{
+            padding: 40,
+            color: '#ff6b6b',
+            fontFamily: 'monospace',
+            whiteSpace: 'pre-wrap',
+            overflow: 'auto'
+          }}
+        >
           <h1>Render Error</h1>
           <pre>{this.state.error.message}</pre>
+          {this.state.componentStack && (
+            <pre style={{ color: '#ffb86b' }}>In components:{this.state.componentStack}</pre>
+          )}
           <pre>{this.state.error.stack}</pre>
         </div>
       )

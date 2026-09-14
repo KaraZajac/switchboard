@@ -40,18 +40,50 @@ export function MessageContent({ text, highlightNick }: MessageContentProps) {
     carried = formattingAfter(raw, carried)
   }
 
-  return (
-    <span>
-      {segments.map((segment, i) => (
-        <Segment
-          key={i}
-          segment={segment}
-          highlightNick={highlightNick}
-          carried={opening[i]}
-        />
-      ))}
-    </span>
+  // What the links point at goes under the text, not into it — the way
+  // Discord lays a message out, and the way the phone does. Drawing the
+  // picture where the link sat split a sentence around it: "look at this
+  // one <link>" [picture] "nice".
+  const embeds = segments.flatMap((segment, i) =>
+    segment.type === 'link' ? [<Embed key={i} url={segment.url} />] : []
   )
+
+  // A line that is nothing but a GIF from the picker, or an upload, shows
+  // the thing and not its address. A link with words around it keeps its
+  // place in the sentence.
+  const said = segments.filter((segment) => !(segment.type === 'text' && segment.content.trim() === ''))
+  const only = said.length === 1 && said[0].type === 'link' ? said[0].url : null
+  const addressless = only !== null && (isKlipyMediaUrl(only) || isFilehostUrl(only))
+
+  return (
+    <>
+      {!addressless && (
+        // Line breaks are kept: a multiline message arrives with its newlines,
+        // and rendered as ordinary text it was one long line with the breaks gone
+        <span className="whitespace-pre-wrap break-words">
+          {segments.map((segment, i) => (
+            <Segment
+              key={i}
+              segment={segment}
+              highlightNick={highlightNick}
+              carried={opening[i]}
+            />
+          ))}
+        </span>
+      )}
+      {embeds}
+    </>
+  )
+}
+
+/** What a link points at, drawn under the message */
+function Embed({ url }: { url: string }) {
+  if (isKlipyMediaUrl(url)) return <KlipyMedia url={url} />
+  if (isFilehostUrl(url)) return <FilehostMedia url={url} />
+  const ytId = getYouTubeVideoId(url)
+  if (ytId) return <YouTubeEmbed videoId={ytId} url={url} />
+  if (isImageUrl(url)) return <ClickableImage url={url} alt="Preview" />
+  return <LinkPreview url={url} />
 }
 
 function Segment({
@@ -73,56 +105,20 @@ function Segment({
         />
       )
 
-    case 'link': {
-      // Klipy media: render inline without URL text
-      if (isKlipyMediaUrl(segment.url)) {
-        return <KlipyMedia url={segment.url} />
-      }
-
-      // Filehost uploads: render inline media or file card (no URL text)
-      if (isFilehostUrl(segment.url)) {
-        return <FilehostMedia url={segment.url} />
-      }
-
-      // YouTube: show link + embedded player
-      const ytId = getYouTubeVideoId(segment.url)
-      if (ytId) {
-        return (
-          <>
-            <a
-              href={segment.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-blue-400 underline hover:text-blue-300"
-              title={segment.url}
-            >
-              {segment.display}
-            </a>
-            <YouTubeEmbed videoId={ytId} url={segment.url} />
-          </>
-        )
-      }
-
+    case 'link':
+      // The address as a link; what it points at is drawn under the message
+      // by `Embed`, so the sentence reads whole
       return (
-        <>
-          <a
-            href={segment.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-blue-400 underline hover:text-blue-300"
-            title={segment.url}
-          >
-            {segment.display}
-          </a>
-          {/* Image preview */}
-          {isImageUrl(segment.url) ? (
-            <ClickableImage url={segment.url} alt="Preview" />
-          ) : (
-            <LinkPreview url={segment.url} />
-          )}
-        </>
+        <a
+          href={segment.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-blue-400 underline hover:text-blue-300"
+          title={segment.url}
+        >
+          {segment.display}
+        </a>
       )
-    }
 
     case 'code':
       if (segment.inline) {

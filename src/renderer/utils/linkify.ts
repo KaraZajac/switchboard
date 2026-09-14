@@ -182,27 +182,8 @@ function linkifyText(text: string): MessageSegment[] {
   return segments
 }
 
-/**
- * Check if a URL points to an image.
- */
-export function isImageUrl(url: string): boolean {
-  const imageExtensions = /\.(jpg|jpeg|png|gif|webp|svg|bmp|ico)(\?.*)?$/i
-  return imageExtensions.test(url)
-}
-
-/**
- * Check if a URL is a Klipy media URL (should be rendered inline without link text).
- */
-export function isKlipyMediaUrl(url: string): boolean {
-  return /^https?:\/\/static\.klipy\.com\//i.test(url)
-}
-
-/**
- * Check if a URL points to a video.
- */
-export function isVideoUrl(url: string): boolean {
-  return /\.(mp4|webm)(\?.*)?$/i.test(url)
-}
+// What an address points at is decided once, for both clients — see `@shared/links`
+export { isImageUrl, isKlipyMediaUrl, isVideoUrl } from '@shared/links'
 
 /**
  * Check if a URL points to an audio file.

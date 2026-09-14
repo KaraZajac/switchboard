@@ -43,6 +43,44 @@ function createMockClient() {
 }
 
 describe('CAP Negotiation', () => {
+  it('acts on a multi-line ACK only when its last line arrives', () => {
+    const { client, state, sentLines } = createMockClient()
+    dispatchMessage(client, parseMessage(':server CAP * LS :multi-prefix server-time'))
+    expect(state.pendingCapRequests).toBe(1)
+
+    // "a client MUST NOT change capabilities until the last ACK of the set"
+    dispatchMessage(client, parseMessage(':server CAP * ACK * :multi-prefix'))
+    expect(state.capabilities.has('multi-prefix')).toBe(true)
+    expect(sentLines).not.toContain('CAP END')
+
+    dispatchMessage(client, parseMessage(':server CAP * ACK :server-time'))
+    expect(state.capabilities.has('server-time')).toBe(true)
+    expect(sentLines).toContain('CAP END')
+  })
+
+  it('keeps the CAP LS of two networks apart', () => {
+    // Every launch with more than one network is this: two servers listing
+    // what they offer at the same moment, each over several lines
+    const a = createMockClient()
+    const b = createMockClient()
+
+    dispatchMessage(a.client, parseMessage(':server-a CAP * LS * :multi-prefix'))
+    dispatchMessage(b.client, parseMessage(':server-b CAP * LS * :sasl'))
+    dispatchMessage(a.client, parseMessage(':server-a CAP * LS :server-time'))
+
+    const askedA = a.sentLines.find((l) => l.startsWith('CAP REQ'))!
+    expect(askedA).toContain('multi-prefix')
+    expect(askedA).toContain('server-time')
+    expect(askedA).not.toContain('sasl')
+    expect(b.sentLines.find((l) => l.startsWith('CAP REQ'))).toBeUndefined()
+
+    dispatchMessage(b.client, parseMessage(':server-b CAP * LS :echo-message'))
+    const askedB = b.sentLines.find((l) => l.startsWith('CAP REQ'))!
+    expect(askedB).toContain('sasl')
+    expect(askedB).toContain('echo-message')
+    expect(askedB).not.toContain('multi-prefix')
+  })
+
   it('parses CAP LS and requests known caps', () => {
     const { client, sentLines } = createMockClient()
 

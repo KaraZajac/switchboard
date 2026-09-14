@@ -50,6 +50,12 @@ import org.switchboard.android.irc.Friends
 import org.switchboard.android.irc.History
 import org.switchboard.android.irc.Isupport
 import org.switchboard.android.irc.Links
+import org.switchboard.android.irc.Klipy
+import org.switchboard.android.irc.Events
+import org.switchboard.android.irc.Emoji
+import org.switchboard.android.irc.Nicks
+import org.switchboard.android.irc.IrcUrl
+import org.switchboard.android.irc.TrustedCertificate
 import org.switchboard.android.irc.ServerConfig
 import org.switchboard.android.irc.Reconnect
 import org.switchboard.android.irc.Powers
@@ -1440,6 +1446,171 @@ class SharedCorpusTest {
         }
     }
 
+    @Test
+    fun `keeps a line said to services the way the desktop does`() {
+        for (case in load("services.json")["secrets"]!!.jsonArray) {
+            val c = case.jsonObject
+            assertEquals(
+                c["name"]!!.jsonPrimitive.content,
+                c["shown"]!!.jsonPrimitive.content,
+                Services.secretsMasked(
+                    c["target"]!!.jsonPrimitive.content,
+                    c["text"]!!.jsonPrimitive.content
+                )
+            )
+        }
+    }
+
+    // ── irc:// links ─────────────────────────────────────────────────
+
+    @Test
+    fun `reads an irc link the way the desktop reads it`() {
+        for (entry in load("ircurl.json")["cases"]!!.jsonArray) {
+            val case = entry.jsonObject
+            val name = case["name"]!!.jsonPrimitive.content
+            val expected = (case["link"] as? JsonObject)?.let { link ->
+                IrcUrl.Link(
+                    host = link["host"]!!.jsonPrimitive.content,
+                    port = link["port"]!!.jsonPrimitive.int,
+                    tls = link["tls"]!!.jsonPrimitive.boolean,
+                    channel = (link["channel"] as? JsonPrimitive)?.contentOrNull,
+                    nick = (link["nick"] as? JsonPrimitive)?.contentOrNull
+                )
+            }
+            assertEquals(name, expected, IrcUrl.parse(case["url"]!!.jsonPrimitive.content))
+        }
+    }
+
+    // ── the nick to try next ─────────────────────────────────────────
+
+    @Test
+    fun `tries the same alternative nicks the desktop tries`() {
+        for (entry in load("altnick.json")["cases"]!!.jsonArray) {
+            val case = entry.jsonObject
+            assertEquals(
+                case["name"]!!.jsonPrimitive.content,
+                case["next"]!!.jsonPrimitive.content,
+                Nicks.nextToTry(
+                    case["attempted"]!!.jsonPrimitive.content,
+                    case["alternatives"]!!.jsonArray.map { it.jsonPrimitive.content },
+                    case["tried"]!!.jsonArray.map { it.jsonPrimitive.content }
+                )
+            )
+        }
+    }
+
+    // ── emoji by name ────────────────────────────────────────────────
+
+    @Test
+    fun `offers and finishes emoji names as the desktop does`() {
+        val corpus = load("shortcodes.json")
+        val table = Emoji.parse(corpus["table"]!!.jsonArray)
+        for (entry in corpus["query"]!!.jsonArray) {
+            val case = entry.jsonObject
+            assertEquals(
+                case["name"]!!.jsonPrimitive.content,
+                (case["query"] as? JsonPrimitive)?.contentOrNull,
+                Emoji.query(case["draft"]!!.jsonPrimitive.content)
+            )
+        }
+        for (entry in corpus["candidates"]!!.jsonArray) {
+            val case = entry.jsonObject
+            assertEquals(
+                case["name"]!!.jsonPrimitive.content,
+                case["names"]!!.jsonArray.map { it.jsonPrimitive.content },
+                Emoji.candidates(case["query"]!!.jsonPrimitive.content, table).map { it.name }
+            )
+        }
+        for (entry in corpus["completed"]!!.jsonArray) {
+            val case = entry.jsonObject
+            assertEquals(
+                case["name"]!!.jsonPrimitive.content,
+                case["result"]!!.jsonPrimitive.content,
+                Emoji.complete(case["draft"]!!.jsonPrimitive.content, case["emoji"]!!.jsonPrimitive.content)
+            )
+        }
+        for (entry in corpus["replaced"]!!.jsonArray) {
+            val case = entry.jsonObject
+            assertEquals(
+                case["name"]!!.jsonPrimitive.content,
+                case["result"]!!.jsonPrimitive.content,
+                Emoji.replaceShortcodes(case["text"]!!.jsonPrimitive.content, table)
+            )
+        }
+    }
+
+    // ── a certificate nobody vouches for ─────────────────────────────
+
+    @Test
+    fun `spells and compares a certificate fingerprint as the desktop does`() {
+        val corpus = load("certificate.json")
+        for (entry in corpus["format"]!!.jsonArray) {
+            val case = entry.jsonObject
+            assertEquals(
+                case["name"]!!.jsonPrimitive.content,
+                case["shown"]!!.jsonPrimitive.content,
+                TrustedCertificate.format(case["raw"]!!.jsonPrimitive.content)
+            )
+        }
+        for (entry in corpus["same"]!!.jsonArray) {
+            val case = entry.jsonObject
+            assertEquals(
+                case["name"]!!.jsonPrimitive.content,
+                case["same"]!!.jsonPrimitive.content == "true",
+                TrustedCertificate.same(
+                    (case["a"] as? JsonPrimitive)?.contentOrNull,
+                    (case["b"] as? JsonPrimitive)?.contentOrNull
+                )
+            )
+        }
+    }
+
+    // ── channel events ───────────────────────────────────────────────
+
+    @Test
+    fun `words a join, a kick or a topic change as the desktop does`() {
+        val corpus = load("events.json")
+        for (entry in corpus["lines"]!!.jsonArray) {
+            val case = entry.jsonObject
+            assertEquals(
+                case["name"]!!.jsonPrimitive.content,
+                case["line"]!!.jsonPrimitive.content,
+                Events.line(
+                    case["kind"]!!.jsonPrimitive.content,
+                    case["nick"]!!.jsonPrimitive.content,
+                    (case["detail"] as? JsonPrimitive)?.contentOrNull,
+                    (case["reason"] as? JsonPrimitive)?.contentOrNull
+                )
+            )
+        }
+        for ((kind, hidden) in corpus["hidden"]!!.jsonObject) {
+            assertEquals(kind, hidden.jsonPrimitive.content == "true", Events.isJoinOrPart(kind))
+        }
+    }
+
+    // ── Klipy ────────────────────────────────────────────────────────
+
+    @Test
+    fun `picks the same Klipy files the desktop picks`() {
+        val corpus = load("klipy.json")
+        for (entry in corpus["picks"]!!.jsonArray) {
+            val case = entry.jsonObject
+            val name = case["name"]!!.jsonPrimitive.content
+            val item = Klipy.Item(case["item"]!!.jsonObject)
+            assertEquals(name, case["preview"]!!.jsonPrimitive.content, item.previewUrl)
+            assertEquals(name, case["share"]!!.jsonPrimitive.content, item.shareUrl)
+            assertEquals(name, case["video"]!!.jsonPrimitive.content == "true", item.hasVideo)
+        }
+        for (entry in corpus["results"]!!.jsonArray) {
+            val case = entry.jsonObject
+            assertEquals(
+                case["name"]!!.jsonPrimitive.content,
+                case["count"]!!.jsonPrimitive.content.toInt(),
+                Klipy.parseResults(case["json"]!!).size
+            )
+        }
+    }
+
     // ── what a network can do about accounts ─────────────────────────
 
     /**
@@ -2100,7 +2271,10 @@ class SharedCorpusTest {
             tls = from["tls"]?.jsonPrimitive?.booleanOrNull ?: base.tls,
             websocketUrl = if (from.containsKey("websocketUrl"))
                 from["websocketUrl"]?.jsonPrimitive?.contentOrNull
-            else base.websocketUrl
+            else base.websocketUrl,
+            trustedCertificate = if (from.containsKey("trustedCertificate"))
+                from["trustedCertificate"]?.jsonPrimitive?.contentOrNull
+            else base.trustedCertificate
         )
 
         for (entry in load("dial.json")["cases"]!!.jsonArray) {
@@ -2129,6 +2303,32 @@ class SharedCorpusTest {
                 Completion.matching(
                     case["partial"]!!.jsonPrimitive.content,
                     case["people"]!!.jsonArray.map { it.jsonPrimitive.content }
+                )
+            )
+        }
+
+        for (entry in corpus["mentions"]!!.jsonArray) {
+            val case = entry.jsonObject
+            val name = case["name"]!!.jsonPrimitive.content
+            val draft = case["draft"]!!.jsonPrimitive.content
+            val query = (case["query"] as? JsonPrimitive)?.contentOrNull
+            assertEquals(name, query, Completion.mentionQuery(draft))
+            val people = case["people"]!!.jsonArray.map { it.jsonPrimitive.content }
+            assertEquals(
+                name,
+                case["candidates"]!!.jsonArray.map { it.jsonPrimitive.content },
+                if (query == null) emptyList() else Completion.mentionCandidates(query, people)
+            )
+        }
+
+        for (entry in corpus["mentioned"]!!.jsonArray) {
+            val case = entry.jsonObject
+            assertEquals(
+                case["name"]!!.jsonPrimitive.content,
+                case["result"]!!.jsonPrimitive.content,
+                Completion.mentioned(
+                    case["draft"]!!.jsonPrimitive.content,
+                    case["nick"]!!.jsonPrimitive.content
                 )
             )
         }
@@ -2210,6 +2410,18 @@ class SharedCorpusTest {
         }
 
         assertNull("nothing at all", Links.safeExternal(null))
+    }
+
+    @Test
+    fun `sees the same pictures and clips in addresses the desktop sees`() {
+        for (entry in load("links.json")["media"]!!.jsonArray) {
+            val case = entry.jsonObject
+            val name = case["name"]!!.jsonPrimitive.content
+            val url = case["url"]!!.jsonPrimitive.content
+            assertEquals(name, case["image"]!!.jsonPrimitive.content == "true", Links.isImage(url))
+            assertEquals(name, case["video"]!!.jsonPrimitive.content == "true", Links.isVideo(url))
+            assertEquals(name, case["klipy"]!!.jsonPrimitive.content == "true", Links.isKlipyMedia(url))
+        }
     }
 
     // ── what a connection failure is called ───────────────────────────

@@ -3,6 +3,7 @@ import { Modal } from '../common/Modal'
 import { useUIStore } from '../../stores/uiStore'
 import { useServerStore } from '../../stores/serverStore'
 import { accountAbilities, accountView, bestSaslMechanism } from '@shared/accounts'
+import { isServiceNick } from '@shared/constants'
 
 /**
  * Your account on one network.
@@ -46,8 +47,16 @@ export function AccountModal() {
   const [busy, setBusy] = useState(false)
   const [outcome, setOutcome] = useState<{ text: string; failed: boolean } | null>(null)
   const [awaitingCode, setAwaitingCode] = useState(false)
+  // An account made somewhere else, on a network that makes its own
+  const [loginName, setLoginName] = useState(nick)
+  const [loginPassword, setLoginPassword] = useState('')
+  // What NickServ said while this was open, newest last
+  const [servicesLines, setServicesLines] = useState<string[]>([])
 
-  useEffect(() => setName(nick), [nick])
+  useEffect(() => {
+    setName(nick)
+    setLoginName(nick)
+  }, [nick])
 
   // The network's answer to REGISTER or VERIFY arrives whenever it arrives.
   useEffect(() => {
@@ -72,6 +81,16 @@ export function AccountModal() {
         if (event.command !== 'REGISTER' && event.command !== 'VERIFY') return
         setBusy(false)
         setOutcome({ text: event.message, failed: true })
+      }),
+      // NickServ answers in a notice to a conversation nobody is looking at.
+      // While this is open, its answer belongs here, under the question.
+      api.on('irc:message', (event) => {
+        if (event.serverId !== serverId || !isServiceNick(event.channel)) return
+        // The bot's answers, not our own questions echoed back
+        if (!isServiceNick(event.message?.nick ?? '')) return
+        const text = event.message?.content
+        if (typeof text !== 'string' || !text.trim()) return
+        setServicesLines((lines) => [...lines, text].slice(-3))
       })
     ]
     return () => cleanups.forEach((off) => off())
@@ -130,6 +149,53 @@ export function AccountModal() {
     setPassword('')
     setBusy(false)
     setOutcome({ text: 'Sent. NickServ will answer in a moment.', failed: false })
+  }
+
+  /**
+   * Register with NickServ, the way most of IRC still does it.
+   *
+   * The phrase is the same on Atheme and Anope — `REGISTER <password>
+   * <email>` — and the client knows it, so there is no reason to send people
+   * off to type it by hand. It registers the nick you are using now, which
+   * is how NickServ works; the password is saved so the next connection logs
+   * in with it. Networks that want the email confirmed say so in their reply,
+   * which is shown below.
+   */
+  const registerWithNickServ = async (): Promise<void> => {
+    setBusy(true)
+    setOutcome(null)
+    await remember(nick, password)
+    await window.switchboard.invoke(
+      'message:send',
+      serverId,
+      'NickServ',
+      `REGISTER ${password}${email.trim() ? ` ${email.trim()}` : ''}`
+    )
+    setBusy(false)
+    setOutcome({
+      text: 'Sent. NickServ answers below; some networks email a code to confirm with.',
+      failed: false
+    })
+  }
+
+  /**
+   * Log in with an account that already exists, on a network that makes its
+   * own.
+   *
+   * Registering is not the only way to have an account here: it may have been
+   * made on the phone, or on another client. SASL logs in as a connection is
+   * made, so the credentials are saved and a new connection made — the
+   * network then logs us in before anything is said or joined.
+   */
+  const login = async (): Promise<void> => {
+    setBusy(true)
+    setOutcome(null)
+    await remember(loginName, loginPassword)
+    setLoginPassword('')
+    await window.switchboard.invoke('server:disconnect', serverId)
+    await window.switchboard.invoke('server:connect', serverId)
+    setBusy(false)
+    setOutcome({ text: `Saved. Reconnecting to log in as ${loginName}.`, failed: false })
   }
 
   const connected = status === 'connected'
@@ -227,6 +293,34 @@ export function AccountModal() {
                   disabled={busy || !longEnough || (abilities.emailRequired && !email)}
                   onClick={register}
                 />
+
+                {abilities.saslMechanisms.length > 0 && (
+                  <div className="space-y-4 border-t border-gray-800 pt-4">
+                    <Explain>
+                      Already have an account here, made on another device or another client?
+                      Log in with it and this network will do it for you every time you
+                      connect.
+                    </Explain>
+                    <Field
+                      label="Account"
+                      hint="Usually your nick"
+                      value={loginName}
+                      onChange={setLoginName}
+                    />
+                    <Field
+                      label="Password"
+                      hint=""
+                      value={loginPassword}
+                      secret
+                      onChange={setLoginPassword}
+                    />
+                    <Action
+                      label="Log in"
+                      disabled={!loginName || !loginPassword || busy}
+                      onClick={login}
+                    />
+                  </div>
+                )}
               </>
             )}
           </>
@@ -245,11 +339,32 @@ export function AccountModal() {
               disabled={!name || !password || busy}
               onClick={identify}
             />
-            <Explain>
-              No account yet? Send NickServ a message saying REGISTER &lt;password&gt;
-              &lt;email&gt;.
-            </Explain>
+            <div className="space-y-4 border-t border-gray-800 pt-4">
+              <Explain>
+                No account yet? NickServ can make one for the nick you are using now,{' '}
+                {nick}, with the password above. Most networks ask for an email to confirm it.
+              </Explain>
+              <Field label="Email" hint="For registering" value={email} onChange={setEmail} />
+              <Action
+                label={`Register ${nick} with NickServ`}
+                disabled={!nick || !password || busy}
+                onClick={registerWithNickServ}
+              />
+            </div>
           </>
+        )}
+
+        {servicesLines.length > 0 && (
+          <div className="space-y-1 rounded bg-gray-900 p-3">
+            <div className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+              NickServ says
+            </div>
+            {servicesLines.map((line, i) => (
+              <div key={i} className="text-xs leading-relaxed text-gray-300">
+                {line}
+              </div>
+            ))}
+          </div>
         )}
 
         {outcome && (

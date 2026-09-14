@@ -55,6 +55,25 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="switchboard" android:host="pair" />
             </intent-filter>
+
+            <!-- irc:// and ircs:// links on web pages open here, the way they
+                 open in every desktop client. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="irc" />
+                <data android:scheme="ircs" />
+            </intent-filter>
+
+            <!-- Text or a picture shared from another app, to be sent to a
+                 conversation of the user's choosing. -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+                <data android:mimeType="image/*" />
+            </intent-filter>
         </activity>
 
         <service

@@ -144,6 +144,7 @@ fun SettingsScreen(
         HighlightsCard(engine)
         AwayCard(engine)
         RejoinCard(engine)
+        JoinsCard(engine)
         IgnoredCard(engine)
         AliasesCard(engine)
         ProxyCard(engine)
@@ -920,6 +921,52 @@ private fun AwayCard(engine: SwitchboardEngine) {
             shape = RoundedCornerShape(8.dp)
         ) {
             Text("Save", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+        }
+    }
+}
+
+/**
+ * The noisy three.
+ *
+ * Off by default: the member list already says who is here, and in a busy
+ * channel a line for every arrival and departure buries the talk. Renames,
+ * kicks and topic changes are always shown — they are rarer, and they matter.
+ * Shared with the desktop, so both devices read a channel the same way.
+ */
+@Composable
+private fun JoinsCard(engine: SwitchboardEngine) {
+    Spacer(Modifier.height(8.dp))
+    Text(
+        "Joins, parts and quits",
+        color = Overlay,
+        fontSize = 11.sp,
+        fontWeight = FontWeight.Bold,
+        modifier = Modifier.padding(start = 20.dp, bottom = 6.dp)
+    )
+    Card {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                Text("Show them in the conversation", color = Text0, fontSize = 15.sp)
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "A line when somebody arrives or leaves. Off by default — the " +
+                        "member list already says who is here. Shared with your desktop.",
+                    color = Subtext,
+                    fontSize = 12.sp,
+                    lineHeight = 17.sp
+                )
+            }
+            Switch(
+                checked = engine.showJoinsParts,
+                onCheckedChange = { engine.setShowJoinsAndParts(it) },
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = Crust,
+                    checkedTrackColor = Blue
+                )
+            )
         }
     }
 }

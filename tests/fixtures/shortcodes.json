@@ -1,0 +1,190 @@
+{
+  "$comment": "Emoji by name, as both composers offer it: what a half-typed `:name` matches, what picking one does to the draft, and which finished `:name:` codes turn into emoji on the way out. Shared by tests/shared/shortcodes.test.ts and the Android SharedCorpusTest, against this small table rather than the real one.",
+  "table": [
+    {
+      "emoji": "😄",
+      "name": "smile"
+    },
+    {
+      "emoji": "😃",
+      "name": "smiley",
+      "keywords": [
+        "happy"
+      ]
+    },
+    {
+      "emoji": "👍",
+      "name": "thumbsup",
+      "keywords": [
+        "+1",
+        "yes"
+      ]
+    },
+    {
+      "emoji": "🎉",
+      "name": "tada",
+      "keywords": [
+        "party"
+      ]
+    },
+    {
+      "emoji": "🐱",
+      "name": "cat"
+    },
+    {
+      "emoji": "🐈",
+      "name": "cat2"
+    },
+    {
+      "emoji": "🔹",
+      "name": "small_blue_diamond"
+    }
+  ],
+  "$query": "The name being typed, or null when nothing is.",
+  "query": [
+    {
+      "name": "a colon and some letters",
+      "draft": "hi :smi",
+      "query": "smi"
+    },
+    {
+      "name": "a time is not a name",
+      "draft": "at 10:30",
+      "query": null
+    },
+    {
+      "name": "one letter is too soon",
+      "draft": ":s",
+      "query": null
+    },
+    {
+      "name": "a bare colon offers nothing",
+      "draft": "look :",
+      "query": null
+    },
+    {
+      "name": "plus and digits are letters enough",
+      "draft": "go :+1",
+      "query": "+1"
+    },
+    {
+      "name": "nothing typed",
+      "draft": "",
+      "query": null
+    }
+  ],
+  "$candidates": "What a name so far could be, by name.",
+  "candidates": [
+    {
+      "name": "names that start with it, in order",
+      "query": "smi",
+      "names": [
+        "smile",
+        "smiley"
+      ]
+    },
+    {
+      "name": "a keyword finds it too",
+      "query": "happy",
+      "names": [
+        "smiley"
+      ]
+    },
+    {
+      "name": "the exact name comes before its longer sibling",
+      "query": "cat",
+      "names": [
+        "cat",
+        "cat2"
+      ]
+    },
+    {
+      "name": "nothing matching is nothing",
+      "query": "zzz",
+      "names": []
+    },
+    {
+      "name": "a keyword with punctuation in it",
+      "query": "+1",
+      "names": [
+        "thumbsup"
+      ]
+    },
+    {
+      "name": "case does not matter",
+      "query": "SMI",
+      "names": [
+        "smile",
+        "smiley"
+      ]
+    },
+    {
+      "name": "the shortest name first, whatever the alphabet says",
+      "query": "sm",
+      "names": [
+        "smile",
+        "smiley",
+        "small_blue_diamond"
+      ]
+    }
+  ],
+  "$completed": "The draft once a suggestion is picked.",
+  "completed": [
+    {
+      "name": "mid-sentence",
+      "draft": "hi :smi",
+      "emoji": "😄",
+      "result": "hi 😄 "
+    },
+    {
+      "name": "at the start",
+      "draft": ":ta",
+      "emoji": "🎉",
+      "result": "🎉 "
+    },
+    {
+      "name": "no name being typed leaves the draft alone",
+      "draft": "hi",
+      "emoji": "😄",
+      "result": "hi"
+    }
+  ],
+  "$replaced": "Finished codes on the way out.",
+  "replaced": [
+    {
+      "name": "two codes in a line",
+      "text": "good job :thumbsup: :tada:",
+      "result": "good job 👍 🎉"
+    },
+    {
+      "name": "a time is left alone",
+      "text": "see you at 10:30:00",
+      "result": "see you at 10:30:00"
+    },
+    {
+      "name": "an unknown name stays as typed",
+      "text": "unknown :nope: stays",
+      "result": "unknown :nope: stays"
+    },
+    {
+      "name": "inside an address it is not a code",
+      "text": "http://example.org/:smile:",
+      "result": "http://example.org/:smile:"
+    },
+    {
+      "name": "a code on its own",
+      "text": ":smile:",
+      "result": "😄"
+    },
+    {
+      "name": "after an opening bracket",
+      "text": "(:cat:)",
+      "result": "(🐱)"
+    },
+    {
+      "name": "upper case is the same code",
+      "text": ":SMILE:",
+      "result": "😄"
+    }
+  ]
+}

@@ -6,6 +6,9 @@ import { useUserStore } from '../stores/userStore'
 import { useUIStore, syncThemeFromSettings } from '../stores/uiStore'
 import { isChannelName, isServiceNick } from '@shared/constants'
 import { mentionsYou } from '@shared/mentions'
+import { eventLine } from '@shared/events'
+import { certificateProblemText, certificateFingerprintLine } from '@shared/certificate'
+import { reloadNotifyAll } from '../stores/mutePersistence'
 import { asksForIdentification, confirmsIdentification } from '@shared/services'
 
 /**
@@ -22,6 +25,50 @@ export function useIRCEvents(): void {
 
     const cleanups: (() => void)[] = []
 
+    // A line about somebody arriving, leaving, being renamed or kicked — see
+    // `@shared/events`. Renames, kicks and topic changes always; joins, parts
+    // and quits only where the shared switch is on. Until now none of these
+    // appeared live at all, only in the playback after a reconnect, so a
+    // conversation said who had quit overnight and nothing about who left
+    // while you were watching.
+    const note = (serverId: string, channel: string, content: string): void => {
+      useMessageStore.getState().addMessage(serverId, channel, {
+        id: `event-${serverId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        serverId,
+        channel,
+        nick: '',
+        userHost: null,
+        content,
+        type: 'system',
+        tags: {},
+        replyTo: null,
+        timestamp: new Date().toISOString(),
+        account: null,
+        pending: false,
+        reactions: {},
+        channelContext: null
+      })
+    }
+    const showsJoins = (): boolean => useUIStore.getState().showJoinsParts
+    /** Every channel on the server this person is in, for a quit or a rename */
+    const channelsWith = (serverId: string, nick: string): string[] => {
+      const users = useUserStore.getState().users
+      const wanted = nick.toLowerCase()
+      return Object.keys(users)
+        .filter(
+          (key) =>
+            key.startsWith(serverId + ':') &&
+            users[key].some((u) => u.nick.toLowerCase() === wanted)
+        )
+        .map((key) => key.slice(serverId.length + 1))
+    }
+    const readJoinsSetting = (): void => {
+      void api
+        .invoke('settings:get', 'showJoinsParts')
+        .then((value) => useUIStore.getState().setShowJoinsParts(value === true))
+    }
+    readJoinsSetting()
+
     // Connection events
     cleanups.push(
       api.on('irc:connected', ({ serverId, nick }) => {
@@ -37,6 +84,51 @@ export function useIRCEvents(): void {
         if (caps.includes('draft/metadata-2')) {
           api.invoke('metadata:get', serverId, '*', 'avatar').catch(() => {})
         }
+      })
+    )
+
+    // Between a lost connection and the next dial. Not "disconnected": that
+    // state has a Connect button under it, and reads as having given up.
+    cleanups.push(
+      api.on('irc:reconnecting', ({ serverId }) => {
+        useServerStore.getState().setConnectionStatus(serverId, 'reconnecting')
+      })
+    )
+
+    // The server's certificate was refused. Dialling again cannot change
+    // that, so the ladder has stopped; what can is the user saying yes to
+    // this one certificate, which is what the toast offers — with the
+    // fingerprint, the one thing they can check against what the operator
+    // told them. See `@shared/certificate`.
+    cleanups.push(
+      api.on('irc:certificate', ({ serverId, ...problem }) => {
+        useServerStore.getState().setConnectionStatus(serverId, 'disconnected')
+        const server = useServerStore.getState().servers.find((s) => s.id === serverId)
+        useUIStore.getState().addToast({
+          title: `${server?.name ?? 'This network'}: certificate not trusted`,
+          body: certificateProblemText(problem, server?.host ?? 'the server'),
+          detail: certificateFingerprintLine(problem),
+          action: {
+            kind: 'trust',
+            label: 'Trust it and connect',
+            serverId,
+            fingerprint: problem.fingerprint
+          },
+          sticky: true
+        })
+      })
+    )
+
+    // An irc:// link, handed over by the operating system — see `@shared/ircurl`
+    cleanups.push(
+      api.on('link:open', ({ serverId, channel }) => {
+        useChannelStore.getState().addChannel(serverId, channel)
+        useChannelStore.getState().setActiveChannel(serverId, channel)
+      })
+    )
+    cleanups.push(
+      api.on('link:add-server', (prefill) => {
+        useUIStore.getState().openAddServer(prefill)
       })
     )
 
@@ -62,6 +154,7 @@ export function useIRCEvents(): void {
       api.on('irc:join', ({ serverId, channel, user, isMe }) => {
         useChannelStore.getState().addChannel(serverId, channel)
         useUserStore.getState().addUser(serverId, channel, user)
+        if (!isMe && showsJoins()) note(serverId, channel, eventLine({ kind: 'join', nick: user.nick }))
 
         // Only our own arrival is a reason to go looking for history. This ran
         // on everybody's, so a busy channel hit the database once per join.
@@ -121,7 +214,8 @@ export function useIRCEvents(): void {
     )
 
     cleanups.push(
-      api.on('irc:part', ({ serverId, channel, nick, isMe }) => {
+      api.on('irc:part', ({ serverId, channel, nick, reason, isMe }) => {
+        if (!isMe && showsJoins()) note(serverId, channel, eventLine({ kind: 'part', nick, reason }))
         useUserStore.getState().removeUser(serverId, channel, nick)
         // We left — drop the channel rather than leaving a dead row behind
         if (isMe) {
@@ -131,13 +225,17 @@ export function useIRCEvents(): void {
     )
 
     cleanups.push(
-      api.on('irc:kick', ({ serverId, channel, nick }) => {
+      api.on('irc:kick', ({ serverId, channel, nick, by, reason }) => {
+        note(serverId, channel, eventLine({ kind: 'kick', nick, detail: by, reason }))
         useUserStore.getState().removeUser(serverId, channel, nick)
       })
     )
 
     cleanups.push(
       api.on('irc:topic', ({ serverId, channel, topic, setBy }) => {
+        // Said by somebody, so a change — the topic that comes with joining
+        // arrives with nobody's name on it
+        if (setBy) note(serverId, channel, eventLine({ kind: 'topic', nick: setBy, detail: topic }))
         useChannelStore.getState().setTopic(serverId, channel, topic, setBy)
       })
     )
@@ -206,9 +304,12 @@ export function useIRCEvents(): void {
         // is the only way to know: there is no ISUPPORT token that says so.
         if (isService) useServerStore.getState().noteService(serverId, channel)
 
-        // Route service messages to the server console channel
-        const effectiveChannel = isService ? '*' : channel
-        useMessageStore.getState().addMessage(serverId, effectiveChannel, message)
+        // Filed under the bot's own name, which is the entry the sidebar
+        // lists it under. These used to be sent to the server console, which
+        // draws only the message of the day — so NickServ's answers were
+        // shown nowhere, and the NickServ conversation said it had never
+        // started.
+        useMessageStore.getState().addMessage(serverId, channel, message)
 
         // NickServ, asking us to log in. On most of IRC this notice is the
         // first thing that happens after connecting, and it arrives as a
@@ -234,7 +335,7 @@ export function useIRCEvents(): void {
         // Check if this channel is currently active
         const activeServerId = useServerStore.getState().activeServerId
         const activeChannel = useChannelStore.getState().activeChannel[serverId]
-        const isActiveChannel = serverId === activeServerId && effectiveChannel === activeChannel
+        const isActiveChannel = serverId === activeServerId && channel === activeChannel
 
         // One rule, shared with the phone and checked against the same corpus:
         // a mention that rings one device and not the other is two clients.
@@ -245,17 +346,19 @@ export function useIRCEvents(): void {
           useServerStore.getState().highlightWords
         )
         const isPrivate = !isChannelName(channel) && channel !== '*' && !isService
+        // A channel where every line is worth a notification — see `notifyAll` in the channel store
+        const everyLine = useChannelStore.getState().notifiesAll(serverId, channel)
 
         if (!isActiveChannel) {
           // Service messages get unread but not mention badges
           useChannelStore
             .getState()
-            .incrementUnread(serverId, effectiveChannel, !isService && (isMention || isPrivate))
+            .incrementUnread(serverId, channel, !isService && (isMention || isPrivate || everyLine))
         }
 
         // Desktop notification for mentions and PMs (not for services or muted servers)
         const isServerMuted = useServerStore.getState().isServerMuted(serverId)
-        if ((isMention || isPrivate) && !isActiveChannel && !isService && !isServerMuted) {
+        if ((isMention || isPrivate || everyLine) && !isActiveChannel && !isService && !isServerMuted) {
           const uiState = useUIStore.getState()
           if (uiState.notificationsEnabled) {
             const title = isPrivate ? `PM from ${message.nick}` : `${message.nick} in ${channel}`
@@ -278,6 +381,9 @@ export function useIRCEvents(): void {
     // User events
     cleanups.push(
       api.on('irc:nick', ({ serverId, oldNick, newNick }) => {
+        for (const channel of channelsWith(serverId, oldNick)) {
+          note(serverId, channel, eventLine({ kind: 'nick', nick: oldNick, detail: newNick }))
+        }
         useUserStore.getState().renameUser(serverId, oldNick, newNick)
 
         // If this is our own nick change, update the store
@@ -289,7 +395,12 @@ export function useIRCEvents(): void {
     )
 
     cleanups.push(
-      api.on('irc:quit', ({ serverId, nick }) => {
+      api.on('irc:quit', ({ serverId, nick, reason }) => {
+        if (showsJoins()) {
+          for (const channel of channelsWith(serverId, nick)) {
+            note(serverId, channel, eventLine({ kind: 'quit', nick, reason }))
+          }
+        }
         useUserStore.getState().removeUserFromServer(serverId, nick)
       })
     )
@@ -560,6 +671,8 @@ export function useIRCEvents(): void {
     cleanups.push(
       api.on('settings:changed', ({ key }) => {
         if (key === 'theme') void syncThemeFromSettings()
+        if (key === 'showJoinsParts') readJoinsSetting()
+        if (key === 'notifyAll') void reloadNotifyAll()
       })
     )
 

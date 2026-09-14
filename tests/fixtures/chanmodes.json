@@ -111,11 +111,11 @@
       "label": "Limit"
     },
     {
-      "name": "anything else is named after itself",
+      "name": "anything else is named after its letter",
       "chanmodes": "eIbq,k,flj,CFLMPQScgimnprstz",
       "prefix": "(ohv)@%+",
       "letter": "z",
-      "label": "+z"
+      "label": "Mode z"
     }
   ],
   "$changes": "The MODE arguments for turning one setting on or off. Null means there is nothing to send.",

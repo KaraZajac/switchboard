@@ -81,9 +81,11 @@ class Notifier(private val context: Context) {
         while (history.size > 8) history.removeAt(0)
 
         val me = Person.Builder().setName("You").build()
-        val style = NotificationCompat.MessagingStyle(me)
-            .setConversationTitle(conversation)
-            .setGroupConversation(conversation.startsWith("#"))
+        val group = conversation.startsWith("#") || conversation.startsWith("&")
+        val style = NotificationCompat.MessagingStyle(me).setGroupConversation(group)
+        // A channel is named; a direct message is named after the person
+        // already, and a title on top read "robin: robin".
+        if (group) style.setConversationTitle(conversation)
 
         for ((who, said) in history) {
             style.addMessage(
@@ -96,11 +98,15 @@ class Notifier(private val context: Context) {
             )
         }
 
+        // Where a tap should land: the network and the conversation, by their
+        // own names rather than the folded key, so a nick keeps its case.
+        // MainActivity reads these on the way in.
         val open = PendingIntent.getActivity(
             context,
             conversationKey.hashCode(),
             Intent(context, MainActivity::class.java)
-                .putExtra(EXTRA_CONVERSATION, conversationKey)
+                .putExtra(EXTRA_SERVER, conversationKey.substringBefore(':'))
+                .putExtra(EXTRA_CHANNEL, conversation)
                 .setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
@@ -163,6 +169,7 @@ class Notifier(private val context: Context) {
         const val MENTIONS = "switchboard-mentions"
         const val MESSAGES = "switchboard-messages"
         const val GROUP = "switchboard-conversations"
-        const val EXTRA_CONVERSATION = "conversation"
+        const val EXTRA_SERVER = "server"
+        const val EXTRA_CHANNEL = "channel"
     }
 }

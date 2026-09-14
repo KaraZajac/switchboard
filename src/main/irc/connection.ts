@@ -9,6 +9,7 @@ import type { IRCMessage } from '@shared/types/irc'
 import type { ServerConfig } from '@shared/types/server'
 import { parseMessage } from './parser'
 import { reconnectDelay, THROTTLED_FLOOR_MS } from '@shared/reconnect'
+import { formatFingerprint, sameFingerprint, type CertificateProblem } from '@shared/certificate'
 import { redactLine } from '@shared/redact'
 import { cmd } from './serializer'
 import { decodeLine } from '@shared/decoding'
@@ -101,6 +102,10 @@ export interface ConnectionEvents {
   message: (msg: IRCMessage) => void
   connected: () => void
   disconnected: (reason: string) => void
+  /** A retry is booked, this many milliseconds away */
+  reconnecting: (delayMs: number) => void
+  /** The server's certificate was refused, and here is the one thing to check */
+  certificate: (problem: CertificateProblem) => void
   error: (error: Error) => void
 }
 
@@ -196,6 +201,12 @@ export class IRCConnection extends EventEmitter {
   private discarding = false
   private _connected = false
   private reconnectAttempts = 0
+  /**
+   * Set when the server's certificate was refused. Dialling again cannot
+   * change the answer, so the ladder stops here until somebody trusts the
+   * certificate or edits the server — either of which dials afresh.
+   */
+  private certificateRefused = false
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
   private pingTimer: ReturnType<typeof setInterval> | null = null
   private lastPongAt = 0
@@ -253,8 +264,11 @@ export class IRCConnection extends EventEmitter {
    * Connect to the IRC server.
    */
   connect(): void {
+    // A dial the user asked for supersedes one that was booked
+    this.cancelReconnect()
     this.cleanup()
     this.intentionalDisconnect = false
+    this.certificateRefused = false
     this.buffer = Buffer.alloc(0)
     this.discarding = false
 
@@ -319,7 +333,11 @@ export class IRCConnection extends EventEmitter {
 
     return {
       ...base,
-      rejectUnauthorized: true,
+      // Verified by hand in `onSecureConnect` rather than by the socket, so
+      // a refused certificate can be shown and — if it is the one the user
+      // chose to trust — accepted. Node still does the checking and reports
+      // the verdict in `authorized`; this only stops it acting on it.
+      rejectUnauthorized: false,
       servername: this.config.host,
       ...(extra ? { ca: [...tls.rootCertificates, extra] } : {}),
       ...(identity ? { cert: identity.certificate, key: identity.privateKey } : {})
@@ -345,7 +363,7 @@ export class IRCConnection extends EventEmitter {
     if (this.socks) {
       // bound where the tunnel is opened
     } else if (this.config.tls) {
-      this.socket.once('secureConnect', () => this.onConnect())
+      this.socket.once('secureConnect', () => this.onSecureConnect())
     } else {
       this.socket.once('connect', () => this.onConnect())
     }
@@ -494,7 +512,7 @@ export class IRCConnection extends EventEmitter {
     const secure = tls.connect(this.tlsOptions({ socket: raw }))
     this.socket = secure
     this.bindSocket()
-    secure.once('secureConnect', () => this.onConnect())
+    secure.once('secureConnect', () => this.onSecureConnect())
   }
 
   private failProxy(reason: string): void {
@@ -662,21 +680,8 @@ export class IRCConnection extends EventEmitter {
   // ── Socket event handlers ────────────────────────────────────────
 
   private onConnect(): void {
-    // For plain TCP, this fires on 'connect'
-    // For TLS, we bind this to 'secureConnect' instead
-    if (this.config.tls && !(this.socket as tls.TLSSocket)?.authorized) {
-      // TLS verification failed — secureConnect still fires but authorized is false
-      const err = (this.socket as tls.TLSSocket).authorizationError
-      if (err) {
-        // In words, where we have them: `ERR_TLS_CERT_ALTNAME_INVALID` is
-        // accurate and tells nobody that this might not be the server they
-        // meant. See `@shared/connectionerror` — the phone says the same.
-        this.emit('error', new Error(connectionProblem(String(err), this.config.host)))
-        this.cleanup()
-        return
-      }
-    }
-
+    // For plain TCP, this fires on 'connect'. For TLS it is reached through
+    // `onSecureConnect`, which has already decided about the certificate.
     this._connected = true
     // Deliberately not clearing `reconnectAttempts` here. A socket that opens
     // is not a server that let us in: a connect throttle, a full server, a ban
@@ -754,6 +759,41 @@ export class IRCConnection extends EventEmitter {
     this.emit('error', new Error(connectionProblem(err.message, this.config.host)))
   }
 
+  /**
+   * The handshake is done; is the certificate one to talk to?
+   *
+   * What the root store accepts goes straight through. What it refuses is
+   * accepted anyway when it is the one certificate the user chose — see
+   * `@shared/certificate` — and otherwise reported with its fingerprint and
+   * dropped, before a byte of registration (and the password in it) goes out.
+   */
+  private onSecureConnect(): void {
+    const socket = this.socket as tls.TLSSocket | null
+    if (!socket) return
+
+    if (!socket.authorized) {
+      const peer = socket.getPeerCertificate()
+      const fingerprint = formatFingerprint(peer?.fingerprint256 ?? '')
+      // A distinguished-name field may hold several values; the first is the name
+      const first = (value: string | string[] | undefined): string | null =>
+        Array.isArray(value) ? (value[0] ?? null) : (value ?? null)
+      if (!(fingerprint && sameFingerprint(this.config.trustedCertificate, fingerprint))) {
+        this.certificateRefused = true
+        this.emit('certificate', {
+          fingerprint,
+          subject: first(peer?.subject?.CN),
+          issuer: first(peer?.issuer?.CN),
+          validTo: peer?.valid_to ?? null,
+          reason: String(socket.authorizationError ?? 'The certificate was refused')
+        })
+        socket.destroy()
+        return
+      }
+    }
+
+    this.onConnect()
+  }
+
   private onEnd(): void {
     // Server closed its side of the connection
   }
@@ -767,7 +807,7 @@ export class IRCConnection extends EventEmitter {
       this.emit('disconnected', this.intentionalDisconnect ? 'User quit' : 'Connection lost')
     }
 
-    if (!this.intentionalDisconnect) {
+    if (!this.intentionalDisconnect && !this.certificateRefused) {
       this.scheduleReconnect()
     }
   }
@@ -795,6 +835,9 @@ export class IRCConnection extends EventEmitter {
 
     this.reconnectAttempts++
     const delay = reconnectDelay(this.reconnectAttempts, this.closingMessage)
+    // So the window can say "trying again" rather than "not connected" —
+    // which, with a Connect button under it, read as having given up
+    this.emit('reconnecting', delay)
     if (delay >= THROTTLED_FLOOR_MS) {
       console.info(
         `${this.config.host}: waiting ${Math.round(delay / 1000)}s — ${this.closingMessage}`

@@ -31,6 +31,7 @@ import org.switchboard.android.irc.Filehost
 import org.switchboard.android.irc.MaskLists
 import org.switchboard.android.irc.Profile
 import org.switchboard.android.irc.dialChanged
+import org.switchboard.android.irc.TrustedCertificate
 
 /**
  * Everything the app can be asked to do.
@@ -637,6 +638,28 @@ suspend fun SwitchboardEngine.identifyWithServices(
 }
 
 /**
+ * Register with NickServ, the way most of IRC still does it.
+ *
+ * The phrase is the same on Atheme and Anope — `REGISTER <password> <email>`
+ * — and the client knows it, so there is no reason to send people off to type
+ * it by hand. It registers the nick in use now, which is how NickServ works;
+ * the password is saved so the next connection logs in with it. Networks that
+ * want the email confirmed say so in their reply.
+ */
+suspend fun SwitchboardEngine.registerWithServices(
+    serverId: String,
+    password: String,
+    email: String?
+) {
+    val nick = store.servers[serverId]?.nick.orEmpty()
+    if (nick.isNotEmpty()) rememberAccount(serverId, nick, password)
+    val line = "REGISTER $password" + (email?.takeIf { it.isNotBlank() }?.let { " $it" } ?: "")
+    act(serverId, "message:send", JsonPrimitive("NickServ"), JsonPrimitive(line)) {
+        it.say("NickServ", line)
+    }
+}
+
+/**
  * Remember an account so the next connection logs in by itself.
  *
  * SASL rather than an identify command wherever the network offers it: it
@@ -901,6 +924,8 @@ suspend fun SwitchboardEngine.listServers(): List<ServerConfig> {
             autoJoin = (row["autoJoin"] as? JsonArray)?.mapNotNull { it.text() }.orEmpty(),
             sortOrder = (row["sortOrder"] as? JsonPrimitive)?.intOrNull ?: 0,
             websocketUrl = row["websocketUrl"].text(),
+            trustedCertificate = row["trustedCertificate"].text(),
+            altNicks = (row["altNicks"] as? JsonArray)?.mapNotNull { it.text() }.orEmpty(),
             profile = (row["profile"] as? JsonObject)
                 ?.mapNotNull { (key, value) -> value.text()?.let { key to it } }
                 ?.toMap()
@@ -976,6 +1001,22 @@ suspend fun SwitchboardEngine.updateServer(serverId: String, changes: ServerConf
         return
     }
     ask("server:update", JsonPrimitive(serverId), changes.toJson(omitBlankSecrets = true))
+}
+
+/**
+ * Say yes to this one certificate — see [TrustedCertificate].
+ *
+ * Written on the server's config, where the desktop reads it too, and the
+ * connection is made again: a trusted certificate is a reason to dial, which
+ * `dialChanged` knows, so the redial comes with the update on whichever device
+ * holds the connection.
+ */
+suspend fun SwitchboardEngine.trustCertificate(serverId: String, fingerprint: String) {
+    val current = listServers().firstOrNull { it.id == serverId } ?: return
+    updateServer(serverId, current.copy(trustedCertificate = TrustedCertificate.format(fingerprint)))
+    // Cleared last: the banner's scope is what runs this, and clearing the
+    // prompt takes the banner — and the scope — away
+    store.certificatePrompt = null
 }
 
 suspend fun SwitchboardEngine.removeServer(serverId: String) {
@@ -1123,6 +1164,8 @@ private fun ServerConfig.toJson(omitBlankSecrets: Boolean = false): JsonObject =
     put("saslMechanism", saslMechanism?.let { JsonPrimitive(it) } ?: JsonNull)
     put("saslUsername", saslUsername?.let { JsonPrimitive(it) } ?: JsonNull)
     put("websocketUrl", websocketUrl?.let { JsonPrimitive(it) } ?: JsonNull)
+    put("trustedCertificate", trustedCertificate?.let { JsonPrimitive(it) } ?: JsonNull)
+    put("altNicks", altNicks.asJson())
 
     val secrets = listOf(
         "password" to password,

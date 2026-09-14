@@ -8,6 +8,7 @@ import { MAX_BATCH_MESSAGES } from '../../src/shared/constants'
 import '../../src/main/irc/features/batch'
 import '../../src/main/irc/handlers/channel'
 import '../../src/main/irc/handlers/registration'
+import '../../src/main/irc/handlers/message'
 
 /**
  * Telling history from news.
@@ -192,5 +193,48 @@ describe('a batch that never ends', () => {
     expect(errors.length).toBe(1)
     // Still consumed after the drop: the overflow must not arrive as live traffic
     expect(checkBatchMembership(c, parseMessage('@batch=h :n!u@h PRIVMSG #chan :late'))).toBe(false)
+  })
+})
+
+/**
+ * A multiline message is one message, and its tags are on the BATCH line.
+ *
+ * That is where the spec puts msgid, time and account for the whole; the parts
+ * carry only `batch`. Built from the first part alone, the message got an
+ * invented id — and an edit, a reaction or a REDACT naming the real one found
+ * nothing to change, on the desktop and on the phone alike, while the same
+ * three actions on a single-line message worked.
+ */
+describe('a multiline message', () => {
+  it('keeps the id, time and account the BATCH line carries', () => {
+    const harness = client()
+    const seen: Record<string, unknown>[] = []
+    harness.events.on('privmsg', (m) => seen.push(m))
+
+    feed(harness, '@msgid=whole;time=2026-09-13T22:06:23.988Z;account=alice :irc.test BATCH +m draft/multiline #chan')
+    feed(harness, '@batch=m :alice!u@h PRIVMSG #chan :first line')
+    feed(harness, '@batch=m :alice!u@h PRIVMSG #chan :second line')
+    feed(harness, ':irc.test BATCH -m')
+
+    expect(seen).toHaveLength(1)
+    expect(seen[0]).toMatchObject({
+      msgid: 'whole',
+      time: '2026-09-13T22:06:23.988Z',
+      account: 'alice',
+      content: 'first line\nsecond line'
+    })
+  })
+
+  it('lets a part say something the BATCH line did not', () => {
+    const harness = client()
+    const seen: Record<string, unknown>[] = []
+    harness.events.on('privmsg', (m) => seen.push(m))
+
+    feed(harness, '@msgid=whole :irc.test BATCH +m draft/multiline #chan')
+    feed(harness, '@batch=m;+reply=earlier :alice!u@h PRIVMSG #chan :one')
+    feed(harness, '@batch=m :alice!u@h PRIVMSG #chan :two')
+    feed(harness, ':irc.test BATCH -m')
+
+    expect(seen[0]).toMatchObject({ msgid: 'whole', replyTo: 'earlier' })
   })
 })

@@ -1,8 +1,13 @@
 package org.switchboard.android
 
 import android.app.Application
+import android.os.Build
 import coil.ImageLoader
+import org.switchboard.android.irc.Emoji
 import coil.ImageLoaderFactory
+import coil.decode.GifDecoder
+import coil.decode.ImageDecoderDecoder
+import coil.decode.VideoFrameDecoder
 import okhttp3.OkHttpClient
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -34,6 +39,8 @@ class SwitchboardApp : Application(), ImageLoaderFactory {
 
     override fun onCreate() {
         super.onCreate()
+        // The emoji table, for `:smile:` in the composer — see [Emoji]
+        Emoji.load(this)
         SwitchboardService.createChannel(this)
 
         // Before anything dials. A Strict Transport Security policy that is not
@@ -59,6 +66,17 @@ class SwitchboardApp : Application(), ImageLoaderFactory {
      */
     override fun newImageLoader(): ImageLoader =
         ImageLoader.Builder(this)
+            // A GIF that does not move is a still, and a Klipy clip is an mp4
+            // whose first frame stands for it in the conversation. Coil draws
+            // neither without being told how.
+            .components {
+                if (Build.VERSION.SDK_INT >= 28) {
+                    add(ImageDecoderDecoder.Factory())
+                } else {
+                    add(GifDecoder.Factory())
+                }
+                add(VideoFrameDecoder.Factory())
+            }
             .okHttpClient {
                 OkHttpClient.Builder()
                     .addInterceptor { chain ->

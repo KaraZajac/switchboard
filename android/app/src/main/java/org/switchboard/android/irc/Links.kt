@@ -127,4 +127,18 @@ object Links {
     }
 
     private val SAFE_SCHEMES = setOf("http", "https", "mailto")
+
+    /**
+     * What a link points at, from the only thing a client has to go on: the
+     * address. A picture is shown as a picture, a Klipy address as the GIF it
+     * is and nothing else, a video as a link — on both clients. The desktop
+     * half is in `src/shared/links.ts`, checked against the same corpus.
+     */
+    private val IMAGE = Regex("\\.(jpe?g|png|gif|webp|svg|bmp|ico)(\\?.*)?$", RegexOption.IGNORE_CASE)
+    private val VIDEO = Regex("\\.(mp4|webm)(\\?.*)?$", RegexOption.IGNORE_CASE)
+    private val KLIPY = Regex("^https?://static\\.klipy\\.com/", RegexOption.IGNORE_CASE)
+
+    fun isImage(url: String): Boolean = IMAGE.containsMatchIn(url)
+    fun isVideo(url: String): Boolean = VIDEO.containsMatchIn(url)
+    fun isKlipyMedia(url: String): Boolean = KLIPY.containsMatchIn(url)
 }

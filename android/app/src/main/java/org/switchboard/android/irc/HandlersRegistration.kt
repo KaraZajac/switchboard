@@ -43,7 +43,7 @@ internal fun registerCapabilityHandlers() {
                     if (session.requireTls(port)) return@on
                 }
 
-                requestCapabilities(session)
+                requestCapabilities(session, reply = CapReply.of(message))
             }
 
             "ACK" -> {
@@ -112,7 +112,7 @@ internal fun registerCapabilityHandlers() {
                 for (entry in listed.split(" ").filter { it.isNotEmpty() }) {
                     state.available[entry.substringBefore("=")] = entry.substringAfter("=", "")
                 }
-                requestCapabilities(session, onlyNew = true)
+                requestCapabilities(session, onlyNew = true, reply = CapReply.of(message))
             }
 
             "DEL" -> {
@@ -174,14 +174,58 @@ internal fun registerCapabilityHandlers() {
 }
 
 /**
+ * How the server will answer a REQ: `:<server> CAP <nick> ACK :<the list>`.
+ *
+ * Everything known about that at REQ time is the prefix and the nick
+ * parameter of the CAP message being answered. Before registration most
+ * servers put `*` where the nick goes; some already use the nick.
+ */
+internal data class CapReply(val server: String, val nick: String) {
+    /** The bytes the server will put in front of the list we asked for */
+    fun prefixBytes(): Int {
+        val name = server.ifEmpty { "?".repeat(UNKNOWN_SERVER_NAME_BYTES) }
+        val who = if (nick.length > 1) nick else "*"
+        return ":$name CAP $who ACK :".toByteArray().size
+    }
+
+    companion object {
+        /**
+         * The longest a server name can be when we have not yet heard it.
+         *
+         * RFC 1035 caps a hostname label at 63 octets. This generous a
+         * placeholder costs a second REQ line only on a network that offers
+         * a great many capabilities — which is exactly where the room is
+         * needed.
+         */
+        const val UNKNOWN_SERVER_NAME_BYTES = 63
+
+        val UNKNOWN = CapReply("", "*")
+
+        fun of(message: IrcMessage) = CapReply(message.prefix.orEmpty(), message.param(0) ?: "*")
+    }
+}
+
+/**
  * Ask for capabilities, in as many CAP REQ lines as it takes.
  *
  * A wish list past the 512-byte line limit is answered with
  * `417 ERR_INPUTTOOLONG`, registration never completes, and the client simply
  * never connects. Each CAP REQ is atomic, so splitting changes nothing except
  * that it fits.
+ *
+ * It is the *answer* that has to fit, not the question. The spec: "Clients
+ * SHOULD ensure that their list of requested capabilities is not too long to
+ * be replied to with a single ACK or NAK message." The ACK repeats the list
+ * behind `:irc.example.org CAP * ACK :`, longer than our `CAP REQ :` by the
+ * server's name and then some. A REQ that fit with two bytes to spare came
+ * back as an ACK cut off mid-word at the limit, and the capability that was
+ * cut — the last one asked for — was silently never enabled.
  */
-internal fun requestCapabilities(session: IrcSession, onlyNew: Boolean = false) {
+internal fun requestCapabilities(
+    session: IrcSession,
+    onlyNew: Boolean = false,
+    reply: CapReply = CapReply.UNKNOWN
+) {
     val state = session.state
     val wanted = IrcConnection.WANTED_CAPABILITIES.filter {
         state.available.containsKey(it) && (!onlyNew || !state.capabilities.contains(it))
@@ -192,7 +236,7 @@ internal fun requestCapabilities(session: IrcSession, onlyNew: Boolean = false) 
         return
     }
 
-    val budget = IrcConnection.MAX_LINE_BYTES - "CAP REQ :".toByteArray().size - 2 // CRLF
+    val budget = IrcConnection.MAX_LINE_BYTES - reply.prefixBytes() - 2 // CRLF
     val lines = mutableListOf<String>()
     var current = ""
 
@@ -429,8 +473,11 @@ internal fun registerRegistrationHandlers() {
         state.nickRefusedReason = message.params.lastOrNull()
 
         if (!state.registered) {
+            // The next of the user's alternatives, and an underscore once
+            // those run out — see [Nicks]
             val attempted = message.param(1) ?: state.nick
-            state.nick = "${attempted}_"
+            state.nick = Nicks.nextToTry(attempted, session.config.altNicks, state.triedNicks)
+            state.triedNicks += attempted
             session.send("NICK", state.nick)
             // Nothing is settled yet — SASL may still win the name back, and
             // saying so now would be a warning about something that did not

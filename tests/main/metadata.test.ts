@@ -30,6 +30,52 @@ const feed = (c: ReturnType<typeof client>, line: string) =>
 const stored = (c: ReturnType<typeof client>, target: string) =>
   (c.state.metadata as Map<string, Record<string, string>>).get(target.toLowerCase())
 
+describe("the server's own notifications", () => {
+  let c: ReturnType<typeof client>
+
+  beforeEach(() => {
+    c = client()
+  })
+
+  // `METADATA <target> <key> <visibility> :<value>` is the shape the spec
+  // gives a server for telling everyone in a channel that somebody changed a
+  // key, and the only shape a metadata-2 server has. The desktop used to look
+  // for `METADATA <target> SET <key>` and drop this, so on such a network it
+  // showed nobody's profile but its own — while the phone showed everybody's.
+  it("takes another person's value in the spec's shape", () => {
+    feed(c, ':robin!r@example.org METADATA robin display-name * :Robin of Loxley')
+    expect(stored(c, 'robin')).toEqual({ 'display-name': 'Robin of Loxley' })
+    expect(c.seen).toEqual([{ target: 'robin', key: 'display-name', value: 'Robin of Loxley' }])
+  })
+
+  it('takes a cleared key in that shape: visibility, then nothing', () => {
+    feed(c, ':robin!r@example.org METADATA robin pronouns * :he/him')
+    feed(c, ':robin!r@example.org METADATA robin pronouns *')
+    expect(stored(c, 'robin')).toBeUndefined()
+    expect(c.seen.at(-1)).toEqual({ target: 'robin', key: 'pronouns', value: '' })
+  })
+
+  it('still reads the command shape a server may relay', () => {
+    feed(c, ':robin!r@example.org METADATA robin SET status * :writing')
+    expect(stored(c, 'robin')).toEqual({ status: 'writing' })
+    feed(c, ':robin!r@example.org METADATA robin SET status')
+    expect(stored(c, 'robin')).toBeUndefined()
+  })
+
+  it('does not mistake a relayed subscription command for a key', () => {
+    feed(c, ':irc.test METADATA * SUBS display-name pronouns')
+    feed(c, ':irc.test METADATA kara SYNC')
+    expect(c.seen).toEqual([])
+  })
+
+  it('forgives its own clear echoed back as the key, in this shape too', () => {
+    feed(c, ':irc.test METADATA kara pronouns * :she/her')
+    expectCleared(c, 'pronouns')
+    feed(c, ':irc.test METADATA kara pronouns * pronouns')
+    expect(stored(c, 'kara')).toBeUndefined()
+  })
+})
+
 describe('reading metadata off the wire', () => {
   let c: ReturnType<typeof client>
 

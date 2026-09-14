@@ -1,6 +1,9 @@
 import { fetchForPreview, BlockedAddressError } from '../net/safefetch'
+import { logsFolder } from '../logging'
+import { mkdir } from 'fs/promises'
+import { formatFingerprint } from '@shared/certificate'
 import { isPrivateAddress } from '@shared/privateaddress'
-import { BrowserWindow, Notification, app, dialog, type IpcMainInvokeEvent } from 'electron'
+import { BrowserWindow, Notification, app, dialog, type IpcMainInvokeEvent, shell } from 'electron'
 import { hasMetadata } from '@shared/metadata'
 import { transcript, transcriptFilename } from '@shared/transcript'
 import { listTransfers, acceptTransfer, declineTransfer, offerFile } from '../irc/features/dcc'
@@ -170,14 +173,15 @@ export function registerIPCHandlers(): void {
   })
 
   handle('server:add', async (_event, config: ServerConfig) => {
-    // A profile belongs to the person, not to a connection. Adding a network
-    // should not mean typing your name in again, so a new one starts from the
-    // saved default unless the caller brought its own.
-    const stored = getSetting<Record<string, string>>(DEFAULT_PROFILE) ?? {}
-    const seeded =
-      config.profile && Object.keys(config.profile).length > 0
-        ? config
-        : { ...config, profile: stored }
+    // No copy of the global taken: a new network follows the profile you
+    // carry, which `resolveProfile` gives it for as long as it has nothing of
+    // its own. This used to seed the new network with a copy — from before a
+    // network could differ from your profile at all — and once it could, a
+    // copy was indistinguishable from a choice: the editor opened on "On
+    // <network>", and editing your profile afterwards changed nothing here
+    // until the next launch, when the copy was recognised and collapsed. The
+    // phone never copied.
+    const seeded = { ...config, profile: config.profile ?? {} }
 
     const id = addServer(seeded)
     // The vault is what the other device would connect with — keep it current
@@ -204,6 +208,25 @@ export function registerIPCHandlers(): void {
       ircManager.disconnect(serverId)
       ircManager.connect(after)
     }
+  })
+
+  // The one certificate, by its fingerprint, and the dial that failed made
+  // again. Dialling is explicit rather than left to `dialChanged`: the client
+  // that was refused may never have got as far as being listed.
+  handle('server:trust-certificate', async (_event, serverId: string, fingerprint: string) => {
+    updateServer(serverId, { trustedCertificate: formatFingerprint(fingerprint) })
+    resealVault()
+    serversChanged()
+    const after = getServer(serverId)
+    if (!after) return
+    ircManager.disconnect(serverId)
+    ircManager.connect(after)
+  })
+
+  handle('logs:folder', async () => logsFolder())
+  handle('logs:open', async () => {
+    await mkdir(logsFolder(), { recursive: true })
+    await shell.openPath(logsFolder())
   })
 
   handle('server:remove', async (_event, serverId: string) => {
@@ -1193,94 +1216,23 @@ export function registerIPCHandlers(): void {
     if (result.canceled || result.filePaths.length === 0) return null
 
     const filePath = result.filePaths[0]
-    const fileName = basename(filePath)
-    const fileData = await readFile(filePath)
-
-    const MIME_MAP: Record<string, string> = {
-      '.png': 'image/png',
-      '.jpg': 'image/jpeg',
-      '.jpeg': 'image/jpeg',
-      '.gif': 'image/gif',
-      '.webp': 'image/webp',
-      '.svg': 'image/svg+xml',
-      '.bmp': 'image/bmp',
-      '.mp4': 'video/mp4',
-      '.webm': 'video/webm',
-      '.mov': 'video/quicktime',
-      '.avi': 'video/x-msvideo',
-      '.pdf': 'application/pdf',
-      '.txt': 'text/plain',
-      '.md': 'text/markdown',
-      '.log': 'text/plain',
-      '.zip': 'application/zip'
-    }
-    const contentType = MIME_MAP[extname(filePath).toLowerCase()] || 'application/octet-stream'
-
-    // Build auth header from SASL credentials
-    const headers: Record<string, string> = {
-      'Content-Type': contentType,
-      'Content-Disposition': `attachment; filename="${fileName}"`,
-      'Content-Length': fileData.length.toString()
-    }
-
-    // The account password, but only where the connection to the filehost is
-    // itself encrypted. The upload authenticates with Basic, and over plain
-    // http that hands the password to anyone on the path — and unlike the IRC
-    // connection, this URL is whatever the server said it was.
-    const config = getServer(serverId)
-    if (config?.saslUsername && config?.saslPassword && mayAuthenticate(filehostUrl)) {
-      const credentials = Buffer.from(`${config.saslUsername}:${config.saslPassword}`).toString(
-        'base64'
-      )
-      headers['Authorization'] = `Basic ${credentials}`
-    }
-
-    // Use Node http/https directly — Electron patches global fetch with net.fetch
-    // which rejects Buffer bodies with ERR_INVALID_ARGUMENT
-    const url = new URL(filehostUrl)
-    const httpMod = url.protocol === 'https:' ? https : http
-
-    const location = await new Promise<string>((resolve, reject) => {
-      const req = httpMod.request(
-        url,
-        {
-          method: 'POST',
-          headers
-        },
-        (res) => {
-          let body = ''
-          res.on('data', (chunk: Buffer) => {
-            body += chunk.toString()
-          })
-          res.on('end', () => {
-            if (res.statusCode !== 201) {
-              reject(new Error(`Upload failed (${res.statusCode}): ${body}`))
-              return
-            }
-            const loc = res.headers['location'] || body.trim()
-            if (!loc) {
-              reject(new Error('Server did not return a file URL'))
-              return
-            }
-            // The draft allows a relative Location, and a relative one pasted
-            // into a channel is a link to nothing
-            const resolved = uploadedUrl(typeof loc === 'string' ? loc : null, filehostUrl)
-            if (!resolved) {
-              reject(new Error('Server did not return a usable file URL'))
-              return
-            }
-            resolve(resolved)
-          })
-        }
-      )
-
-      req.on('error', reject)
-      req.write(fileData)
-      req.end()
-    })
-
-    return { url: location, filename: fileName }
+    return uploadToFilehost(serverId, basename(filePath), mimeOf(filePath), await readFile(filePath))
   })
+
+  // What the clipboard or a drop hands over: bytes with a name and a type,
+  // and no path on disk to open a dialog for. The same upload as the button.
+  handle(
+    'file:upload-bytes',
+    async (_event, serverId: string, fileName: string, contentType: string, data: Uint8Array) => {
+      return uploadToFilehost(
+        serverId,
+        fileName || 'upload',
+        contentType || mimeOf(fileName),
+        Buffer.from(data)
+      )
+    }
+  )
+
 
   // ── Link previews ──────────────────────────────────────────────────
 
@@ -1497,4 +1449,112 @@ function decodeHTMLEntities(str: string): string {
     }
     return NAMED_ENTITIES[entity.toLowerCase()] ?? match
   })
+}
+
+/** What a file is, from its name — the servers only know what they are told */
+function mimeOf(fileName: string): string {
+  const MIME_MAP: Record<string, string> = {
+    '.png': 'image/png',
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.gif': 'image/gif',
+    '.webp': 'image/webp',
+    '.svg': 'image/svg+xml',
+    '.bmp': 'image/bmp',
+    '.mp4': 'video/mp4',
+    '.webm': 'video/webm',
+    '.mov': 'video/quicktime',
+    '.avi': 'video/x-msvideo',
+    '.pdf': 'application/pdf',
+    '.txt': 'text/plain',
+    '.md': 'text/markdown',
+    '.log': 'text/plain',
+    '.zip': 'application/zip'
+  }
+  return MIME_MAP[extname(fileName).toLowerCase()] || 'application/octet-stream'
+}
+
+/**
+ * Put a file on the network's filehost and get its address back.
+ *
+ * Shared by the upload button, which opens a dialog for a path, and by a
+ * paste or a drop, which arrive as bytes with a name. Everything from the
+ * headers on is the same either way.
+ */
+async function uploadToFilehost(
+  serverId: string,
+  fileName: string,
+  contentType: string,
+  fileData: Buffer
+): Promise<{ url: string; filename: string } | null> {
+  const client = ircManager.getClient(serverId)
+  if (!client) throw new Error('Not connected')
+
+  const filehostUrl = filehostOf(client.state.isupport)
+  if (!filehostUrl) throw new Error('Server does not support file uploads')
+
+  // Build auth header from SASL credentials
+  const headers: Record<string, string> = {
+    'Content-Type': contentType,
+    'Content-Disposition': `attachment; filename="${fileName}"`,
+    'Content-Length': fileData.length.toString()
+  }
+
+  // The account password, but only where the connection to the filehost is
+  // itself encrypted. The upload authenticates with Basic, and over plain
+  // http that hands the password to anyone on the path — and unlike the IRC
+  // connection, this URL is whatever the server said it was.
+  const config = getServer(serverId)
+  if (config?.saslUsername && config?.saslPassword && mayAuthenticate(filehostUrl)) {
+    const credentials = Buffer.from(`${config.saslUsername}:${config.saslPassword}`).toString(
+      'base64'
+    )
+    headers['Authorization'] = `Basic ${credentials}`
+  }
+
+  // Use Node http/https directly — Electron patches global fetch with net.fetch
+  // which rejects Buffer bodies with ERR_INVALID_ARGUMENT
+  const url = new URL(filehostUrl)
+  const httpMod = url.protocol === 'https:' ? https : http
+
+  const location = await new Promise<string>((resolve, reject) => {
+    const req = httpMod.request(
+      url,
+      {
+        method: 'POST',
+        headers
+      },
+      (res) => {
+        let body = ''
+        res.on('data', (chunk: Buffer) => {
+          body += chunk.toString()
+        })
+        res.on('end', () => {
+          if (res.statusCode !== 201) {
+            reject(new Error(`Upload failed (${res.statusCode}): ${body}`))
+            return
+          }
+          const loc = res.headers['location'] || body.trim()
+          if (!loc) {
+            reject(new Error('Server did not return a file URL'))
+            return
+          }
+          // The draft allows a relative Location, and a relative one pasted
+          // into a channel is a link to nothing
+          const resolved = uploadedUrl(typeof loc === 'string' ? loc : null, filehostUrl)
+          if (!resolved) {
+            reject(new Error('Server did not return a usable file URL'))
+            return
+          }
+          resolve(resolved)
+        })
+      }
+    )
+
+    req.on('error', reject)
+    req.write(fileData)
+    req.end()
+  })
+
+  return { url: location, filename: fileName }
 }

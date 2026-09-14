@@ -131,6 +131,48 @@ class CapabilityTest {
         assertEquals(all, requested())
     }
 
+    /**
+     * It is the answer that has to fit.
+     *
+     * The server repeats the list behind `:its.name CAP * ACK :`, longer than
+     * `CAP REQ :` by the server's name and then some. rIRCd, which offers more
+     * capabilities than most, answered a 504-byte request with a 512-byte ACK
+     * cut off in the middle of a capability name — and the one that was cut
+     * was simply never enabled, with nothing anywhere to say so.
+     */
+    @Test
+    fun `leaves room for the server's answer`() {
+        val server = "a-server-with-a-long-name.example-network.org"
+        val all = IrcConnection.WANTED_CAPABILITIES
+        feed(":$server CAP * LS :" + all.joinToString(" "))
+
+        val lines = session.sent.filter { it.startsWith("CAP REQ") }
+        assertTrue("a list this long needs more than one line", lines.size > 1)
+        for (line in lines) {
+            val ack = ":$server CAP * ACK :" + line.substringAfter(":")
+            assertTrue(
+                "the ACK has to fit in one message too: ${ack.toByteArray().size}",
+                ack.toByteArray().size + 2 <= IrcConnection.MAX_LINE_BYTES
+            )
+        }
+        assertEquals(all, requested())
+    }
+
+    @Test
+    fun `budgets for the nick where the server already uses it in the reply`() {
+        val nick = "somebody-with-a-thirty-char-nick"
+        val all = IrcConnection.WANTED_CAPABILITIES
+        feed(":irc.example.org CAP $nick LS :" + all.joinToString(" "))
+
+        for (line in session.sent.filter { it.startsWith("CAP REQ") }) {
+            val ack = ":irc.example.org CAP $nick ACK :" + line.substringAfter(":")
+            assertTrue(
+                "the ACK has to fit with the nick in it: ${ack.toByteArray().size}",
+                ack.toByteArray().size + 2 <= IrcConnection.MAX_LINE_BYTES
+            )
+        }
+    }
+
     @Test
     fun `counts the lines, so CAP END waits for the last answer`() {
         val all = IrcConnection.WANTED_CAPABILITIES

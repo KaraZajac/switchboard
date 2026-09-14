@@ -92,6 +92,8 @@ android {
      */
     val shareNetworks by tasks.registering(Copy::class) {
         from(rootProject.file("../src/shared/networks.json"))
+        // The emoji table too: `:smile:` has to mean the same on both
+        from(rootProject.file("../src/shared/emoji.json"))
         into(layout.projectDirectory.dir("src/main/assets"))
     }
     tasks.named("preBuild") { dependsOn(shareNetworks) }
@@ -147,6 +149,10 @@ dependencies {
     // list shows up as jank or as a leak. Coil is the Compose-native one and
     // brings its own OkHttp.
     implementation("io.coil-kt:coil-compose:2.7.0")
+    // Pictures in the conversation: a GIF has to move, and a Klipy clip is an
+    // mp4 shown by its first frame
+    implementation("io.coil-kt:coil-gif:2.7.0")
+    implementation("io.coil-kt:coil-video:2.7.0")
 
     testImplementation("junit:junit:4.13.2")
     // Generating a QR in the unit test, so the decoder is checked against a
