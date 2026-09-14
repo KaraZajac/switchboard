@@ -99,6 +99,7 @@ android {
     tasks.named("preBuild") { dependsOn(shareNetworks) }
 
     testOptions {
+        unitTests.isIncludeAndroidResources = true
         // android.util.Log is the only Android API the protocol layer touches,
         // which is what lets the engine be exercised against a real server from
         // an ordinary JVM test.
@@ -159,4 +160,9 @@ dependencies {
     // real image rather than a hand-made bitmap
     testImplementation("com.google.zxing:javase:3.5.3")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
+    // The phone's message database is real SQLite, and the decisions that
+    // matter — dedup, what is still owed to the desktop, what gets pruned —
+    // are in the SQL. Testing them against a fake would be testing the fake.
+    testImplementation("org.robolectric:robolectric:4.14.1")
+    testImplementation("androidx.test:core:1.6.1")
 }

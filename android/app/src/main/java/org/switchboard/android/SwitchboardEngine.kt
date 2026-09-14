@@ -51,8 +51,8 @@ import org.switchboard.android.ui.applyTheme
 import org.switchboard.android.vault.VaultCrypto
 import java.util.Timer
 import java.util.TimerTask
-import org.switchboard.android.irc.HandoverQueue
 import org.switchboard.android.irc.Ignore
+import org.switchboard.android.store.MessageStore
 import kotlinx.serialization.json.JsonArray
 import org.switchboard.android.vault.VaultStore
 
@@ -76,6 +76,15 @@ class SwitchboardEngine(
     val store: SwitchboardStore
 ) {
     val vault = VaultStore(context)
+
+    /**
+     * What was said, kept on this phone — see [MessageStore].
+     *
+     * Small and local. It is what makes a conversation still be there after
+     * Android has stopped the process, and what stops an evening of holding
+     * the connections being lost before the desktop comes back to be told.
+     */
+    val history = MessageStore(context)
 
     /** This phone's identity to the desktop, and the ticket that reaches it */
     val identity = DeviceIdentity(context)
@@ -211,9 +220,11 @@ class SwitchboardEngine(
 
             if ((about == null || !connections.containsKey(about)) && !silenced(channel, data)) {
                 store.handleEvent(channel, data)
-                // Relayed from the desktop, which wrote it down as it sent it.
-                // Nothing to hand back.
                 if (channel == "irc:message") notifyIfWorthIt(data)
+                // Relayed from the desktop, which wrote it down as it sent it
+                // — nothing to hand back, but worth keeping so this phone
+                // opens with the conversation still in it
+                record(channel, data, ours = false)
 
                 // The desktop read it. Whatever this phone was showing about
                 // that conversation is answered.
@@ -254,6 +265,10 @@ class SwitchboardEngine(
         // Not in `init`: the properties it writes are declared further down,
         // and their own initialisers would run afterwards and overwrite it.
         applySharedState()
+
+        // What the last run of this app heard. Before anything dials, so the
+        // conversation is there to read while the network is still answering.
+        restoreHistory()
 
         watchTheNetwork()
         coordinator.start()
@@ -836,8 +851,6 @@ class SwitchboardEngine(
      * themselves, and writing a queue to disk that outlived what it describes
      * would promise more than the rest of this client keeps.
      */
-    private val handover = HandoverQueue(keep = HANDOVER_KEEP, batch = HANDOVER_BATCH)
-
     /**
      * One hand-over at a time.
      *
@@ -847,16 +860,84 @@ class SwitchboardEngine(
      */
     private val handoverLock = kotlinx.coroutines.sync.Mutex()
 
-    /** A message that arrived on one of this phone's own sockets */
-    private fun rememberForDesktop(data: JsonElement) {
+    /**
+     * Write a message down on this phone.
+     *
+     * [ours] is the difference between the two directions: a message this
+     * phone heard on its own socket exists nowhere else until the desktop is
+     * told, and is kept marked until it has been. One relayed from the desktop
+     * is stored too — that is what lets the app open with the conversation
+     * still in it — but there is nothing to hand back.
+     */
+    private fun record(channel: String, data: JsonElement, ours: Boolean) {
+        when (channel) {
+            "irc:message" -> keep(data, ours)
+
+            // A correction and a retraction are part of what was said, and a
+            // phone that kept only the first wording would hand the desktop
+            // something nobody wrote
+            "irc:edit" -> {
+                val payload = data as? JsonObject ?: return
+                val id = (payload["originalId"] as? JsonPrimitive)?.contentOrNull() ?: return
+                val content = (payload["newContent"] as? JsonPrimitive)?.contentOrNull() ?: return
+                val at = (payload["editedAt"] as? JsonPrimitive)?.contentOrNull().orEmpty()
+                runCatching { history.edit(id, content, at) }
+            }
+
+            "irc:redact" -> {
+                val payload = data as? JsonObject ?: return
+                val id = (payload["msgid"] as? JsonPrimitive)?.contentOrNull() ?: return
+                val by = (payload["by"] as? JsonPrimitive)?.contentOrNull() ?: "someone"
+                runCatching { history.redact(id, by) }
+            }
+        }
+    }
+
+    /** Put the phone's own record back into the conversations it belongs to */
+    private fun restoreHistory() {
+        runCatching {
+            var newest: Pair<String, String>? = null
+            var newestAt = ""
+
+            for (conversation in history.conversations()) {
+                val earlier = history.recent(conversation.serverId, conversation.channel)
+                store.restore(conversation.serverId, conversation.channel, earlier)
+
+                val last = earlier.lastOrNull()?.timestamp.orEmpty()
+                if (last > newestAt) {
+                    newestAt = last
+                    newest = conversation.serverId to conversation.channel
+                }
+            }
+
+            // Open on whatever was said most recently, the way it was left.
+            // Only when nothing is chosen yet: a snapshot or a notification
+            // tap has a better idea than this does.
+            if (store.activeServerId == null) {
+                newest?.let { (serverId, channel) -> store.select(serverId, channel) }
+            }
+        }.onFailure { Log.w(TAG, "could not read what was said last time", it) }
+    }
+
+    /** What this run of the app already knows, written down for the next one */
+    internal fun rememberFetched(serverId: String, channel: String) {
+        runCatching {
+            for (message in store.messagesFor(serverId, channel)) {
+                history.remember(serverId, channel, message, needsHandover = false)
+            }
+        }.onFailure { Log.w(TAG, "could not write fetched history down", it) }
+    }
+
+    private fun keep(data: JsonElement, ours: Boolean) {
         val payload = data as? JsonObject ?: return
         val serverId = (payload["serverId"] as? JsonPrimitive)?.contentOrNull() ?: return
         val channel = (payload["channel"] as? JsonPrimitive)?.contentOrNull() ?: return
-        val message = payload["message"] as? JsonObject ?: return
-        // Ours already: the desktop wrote this one down when it sent it
-        if (message["historical"]?.jsonPrimitive?.booleanOrNull == true) return
+        val body = payload["message"] as? JsonObject ?: return
+        // Replayed history, which whoever replayed it already has
+        if (body["historical"]?.jsonPrimitive?.booleanOrNull == true) return
 
-        handover.remember(serverId, channel, message)
+        runCatching { history.remember(serverId, channel, body.toMessage(), needsHandover = ours) }
+            .onFailure { Log.w(TAG, "could not write a message down", it) }
     }
 
     /**
@@ -868,24 +949,41 @@ class SwitchboardEngine(
      * Dropped from the queue only once the desktop has actually answered.
      */
     internal suspend fun handOverHistory() {
-        if (!remote.isLinked || handover.size == 0) return
+        if (!remote.isLinked) return
+        if (runCatching { history.pendingCount() }.getOrDefault(0) == 0) return
 
         handoverLock.withLock { handOverPending() }
     }
 
     private suspend fun handOverPending() {
         while (true) {
-            val batch = handover.peek() ?: return
+            val batch = runCatching { history.pendingHandover() }.getOrNull() ?: return
 
-            val answer = ask("history:store", JsonPrimitive(batch.serverId), batch.rows)
+            val rows = JsonArray(
+                batch.rows.map { (channel, message) ->
+                    buildJsonObject {
+                        put("id", JsonPrimitive(message.id))
+                        put("channel", JsonPrimitive(channel))
+                        put("nick", JsonPrimitive(message.nick))
+                        put("content", JsonPrimitive(message.content))
+                        put("timestamp", JsonPrimitive(message.timestamp))
+                        put("type", JsonPrimitive(message.type))
+                        message.replyTo?.let { put("replyTo", JsonPrimitive(it)) }
+                        message.oper?.let { put("oper", JsonPrimitive(it)) }
+                        message.relayedBy?.let { put("relayedBy", JsonPrimitive(it)) }
+                    }
+                }
+            )
+
+            val answer = ask("history:store", JsonPrimitive(batch.serverId), rows)
             if (answer == null) {
-                // The desktop did not take them; keep them for next time
-                Log.w(TAG, "handing over ${batch.count} message(s) failed; keeping them")
+                // The desktop did not take them; they stay marked for next time
+                Log.w(TAG, "handing over ${batch.rows.size} message(s) failed; keeping them")
                 return
             }
 
-            Log.i(TAG, "handed ${batch.count} message(s) to the desktop for ${batch.serverId}")
-            handover.drop(batch.count)
+            Log.i(TAG, "handed ${batch.rows.size} message(s) to the desktop for ${batch.serverId}")
+            history.markHandedOver(batch.rows.map { (_, message) -> message.id })
         }
     }
 
@@ -1499,12 +1597,12 @@ class SwitchboardEngine(
             // holding its own connection — the case this whole client exists
             // for — never told anyone anything. Messages arrived, the badge
             // counted them, and the phone stayed dark.
-            if (channel == "irc:message") {
-                notifyIfWorthIt(data)
-                // This phone is the connection, so this message exists here and
-                // nowhere else until the desktop is told — see [handOverHistory]
-                rememberForDesktop(data)
-            }
+            if (channel == "irc:message") notifyIfWorthIt(data)
+
+            // This phone is the connection, so whatever this was exists here
+            // and nowhere else until the desktop is told — see
+            // [handOverHistory]
+            record(channel, data, ours = true)
 
             rememberMembership(channel, data)
 
@@ -1757,7 +1855,7 @@ class SwitchboardEngine(
         // connection ever reaches a disk. Cheap when there is nothing waiting,
         // and this runs on every change of state — which includes the link
         // coming back, which is exactly when it matters.
-        if (remote.isLinked && handover.size > 0) scope.launch { handOverHistory() }
+        if (remote.isLinked) scope.launch { handOverHistory() }
 
         // Both of us on the same networks at once, which is the ordinary case
         // wherever the server allows it: nobody is standing in for anybody, and
@@ -2043,11 +2141,6 @@ class SwitchboardEngine(
         /** The shared setting both clients keep mutes in */
         const val MUTES_KEY = "mutes"
 
-        /** Most messages to keep for the desktop, oldest dropped first */
-        const val HANDOVER_KEEP = 2_000
-
-        /** Most to send in one call — the desktop refuses more than this anyway */
-        const val HANDOVER_BATCH = 500
         /** The shared-settings name for the theme; [THEME_KEY] is this phone's own copy */
         const val THEME_SETTING = "theme"
         const val NOTIFY_ALL_KEY = "notifyAll"

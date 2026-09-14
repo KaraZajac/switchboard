@@ -421,6 +421,34 @@ class SwitchboardStore {
         channels[serverId] = list + Channel(name)
     }
 
+    /**
+     * Put back what an earlier run of this app heard.
+     *
+     * Read off the phone's own database at launch — see
+     * [org.switchboard.android.store.MessageStore]. Merged rather than
+     * assigned: a conversation may already have something in it by the time
+     * the disk answers, and anything the desktop has since relayed is newer
+     * than anything here.
+     */
+    fun restore(serverId: String, channel: String, earlier: List<Message>) {
+        if (earlier.isEmpty()) return
+
+        val conversation = key(serverId, channel)
+        val already = messages[conversation].orEmpty()
+        val known = already.map { it.id }.toSet()
+
+        messages[conversation] = (earlier.filterNot { it.id in known } + already)
+            .sortedBy { it.timestamp }
+            .capped()
+
+        // And list it, whether it is a channel or a person. Without this the
+        // messages are on the phone and unreachable: the list is built from
+        // what the network says we are in, and offline the network says
+        // nothing — so a conversation kept precisely so it could be read on a
+        // train had no way to be opened.
+        openConversation(serverId, channel)
+    }
+
     private fun key(serverId: String, channel: String) = "$serverId:${channel.lowercase()}"
 
     fun conversationKey(): String? {
@@ -1420,7 +1448,7 @@ private fun JsonObject.toMember(): Member = Member(
     host = this["host"]?.str()
 )
 
-private fun JsonObject.toMessage(): Message = Message(
+internal fun JsonObject.toMessage(): Message = Message(
     id = this["id"]?.str() ?: (this["timestamp"]?.str() ?: "") + (this["nick"]?.str() ?: ""),
     nick = this["nick"]?.str() ?: "",
     content = this["content"]?.str() ?: "",

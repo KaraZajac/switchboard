@@ -1025,10 +1025,16 @@ suspend fun SwitchboardEngine.removeServer(serverId: String) {
         if (!vault.isUnlocked) return
         resealWith(vault.servers().filterNot { it.id == serverId })
         store.forgetServer(serverId)
+    // And what was said on it: a network that is gone is not one to keep
+    // conversations for — see [org.switchboard.android.store.MessageStore]
+    runCatching { history.forgetServer(serverId) }
         return
     }
     ask("server:remove", JsonPrimitive(serverId))
     store.forgetServer(serverId)
+    // And what was said on it: a network that is gone is not one to keep
+    // conversations for — see [org.switchboard.android.store.MessageStore]
+    runCatching { history.forgetServer(serverId) }
 }
 
 /**

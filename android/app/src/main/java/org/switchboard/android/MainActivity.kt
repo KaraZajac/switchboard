@@ -605,6 +605,10 @@ private suspend fun loadHistory(engine: SwitchboardEngine, serverId: String, cha
                 JsonPrimitive(HISTORY_FIRST_PAGE)
             )
         )
+
+        // And keep it, so this conversation is still readable on a train with
+        // no signal and after Android has stopped the app
+        engine.rememberFetched(serverId, channel)
     }
 }
 
