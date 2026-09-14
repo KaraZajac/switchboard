@@ -8,18 +8,6 @@ npmRebuild: false
 directories:
   buildResources: resources
   output: dist
-files:
-  - '!**/.vscode/*'
-  - '!src/*'
-  - '!electron.vite.config.*'
-  - '!{.eslintrc,.prettierrc,tsconfig.*}'
-  - '!{PLAN,README}.md'
-  # The Android client is a separate build; its Gradle output is hundreds of
-  # megabytes and has no business inside the desktop app.
-  - '!android/*'
-  - '!docs/*'
-  - '!tests/*'
-  - '!images/*'
 asarUnpack:
   - resources/**
   - node_modules/sql.js/dist/**
@@ -31,8 +19,24 @@ asarUnpack:
   # asar archive, and the remote link silently disappears if it is not unpacked.
   - node_modules/@number0/**
 icon: resources/icon.png
+# There is deliberately no top-level `files` list. The packer normalises that
+# list into a filter object and turns it into a *second* matcher, separate from
+# the one it decorates with `**/*` and its own ignores — and a matcher made of
+# nothing but exclusions is treated as "everything except". The result was the
+# entire checkout inside the app archive: `.git`, `src`, `tests`, the Android
+# sources, the screenshots, and on CI the unpacked Electron it had just written
+# to `dist/`. Every published build up to 2.3.0-beta shipped that way, which is
+# why the installers kept growing.
+#
+# The platform lists are what the packer builds its main matcher from, so the
+# include list lives there, three times over: the compiled app, the resources
+# the tray and app icons are read from at run time, and the manifest. The
+# packer adds the production node_modules on its own.
 mac:
   files:
+    - out/**/*
+    - resources/**/*
+    - package.json
     - '!node_modules/better-sqlite3-multiple-ciphers/prebuilds/{linux,linuxmusl,win32}-*'
   icon: resources/icon.png
   target:
@@ -43,6 +47,9 @@ mac:
   category: public.app-category.social-networking
 linux:
   files:
+    - out/**/*
+    - resources/**/*
+    - package.json
     # The database addon ships a prebuild per platform, and seven of the eight
     # are 20MB of dead weight in any one build. Both linux variants stay: the
     # loader picks between glibc and musl at run time, and an AppImage can
@@ -61,6 +68,9 @@ linux:
   category: Network;Chat;IRCClient
 win:
   files:
+    - out/**/*
+    - resources/**/*
+    - package.json
     - '!node_modules/better-sqlite3-multiple-ciphers/prebuilds/{darwin,linux,linuxmusl}-*'
   target:
     - target: nsis
