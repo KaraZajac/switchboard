@@ -1,4 +1,4 @@
-import { app } from 'electron'
+import { host } from '../host'
 import * as fs from 'fs'
 import * as path from 'path'
 import { SqliteDatabase } from './driver'
@@ -24,7 +24,7 @@ export function databaseIsEncrypted(): boolean {
  * message search can stop being a substring scan.
  */
 export async function initDatabase(): Promise<void> {
-  const userData = app.getPath('userData')
+  const userData = host().dataDir()
   dbPath = path.join(userData, 'switchboard.sqlite')
   const legacyPath = path.join(userData, 'switchboard.db')
 

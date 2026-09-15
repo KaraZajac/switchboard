@@ -1,4 +1,4 @@
-import { app, safeStorage } from 'electron'
+import { host } from '../host'
 import * as fs from 'fs'
 import * as path from 'path'
 import { randomBytes } from 'crypto'
@@ -22,7 +22,7 @@ const KEY_FILE = 'switchboard.key'
 
 /** Where the wrapped key lives — beside the database, not inside it */
 function keyPath(): string {
-  return path.join(app.getPath('userData'), KEY_FILE)
+  return path.join(host().dataDir(), KEY_FILE)
 }
 
 /**
@@ -34,7 +34,7 @@ function keyPath(): string {
  */
 export function keychainAvailable(): boolean {
   try {
-    return safeStorage.isEncryptionAvailable()
+    return host().secrets.available()
   } catch {
     return false
   }
@@ -54,7 +54,7 @@ export function databaseKey(): Buffer | null {
 
   if (fs.existsSync(file)) {
     try {
-      const unwrapped = safeStorage.decryptString(fs.readFileSync(file))
+      const unwrapped = host().secrets.decrypt(fs.readFileSync(file))
       const key = Buffer.from(unwrapped, 'base64')
       if (key.length !== 32) throw new Error('the stored key is the wrong length')
       return key
@@ -68,7 +68,7 @@ export function databaseKey(): Buffer | null {
   }
 
   const key = randomBytes(32)
-  const wrapped = safeStorage.encryptString(key.toString('base64'))
+  const wrapped = host().secrets.encrypt(key.toString('base64'))
 
   // Write it the way anything important gets written: temp, flush, rename.
   const temporary = `${file}.tmp`

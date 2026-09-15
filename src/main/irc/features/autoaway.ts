@@ -1,4 +1,4 @@
-import { powerMonitor } from 'electron'
+import { host } from '../../host'
 import type { IRCManager } from '../manager'
 import { getSetting } from '../../storage/models/settings'
 import { awayAction, awayMessage } from '@shared/autoaway'
@@ -53,7 +53,10 @@ export function stopWatchingIdleTime(): void {
 
 function tick(manager: IRCManager): void {
   const afterMinutes = Number(getSetting<number>(AFTER_MINUTES) ?? 0)
-  const idleSeconds = powerMonitor.getSystemIdleTime()
+  // Null where there is nobody to be idle. A headless instance is not away,
+  // it is simply not a person, and marking it away would mark you away.
+  const idleSeconds = host().idleSeconds()
+  if (idleSeconds === null) return
 
   for (const [serverId, client] of manager.connections()) {
     if (client.state.registrationState !== 'connected') continue

@@ -2,14 +2,6 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 
 // The module imports electron only for the default backend, which the tests
 // replace — stub it so importing does not need an Electron runtime.
-vi.mock('electron', () => ({
-  safeStorage: {
-    isEncryptionAvailable: () => false,
-    encryptString: (s: string) => Buffer.from(s),
-    decryptString: (b: Buffer) => b.toString(),
-    getSelectedStorageBackend: () => 'basic_text'
-  }
-}))
 
 const {
   encryptSecret,

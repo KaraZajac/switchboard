@@ -1,4 +1,4 @@
-import { app, safeStorage } from 'electron'
+import { host } from '../host'
 import * as fs from 'fs'
 import * as path from 'path'
 
@@ -29,7 +29,7 @@ const KEY_FILE = 'vault.key'
  */
 function keyPath(): string | null {
   try {
-    return path.join(app.getPath('userData'), KEY_FILE)
+    return path.join(host().dataDir(), KEY_FILE)
   } catch {
     return null
   }
@@ -38,7 +38,7 @@ function keyPath(): string | null {
 /** Whether the OS will wrap a key for us — false on a box with no keyring */
 export function keychainAvailable(): boolean {
   try {
-    return safeStorage.isEncryptionAvailable()
+    return host().secrets.available()
   } catch {
     return false
   }
@@ -52,7 +52,7 @@ export function rememberVaultKey(key: Buffer): boolean {
   if (!file) return false
 
   try {
-    const wrapped = safeStorage.encryptString(key.toString('base64'))
+    const wrapped = host().secrets.encrypt(key.toString('base64'))
     const temporary = `${file}.tmp`
     const handle = fs.openSync(temporary, 'w')
     try {
@@ -77,7 +77,7 @@ export function recallVaultKey(): Buffer | null {
   if (!file || !fs.existsSync(file)) return null
 
   try {
-    const key = Buffer.from(safeStorage.decryptString(fs.readFileSync(file)), 'base64')
+    const key = Buffer.from(host().secrets.decrypt(fs.readFileSync(file)), 'base64')
     if (key.length !== 32) throw new Error('the stored key is the wrong length')
     return key
   } catch (err) {

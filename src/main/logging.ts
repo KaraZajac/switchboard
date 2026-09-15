@@ -1,4 +1,4 @@
-import { app } from 'electron'
+import { host } from './host'
 import * as fs from 'fs'
 import { join } from 'path'
 import { getSetting } from './storage/models/settings'
@@ -23,7 +23,7 @@ import type { ChatMessage } from '@shared/types/message'
 const LOG_TO_DISK = 'logToDisk'
 
 export function logsFolder(): string {
-  return join(app.getPath('userData'), 'logs')
+  return join(host().dataDir(), 'logs')
 }
 
 export function loggingToDisk(): boolean {

@@ -1,4 +1,4 @@
-import { safeStorage } from 'electron'
+import { host } from '../host'
 
 /**
  * Encryption for the few values that must not sit on disk in the clear:
@@ -22,19 +22,19 @@ export interface SecretBackend {
   backendName(): string
 }
 
-const electronBackend: SecretBackend = {
-  isAvailable: () => safeStorage.isEncryptionAvailable(),
-  encrypt: (plain) => safeStorage.encryptString(plain),
-  decrypt: (data) => safeStorage.decryptString(data),
-  backendName: () =>
-    process.platform === 'linux' ? safeStorage.getSelectedStorageBackend() : process.platform
+/** Whatever the machine offers — see `src/main/host` */
+const platformBackend: SecretBackend = {
+  isAvailable: () => host().secrets.available(),
+  encrypt: (plain) => host().secrets.encrypt(plain),
+  decrypt: (data) => host().secrets.decrypt(data),
+  backendName: () => host().secrets.describe()
 }
 
-let backend: SecretBackend = electronBackend
+let backend: SecretBackend = platformBackend
 
 /** Test seam — pass nothing to restore the real one */
 export function setSecretBackend(next: SecretBackend | null): void {
-  backend = next ?? electronBackend
+  backend = next ?? platformBackend
   warnedUnavailable = false
 }
 

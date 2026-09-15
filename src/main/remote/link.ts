@@ -1,4 +1,4 @@
-import { app } from 'electron'
+import { host } from '../host'
 import { readFile, writeFile, mkdir } from 'fs/promises'
 import { randomBytes } from 'crypto'
 import { join } from 'path'
@@ -136,7 +136,7 @@ export function sessionState(): SessionState {
 
 /** Stable identity across restarts, so paired devices keep working */
 async function loadSecretKey(): Promise<number[]> {
-  const dir = join(app.getPath('userData'), 'remote')
+  const dir = join(host().dataDir(), 'remote')
   const file = join(dir, 'endpoint.key')
   try {
     const existing = await readFile(file)

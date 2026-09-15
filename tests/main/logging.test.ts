@@ -1,10 +1,12 @@
 import { describe, it, expect, vi } from 'vitest'
 
-vi.mock('electron', () => ({ app: { getPath: () => '/tmp/switchboard-test' } }))
 vi.mock('../../src/main/storage/models/settings', () => ({ getSetting: () => null }))
 vi.mock('../../src/main/storage/models/server', () => ({ getServer: () => null }))
 
+import { setHost, testHost } from '../../src/main/host'
 import { logLineFor } from '../../src/main/logging'
+
+setHost(testHost('/tmp/switchboard-test'))
 
 /** The shape every other client's logs take, so a tool that reads theirs reads ours */
 describe('a log line', () => {

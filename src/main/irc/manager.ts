@@ -1,4 +1,3 @@
-import { BrowserWindow } from 'electron'
 import { hasMetadata } from '@shared/metadata'
 import { canShareConnection } from '@shared/accounts'
 import { foldCase } from '@shared/casemap'
@@ -52,15 +51,10 @@ import { REJOIN_AFTER_KICK_MS } from '@shared/constants'
  */
 export class IRCManager {
   private clients = new Map<string, IRCClient>()
-  private mainWindow: BrowserWindow | null = null
   private autoConnected = false
   private eventSubscribers = new Set<(channel: string, data: unknown) => void>()
   /** Servers we disconnected because another device took over */
   private released: string[] = []
-
-  setMainWindow(window: BrowserWindow): void {
-    this.mainWindow = window
-  }
 
   /**
    * Connect to a server with the given config.
@@ -456,9 +450,15 @@ export class IRCManager {
       }
       writeLogLine(serverId, target, message)
     }
-    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
-      this.mainWindow.webContents.send(channel, data)
-    }
+    /*
+     * One way out, not two.
+     *
+     * The window used to be held here and written to directly, alongside a
+     * list of subscribers that got the same events — so the engine knew what a
+     * BrowserWindow was, and the desktop window and a paired device were fed
+     * by different code. The window is just the first subscriber now, which is
+     * also what lets this run with no window at all.
+     */
     for (const listener of this.eventSubscribers) {
       try {
         listener(channel, data)

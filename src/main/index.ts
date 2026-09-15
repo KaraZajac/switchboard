@@ -1,4 +1,20 @@
 import { app, BrowserWindow, Menu, Tray, session, shell, nativeImage } from 'electron'
+import { setHost } from './host'
+import { electronHost } from './host/electron'
+
+/*
+ * What this process is running on, before anything else.
+ *
+ * The engine below `src/main` — connections, storage, vault, session, link —
+ * asks the host for the few things it needs from a machine: somewhere to put
+ * files, a keychain, whether anybody is idle, and a fetch that honours the
+ * proxy. Nothing down there imports Electron any more, which is what lets the
+ * same engine run with no window on something that never sleeps.
+ *
+ * Installed at the top of the module rather than in `whenReady`, because
+ * storage is touched on the way there.
+ */
+setHost(electronHost)
 import { setAppVersion } from './irc/handlers/message'
 import { useNetworkSettings } from './irc/connection'
 import type { ProxySettings } from '@shared/socks'
@@ -66,8 +82,13 @@ function createWindow(): void {
   mainWindow.on('maximize', () => sendToRenderer('window:maximized', { maximized: true }))
   mainWindow.on('unmaximize', () => sendToRenderer('window:maximized', { maximized: false }))
 
-  // Set up IRC manager with main window for IPC
-  ircManager.setMainWindow(mainWindow)
+  // The window is a subscriber like any other, which is what lets the engine
+  // run without one at all
+  const window = mainWindow
+  const stopForwarding = ircManager.subscribe((channel, data) => {
+    if (!window.isDestroyed()) window.webContents.send(channel, data)
+  })
+  window.on('closed', stopForwarding)
 
   // Load the renderer
   if (!app.isPackaged && process.env['ELECTRON_RENDERER_URL']) {

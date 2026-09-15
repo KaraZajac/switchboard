@@ -6,16 +6,6 @@ import type { ServerConfig } from '@shared/types/server'
 
 let userData: string
 
-// A real database, because the bug was in the SQL — a column named and never
-// bound. Against a fake this would have passed.
-vi.mock('electron', () => ({
-  app: { getPath: () => userData },
-  safeStorage: {
-    isEncryptionAvailable: () => true,
-    encryptString: (value: string) => Buffer.from(`wrapped:${value}`),
-    decryptString: (buffer: Buffer) => buffer.toString().replace(/^wrapped:/, '')
-  }
-}))
 
 /**
  * Taking a network out of a shared config.
@@ -62,6 +52,9 @@ let messages: Messages
 beforeEach(async () => {
   userData = fs.mkdtempSync(path.join(os.tmpdir(), 'switchboard-upsert-'))
   vi.resetModules()
+  // A real database, because the bug was in the SQL and a fake would have passed
+  const platform = await import('../../src/main/host')
+  platform.setHost(platform.testHost(userData))
   const database = await import('../../src/main/storage/database')
   await database.initDatabase()
   servers = await import('../../src/main/storage/models/server')

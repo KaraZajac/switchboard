@@ -15,14 +15,11 @@ import * as path from 'path'
 
 let userData: string
 
-vi.mock('electron', () => ({
-  app: { getPath: () => userData, getName: () => 'Switchboard' },
-  safeStorage: {
-    isEncryptionAvailable: () => true,
-    encryptString: (value: string) => Buffer.from(`wrapped:${value}`),
-    decryptString: (buffer: Buffer) => buffer.toString().replace(/^wrapped:/, '')
-  }
-}))
+
+async function installHost(): Promise<void> {
+  const platform = await import('../../src/main/host')
+  platform.setHost(platform.testHost(userData))
+}
 
 beforeEach(() => {
   userData = fs.mkdtempSync(path.join(os.tmpdir(), 'switchboard-vault-'))
@@ -36,6 +33,7 @@ afterEach(() => {
 const PASSPHRASE = 'correct horse battery staple'
 
 async function deviceWithState() {
+  await installHost()
   const db = await import('../../src/main/storage/database')
   await db.initDatabase()
 

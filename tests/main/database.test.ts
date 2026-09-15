@@ -47,7 +47,19 @@ afterEach(() => {
 const dbFile = () => path.join(userData, 'switchboard.sqlite')
 const legacyFile = () => path.join(userData, 'switchboard.db')
 
+/**
+ * The machine, as the test provides it.
+ *
+ * Reinstalled after every `resetModules`, because the host's own module is
+ * reset with everything else — see `src/main/host`.
+ */
+async function installHost() {
+  const platform = await import('../../src/main/host')
+  platform.setHost(platform.testHost(userData, { keychain }))
+}
+
 async function freshDatabase() {
+  await installHost()
   const module = await import('../../src/main/storage/database')
   await module.initDatabase()
   return module

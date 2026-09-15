@@ -1,4 +1,4 @@
-import { net } from 'electron'
+import { host } from '../host'
 import { lookup } from 'dns/promises'
 import { isIpLiteral, isPrivateAddress } from '@shared/privateaddress'
 
@@ -95,7 +95,7 @@ export async function fetchForPreview(target: string): Promise<FetchedPage | nul
     const left = deadline - Date.now()
     if (left <= 0) return null
 
-    const response = await net.fetch(url.toString(), {
+    const response = await host().fetch(url.toString(), {
       headers: { 'User-Agent': 'Switchboard IRC Client' },
       // By hand, so every hop is checked. `follow` would make the second
       // request without asking us about it.
