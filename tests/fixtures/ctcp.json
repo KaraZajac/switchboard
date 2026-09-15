@@ -1,0 +1,69 @@
+{
+  "$comment": "Answering CTCP. Shared by tests/shared/ctcp.test.ts and the Android SharedCorpusTest, so a person who asks a desktop, a phone and an always-on instance the same question gets the same answer. Switchboard used to ignore CTCP asked of a channel, which is how people ask — a survey got a reply from every client in the room except this one.",
+  "$replies": "verb and args in, the NOTICE body out, or null for something we do not answer.",
+  "version": "2.5.0",
+  "platform": "linux",
+  "now": "2026-09-15T21:00:00.000Z",
+  "replies": [
+    {
+      "name": "version, the one everybody asks",
+      "verb": "VERSION",
+      "args": "",
+      "reply": "VERSION Switchboard 2.5.0 (linux)"
+    },
+    {
+      "name": "source, the one they ask next",
+      "verb": "SOURCE",
+      "args": "",
+      "reply": "SOURCE https://github.com/KaraZajac/switchboard"
+    },
+    {
+      "name": "clientinfo names the rest",
+      "verb": "CLIENTINFO",
+      "args": "",
+      "reply": "CLIENTINFO CLIENTINFO PING SOURCE TIME VERSION"
+    },
+    {
+      "name": "time, to the second and spelled the same on both",
+      "verb": "TIME",
+      "args": "",
+      "reply": "TIME 2026-09-15T21:00:00Z"
+    },
+    {
+      "name": "ping comes back exactly as it went",
+      "verb": "PING",
+      "args": "1757970000 123456",
+      "reply": "PING 1757970000 123456"
+    },
+    {
+      "name": "an empty ping is still a ping",
+      "verb": "PING",
+      "args": "",
+      "reply": "PING "
+    },
+    {
+      "name": "asked in lower case",
+      "verb": "version",
+      "args": "",
+      "reply": "VERSION Switchboard 2.5.0 (linux)"
+    },
+    {
+      "name": "something we do not answer",
+      "verb": "USERINFO",
+      "args": "",
+      "reply": null
+    },
+    {
+      "name": "finger, which nobody should still be asking",
+      "verb": "FINGER",
+      "args": "",
+      "reply": null
+    },
+    {
+      "name": "an unknown verb with a payload is not answered either",
+      "verb": "XDCC",
+      "args": "SEND 1",
+      "reply": null
+    }
+  ]
+}

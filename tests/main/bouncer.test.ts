@@ -775,3 +775,59 @@ describe('what the bouncer does not pass on', () => {
     expect(socket.lines('005').join(' ')).toContain('CHANTYPES=#')
   })
 })
+
+describe('a question the bouncer has already answered', () => {
+  const X = String.fromCharCode(1)
+  const ctcp = (verb: string) => `:asker!a@b PRIVMSG kara :${X}${verb}${X}`
+
+  it('does not pass it on for the attached client to answer as well', () => {
+    const upstream = fakeUpstream()
+    const { socket } = attach(upstream)
+    register(socket)
+    socket.written.length = 0
+
+    upstream.raw(ctcp('VERSION'))
+    upstream.raw(ctcp('SOURCE'))
+    upstream.raw(ctcp('CLIENTINFO'))
+
+    // The bouncer's own connection answers these before this runs. Relaying
+    // them meant a single VERSION came back twice, from two clients claiming
+    // two different versions of the same program.
+    expect(socket.written).toEqual([])
+  })
+
+  it('does not pass on a channel-wide one either, having answered that too', () => {
+    const upstream = fakeUpstream()
+    const { socket } = attach(upstream)
+    register(socket)
+    socket.written.length = 0
+
+    upstream.raw(`:asker!a@b PRIVMSG #test :${X}VERSION${X}`)
+
+    expect(socket.written).toEqual([])
+  })
+
+  it('passes on an action, which is not a question', () => {
+    const upstream = fakeUpstream()
+    const { socket } = attach(upstream)
+    register(socket)
+    socket.written.length = 0
+
+    upstream.raw(`:bunny!b@h PRIVMSG #test :${X}ACTION waves${X}`)
+
+    expect(socket.written.join(' ')).toContain('ACTION waves')
+  })
+
+  it('passes on a file offer, which it does not answer', () => {
+    const upstream = fakeUpstream()
+    const { socket } = attach(upstream)
+    register(socket)
+    socket.written.length = 0
+
+    // Swallowing this would mean a file sent to somebody attached here never
+    // reaches them
+    upstream.raw(`:bunny!b@h PRIVMSG kara :${X}DCC SEND cat.png 2130706433 5000 84${X}`)
+
+    expect(socket.written.join(' ')).toContain('DCC SEND cat.png')
+  })
+})

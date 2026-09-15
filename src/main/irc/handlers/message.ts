@@ -3,48 +3,45 @@ import { registerHandler } from './registry'
 import { operFrom, relayedBy } from '@shared/tags'
 import { isServerSource } from '@shared/source'
 import { statusTarget } from '@shared/isupport'
+import { ctcpReply, CtcpGuard } from '@shared/ctcp'
 
 /**
  * What we say we are, when asked.
  *
- * Set once at startup from the packaged version. Not read from `electron`
- * here, because these handlers are exercised in plain Node — and the string
- * was hardcoded as "1.0" for long enough that every CTCP VERSION reply this
- * client has ever sent named a version it has not been since.
+ * Set once at startup. Not read from `electron` here, because these handlers
+ * are exercised in plain Node — and the string was hardcoded as "1.0" for long
+ * enough that every CTCP VERSION reply this client has ever sent named a
+ * version it has not been since.
  */
-let appVersion = 'Switchboard'
+let appVersion = '0.0.0'
+let appPlatform = 'unknown'
 
 /** Tell the protocol layer what to answer CTCP VERSION with */
 export function setAppVersion(version: string, platform: string): void {
-  appVersion = `Switchboard ${version} (${platform})`
+  appVersion = version
+  appPlatform = platform
+}
+
+function ctcpAnswer(verb: string, args: string): string | null {
+  return ctcpReply(verb, args, { version: appVersion, platform: appPlatform, now: new Date() })
 }
 
 /**
- * What we answer, and what we say we answer.
+ * How often this client will answer, per connection.
  *
- * The same five as the phone, with the same wording, so a person who
- * CTCP-VERSIONs someone running Switchboard gets the same reply whichever
- * device they happen to be holding. CLIENTINFO is how the convention says to
- * ask what the rest of the list is, so it names them rather than being a
- * fifth thing to keep in step by hand.
+ * Per connection rather than one for the whole app: two networks are two
+ * different rooms of people, and a survey on one should not use up the answer
+ * owed to somebody on the other.
  */
-const CTCP_ANSWERS = ['CLIENTINFO', 'PING', 'SOURCE', 'TIME', 'VERSION']
+const guards = new WeakMap<object, CtcpGuard>()
 
-function ctcpAnswer(verb: string, args: string): string | null {
-  switch (verb) {
-    case 'VERSION':
-      return `VERSION ${appVersion}`
-    case 'TIME':
-      return `TIME ${new Date().toISOString()}`
-    case 'PING':
-      return `PING ${args}`
-    case 'SOURCE':
-      return 'SOURCE https://github.com/KaraZajac/switchboard'
-    case 'CLIENTINFO':
-      return `CLIENTINFO ${CTCP_ANSWERS.join(' ')}`
-    default:
-      return null
+function guardFor(client: object): CtcpGuard {
+  let guard = guards.get(client)
+  if (!guard) {
+    guard = new CtcpGuard()
+    guards.set(client, guard)
   }
+  return guard
 }
 
 /**
@@ -62,10 +59,6 @@ registerHandler('PRIVMSG', (client, msg) => {
     const ctcpCommand = spaceIdx === -1 ? ctcpContent : ctcpContent.slice(0, spaceIdx)
     const ctcpArgs = spaceIdx === -1 ? '' : ctcpContent.slice(spaceIdx + 1)
 
-    // Only when it was asked of us. A CTCP sent to a channel is asked of
-    // everyone in it at once, and a room full of clients each answering it
-    // privately is the flood that got CTCP a bad name — and gets the clients
-    // killed for it on networks that watch for exactly this.
     const askedOfUs = client.state.casemap(target) === client.state.casemap(client.state.nick)
 
     // DCC is an offer rather than a question, so it gets no NOTICE back — and
@@ -77,9 +70,23 @@ registerHandler('PRIVMSG', (client, msg) => {
       return
     }
 
-    if (askedOfUs) {
-      const answer = ctcpAnswer(ctcpCommand.toUpperCase(), ctcpArgs)
-      if (answer) client.connection.sendRaw(`NOTICE ${nick} :\x01${answer}\x01`)
+    /*
+     * Answered whether it was asked of us or of the channel.
+     *
+     * Asking a channel is how people ask — it is the only way to find out what
+     * everyone in a room is running — and staying silent meant a survey came
+     * back with an answer from every client present except this one. Somebody
+     * on IRC reported that as Switchboard not supporting CTCP, which from
+     * where they were standing it was.
+     *
+     * The old silence was not wrong about the risk, only about the remedy: a
+     * room full of clients all answering at once is a flood. So the answer is
+     * rate limited rather than withheld, which is what every other client
+     * does. See `CtcpGuard`.
+     */
+    const answer = ctcpAnswer(ctcpCommand.toUpperCase(), ctcpArgs)
+    if (answer && nick && guardFor(client).allow(nick, Date.now())) {
+      client.connection.sendRaw(`NOTICE ${nick} :\x01${answer}\x01`)
     }
     // Don't display CTCP requests to the user
     return

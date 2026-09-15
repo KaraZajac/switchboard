@@ -42,6 +42,8 @@ import org.switchboard.android.vault.shouldAdoptVault
 import org.switchboard.android.irc.ClientTags
 import org.switchboard.android.irc.Completion
 import org.switchboard.android.irc.Decoding
+import org.switchboard.android.irc.Ctcp
+import org.switchboard.android.irc.CtcpGuard
 import org.switchboard.android.irc.Filehost
 import org.switchboard.android.irc.dialChanged
 import org.switchboard.android.irc.Formatting
@@ -2418,6 +2420,51 @@ class SharedCorpusTest {
                 Filehost.acceptsType(accept, case["type"]!!.jsonPrimitive.content)
             )
         }
+    }
+
+    // ── answering CTCP ────────────────────────────────────────────────
+
+    @Test
+    fun `answers a CTCP question the same way the desktop does`() {
+        val corpus = load("ctcp.json")
+        val version = corpus["version"]!!.jsonPrimitive.content
+        val platform = corpus["platform"]!!.jsonPrimitive.content
+        val now = java.time.Instant.parse(corpus["now"]!!.jsonPrimitive.content)
+
+        for (entry in corpus["replies"]!!.jsonArray) {
+            val case = entry.jsonObject
+            assertEquals(
+                case["name"]!!.jsonPrimitive.content,
+                case["reply"]!!.jsonPrimitive.contentOrNull,
+                Ctcp.reply(
+                    case["verb"]!!.jsonPrimitive.content,
+                    case["args"]!!.jsonPrimitive.content,
+                    version,
+                    platform,
+                    now
+                )
+            )
+        }
+    }
+
+    @Test
+    fun `holds answers to the same rate the desktop holds them to`() {
+        val guard = CtcpGuard()
+
+        // Asking two or three things in a row is what asking looks like
+        for (i in 0 until Ctcp.PER_ASKER) {
+            assertEquals(true, guard.allow("asker", 1_000L + i * 100))
+        }
+        assertEquals(false, guard.allow("asker", 1_500))
+        assertEquals(false, guard.allow("ASKER", 1_500))
+        assertEquals(true, guard.allow("asker", 1_000 + Ctcp.WINDOW_MS))
+
+        // A crowd asking at once is what a channel full of bots reacting to
+        // one line looks like
+        val crowd = CtcpGuard()
+        for (i in 0 until Ctcp.TOTAL) assertEquals(true, crowd.allow("asker$i", 1_000L + i))
+        assertEquals(false, crowd.allow("one-too-many", 1_100))
+        assertEquals(true, crowd.allow("later", 1_000 + Ctcp.WINDOW_MS))
     }
 
     // ── uploading a file ──────────────────────────────────────────────

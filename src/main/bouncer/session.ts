@@ -6,6 +6,7 @@ import type { IRCMessage } from '@shared/types/irc'
 import type { IRCClient } from '../irc/client'
 import { parseLogin, type BouncerLogin } from '@shared/bouncerlogin'
 import { formatAttributes, parseAttributes } from '@shared/bouncer'
+import { CTCP_ANSWERS } from '@shared/ctcp'
 
 /**
  * One IRC client attached to this bouncer.
@@ -909,6 +910,30 @@ export class BouncerSession {
     return () => upstream.events.off('raw', onRaw)
   }
 
+  /**
+   * A CTCP question the bouncer has already answered.
+   *
+   * The bouncer's own connection is the one on the network, and its handler
+   * answers before this ever runs. Passing the question on as well means every
+   * attached Switchboard answers it too — so a single `VERSION` came back
+   * twice, from two clients claiming two different versions of the same
+   * program. Measured: ten replies to five questions.
+   *
+   * `ACTION` is not a question, and `DCC` is an offer the bouncer does not
+   * answer and must not swallow, or a file sent to somebody attached here
+   * would never reach them.
+   */
+  private answeredHere(msg: IRCMessage): boolean {
+    const command = msg.command.toUpperCase()
+    if (command !== 'PRIVMSG') return false
+
+    const text = msg.params[1] ?? ''
+    if (!text.startsWith('\u0001') || !text.endsWith('\u0001')) return false
+
+    const verb = text.slice(1, -1).split(' ')[0]?.toUpperCase() ?? ''
+    return (CTCP_ANSWERS as readonly string[]).includes(verb)
+  }
+
   /** One line from the network, trimmed to what this client agreed to receive */
   relay(line: string): void {
     let msg: IRCMessage
@@ -920,6 +945,7 @@ export class BouncerSession {
 
     const command = msg.command.toUpperCase()
     if (NOT_RELAYED.has(command)) return
+    if (this.answeredHere(msg)) return
 
     /*
      * Our own words, back from the network, to a client that did not ask.

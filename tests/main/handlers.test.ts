@@ -31,10 +31,12 @@ import { tagToUse, TAG_NAMES } from '@shared/clienttags'
 /**
  * Create a mock IRCClient for handler testing.
  */
-function createMockClient(overrides: Partial<{
-  nick: string
-  autoJoin: string[]
-}> = {}) {
+function createMockClient(
+  overrides: Partial<{
+    nick: string
+    autoJoin: string[]
+  }> = {}
+) {
   const state = new ConnectionState()
   state.nick = overrides.nick || 'TestUser'
 
@@ -129,7 +131,9 @@ describe('Registration Handlers', () => {
   it('handles RPL_ISUPPORT (005)', () => {
     const { client, state } = createMockClient()
 
-    const msg = parseMessage(':server 005 TestUser CHANTYPES=#& PREFIX=(ov)@+ NETWORK=TestNet :are supported')
+    const msg = parseMessage(
+      ':server 005 TestUser CHANTYPES=#& PREFIX=(ov)@+ NETWORK=TestNet :are supported'
+    )
     dispatchMessage(client, msg)
 
     expect(state.isupport['CHANTYPES']).toBe('#&')
@@ -158,10 +162,7 @@ describe('Registration Handlers', () => {
     dispatchMessage(client, parseMessage(':server 372 TestUser :- Enjoy your stay'))
     dispatchMessage(client, parseMessage(':server 376 TestUser :End of /MOTD'))
 
-    expect(handler).toHaveBeenCalledWith([
-      '- Welcome to TestNet',
-      '- Enjoy your stay'
-    ])
+    expect(handler).toHaveBeenCalledWith(['- Welcome to TestNet', '- Enjoy your stay'])
   })
 
   it('handles NICK change', () => {
@@ -192,10 +193,12 @@ describe('Channel Handlers', () => {
     dispatchMessage(client, parseMessage(':TestUser!user@host JOIN #newchan'))
 
     expect(state.inChannel('#newchan')).toBe(true)
-    expect(handler).toHaveBeenCalledWith(expect.objectContaining({
-      channel: '#newchan',
-      isMe: true
-    }))
+    expect(handler).toHaveBeenCalledWith(
+      expect.objectContaining({
+        channel: '#newchan',
+        isMe: true
+      })
+    )
   })
 
   it('handles JOIN with extended-join', () => {
@@ -206,15 +209,17 @@ describe('Channel Handlers', () => {
 
     dispatchMessage(client, parseMessage(':Other!other@host JOIN #chan account123 :Real Name'))
 
-    expect(handler).toHaveBeenCalledWith(expect.objectContaining({
-      channel: '#chan',
-      user: expect.objectContaining({
-        nick: 'Other',
-        account: 'account123',
-        realname: 'Real Name'
-      }),
-      isMe: false
-    }))
+    expect(handler).toHaveBeenCalledWith(
+      expect.objectContaining({
+        channel: '#chan',
+        user: expect.objectContaining({
+          nick: 'Other',
+          account: 'account123',
+          realname: 'Real Name'
+        }),
+        isMe: false
+      })
+    )
   })
 
   it('handles PART (self)', () => {
@@ -280,8 +285,7 @@ describe('Channel Handlers', () => {
     client.connection.sendRaw = (line: string) => sent.push(line)
 
     // FurNet allows draft/reply and denies reply, which is the one we sent
-    state.isupport['CLIENTTAGDENY'] =
-      '*,-draft/typing,-typing,-draft/channel-context,-draft/reply'
+    state.isupport['CLIENTTAGDENY'] = '*,-draft/typing,-typing,-draft/channel-context,-draft/reply'
     expect(tagToUse(state.isupport['CLIENTTAGDENY'], TAG_NAMES.reply)).toBe('draft/reply')
 
     // Libera carries neither spelling of a reaction
@@ -324,7 +328,7 @@ describe('Channel Handlers', () => {
     expect(seen).toEqual([null])
   })
 
-  it('answers a CTCP asked of us, and ignores one asked of a channel', () => {
+  it('answers a CTCP asked of us', () => {
     const { client, state } = createMockClient()
     state.nick = 'kara'
     const sent: string[] = []
@@ -333,11 +337,43 @@ describe('Channel Handlers', () => {
     dispatchMessage(client, parseMessage(':asker!u@h PRIVMSG kara :\x01VERSION\x01'))
     expect(sent).toHaveLength(1)
     expect(sent[0]).toContain('VERSION')
+  })
 
-    // Asked of everyone in the room at once. A room full of clients each
-    // answering privately is the flood that got CTCP a bad name.
+  it('answers one asked of a channel, which is how people ask', () => {
+    const { client, state } = createMockClient()
+    state.nick = 'kara'
+    const sent: string[] = []
+    client.connection.sendRaw = (line: string) => sent.push(line)
+
+    /*
+     * This used to be ignored, on the reasoning that a room full of clients
+     * each answering privately is the flood that got CTCP a bad name. True,
+     * but the remedy was wrong: a survey of a channel came back with a reply
+     * from every client in it except this one, and somebody on IRC reported
+     * that as Switchboard not supporting CTCP.
+     *
+     * Rate limited rather than withheld now, which is what every other client
+     * does — see `CtcpGuard`.
+     */
     dispatchMessage(client, parseMessage(':asker!u@h PRIVMSG #linux :\x01VERSION\x01'))
+
     expect(sent).toHaveLength(1)
+    expect(sent[0]).toBe(`NOTICE asker :\x01VERSION Switchboard 0.0.0 (unknown)\x01`)
+  })
+
+  it('stops answering somebody who will not stop asking', () => {
+    const { client, state } = createMockClient()
+    state.nick = 'kara'
+    const sent: string[] = []
+    client.connection.sendRaw = (line: string) => sent.push(line)
+
+    for (let i = 0; i < 10; i++) {
+      dispatchMessage(client, parseMessage(':asker!u@h PRIVMSG #linux :\x01VERSION\x01'))
+    }
+
+    // Three per person per half minute. Without a limit, a stranger decides
+    // how many messages this client sends.
+    expect(sent).toHaveLength(3)
   })
 
   it('says which CTCPs it answers when asked', () => {
@@ -432,7 +468,10 @@ describe('Channel Handlers', () => {
     const { client, state } = createMockClient()
     state.getChannel('#test')
 
-    dispatchMessage(client, parseMessage(':server 353 TestUser = #test :@Op!op@host.com +Voiced!voiced@other.net'))
+    dispatchMessage(
+      client,
+      parseMessage(':server 353 TestUser = #test :@Op!op@host.com +Voiced!voiced@other.net')
+    )
 
     const ch = state.getChannel('#test')
     const op = ch.users.get('op')!
@@ -495,14 +534,16 @@ describe('Message Handlers', () => {
 
     dispatchMessage(client, parseMessage(':Alice!alice@host PRIVMSG #general :Hello everyone'))
 
-    expect(handler).toHaveBeenCalledWith(expect.objectContaining({
-      channel: '#general',
-      nick: 'Alice',
-      content: 'Hello everyone',
-      type: 'privmsg',
-      isPrivate: false,
-      isEcho: false
-    }))
+    expect(handler).toHaveBeenCalledWith(
+      expect.objectContaining({
+        channel: '#general',
+        nick: 'Alice',
+        content: 'Hello everyone',
+        type: 'privmsg',
+        isPrivate: false,
+        isEcho: false
+      })
+    )
   })
 
   it('handles PRIVMSG as PM', () => {
@@ -512,10 +553,12 @@ describe('Message Handlers', () => {
 
     dispatchMessage(client, parseMessage(':Alice!alice@host PRIVMSG TestUser :Hey there'))
 
-    expect(handler).toHaveBeenCalledWith(expect.objectContaining({
-      channel: 'Alice', // PM uses sender nick as channel
-      isPrivate: true
-    }))
+    expect(handler).toHaveBeenCalledWith(
+      expect.objectContaining({
+        channel: 'Alice', // PM uses sender nick as channel
+        isPrivate: true
+      })
+    )
   })
 
   it('handles ACTION (/me)', () => {
@@ -523,12 +566,17 @@ describe('Message Handlers', () => {
     const handler = vi.fn()
     events.on('privmsg', handler)
 
-    dispatchMessage(client, parseMessage(':Alice!alice@host PRIVMSG #general :\x01ACTION waves\x01'))
+    dispatchMessage(
+      client,
+      parseMessage(':Alice!alice@host PRIVMSG #general :\x01ACTION waves\x01')
+    )
 
-    expect(handler).toHaveBeenCalledWith(expect.objectContaining({
-      content: 'waves',
-      type: 'action'
-    }))
+    expect(handler).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: 'waves',
+        type: 'action'
+      })
+    )
   })
 
   it('detects echo messages', () => {
@@ -538,9 +586,11 @@ describe('Message Handlers', () => {
 
     dispatchMessage(client, parseMessage(':TestUser!user@host PRIVMSG #general :My own message'))
 
-    expect(handler).toHaveBeenCalledWith(expect.objectContaining({
-      isEcho: true
-    }))
+    expect(handler).toHaveBeenCalledWith(
+      expect.objectContaining({
+        isEcho: true
+      })
+    )
   })
 
   it('extracts IRCv3 tags from messages', () => {
@@ -548,15 +598,20 @@ describe('Message Handlers', () => {
     const handler = vi.fn()
     events.on('privmsg', handler)
 
-    dispatchMessage(client, parseMessage(
-      '@time=2024-03-18T12:00:00Z;msgid=abc123;account=alice_acct :Alice!a@h PRIVMSG #ch :tagged'
-    ))
+    dispatchMessage(
+      client,
+      parseMessage(
+        '@time=2024-03-18T12:00:00Z;msgid=abc123;account=alice_acct :Alice!a@h PRIVMSG #ch :tagged'
+      )
+    )
 
-    expect(handler).toHaveBeenCalledWith(expect.objectContaining({
-      msgid: 'abc123',
-      time: '2024-03-18T12:00:00Z',
-      account: 'alice_acct'
-    }))
+    expect(handler).toHaveBeenCalledWith(
+      expect.objectContaining({
+        msgid: 'abc123',
+        time: '2024-03-18T12:00:00Z',
+        account: 'alice_acct'
+      })
+    )
   })
 
   it('handles NOTICE', () => {
@@ -566,12 +621,14 @@ describe('Message Handlers', () => {
 
     dispatchMessage(client, parseMessage(':Server NOTICE #channel :Server notice here'))
 
-    expect(handler).toHaveBeenCalledWith(expect.objectContaining({
-      channel: '#channel',
-      nick: 'Server',
-      content: 'Server notice here',
-      type: 'notice'
-    }))
+    expect(handler).toHaveBeenCalledWith(
+      expect.objectContaining({
+        channel: '#channel',
+        nick: 'Server',
+        content: 'Server notice here',
+        type: 'notice'
+      })
+    )
   })
 
   it('handles QUIT', () => {
@@ -610,9 +667,10 @@ describe('Message Handlers', () => {
     const handler = vi.fn()
     events.on('react', handler)
 
-    dispatchMessage(client, parseMessage(
-      '@+draft/react=👍;+reply=msg123 :Alice!a@h TAGMSG #general'
-    ))
+    dispatchMessage(
+      client,
+      parseMessage('@+draft/react=👍;+reply=msg123 :Alice!a@h TAGMSG #general')
+    )
 
     expect(handler).toHaveBeenCalledWith({
       channel: '#general',
@@ -630,7 +688,10 @@ describe('Error Handlers', () => {
     const handler = vi.fn()
     events.on('error', handler)
 
-    dispatchMessage(client, parseMessage(':server FAIL PRIVMSG CANNOT_SEND :You cannot send messages'))
+    dispatchMessage(
+      client,
+      parseMessage(':server FAIL PRIVMSG CANNOT_SEND :You cannot send messages')
+    )
 
     expect(handler).toHaveBeenCalledWith({
       code: 'CANNOT_SEND',
@@ -749,7 +810,10 @@ describe('AWAY Handler', () => {
     const handler = vi.fn()
     events.on('away', handler)
 
-    dispatchMessage(client, parseMessage(':server 305 TestUser :You are no longer marked as being away'))
+    dispatchMessage(
+      client,
+      parseMessage(':server 305 TestUser :You are no longer marked as being away')
+    )
 
     expect(handler).toHaveBeenCalledWith({ nick: 'TestUser', message: null })
   })
@@ -759,9 +823,15 @@ describe('AWAY Handler', () => {
     const handler = vi.fn()
     events.on('away', handler)
 
-    dispatchMessage(client, parseMessage(':server 306 TestUser :You have been marked as being away'))
+    dispatchMessage(
+      client,
+      parseMessage(':server 306 TestUser :You have been marked as being away')
+    )
 
-    expect(handler).toHaveBeenCalledWith({ nick: 'TestUser', message: 'You have been marked as being away' })
+    expect(handler).toHaveBeenCalledWith({
+      nick: 'TestUser',
+      message: 'You have been marked as being away'
+    })
   })
 })
 
@@ -807,7 +877,10 @@ describe('MONITOR Handlers', () => {
     const handler = vi.fn()
     events.on('monitorOnline', handler)
 
-    dispatchMessage(client, parseMessage(':server 730 TestUser :Alice!alice@host.com,Bob!bob@other.net'))
+    dispatchMessage(
+      client,
+      parseMessage(':server 730 TestUser :Alice!alice@host.com,Bob!bob@other.net')
+    )
 
     expect(handler).toHaveBeenCalledTimes(2)
     expect(handler).toHaveBeenCalledWith({ nick: 'Alice', user: 'alice', host: 'host.com' })
@@ -841,7 +914,10 @@ describe('MONITOR Handlers', () => {
     const handler = vi.fn()
     events.on('error', handler)
 
-    dispatchMessage(client, parseMessage(':server 734 TestUser 100 Alice,Bob :Monitor list is full'))
+    dispatchMessage(
+      client,
+      parseMessage(':server 734 TestUser 100 Alice,Bob :Monitor list is full')
+    )
 
     expect(handler).toHaveBeenCalledWith({
       code: '734',
@@ -857,9 +933,12 @@ describe('WHOX Handler', () => {
     const ch = state.getChannel('#general')
 
     // params: <nick> <token> <channel> <user> <host> <server> <nick> <flags> <account> <realname>
-    dispatchMessage(client, parseMessage(
-      `:server 354 TestUser ${WHOX_TOKEN} #general alice host.com irc.net Alice G@B alice_acct :Alice Real`
-    ))
+    dispatchMessage(
+      client,
+      parseMessage(
+        `:server 354 TestUser ${WHOX_TOKEN} #general alice host.com irc.net Alice G@B alice_acct :Alice Real`
+      )
+    )
 
     const user = ch.users.get('alice')!
     expect(user.nick).toBe('Alice')
@@ -879,9 +958,12 @@ describe('WHOX Handler', () => {
 
     // The spec puts the channel prefixes in the flags; a server that leaves
     // them out must not turn an op into nobody
-    dispatchMessage(client, parseMessage(
-      `:server 354 TestUser ${WHOX_TOKEN} #general alice host.com irc.net Alice H 0 :Alice Real`
-    ))
+    dispatchMessage(
+      client,
+      parseMessage(
+        `:server 354 TestUser ${WHOX_TOKEN} #general alice host.com irc.net Alice H 0 :Alice Real`
+      )
+    )
 
     const user = ch.users.get('alice')!
     expect(user.prefixes).toEqual(['@'])
@@ -894,9 +976,12 @@ describe('WHOX Handler', () => {
     const ch = state.getChannel('#general')
     ch.setUser('Alice', { nick: 'Alice', prefixes: ['+'] })
 
-    dispatchMessage(client, parseMessage(
-      `:server 354 TestUser ${WHOX_TOKEN} #general alice host.com irc.net Alice H@ 0 :Alice Real`
-    ))
+    dispatchMessage(
+      client,
+      parseMessage(
+        `:server 354 TestUser ${WHOX_TOKEN} #general alice host.com irc.net Alice H@ 0 :Alice Real`
+      )
+    )
 
     expect(ch.users.get('alice')!.prefixes).toEqual(['@'])
   })
@@ -906,9 +991,12 @@ describe('WHOX Handler', () => {
     state.isupport['PREFIX'] = '(qaohv)~&@%+'
     const ch = state.getChannel('#general')
 
-    dispatchMessage(client, parseMessage(
-      `:server 354 TestUser ${WHOX_TOKEN} #general alice host.com irc.net Alice H*~ 0 :Alice Real`
-    ))
+    dispatchMessage(
+      client,
+      parseMessage(
+        `:server 354 TestUser ${WHOX_TOKEN} #general alice host.com irc.net Alice H*~ 0 :Alice Real`
+      )
+    )
 
     expect(ch.users.get('alice')!.prefixes).toEqual(['~'])
   })
@@ -917,9 +1005,12 @@ describe('WHOX Handler', () => {
     const { client, state } = createMockClient()
     const ch = state.getChannel('#general')
 
-    dispatchMessage(client, parseMessage(
-      ':server 354 TestUser othertoken #general alice host.com irc.net Alice H alice_acct :Alice Real'
-    ))
+    dispatchMessage(
+      client,
+      parseMessage(
+        ':server 354 TestUser othertoken #general alice host.com irc.net Alice H alice_acct :Alice Real'
+      )
+    )
 
     expect(ch.users.size).toBe(0)
   })
@@ -941,9 +1032,7 @@ describe('WHOX Handler', () => {
 
     expect(handler).toHaveBeenCalledWith({
       channel: '#general',
-      users: expect.arrayContaining([
-        expect.objectContaining({ nick: 'Alice' })
-      ])
+      users: expect.arrayContaining([expect.objectContaining({ nick: 'Alice' })])
     })
   })
 
@@ -985,10 +1074,12 @@ describe('BATCH Handler', () => {
     // End batch
     dispatchMessage(client, parseMessage(':server BATCH -ref1'))
     expect(state.batches.has('ref1')).toBe(false)
-    expect(handler).toHaveBeenCalledWith(expect.objectContaining({
-      target: '#general',
-      messages: []
-    }))
+    expect(handler).toHaveBeenCalledWith(
+      expect.objectContaining({
+        target: '#general',
+        messages: []
+      })
+    )
   })
 
   it('buffers messages via checkBatchMembership', async () => {
@@ -1007,10 +1098,12 @@ describe('BATCH Handler', () => {
 
     // End batch — should contain the buffered message
     dispatchMessage(client, parseMessage(':server BATCH -hist1'))
-    expect(handler).toHaveBeenCalledWith(expect.objectContaining({
-      target: '#general',
-      messages: [expect.objectContaining({ command: 'PRIVMSG' })]
-    }))
+    expect(handler).toHaveBeenCalledWith(
+      expect.objectContaining({
+        target: '#general',
+        messages: [expect.objectContaining({ command: 'PRIVMSG' })]
+      })
+    )
   })
 
   it('emits netsplit event for netsplit batch', () => {
@@ -1021,10 +1114,12 @@ describe('BATCH Handler', () => {
     dispatchMessage(client, parseMessage(':server BATCH +ns1 netsplit server1.net server2.net'))
     dispatchMessage(client, parseMessage(':server BATCH -ns1'))
 
-    expect(handler).toHaveBeenCalledWith(expect.objectContaining({
-      server1: 'server1.net',
-      server2: 'server2.net'
-    }))
+    expect(handler).toHaveBeenCalledWith(
+      expect.objectContaining({
+        server1: 'server1.net',
+        server2: 'server2.net'
+      })
+    )
   })
 })
 
@@ -1046,7 +1141,10 @@ describe('MARKREAD Handler', () => {
     const handler = vi.fn()
     events.on('readMarker', handler)
 
-    dispatchMessage(client, parseMessage(':server MARKREAD #general timestamp=2024-03-18T12:00:00Z'))
+    dispatchMessage(
+      client,
+      parseMessage(':server MARKREAD #general timestamp=2024-03-18T12:00:00Z')
+    )
 
     expect(handler).toHaveBeenCalledWith({
       channel: '#general',
@@ -1073,7 +1171,10 @@ describe('RENAME Handler', () => {
     const handler = vi.fn()
     events.on('channelRename', handler)
 
-    dispatchMessage(client, parseMessage(':server RENAME #old-name #new-name :Channel has been renamed'))
+    dispatchMessage(
+      client,
+      parseMessage(':server RENAME #old-name #new-name :Channel has been renamed')
+    )
 
     expect(state.inChannel('#new-name')).toBe(true)
     expect(state.inChannel('#old-name')).toBe(false)

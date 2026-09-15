@@ -376,8 +376,10 @@ if (!app.requestSingleInstanceLock()) {
 app
   .whenReady()
   .then(async () => {
-    // What a CTCP VERSION gets told, before anything can be asked
-    setAppVersion(app.getVersion(), process.platform)
+    // What a CTCP VERSION gets told, before anything can be asked. The
+    // build-time version rather than `app.getVersion()`, which answers with
+    // Electron's own when the app is not packaged.
+    setAppVersion(__APP_VERSION__, process.platform)
 
     // Where connections dial through, and what they will trust. Read on each
     // dial rather than captured, so a proxy typed into settings applies to the

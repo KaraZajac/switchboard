@@ -59,23 +59,32 @@ internal fun registerMessagingHandlers() {
             val isAction = ctcp && text.startsWith("\u0001ACTION ")
 
             if (ctcp && !isAction) {
-                // Only when it was asked of us. A CTCP sent to a channel is
-                // asked of everyone in it at once, and a room full of clients
-                // each answering it privately is the flood that got CTCP a bad
-                // name — and gets the clients killed for it on networks that
-                // watch for exactly this.
-                if (state.isMe(target)) {
-                    val body = text.substring(1, text.length - 1)
+                val body = text.substring(1, text.length - 1)
 
-                    // DCC is an offer rather than a question, so it gets no
-                    // NOTICE back — and only ever from somebody talking to us
-                    // directly, which the check above already settles.
-                    val offer = Dcc.parse(body)
-                    if (offer != null) {
-                        emitDccOffer(session, from, offer)
-                    } else {
-                        answerCtcp(session, from, body)
-                    }
+                // DCC is an offer rather than a question, so it gets no NOTICE
+                // back — and only ever from somebody talking to us directly. A
+                // DCC sent to a channel is an offer made to everyone at once,
+                // which is not how anybody sends a file to a person.
+                val offer = if (state.isMe(target)) Dcc.parse(body) else null
+                if (offer != null) {
+                    emitDccOffer(session, from, offer)
+                } else if (Dcc.parse(body) == null) {
+                    /*
+                     * Answered whether it was asked of us or of the channel.
+                     *
+                     * Asking a channel is how people ask — it is the only way
+                     * to find out what everyone in a room is running — and
+                     * staying silent meant a survey came back with an answer
+                     * from every client present except this one. Somebody on
+                     * IRC reported that as Switchboard not supporting CTCP,
+                     * which from where they were standing it was.
+                     *
+                     * The old silence was not wrong about the risk, only about
+                     * the remedy: a room full of clients all answering at once
+                     * is a flood. So the answer is rate limited rather than
+                     * withheld, which is what every other client does.
+                     */
+                    answerCtcp(session, from, body)
                 }
                 return@on
             }
@@ -316,49 +325,48 @@ internal object Whox {
 }
 
 /**
- * What we answer, and what we say we answer.
- *
- * The same set the desktop answers, with the same wording, so a person who
- * CTCP-VERSIONs someone running Switchboard gets the same reply whichever
- * device they happen to be holding. CLIENTINFO is how the convention says to
- * ask what the rest of the list is, so it names them rather than being one
- * more thing to keep in step by hand.
- */
-private val CTCP_ANSWERS = listOf("CLIENTINFO", "PING", "SOURCE", "TIME", "VERSION")
-
-/**
  * What we say we are, when asked.
  *
  * Set once at startup from the packaged version, in the same shape the desktop
  * answers with — "Switchboard <version> (<platform>)" — so the two do not
  * describe the same client differently.
  */
-private var appVersion = "Switchboard"
+private var appVersion = "0.0.0"
+private var appPlatform = "unknown"
 
 /** Tell the protocol layer what to answer CTCP VERSION with */
 fun setAppVersion(version: String, platform: String) {
-    appVersion = "Switchboard $version ($platform)"
+    appVersion = version
+    appPlatform = platform
 }
 
 /**
- * Answer a CTCP question.
+ * How often this connection will answer.
+ *
+ * Per connection rather than one for the whole app: two networks are two
+ * different rooms of people, and a survey on one should not use up the answer
+ * owed to somebody on the other.
+ */
+private val ctcpGuards = java.util.WeakHashMap<IrcSession, CtcpGuard>()
+
+@Synchronized
+private fun guardFor(session: IrcSession): CtcpGuard =
+    ctcpGuards.getOrPut(session) { CtcpGuard() }
+
+/**
+ * Answer a CTCP question, if we are willing to answer this one right now.
  *
  * Everything outside the list goes unanswered, which is the polite reading of
  * the convention.
  */
 private fun answerCtcp(session: IrcSession, from: String, body: String) {
     val space = body.indexOf(' ')
-    val verb = (if (space == -1) body else body.substring(0, space)).uppercase()
+    val verb = if (space == -1) body else body.substring(0, space)
     val args = if (space == -1) "" else body.substring(space + 1)
 
-    val reply = when (verb) {
-        "VERSION" -> "VERSION $appVersion"
-        "TIME" -> "TIME " + Instant.now().toString()
-        "PING" -> "PING $args"
-        "SOURCE" -> "SOURCE https://github.com/KaraZajac/switchboard"
-        "CLIENTINFO" -> "CLIENTINFO " + CTCP_ANSWERS.joinToString(" ")
-        else -> return
-    }
+    val reply = Ctcp.reply(verb, args, appVersion, appPlatform, Instant.now()) ?: return
+    if (from.isEmpty() || !guardFor(session).allow(from, System.currentTimeMillis())) return
+
     session.sendRaw("NOTICE $from :\u0001$reply\u0001")
 }
 

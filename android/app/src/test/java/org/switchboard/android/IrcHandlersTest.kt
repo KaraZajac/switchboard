@@ -217,23 +217,43 @@ class IrcHandlersTest {
     }
 
     @Test
-    fun `answers a CTCP asked of us, and ignores one asked of a channel`() {
+    fun `answers a CTCP asked of us, and one asked of the channel`() {
         register()
         feed(":kara!u@h JOIN #chan")
         session.sent.clear()
 
         feed(":asker!u@h PRIVMSG kara :\u0001VERSION\u0001")
         assertEquals(
-            // Unset in a plain JVM test, so it is the bare name — the version
-            // and platform are stamped on at startup by the application.
-            listOf("NOTICE asker :\u0001VERSION Switchboard\u0001"),
+            // Unset in a plain JVM test — the real version and platform are
+            // stamped on at startup by the application.
+            listOf("NOTICE asker :\u0001VERSION Switchboard 0.0.0 (unknown)\u0001"),
             session.sent
         )
 
-        // Asked of everyone in the room at once. A room full of clients each
-        // answering privately is the flood that got CTCP a bad name.
+        /*
+         * This used to be ignored, on the reasoning that a room full of
+         * clients each answering privately is the flood that got CTCP a bad
+         * name. True, but the remedy was wrong: a survey of a channel came
+         * back with a reply from every client in it except this one, and
+         * somebody on IRC reported that as Switchboard not supporting CTCP.
+         *
+         * Rate limited rather than withheld now — see `CtcpGuard`.
+         */
         feed(":asker!u@h PRIVMSG #chan :\u0001VERSION\u0001")
-        assertEquals(1, session.sent.size)
+        assertEquals(2, session.sent.size)
+    }
+
+    @Test
+    fun `stops answering somebody who will not stop asking`() {
+        register()
+        feed(":kara!u@h JOIN #chan")
+        session.sent.clear()
+
+        repeat(10) { feed(":asker!u@h PRIVMSG #chan :\u0001VERSION\u0001") }
+
+        // Three per person per half minute. Without a limit, a stranger
+        // decides how many messages this client sends.
+        assertEquals(3, session.sent.size)
     }
 
     @Test
@@ -544,15 +564,18 @@ class IrcHandlersTest {
      * room.
      */
     @Test
-    fun `a CTCP sent to a channel is neither shown nor answered`() {
+    fun `a CTCP sent to a channel is answered but not shown`() {
         register()
         feed(":kara!u@h JOIN #chan")
         session.sent.clear()
 
         feed(":alice!u@h PRIVMSG #chan :\u0001VERSION\u0001")
 
+        // A client that displays them shows its user a line of control
+        // characters; a client that ignores them is the only one in the room
+        // that does not answer a survey.
         assertTrue(session.eventsOn("irc:message").isEmpty())
-        assertTrue(session.sent.isEmpty())
+        assertEquals(1, session.sent.size)
     }
 
     @Test
