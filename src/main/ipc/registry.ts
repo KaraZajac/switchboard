@@ -42,6 +42,8 @@ export const REMOTE_ALLOWED = new Set([
   // servers, their channels, members and our nick
   'app:renderer-ready',
   'history:fetch',
+  // catching a returning device up on everything it missed
+  'history:since',
   // what a phone heard while it was the connection — see `storage/handover.ts`
   'history:store',
   'chathistory:request',

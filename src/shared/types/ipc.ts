@@ -386,6 +386,8 @@ export interface RendererToMainInvocations {
    * `src/main/storage/handover.ts`.
    */
   'history:store': (serverId: string, messages: HandoverMessage[]) => Promise<number>
+  /** Everything after a moment, across every conversation — see `history:since` */
+  'history:since': (serverId: string, after: string, limit?: number) => Promise<ChatMessage[]>
   'history:fetch': (serverId: string, channel: string, before?: string, limit?: number) => Promise<ChatMessage[]>
   'chathistory:request': (serverId: string, channel: string, before?: string, limit?: number) => Promise<void>
   /** Which conversations had traffic since `since` — the only way to find a missed DM */

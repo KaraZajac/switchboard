@@ -230,6 +230,11 @@ fun App(
             // desktop kept nothing of that time, and this is the only copy.
             engine.handOverHistory()
 
+            // And the other direction: whatever the desktop heard while this
+            // phone was away. Both, every time they meet, or the two records
+            // drift a little further apart on each separation.
+            engine.catchUpFromDesktop()
+
             store.activeServerId?.let { serverId ->
                 store.activeChannel?.let { channel -> loadHistory(engine, serverId, channel) }
             }

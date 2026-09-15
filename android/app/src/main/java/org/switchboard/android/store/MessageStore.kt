@@ -235,6 +235,19 @@ class MessageStore(context: Context) {
             if (it.moveToFirst()) it.getInt(0) else 0
         }
 
+    /**
+     * The newest thing this phone holds for a network.
+     *
+     * Where a catch-up starts from when the desktop comes back. Null when
+     * there is nothing, which means asking for everything the desktop will
+     * give rather than nothing at all.
+     */
+    fun newestFor(serverId: String): String? =
+        db.rawQuery(
+            "SELECT MAX(timestamp) FROM messages WHERE server_id = ?",
+            arrayOf(serverId)
+        ).use { if (it.moveToFirst()) it.getString(0) else null }
+
     // ── read markers ────────────────────────────────────────────────
 
     /**

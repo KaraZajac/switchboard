@@ -54,6 +54,51 @@ export function getMessages(
   return withReactions(serverId, channel, rows[0].values.map(rowToMessage).reverse())
 }
 
+/**
+ * Everything said after a moment, across every conversation on a network.
+ *
+ * What a paired device asks for when it comes back. `getMessages` is the wrong
+ * shape for it twice over: it reaches backwards from a point, and it wants to
+ * be told which conversation — and a phone that has been off does not know
+ * which conversations it missed, which is most of the problem.
+ *
+ * Ordered oldest first and capped, so a device that has been away for a month
+ * walks forward through it a page at a time rather than asking for a year of
+ * a busy channel in one call. The last row's timestamp is the next cursor.
+ */
+export function getMessagesSince(
+  serverId: string,
+  after: string,
+  limit = 500
+): ChatMessage[] {
+  const db = getDb()
+  const rows = db.exec(
+    `SELECT * FROM messages WHERE server_id = ? AND timestamp > ?
+     ORDER BY timestamp ASC, rowid ASC LIMIT ?`,
+    [serverId, after, limit] as unknown as number[]
+  )
+  if (rows.length === 0) return []
+
+  const messages = rows[0].values.map(rowToMessage)
+
+  // Reactions are looked up per conversation, and a page spans several
+  const byChannel = new Map<string, ChatMessage[]>()
+  for (const message of messages) {
+    const list = byChannel.get(message.channel)
+    if (list) list.push(message)
+    else byChannel.set(message.channel, [message])
+  }
+
+  const hydrated = new Map<string, ChatMessage>()
+  for (const [channel, list] of byChannel) {
+    for (const message of withReactions(serverId, channel, list)) {
+      hydrated.set(message.id, message)
+    }
+  }
+
+  return messages.map((message) => hydrated.get(message.id) ?? message)
+}
+
 /** Hang the stored reactions back on the messages they belong to */
 function withReactions(serverId: string, channel: string, messages: ChatMessage[]): ChatMessage[] {
   const found = reactionsFor(serverId, channel, messages.map((m) => m.id))

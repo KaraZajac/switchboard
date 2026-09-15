@@ -1,5 +1,6 @@
 import { fetchForPreview, BlockedAddressError } from '../net/safefetch'
 import { storeHandover } from '../storage/handover'
+import { getMessagesSince } from '../storage/models/message'
 import { logsFolder } from '../logging'
 import { mkdir } from 'fs/promises'
 import { formatFingerprint } from '@shared/certificate'
@@ -964,6 +965,22 @@ export function registerIPCHandlers(): void {
     }
     return stored
   })
+
+  /**
+   * Everything this desktop has heard since a moment, across every
+   * conversation on a network.
+   *
+   * What a paired device asks for when it comes back. Without it a phone
+   * returning from a spell away caught up only the one conversation that
+   * happened to be open — so the two databases drifted apart every time they
+   * were separated, which is the opposite of what pairing promises.
+   */
+  handle(
+    'history:since',
+    async (_event, serverId: string, after: string, limit?: number) => {
+      return getMessagesSince(serverId, after, Math.min(limit ?? 500, 500))
+    }
+  )
 
   handle(
     'history:fetch',

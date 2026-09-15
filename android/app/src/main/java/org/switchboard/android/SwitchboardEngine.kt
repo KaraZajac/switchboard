@@ -903,6 +903,63 @@ class SwitchboardEngine(
         }
     }
 
+    /**
+     * Take everything the desktop heard while this phone was away.
+     *
+     * The other half of [handOverHistory]. That one gives the desktop what
+     * only this phone heard; this takes what only the desktop heard, so the
+     * two records agree again rather than drifting a little further apart
+     * every time they are separated.
+     *
+     * Walked forward a page at a time from the newest thing held for each
+     * network, because a phone that has been off for a week must not ask for
+     * a week of a busy channel in one call. Capped: past a point this is no
+     * longer catching up, and what is older than the cap is a scroll away
+     * from the desktop whenever somebody actually opens the conversation.
+     */
+    internal suspend fun catchUpFromDesktop() {
+        if (!remote.isLinked) return
+
+        for (server in store.servers.keys.toList()) {
+            var since = runCatching { history.newestFor(server) }.getOrNull() ?: EPOCH
+            var pages = 0
+
+            while (pages < CATCHUP_PAGES) {
+                val page = ask(
+                    "history:since",
+                    JsonPrimitive(server),
+                    JsonPrimitive(since),
+                    JsonPrimitive(CATCHUP_PAGE)
+                ) as? JsonArray ?: return
+
+                if (page.isEmpty()) break
+
+                var newest = since
+                for (entry in page) {
+                    val row = entry as? JsonObject ?: continue
+                    val channel = (row["channel"] as? JsonPrimitive)?.contentOrNull() ?: continue
+                    val at = (row["timestamp"] as? JsonPrimitive)?.contentOrNull().orEmpty()
+                    // The desktop's own record, so nothing is owed back to it
+                    runCatching {
+                        history.remember(server, channel, row.toMessage(), needsHandover = false)
+                    }
+                    if (at > newest) newest = at
+                }
+
+                Log.i(TAG, "caught up ${page.size} message(s) on $server")
+                pages++
+
+                // A page that did not move the cursor would ask for the same
+                // rows for ever
+                if (newest == since) break
+                since = newest
+                if (page.size < CATCHUP_PAGE) break
+            }
+        }
+
+        restoreHistory()
+    }
+
     /** Put the phone's own record back into the conversations it belongs to */
     private fun restoreHistory() {
         runCatching {
@@ -2153,6 +2210,15 @@ class SwitchboardEngine(
 
         /** The shared-settings name for the theme; [THEME_KEY] is this phone's own copy */
         const val THEME_SETTING = "theme"
+
+        /** How many messages to take from the desktop in one call */
+        const val CATCHUP_PAGE = 250
+
+        /** And how many of those calls before this stops being catching up */
+        const val CATCHUP_PAGES = 8
+
+        /** Everything, for a network this phone holds nothing for yet */
+        private const val EPOCH = "1970-01-01T00:00:00.000Z"
         const val NOTIFY_ALL_KEY = "notifyAll"
 
         /** And the one they keep the ignore list in */
