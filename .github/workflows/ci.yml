@@ -1,8 +1,20 @@
 name: CI
 
 on:
+  # Pushes as well as pull requests. Every commit in this repository's history
+  # has gone straight to main and there has never been a pull request, so a
+  # workflow that only fired on one had never run at all — three jobs of
+  # checks that existed on paper.
+  push:
+    branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
+
+# One run per branch, with the older cancelled when another push lands on top
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   lint-and-typecheck:
@@ -27,3 +39,66 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
+
+  # The phone's own suite. It went unrun here for a long time while the client
+  # grew a message database, a hand-over queue, the session coordinator and
+  # read markers — all covered by tests nothing executed on a pull request.
+  #
+  # `testDebugUnitTest` compiles the app's debug variant to run against, so a
+  # Compose or Kotlin error fails this job too, not just a broken assertion.
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+
+      # Robolectric fetches a per-API `android-all` jar the first time it runs
+      # against that SDK. Uncached that is a download on every run, and the one
+      # way this job can fail for reasons that have nothing to do with the code.
+      - name: Cache Robolectric's Android jars
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository/org/robolectric
+          key: robolectric-${{ hashFiles('android/app/build.gradle.kts') }}
+          restore-keys: robolectric-
+
+      - name: Test the Android client
+        working-directory: android
+        run: ./gradlew :app:testDebugUnitTest --no-daemon
+
+      # The Kotlin suite seals a Web Push message with a freshly generated
+      # keypair and writes it into `tests/fixtures/`; the desktop suite
+      # decrypts it. That pair is the only thing keeping two independent
+      # RFC 8291 implementations honest about each other.
+      #
+      # The `test` job below cannot do it: on a fresh checkout it reads
+      # whatever was last committed, which is a body Kotlin produced on
+      # somebody's laptop weeks ago. Reading the one this run just wrote is
+      # what turns it back into a check.
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Decrypt what the Android client just encrypted
+        run: |
+          # The Kotlin suite rewrites this file with a freshly generated
+          # keypair on every real run, so an untouched file means the suite
+          # did not execute — Gradle found the task up to date, say — and
+          # decrypting the committed body would pass while checking nothing.
+          if git diff --quiet tests/fixtures/webpush-from-android.json; then
+            echo "::error::The Android suite did not rewrite the Web Push fixture, so it did not run."
+            exit 1
+          fi
+          npx vitest run tests/main/webpush.test.ts
+
+      - uses: actions/upload-artifact@v5
+        if: failure()
+        with:
+          name: android-test-report
+          path: android/app/build/reports/tests/
+          retention-days: 7
