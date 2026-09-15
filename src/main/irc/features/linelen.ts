@@ -78,7 +78,8 @@ export function lineBudget(
  * is seven with the joins in between. Cutting between any of them leaves half
  * an emoji at the end of one message and a stray modifier at the start of the
  * next — 👍🏽 arrives as a thumb and a coloured square. `Intl.Segmenter` knows
- * where the seams are; `BreakIterator` is the same answer on the phone.
+ * where the seams are. The phone works the same joins out by hand — its
+ * runtime's answer turned out to depend on which Unicode data it carried.
  */
 const segmenter =
   typeof Intl !== 'undefined' && 'Segmenter' in Intl

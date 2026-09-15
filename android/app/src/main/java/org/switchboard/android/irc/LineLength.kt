@@ -1,6 +1,5 @@
 package org.switchboard.android.irc
 
-import java.text.BreakIterator
 
 /**
  * Making a message fit on the wire.
@@ -68,6 +67,25 @@ object LineLength {
      * Word boundaries are preferred but not required — a single long token has
      * to go somewhere, and cutting it is better than dropping the message.
      */
+    private const val ZWJ = 0x200D
+
+    /** The five Fitzpatrick modifiers */
+    private fun skinTone(cp: Int) = cp in 0x1F3FB..0x1F3FF
+
+    /** One half of a flag; two of them in a row are one flag */
+    private fun regional(cp: Int) = cp in 0x1F1E6..0x1F1FF
+
+    /** Something that decorates the thing before it rather than standing alone */
+    private fun extends(cp: Int): Boolean {
+        if (cp == 0xFE0F || cp == 0xFE0E || cp == 0x20E3) return true
+        return when (Character.getType(cp)) {
+            Character.NON_SPACING_MARK.toInt(),
+            Character.COMBINING_SPACING_MARK.toInt(),
+            Character.ENCLOSING_MARK.toInt() -> true
+            else -> false
+        }
+    }
+
     /**
      * The smallest thing a line may be cut between.
      *
@@ -75,21 +93,54 @@ object LineLength {
      * family is seven with the joins in between. Cutting between any of them
      * leaves half an emoji at the end of one message and a stray modifier at
      * the start of the next — a thumbs-up arrives as a thumb and a coloured
-     * square. `BreakIterator` knows where the seams are; `Intl.Segmenter` is
-     * the same answer on the desktop.
+     * square.
+     *
+     * Worked out here rather than asked of `BreakIterator`, which was what
+     * this used to do. Its answer depends on the Unicode data the runtime
+     * happens to carry: the same thumbs-up stayed whole on one JVM and came
+     * apart on another, and on Android that data changes with the API level —
+     * so the phone would have cut emoji in half on some devices and not
+     * others, and no test on one machine would ever have shown it. The
+     * desktop's `Intl.Segmenter` is a real implementation of the Unicode
+     * rules; this covers the same joins, and `tests/fixtures/multiline.json`
+     * holds both to the same answers.
      */
     private fun graphemes(text: String): List<String> {
-        val breaks = BreakIterator.getCharacterInstance()
-        breaks.setText(text)
+        if (text.isEmpty()) return emptyList()
 
         val out = mutableListOf<String>()
-        var start = breaks.first()
-        var end = breaks.next()
-        while (end != BreakIterator.DONE) {
-            out.add(text.substring(start, end))
-            start = end
-            end = breaks.next()
+        var current = StringBuilder()
+        var previous = -1
+        // How many flag halves the cluster already holds: a third one starts a
+        // new flag rather than joining the pair
+        var regionals = 0
+
+        var i = 0
+        while (i < text.length) {
+            val cp = text.codePointAt(i)
+
+            val joins = when {
+                current.isEmpty() -> true
+                // A zero-width joiner binds what is on either side of it
+                previous == ZWJ || cp == ZWJ -> true
+                extends(cp) || skinTone(cp) -> true
+                regional(cp) && regionals == 1 -> true
+                else -> false
+            }
+
+            if (!joins) {
+                out.add(current.toString())
+                current = StringBuilder()
+                regionals = 0
+            }
+
+            current.appendCodePoint(cp)
+            regionals = if (regional(cp)) regionals + 1 else 0
+            previous = cp
+            i += Character.charCount(cp)
         }
+
+        out.add(current.toString())
         return out
     }
 
