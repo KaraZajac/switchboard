@@ -40,6 +40,42 @@ jobs:
       - run: npm ci
       - run: npm test
 
+  # The headless build, which is the one nobody runs by hand.
+  #
+  # It fails in a way the desktop build cannot: the engine has to stay free of
+  # Electron, and a single `import { app } from 'electron'` added anywhere
+  # below `src/main` compiles, passes typecheck, ships in the desktop — and
+  # crashes a headless instance on the way in, before a connection is made. The
+  # bundler's own check catches that; running it proves the bundle starts.
+  headless:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build:headless
+
+      # Start it on a scratch directory and stop it. A bundle that builds and
+      # does not run is the failure this is here for.
+      - name: it starts
+        run: |
+          export SWITCHBOARD_DATA="$RUNNER_TEMP/switchboard"
+          export SWITCHBOARD_PASSPHRASE=ci
+          # No port: a listening socket is not something a CI job should open
+          export SWITCHBOARD_BOUNCER_PORT=0
+          timeout 30 node out-headless/switchboard-headless.cjs < /dev/null > start.log 2>&1 &
+          pid=$!
+          for _ in $(seq 1 25); do
+            grep -q 'Switchboard .* headless' start.log && break
+            sleep 1
+          done
+          kill $pid 2>/dev/null || true
+          cat start.log
+          grep -q 'Switchboard .* headless' start.log
+
   # The phone's own suite. It went unrun here for a long time while the client
   # grew a message database, a hand-over queue, the session coordinator and
   # read markers — all covered by tests nothing executed on a pull request.

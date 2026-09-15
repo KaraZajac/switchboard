@@ -66,6 +66,26 @@ a direct message from somebody new leaves nothing else behind to notice. Read
 state travels the same way: `draft/read-marker` means reading something at your
 desk puts the badge out on your phone, and stops it buzzing about it.
 
+## A third one, with no screen
+
+`npm run build:headless` produces a Switchboard with no window — the same
+engine, meant for a machine that stays on. Put it on a server and the taking
+turns above stops happening: it outranks both devices and never leaves, so the
+nick is held continuously and nothing hands over.
+
+It is also a bouncer in the ordinary sense. It listens on IRC, so irssi,
+WeeChat, Halloy, Textual or Switchboard itself attaches to it and arrives
+already joined to your channels, under your nick, with the last of what was
+said while you were away. Several clients can be attached at once and each sees
+what the others say. Networks can be added and changed over
+`soju.im/bouncer-networks`, the same extension Switchboard speaks when it is
+the one talking to a soju.
+
+None of it is required. If you already run soju, add it to Switchboard as a
+network and both devices attach to that instead.
+
+[How to run it →](docs/headless.md)
+
 ## IRCv3 Support
 
 Switchboard negotiates and supports a wide range of IRCv3 capabilities:
@@ -109,14 +129,14 @@ npm run typecheck     # TypeScript strict checks
 
 ## Tech Stack
 
-| | |
-|---|---|
-| Framework | Electron 33, React 19 |
-| State | Zustand 5 |
-| Styling | Tailwind CSS 4 |
-| Database | sql.js (SQLite in pure JS) |
-| Build | electron-vite, electron-builder |
-| Tests | Vitest |
+|           |                                 |
+| --------- | ------------------------------- |
+| Framework | Electron 33, React 19           |
+| State     | Zustand 5                       |
+| Styling   | Tailwind CSS 4                  |
+| Database  | sql.js (SQLite in pure JS)      |
+| Build     | electron-vite, electron-builder |
+| Tests     | Vitest                          |
 
 ## License
 
