@@ -50,6 +50,18 @@ export function ServerRail() {
 
   const handleSwitchboardClick = () => {
     useUIStore.getState().setDmMode(true)
+
+    // Back to the conversation Messages was left on, the way choosing a
+    // network reopens the channel you were reading there. Only if it is still
+    // a conversation that exists — one closed since is not somewhere to land.
+    const last = useUIStore.getState().lastDm
+    if (!last) return
+
+    const open = useChannelStore.getState().channels[last.serverId] || []
+    if (!open.some((channel) => channel.name.toLowerCase() === last.nick.toLowerCase())) return
+
+    useServerStore.getState().setActiveServer(last.serverId)
+    useChannelStore.getState().setActiveChannel(last.serverId, last.nick)
   }
 
   return (

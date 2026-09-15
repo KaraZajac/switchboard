@@ -92,6 +92,16 @@ interface UIState {
   whoisData: WhoisData | null
   editServerId: string | null
   dmMode: boolean
+  /**
+   * The conversation Messages was last left on.
+   *
+   * Switching to a network already reopens where you were on it — the active
+   * channel is kept per server. Messages had no such memory, so coming back to
+   * it landed on an empty pane however recently you had been reading there,
+   * and flipping between a network and a conversation meant finding the
+   * conversation again every time.
+   */
+  lastDm: { serverId: string; nick: string } | null
   /** Nick being fetched for the hover popup (suppresses modal) */
   popupWhoisNick: string | null
   popupWhoisData: WhoisData | null
@@ -107,6 +117,7 @@ interface UIState {
   closeModal: () => void
   toggleUserList: () => void
   setDmMode: (dm: boolean) => void
+  rememberDm: (serverId: string, nick: string) => void
   setCompactMode: (compact: boolean) => void
   setFontSize: (size: number) => void
   setTimeFormat: (format: TimeFormat) => void
@@ -161,6 +172,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   whoisData: null,
   editServerId: null,
   dmMode: false,
+  lastDm: null,
   popupWhoisNick: null,
   popupWhoisData: null,
   toasts: [],
@@ -203,6 +215,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   showWhois: (data) => set({ activeModal: 'whois', whoisData: data }),
   setEditServerId: (id) => set({ editServerId: id, activeModal: id ? 'edit-server' : null }),
   setDmMode: (dm) => set({ dmMode: dm }),
+  rememberDm: (serverId, nick) => set({ lastDm: { serverId, nick } }),
   setPopupWhoisNick: (nick) =>
     set(nick ? { popupWhoisNick: nick, popupWhoisData: null } : { popupWhoisNick: null }),
   setPopupWhoisData: (data) => set({ popupWhoisData: data }),

@@ -109,7 +109,14 @@ fun Navigator(
         ServerRail(
             store = store,
             onSelect = { id -> store.dmMode = false; onSelectServer(id) },
-            onOpenMessages = { store.dmMode = true },
+            onOpenMessages = {
+                store.dmMode = true
+                // Back to the conversation it was left on, the way choosing a
+                // network reopens the channel you were reading there. Through
+                // the same callback a conversation in the list uses, so it is
+                // selected and its history loaded exactly as a tap would.
+                store.lastDmToOpen()?.let { (id, nick) -> onSelect(id, nick) }
+            },
             onManageServers = onManageServers,
             onEditServer = onEditServer,
             onOpenAccount = onOpenAccount,

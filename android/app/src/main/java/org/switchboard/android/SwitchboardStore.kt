@@ -497,6 +497,18 @@ class SwitchboardStore {
     private val lastChannel = mutableStateMapOf<String, String>()
 
     /**
+     * The conversation Messages was last left on, and the network it is on.
+     *
+     * Choosing a network already reopens where you were on it — see
+     * [channelToOpen]. Messages had no such memory, so coming back to it
+     * landed on an empty pane however recently you had been reading there,
+     * and flipping between a network and a conversation meant finding the
+     * conversation again every time.
+     */
+    var lastDm: Pair<String, String>? = null
+        private set
+
+    /**
      * The conversation to open when a network is chosen.
      *
      * Where you left it, if that is still somewhere you can be. Otherwise the
@@ -504,6 +516,19 @@ class SwitchboardStore {
      * somewhere you were reading, so it is the last resort rather than the
      * first.
      */
+    /**
+     * Where Messages should reopen, if that is still a conversation.
+     *
+     * One closed since is not somewhere to land, so this answers null and the
+     * list is shown instead.
+     */
+    fun lastDmToOpen(): Pair<String, String>? {
+        val (serverId, nick) = lastDm ?: return null
+        val open = channels[serverId].orEmpty()
+        if (open.none { it.name.equals(nick, true) }) return null
+        return serverId to nick
+    }
+
     fun channelToOpen(serverId: String): String? {
         val here = channels[serverId].orEmpty()
         lastChannel[serverId]?.let { remembered ->
@@ -518,6 +543,8 @@ class SwitchboardStore {
         activeServerId = serverId
         activeChannel = channel
         lastChannel[serverId] = channel
+        // A conversation with a person is where Messages should reopen
+        if (!isChannel(channel) && !isConsole(channel)) lastDm = serverId to channel
         val list = channels[serverId] ?: return
         channels[serverId] = list.map {
             if (it.name.equals(channel, true)) it.copy(unread = 0, mentions = 0) else it

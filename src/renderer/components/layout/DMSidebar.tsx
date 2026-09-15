@@ -63,6 +63,8 @@ export function DMSidebar() {
     useServerStore.getState().setActiveServer(serverId)
     useChannelStore.getState().setActiveChannel(serverId, nick)
     useChannelStore.getState().clearUnread(serverId, nick)
+    // So coming back to Messages lands here rather than on nothing
+    useUIStore.getState().rememberDm(serverId, nick)
   }
 
   const handleClose = (serverId: string, nick: string) => {
