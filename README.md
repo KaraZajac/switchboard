@@ -106,6 +106,14 @@ Switchboard negotiates and supports a wide range of IRCv3 capabilities:
 
 **Server** — draft/network-icon, draft/filehost, draft/event-playback, draft/register-before-connect
 
+Files go to the network's own filehost where it advertises one: an attach
+button, a drop on the composer, or a paste, and the link goes out as the
+message with the picture shown in place. Switchboard asks the filehost what it
+takes before sending anything, so a refusal arrives before the upload rather
+than after it, and it will not use a plaintext upload address on an encrypted
+connection. `scripts/filehost.mjs` is a filehost written from the spec, for
+developing against.
+
 ## Development
 
 Requires Node.js 22+ and npm.
