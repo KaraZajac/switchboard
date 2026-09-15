@@ -139,22 +139,39 @@ export function formatAttributes(attributes: Record<string, string | undefined>)
  *
  * It matters for more than display. Switchboard keeps one device on a network
  * at a time, because two connections under one nick collide — but a bouncer is
- * built to multiplex, and holding a desktop off one because a phone is attached
- * gives up the exact thing the bouncer was for.
+ * built to multiplex, and holding a desktop off one because a phone is
+ * attached gives up the exact thing the bouncer was for.
  *
- * Two signals, either sufficient. `BOUNCER` in ISUPPORT is what soju and
- * Switchboard both advertise; the `soju.im/bouncer-networks` capability is what
- * a bouncer offers when it has networks to hand out. A bouncer that says
- * neither is indistinguishable from a server and is treated as one, which is
- * the safe way round: the cost of being wrong here is a nick collision.
+ * Three signals, any one sufficient, and each one checked against a bouncer
+ * actually running rather than against a document:
+ *
+ *  - `BOUNCER` in ISUPPORT, which soju and Switchboard both advertise.
+ *  - `soju.im/bouncer-networks`, offered by anything that can hand out more
+ *    than one network.
+ *  - Any capability under `znc.in/`. ZNC relays its upstream's ISUPPORT
+ *    untouched — so there is no token to find, and `NETWORK=` names the
+ *    network rather than the bouncer — but it always offers `znc.in/batch`,
+ *    `znc.in/self-message` and `znc.in/server-time-iso`, and nothing else
+ *    does. It is the most widely run bouncer there is and it was invisible
+ *    here.
+ *
+ * `capabilities` is what the server *offered*, not what we asked for. Whether
+ * this is a bouncer is a fact about the far end; a client that happened not to
+ * request a capability has not changed what it is talking to.
+ *
+ * A bouncer that says none of these is indistinguishable from a server, and is
+ * treated as one. That is the safe way round: the cost of being wrong here is
+ * both devices on the network at once under one nick.
  */
 export function isBouncer(
   isupport: Record<string, string | true>,
   capabilities: Iterable<string>
 ): boolean {
   if ('BOUNCER' in isupport) return true
+
   for (const capability of capabilities) {
-    if (capability === 'soju.im/bouncer-networks') return true
+    if (capability === BOUNCER_NETWORKS_CAP) return true
+    if (capability.startsWith('znc.in/')) return true
   }
   return false
 }

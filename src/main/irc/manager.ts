@@ -275,7 +275,10 @@ export class IRCManager {
     // and treating it as one would let both devices on a server that will not
     // have them
     if (!state) return false
-    return isBouncer(state.isupport, state.capabilities)
+    // What the server offered, not what we asked for: whether this is a
+    // bouncer is a fact about the far end, and a client that happened not to
+    // request a capability has not changed what it is talking to
+    return isBouncer(state.isupport, state.availableCapabilities.keys())
   }
 
   /** The networks this device is holding, for a peer deciding what to take over */

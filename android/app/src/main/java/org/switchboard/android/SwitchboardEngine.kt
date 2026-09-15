@@ -1962,7 +1962,9 @@ class SwitchboardEngine(
          * itself, and it changes the day somebody moves a network behind one.
          */
         if (connection != null &&
-            Bouncer.isBouncer(connection.state.isupport, connection.state.capabilities)
+            // What the server offered, not what we asked for: whether this is
+            // a bouncer is a fact about the far end
+            Bouncer.isBouncer(connection.state.isupport, connection.state.available.keys)
         ) {
             return true
         }

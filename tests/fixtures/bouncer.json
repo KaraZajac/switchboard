@@ -187,13 +187,76 @@
       "bouncer": true
     },
     {
-      "name": "the capability alone is enough",
+      "name": "the bouncer-networks capability alone is enough",
       "isupport": {
         "CHANTYPES": "#"
       },
       "caps": [
         "sasl",
         "soju.im/bouncer-networks"
+      ],
+      "bouncer": true
+    },
+    {
+      "name": "soju, as one actually answers CAP LS",
+      "isupport": {
+        "CHANTYPES": "",
+        "CASEMAPPING": "ascii"
+      },
+      "caps": [
+        "invite-notify",
+        "setname",
+        "account-tag",
+        "echo-message",
+        "soju.im/bouncer-networks-notify",
+        "soju.im/read",
+        "server-time",
+        "cap-notify",
+        "chghost",
+        "draft/pre-away",
+        "batch",
+        "sasl",
+        "away-notify",
+        "extended-join",
+        "multi-prefix",
+        "soju.im/bouncer-networks",
+        "soju.im/no-implicit-names",
+        "draft/read-marker",
+        "message-tags"
+      ],
+      "bouncer": true
+    },
+    {
+      "name": "ZNC, which relays its upstream ISUPPORT and adds no token of its own",
+      "isupport": {
+        "CHANTYPES": "#",
+        "NICKLEN": "32",
+        "NETWORK": "tiny"
+      },
+      "caps": [
+        "batch",
+        "cap-notify",
+        "chghost",
+        "echo-message",
+        "invite-notify",
+        "message-tags",
+        "multi-prefix",
+        "sasl",
+        "server-time",
+        "userhost-in-names",
+        "znc.in/batch",
+        "znc.in/self-message",
+        "znc.in/server-time-iso"
+      ],
+      "bouncer": true
+    },
+    {
+      "name": "one znc capability is enough on its own",
+      "isupport": {
+        "CHANTYPES": "#"
+      },
+      "caps": [
+        "znc.in/self-message"
       ],
       "bouncer": true
     },
@@ -206,7 +269,10 @@
       "caps": [
         "sasl",
         "server-time",
-        "multi-prefix"
+        "multi-prefix",
+        "echo-message",
+        "batch",
+        "message-tags"
       ],
       "bouncer": false
     },
@@ -223,6 +289,17 @@
       },
       "caps": [],
       "bouncer": false
+    },
+    {
+      "name": "a capability merely mentioning znc is not one",
+      "isupport": {
+        "CHANTYPES": "#"
+      },
+      "caps": [
+        "example.org/znc.in"
+      ],
+      "bouncer": false
     }
-  ]
+  ],
+  "$recognised": "Whether the far end is a bouncer, which decides whether two devices may both be on it. The soju and ZNC rows are what those two actually answered CAP LS with, read off the wire on 2026-09-15."
 }

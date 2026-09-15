@@ -247,3 +247,47 @@ describe('starting up beside a device that is already holding', () => {
     expect(connected).toEqual(['a', 'b'])
   })
 })
+
+describe('a bouncer takes every device, whichever bouncer it is', () => {
+  /** A live client, as `throughABouncer` reads one */
+  const asBouncer = (caps: string[]) => ({
+    destroy: () => {},
+    state: { isupport: {}, availableCapabilities: new Map(caps.map((c) => [c, null])) }
+  })
+
+  it('keeps a network behind ZNC when another device takes over', () => {
+    const { manager, clients } = managerWithFakeClients([])
+    servers.list = [{ id: 'a', autoConnect: true }]
+
+    // What ZNC actually answers CAP LS with. It relays its upstream's ISUPPORT
+    // untouched, so there is no token to find — these are the only sign.
+    clients.set('a', asBouncer(['batch', 'server-time', 'znc.in/self-message']))
+
+    manager.releaseConnections()
+
+    // Handing it over gives up the whole reason somebody runs a bouncer
+    expect([...clients.keys()]).toEqual(['a'])
+  })
+
+  it('keeps one behind soju too', () => {
+    const { manager, clients } = managerWithFakeClients([])
+    servers.list = [{ id: 'a', autoConnect: true }]
+    clients.set('a', asBouncer(['sasl', 'soju.im/bouncer-networks']))
+
+    manager.releaseConnections()
+
+    expect([...clients.keys()]).toEqual(['a'])
+  })
+
+  it('still hands over an ordinary server', () => {
+    const { manager, clients } = managerWithFakeClients([])
+    servers.list = [{ id: 'a', autoConnect: true }]
+    clients.set('a', asBouncer(['sasl', 'server-time', 'batch', 'echo-message']))
+
+    manager.releaseConnections()
+
+    // Two connections under one nick collide, which is what the taking turns
+    // is for
+    expect([...clients.keys()]).toEqual([])
+  })
+})

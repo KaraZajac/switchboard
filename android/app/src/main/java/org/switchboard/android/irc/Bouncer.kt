@@ -130,17 +130,27 @@ object Bouncer {
      * Whether the thing we are connected to is a bouncer.
      *
      * It matters for more than display. Switchboard keeps one device on a
-     * network at a time, because two connections under one nick collide — but a
-     * bouncer is built to multiplex, and holding the phone off one because the
-     * desktop is attached gives up the exact thing the bouncer was for.
+     * network at a time, because two connections under one nick collide — but
+     * a bouncer is built to multiplex, and holding the phone off one because
+     * the desktop is attached gives up the thing the bouncer was for.
      *
-     * Two signals, either sufficient. `BOUNCER` in ISUPPORT is what soju and
-     * Switchboard both advertise; the `soju.im/bouncer-networks` capability is
-     * what a bouncer offers when it has networks to hand out. A bouncer that
-     * says neither is indistinguishable from a server and is treated as one,
-     * which is the safe way round: the cost of being wrong here is a nick
-     * collision.
+     * Three signals, any one sufficient, each checked against a bouncer
+     * actually running rather than against a document: `BOUNCER` in ISUPPORT,
+     * which soju and Switchboard advertise; `soju.im/bouncer-networks`; and
+     * any capability under `znc.in/`. ZNC relays its upstream's ISUPPORT
+     * untouched, so there is no token to find — but it always offers
+     * `znc.in/batch`, `znc.in/self-message` and `znc.in/server-time-iso`, and
+     * nothing else does. It is the most widely run bouncer there is and it was
+     * invisible here.
+     *
+     * `capabilities` is what the server offered, not what we asked for.
+     * Whether this is a bouncer is a fact about the far end.
+     *
+     * A bouncer that says none of these is indistinguishable from a server and
+     * is treated as one, which is the safe way round: the cost of being wrong
+     * is both devices on the network at once under one nick.
      */
     fun isBouncer(isupport: Map<String, String>, capabilities: Collection<String>): Boolean =
-        isupport.containsKey("BOUNCER") || capabilities.contains("soju.im/bouncer-networks")
+        isupport.containsKey("BOUNCER") ||
+            capabilities.any { it == "soju.im/bouncer-networks" || it.startsWith("znc.in/") }
 }
