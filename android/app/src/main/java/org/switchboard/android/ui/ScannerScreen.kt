@@ -87,16 +87,11 @@ fun ScannerScreen(
 
     Column(modifier = Modifier.fillMaxSize().background(Crust)) {
         Row(
-            modifier = Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 6.dp, vertical = 8.dp),
+            modifier = Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 4.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
-                Icons.AutoMirrored.Filled.ArrowBack,
-                contentDescription = "Back",
-                tint = Subtext,
-                modifier = Modifier.size(44.dp).clickable(onClick = onBack).padding(11.dp)
-            )
-            Text("Scan to pair", color = Text0, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            IconAction(Icons.AutoMirrored.Filled.ArrowBack, "Back", onBack)
+            Text("Scan to pair", color = Text0, fontSize = 17.sp, fontWeight = FontWeight.Bold)
         }
 
         Box(

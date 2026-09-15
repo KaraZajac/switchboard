@@ -98,15 +98,10 @@ fun BrowseScreen(
                 .fillMaxWidth()
                 .background(Mantle)
                 .statusBarsPadding()
-                .padding(horizontal = 6.dp, vertical = 8.dp),
+                .padding(horizontal = 4.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
-                Icons.AutoMirrored.Filled.ArrowBack,
-                contentDescription = "Back",
-                tint = Subtext,
-                modifier = Modifier.size(42.dp).clickable(onClick = onClose).padding(10.dp)
-            )
+            IconAction(Icons.AutoMirrored.Filled.ArrowBack, "Back", onClose)
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     "Browse channels",
@@ -181,7 +176,7 @@ private fun Listing(entry: ChannelListing, alreadyIn: Boolean, onJoin: () -> Uni
             .padding(horizontal = 16.dp, vertical = 11.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("#", color = Overlay, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            Text("#", color = Overlay, fontSize = 17.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.width(3.dp))
             Text(
                 entry.name.removePrefix("#"),

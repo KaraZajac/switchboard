@@ -94,7 +94,7 @@ fun PairingScreen(
             onClick = onScan,
             colors = ButtonDefaults.buttonColors(containerColor = Blue, contentColor = Crust),
             shape = RoundedCornerShape(10.dp),
-            modifier = Modifier.fillMaxWidth().height(52.dp)
+            modifier = Modifier.fillMaxWidth().height(Sizes.buttonHeight)
         ) {
             Text("Scan the QR code", fontWeight = FontWeight.Bold, fontSize = 16.sp)
         }
@@ -155,7 +155,7 @@ fun PairingScreen(
             enabled = ticket.isNotBlank(),
             colors = ButtonDefaults.buttonColors(containerColor = Surface0, contentColor = Text0),
             shape = RoundedCornerShape(10.dp),
-            modifier = Modifier.fillMaxWidth().height(50.dp)
+            modifier = Modifier.fillMaxWidth().height(Sizes.buttonHeight)
         ) {
             Text("Pair with desktop", fontWeight = FontWeight.Bold, fontSize = 15.sp)
         }

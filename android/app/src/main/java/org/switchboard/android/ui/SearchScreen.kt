@@ -100,15 +100,10 @@ fun SearchScreen(engine: SwitchboardEngine, onOpen: (String, String) -> Unit, on
                 .fillMaxWidth()
                 .background(Mantle)
                 .statusBarsPadding()
-                .padding(horizontal = 6.dp, vertical = 8.dp),
+                .padding(horizontal = 4.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
-                Icons.AutoMirrored.Filled.ArrowBack,
-                contentDescription = "Back",
-                tint = Subtext,
-                modifier = Modifier.size(42.dp).clickable(onClick = onClose).padding(10.dp)
-            )
+            IconAction(Icons.AutoMirrored.Filled.ArrowBack, "Back", onClose)
             OutlinedTextField(
                 value = query,
                 onValueChange = { query = it },

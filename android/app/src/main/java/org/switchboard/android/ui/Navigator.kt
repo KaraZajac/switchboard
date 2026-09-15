@@ -27,6 +27,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.foundation.text.KeyboardActions
@@ -217,28 +218,20 @@ private fun ServerRail(
                 }
 
                 if (dmUnread > 0 && !store.dmMode) {
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(end = 6.dp)
-                            .size(18.dp)
-                            .clip(RoundedCornerShape(9.dp))
-                            .background(Red),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            if (dmUnread > 9) "9+" else "$dmUnread",
-                            color = Crust,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
+                    // The same badge the servers below wear. This one was
+                    // drawn by hand, six pixels away, at its own size and with
+                    // its own "9+" — two unread badges on one 68dp strip.
+                    CountBadge(
+                        dmUnread,
+                        ring = Crust,
+                        modifier = Modifier.align(Alignment.TopEnd).offset(x = 7.dp, y = (-7).dp)
+                    )
                 }
             }
         }
 
         HorizontalDivider(
-            modifier = Modifier.width(28.dp).padding(vertical = 2.dp),
+            modifier = Modifier.width(32.dp).padding(vertical = 2.dp),
             color = Surface0
         )
 
@@ -305,14 +298,24 @@ private fun ServerRail(
 
         // Where every app of this shape puts "add a server"
         Box(
-            modifier = Modifier
-                .size(48.dp)
-                .clip(RoundedCornerShape(24.dp))
-                .background(Surface0)
-                .clickable(onClick = onManageServers),
+            modifier = Modifier.fillMaxWidth().height(52.dp),
             contentAlignment = Alignment.Center
         ) {
-            Text("+", color = Green, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(Surface0)
+                    .clickable(onClick = onManageServers),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    Icons.Filled.Add,
+                    contentDescription = "Add a network",
+                    tint = Green,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
         }
     }
 }
@@ -545,20 +548,10 @@ private fun ChannelList(
             modifier = Modifier.fillMaxWidth().padding(end = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(modifier = Modifier.weight(1f)) {
-                SectionHeader("Channels — ${channels.size}")
-            }
-            if (serverId != null) {
-                Text(
-                    "+",
-                    color = Subtext,
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(6.dp))
-                        .clickable { joining = true }
-                        .padding(horizontal = 10.dp, vertical = 2.dp)
-                )
+            SectionLabel("Channels — ${channels.size}") {
+                if (serverId != null) {
+                    IconAction(Icons.Filled.Add, "Join a channel", { joining = true }, inRow = true)
+                }
             }
         }
 
@@ -698,7 +691,7 @@ private fun ChannelList(
         // banner is not a conversation, but it is worth being able to read.
         val services = serverId?.let { store.servicesOn(it) }.orEmpty()
         if (services.isNotEmpty()) {
-            SectionHeader("Network services")
+            SectionLabel("Network services")
 
             for (who in services) {
                 val selected = store.activeChannel.equals(who, true)
@@ -823,15 +816,12 @@ private fun DirectMessageList(
             // phone could only ever answer, which also meant it could not talk
             // to a network's services until they spoke first — and being told
             // to identify is precisely the moment you need to reply.
-            Text(
-                "+",
-                color = Green,
-                fontSize = 22.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(6.dp))
-                    .clickable { starting = !starting }
-                    .padding(horizontal = 10.dp, vertical = 2.dp)
+            IconAction(
+                Icons.Filled.Add,
+                "Start a conversation",
+                { starting = !starting },
+                inRow = true,
+                tint = Green
             )
         }
 
@@ -1058,17 +1048,6 @@ private fun JoinChannelSheet(
     }
 }
 
-@Composable
-private fun SectionHeader(label: String) {
-    Text(
-        label.uppercase(),
-        color = Overlay,
-        fontSize = 11.sp,
-        fontWeight = FontWeight.Bold,
-        modifier = Modifier.padding(start = 18.dp, end = 16.dp, bottom = 4.dp)
-    )
-}
-
 /**
  * The panel across the bottom: who you are, and which device is on the network.
  *
@@ -1120,7 +1099,7 @@ private fun UserPanel(
                 )
             }
         }
-        Spacer(Modifier.width(9.dp))
+        Spacer(Modifier.width(Sizes.avatarGap))
 
         // The pill used to share the first line with the nick. The drawer is
         // narrow, and a pill as long as CONNECTING or TAKING OVER — the ones
@@ -1169,21 +1148,16 @@ private fun UserPanel(
         }
 
         if (!vaultUnlocked) {
-            Icon(
+            IconAction(
                 Icons.Filled.Lock,
-                contentDescription = "Shared config is locked",
-                tint = Yellow,
-                modifier = Modifier.size(18.dp).clickable(onClick = onOpenSettings)
+                "Shared config is locked",
+                onOpenSettings,
+                inRow = true,
+                tint = Yellow
             )
-            Spacer(Modifier.width(10.dp))
         }
 
-        Icon(
-            Icons.Filled.Settings,
-            contentDescription = "Settings",
-            tint = Subtext,
-            modifier = Modifier.size(20.dp).clickable(onClick = onOpenSettings)
-        )
+        IconAction(Icons.Filled.Settings, "Settings", onOpenSettings, inRow = true)
     }
 }
 

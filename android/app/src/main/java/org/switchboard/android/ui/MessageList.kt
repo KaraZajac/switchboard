@@ -361,7 +361,7 @@ private fun SystemLine(message: Message) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = 60.dp, end = 16.dp, top = 3.dp, bottom = 3.dp),
+            .padding(start = GUTTER + Sizes.gutter, end = 16.dp, top = 3.dp, bottom = 3.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
@@ -455,7 +455,14 @@ private fun DayDivider(timestamp: String) {
     }
 }
 
-private const val GUTTER = 56 // avatar width plus its gap, so grouped lines line up
+/**
+ * How far a message's text sits from the edge.
+ *
+ * A `Dp` now rather than a bare Int: it is the closest thing this file has to
+ * a shared measurement and everything that lines up with the conversation has
+ * to use it — see [Sizes.messageGutter], which is where it lives.
+ */
+private val GUTTER = Sizes.messageGutter // avatar width plus its gap, so grouped lines line up
 
 /** What a long press on a message offers */
 enum class MessageAction { Reply, React, Copy, Edit, Redact }
@@ -542,7 +549,7 @@ private fun MessageRow(
             .padding(start = 16.dp, end = 16.dp, top = if (grouped) 1.dp else 10.dp)
     ) {
         if (grouped) {
-            Spacer(Modifier.width(GUTTER.dp))
+            Spacer(Modifier.width(GUTTER))
         } else {
             Avatar(message.nick, 40.dp, color, avatar = profile.avatar)
             Spacer(Modifier.width(16.dp))
@@ -648,7 +655,7 @@ private fun ReplyPreview(store: SwitchboardStore, serverId: String?, parent: Mes
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = (GUTTER + 16).dp, end = 16.dp, top = 8.dp),
+            .padding(start = (GUTTER + Sizes.gutter), end = 16.dp, top = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(Modifier.width(2.dp).height(14.dp).background(Surface1, RoundedCornerShape(1.dp)))

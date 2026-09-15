@@ -88,16 +88,11 @@ fun SettingsScreen(
             .verticalScroll(rememberScrollState())
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 8.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
-                Icons.AutoMirrored.Filled.ArrowBack,
-                contentDescription = "Back",
-                tint = Subtext,
-                modifier = Modifier.size(44.dp).clickable(onClick = onBack).padding(11.dp)
-            )
-            Text("Settings", color = Text0, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            IconAction(Icons.AutoMirrored.Filled.ArrowBack, "Back", onBack)
+            Text("Settings", color = Text0, fontSize = 17.sp, fontWeight = FontWeight.Bold)
         }
 
         SessionCard(engine)
@@ -113,13 +108,7 @@ fun SettingsScreen(
         if (!locked) VaultCard(engine)
 
         Spacer(Modifier.height(8.dp))
-        Text(
-            "Networks",
-            color = Overlay,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(start = 20.dp, bottom = 6.dp)
-        )
+        SectionLabel("Networks")
         Card {
             Text(
                 if (engine.identity.ticket() != null)
@@ -150,13 +139,7 @@ fun SettingsScreen(
         ProxyCard(engine)
 
         Spacer(Modifier.height(8.dp))
-        Text(
-            "Pairing",
-            color = Overlay,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(start = 20.dp, bottom = 6.dp)
-        )
+        SectionLabel("Pairing")
         Card {
             val paired = engine.identity.ticket() != null
             Text(
@@ -222,13 +205,7 @@ fun SettingsScreen(
 
 @Composable
 private fun SessionCard(engine: SwitchboardEngine) {
-    Text(
-        "This device",
-        color = Overlay,
-        fontSize = 11.sp,
-        fontWeight = FontWeight.Bold,
-        modifier = Modifier.padding(start = 20.dp, top = 12.dp, bottom = 6.dp)
-    )
+    SectionLabel("This device")
     Card {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(
@@ -299,13 +276,7 @@ private fun BatteryCard(engine: SwitchboardEngine) {
     val context = LocalContext.current
     if (!engine.isDozeRestricted) return
 
-    Text(
-        "Background",
-        color = Overlay,
-        fontSize = 11.sp,
-        fontWeight = FontWeight.Bold,
-        modifier = Modifier.padding(start = 20.dp, top = 20.dp, bottom = 6.dp)
-    )
+    SectionLabel("Background", modifier = Modifier.padding(top = 20.dp))
 
     Card {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -386,13 +357,7 @@ private fun VaultCard(engine: SwitchboardEngine) {
         }
     }
 
-    Text(
-        "Shared config",
-        color = Overlay,
-        fontSize = 11.sp,
-        fontWeight = FontWeight.Bold,
-        modifier = Modifier.padding(start = 20.dp, top = 20.dp, bottom = 6.dp)
-    )
+    SectionLabel("Shared config", modifier = Modifier.padding(top = 20.dp))
 
     Card {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -649,7 +614,7 @@ private fun VaultCard(engine: SwitchboardEngine) {
                         CircularProgressIndicator(
                             color = Blue,
                             strokeWidth = 2.dp,
-                            modifier = Modifier.size(16.dp)
+                            modifier = Modifier.size(Sizes.spinner)
                         )
                     }
                 }
@@ -676,13 +641,7 @@ private fun FriendsCard(engine: SwitchboardEngine) {
     val scope = rememberCoroutineScope()
 
     Spacer(Modifier.height(8.dp))
-    Text(
-        "Friends",
-        color = Overlay,
-        fontSize = 11.sp,
-        fontWeight = FontWeight.Bold,
-        modifier = Modifier.padding(start = 20.dp, bottom = 6.dp)
-    )
+    SectionLabel("Friends")
     Card {
         val anyone = servers.any { store.watchedFor(it.id).isNotEmpty() }
         if (!anyone) {
@@ -772,13 +731,7 @@ private fun HighlightsCard(engine: SwitchboardEngine) {
     }
 
     Spacer(Modifier.height(8.dp))
-    Text(
-        "Words to watch for",
-        color = Overlay,
-        fontSize = 11.sp,
-        fontWeight = FontWeight.Bold,
-        modifier = Modifier.padding(start = 20.dp, bottom = 6.dp)
-    )
+    SectionLabel("Words to watch for")
     Card {
         Text(
             "These light up a message and notify you the way your nick does. " +
@@ -854,13 +807,7 @@ private fun AwayCard(engine: SwitchboardEngine) {
     val wanted = minutes.toIntOrNull() ?: 0
 
     Spacer(Modifier.height(8.dp))
-    Text(
-        "Away when idle",
-        color = Overlay,
-        fontSize = 11.sp,
-        fontWeight = FontWeight.Bold,
-        modifier = Modifier.padding(start = 20.dp, bottom = 6.dp)
-    )
+    SectionLabel("Away when idle")
     Card {
         Text(
             "Mark yourself away after the screen has been off this long, and come " +
@@ -936,13 +883,7 @@ private fun AwayCard(engine: SwitchboardEngine) {
 @Composable
 private fun JoinsCard(engine: SwitchboardEngine) {
     Spacer(Modifier.height(8.dp))
-    Text(
-        "Joins, parts and quits",
-        color = Overlay,
-        fontSize = 11.sp,
-        fontWeight = FontWeight.Bold,
-        modifier = Modifier.padding(start = 20.dp, bottom = 6.dp)
-    )
+    SectionLabel("Joins, parts and quits")
     Card {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -985,13 +926,7 @@ private fun JoinsCard(engine: SwitchboardEngine) {
 @Composable
 private fun RejoinCard(engine: SwitchboardEngine) {
     Spacer(Modifier.height(8.dp))
-    Text(
-        "After a kick",
-        color = Overlay,
-        fontSize = 11.sp,
-        fontWeight = FontWeight.Bold,
-        modifier = Modifier.padding(start = 20.dp, bottom = 6.dp)
-    )
+    SectionLabel("After a kick")
     Card {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -1040,13 +975,7 @@ private fun IgnoredCard(engine: SwitchboardEngine) {
     }
 
     Spacer(Modifier.height(8.dp))
-    Text(
-        "Ignored",
-        color = Overlay,
-        fontSize = 11.sp,
-        fontWeight = FontWeight.Bold,
-        modifier = Modifier.padding(start = 20.dp, bottom = 6.dp)
-    )
+    SectionLabel("Ignored")
     Card {
         Text(
             "Nothing from anybody matching one of these reaches this phone — not a " +
@@ -1160,13 +1089,7 @@ private fun AliasesCard(engine: SwitchboardEngine) {
     }
 
     Spacer(Modifier.height(8.dp))
-    Text(
-        "Aliases",
-        color = Overlay,
-        fontSize = 11.sp,
-        fontWeight = FontWeight.Bold,
-        modifier = Modifier.padding(start = 20.dp, bottom = 6.dp)
-    )
+    SectionLabel("Aliases")
     Card {
         Text(
             "A command of your own. \$1 is the first word after it, \$* is all of them, " +
@@ -1269,13 +1192,7 @@ private fun ProxyCard(engine: SwitchboardEngine) {
     var note by remember { mutableStateOf<String?>(null) }
 
     Spacer(Modifier.height(8.dp))
-    Text(
-        "Proxy",
-        color = Overlay,
-        fontSize = 11.sp,
-        fontWeight = FontWeight.Bold,
-        modifier = Modifier.padding(start = 20.dp, bottom = 6.dp)
-    )
+    SectionLabel("Proxy")
     Card {
         Row(modifier = Modifier.fillMaxWidth()) {
             for (option in listOf("none" to "Off", "socks5" to "SOCKS5", "socks4" to "SOCKS4a")) {
@@ -1405,7 +1322,7 @@ private fun Card(content: @Composable androidx.compose.foundation.layout.ColumnS
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 14.dp)
+            .padding(horizontal = Sizes.gutter)
             .background(Mantle, RoundedCornerShape(12.dp))
             .padding(16.dp),
         verticalArrangement = Arrangement.Top,
@@ -1427,13 +1344,7 @@ private fun Card(content: @Composable androidx.compose.foundation.layout.ColumnS
 @Composable
 private fun AppearanceCard(engine: SwitchboardEngine) {
     Spacer(Modifier.height(8.dp))
-    Text(
-        "Appearance",
-        color = Overlay,
-        fontSize = 11.sp,
-        fontWeight = FontWeight.Bold,
-        modifier = Modifier.padding(start = 20.dp, bottom = 6.dp)
-    )
+    SectionLabel("Appearance")
     Card {
         Text(
             "Shared with your desktop, so both look the same.",

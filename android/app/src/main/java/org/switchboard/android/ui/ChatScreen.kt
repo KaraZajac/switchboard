@@ -719,12 +719,7 @@ private fun ContextBar(
                 overflow = TextOverflow.Ellipsis
             )
         }
-        Icon(
-            Icons.Filled.Close,
-            contentDescription = "Cancel",
-            tint = Subtext,
-            modifier = Modifier.size(36.dp).clickable(onClick = onCancel).padding(8.dp)
-        )
+        IconAction(Icons.Filled.Close, "Cancel", onCancel, inRow = true)
     }
 }
 
@@ -809,15 +804,10 @@ private fun ChannelHeader(
             .fillMaxWidth()
             .background(Mantle)
             .statusBarsPadding()
-            .padding(horizontal = 6.dp, vertical = 8.dp),
+            .padding(horizontal = 4.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(
-            Icons.Filled.Menu,
-            contentDescription = "Channels",
-            tint = Subtext,
-            modifier = Modifier.size(44.dp).clickable(onClick = onOpenChannels).padding(11.dp)
-        )
+        IconAction(Icons.Filled.Menu, "Channels", onOpenChannels)
 
         Column(modifier = Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -840,7 +830,7 @@ private fun ChannelHeader(
                         else -> channel.removePrefix("#")
                     },
                     color = Text0,
-                    fontSize = 16.sp,
+                    fontSize = 17.sp,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -869,12 +859,7 @@ private fun ChannelHeader(
             )
         }
 
-        Icon(
-            Icons.Filled.Search,
-            contentDescription = "Search messages",
-            tint = Subtext,
-            modifier = Modifier.size(40.dp).clickable(onClick = onOpenSearch).padding(10.dp)
-        )
+        IconAction(Icons.Filled.Search, "Search messages", onOpenSearch)
 
         // Bans and what the channel is set to. Only in a channel, and only
         // where the network states any modes at all — a shield that opens an
@@ -885,18 +870,10 @@ private fun ChannelHeader(
                 MaskLists.listsFor(tokens["CHANMODES"], tokens["PREFIX"]).isNotEmpty()
 
             if (hasAny) {
-                Icon(
-                    // A padlock rather than the desktop's shield: the
-                    // extended icon set is a megabyte this app does not ship,
-                    // and "restricted" is the same idea.
-                    Icons.Filled.Lock,
-                    contentDescription = "Bans and channel settings",
-                    tint = Subtext,
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clickable { onOpenChannelSettings() }
-                        .padding(10.dp)
-                )
+                // A padlock rather than the desktop's shield: the extended
+                // icon set is a megabyte this app does not ship, and
+                // "restricted" is the same idea.
+                IconAction(Icons.Filled.Lock, "Bans and channel settings", onOpenChannelSettings)
             }
         }
 
@@ -905,31 +882,22 @@ private fun ChannelHeader(
         // shape this platform has. Only where there is a conversation to share.
         val context = LocalContext.current
         if (serverId != null && channel != null) {
-            Icon(
+            IconAction(
                 Icons.Filled.Share,
-                contentDescription = "Share this conversation",
-                tint = Subtext,
-                modifier = Modifier
-                    .size(40.dp)
-                    .clickable { shareTranscript(context, store, serverId, channel) }
-                    .padding(10.dp)
+                "Share this conversation",
+                { shareTranscript(context, store, serverId, channel) }
             )
         }
 
-        Row(
-            modifier = Modifier.clickable(onClick = onOpenMembers).padding(horizontal = 10.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(3.dp)
-        ) {
-            Icon(
-                Icons.Filled.Person,
-                contentDescription = "Members",
-                tint = Subtext,
-                modifier = Modifier.size(20.dp)
+        IconAction(Icons.Filled.Person, "Members", onOpenMembers)
+        if (members > 0) {
+            Text(
+                members.toString(),
+                color = Subtext,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(end = 8.dp)
             )
-            if (members > 0) {
-                Text(members.toString(), color = Subtext, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-            }
         }
     }
 }
@@ -1289,7 +1257,7 @@ private fun Composer(
                     CircularProgressIndicator(
                         color = Blue,
                         strokeWidth = 2.dp,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(Sizes.spinner)
                     )
                 } else {
                     Icon(

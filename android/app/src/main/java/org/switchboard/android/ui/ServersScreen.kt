@@ -424,15 +424,10 @@ internal fun Header(title: String, onBack: () -> Unit) {
             .fillMaxWidth()
             .background(Mantle)
             .statusBarsPadding()
-            .padding(horizontal = 6.dp, vertical = 10.dp),
+            .padding(horizontal = 4.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(
-            Icons.AutoMirrored.Filled.ArrowBack,
-            contentDescription = "Back",
-            tint = Subtext,
-            modifier = Modifier.size(42.dp).clickable(onClick = onBack).padding(10.dp)
-        )
+        IconAction(Icons.AutoMirrored.Filled.ArrowBack, "Back", onBack)
         Text(title, color = Text0, fontSize = 17.sp, fontWeight = FontWeight.Bold)
     }
 }

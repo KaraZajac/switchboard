@@ -63,7 +63,7 @@ fun MemberList(
                 Text(
                     channel ?: "Members",
                     color = Text0,
-                    fontSize = 16.sp,
+                    fontSize = 17.sp,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -75,11 +75,11 @@ fun MemberList(
 
         LazyColumn(modifier = Modifier.fillMaxSize()) {
             if (staff.isNotEmpty()) {
-                item { GroupHeader(roleName(staff.first()), staff.size) }
+                item { SectionLabel("${roleName(staff.first())} — ${staff.size}") }
                 items(staff.size) { MemberRow(store, serverId, staff[it], onSelect) }
             }
             if (rest.isNotEmpty()) {
-                item { GroupHeader("Online", rest.size) }
+                item { SectionLabel("Online — ${rest.size}") }
                 items(rest.size) { MemberRow(store, serverId, rest[it], onSelect) }
             }
             if (members.isEmpty()) {
@@ -94,17 +94,6 @@ fun MemberList(
             }
         }
     }
-}
-
-@Composable
-private fun GroupHeader(label: String, count: Int) {
-    Text(
-        "${label.uppercase()} — $count",
-        color = Overlay,
-        fontSize = 11.sp,
-        fontWeight = FontWeight.Bold,
-        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 6.dp)
-    )
 }
 
 @Composable
