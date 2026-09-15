@@ -81,7 +81,9 @@ import {
   stopRemoteLink,
   startPairing,
   cancelPairing,
-  revokeRemoteDevice
+  revokeRemoteDevice,
+  dialPeer,
+  forgetDialledPeer
 } from '../remote/link'
 import { DEFAULT_NICK } from '@shared/constants'
 import { getReadMarker, setReadMarker, getAllReadMarkers } from '../storage/models/readmarker'
@@ -155,6 +157,19 @@ export function registerIPCHandlers(): void {
   handle('remote:start-pairing', async () => startPairing())
   handle('remote:cancel-pairing', async () => cancelPairing())
   handle('remote:revoke', async (_event, endpointId: string) => revokeRemoteDevice(endpointId))
+
+  /*
+   * Go and find another Switchboard, rather than wait for one.
+   *
+   * The phone has always dialled and the desktop has always waited, which was
+   * fine while those were the only two. A headless instance waits too, so two
+   * waiting peers would sit on the same network never seeing each other —
+   * whichever one has the other's ticket has to be the one to move.
+   */
+  handle('remote:dial', async (_event, ticket: string, pairingCode?: string) =>
+    dialPeer(ticket, pairingCode)
+  )
+  handle('remote:forget-dialled', async (_event, ticket: string) => forgetDialledPeer(ticket))
 
   handle('app:secrets-status', async () => ({
     protected: secretsProtected(),

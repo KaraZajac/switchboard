@@ -94,11 +94,24 @@ export interface VaultStatus {
 // disk would defeat the point of asking for a passphrase.
 let sessionKey: Buffer | null = null
 
-/** Set by the remote link so a re-sealed vault is offered to paired devices */
-let announce: ((version: number) => void) | null = null
+/**
+ * Told whenever the shared config changes, so it can be offered onward.
+ *
+ * A set rather than one slot. It was one while the remote link was the only
+ * thing that cared; a headless instance also wants to know, so it can try the
+ * passphrase it was given against a config that has just arrived — and
+ * registering a second listener silently replaced the first, which stopped
+ * paired devices being offered anything at all.
+ */
+const changeListeners = new Set<(version: number) => void>()
 
-export function onVaultChanged(listener: (version: number) => void): void {
-  announce = listener
+function announce(version: number): void {
+  for (const listener of changeListeners) listener(version)
+}
+
+export function onVaultChanged(listener: (version: number) => void): () => void {
+  changeListeners.add(listener)
+  return () => changeListeners.delete(listener)
 }
 
 function readEnvelope(): VaultEnvelope | null {
@@ -151,7 +164,7 @@ export function createVault(passphrase: string, keepOpen = true): VaultStatus {
   const envelope = seal(sessionKey, salt, 1)
   writeEnvelope(envelope)
   if (keepOpen) rememberVaultKey(sessionKey)
-  announce?.(envelope.version)
+  announce(envelope.version)
   return vaultStatus()
 }
 
@@ -211,7 +224,7 @@ export function resealVault(): VaultStatus {
 
   const next = seal(sessionKey, Buffer.from(envelope.kdf.salt, 'base64'), envelope.version + 1)
   writeEnvelope(next)
-  announce?.(next.version)
+  announce(next.version)
   return vaultStatus()
 }
 
@@ -249,12 +262,38 @@ export function importVault(envelope: VaultEnvelope): {
       const payload = openVault<VaultPayload>(envelope, sessionKey)
       writeEnvelope(envelope)
       applyPayload(payload)
+      /*
+       * Tell everyone else too.
+       *
+       * With two devices the sender already had it, so this looked like noise.
+       * With three it is the only way the third one hears: a config that
+       * arrives from the desktop and stops here leaves the phone on
+       * yesterday's networks with nothing to tell it otherwise. The sender
+       * gets an offer it already matches, and ignores it.
+       */
+      announce(envelope.version)
       return { accepted: true, reason: `Adopted vault v${envelope.version}`, status: vaultStatus() }
     } catch (err) {
       if (err instanceof VaultLockedError) {
+        /*
+         * Not necessarily a different passphrase.
+         *
+         * The key comes from the passphrase *and* a salt made when the vault
+         * was made, so two configs created separately under the same
+         * passphrase cannot open each other either — which is the usual way to
+         * arrive here, because both devices made one before they met.
+         *
+         * There is a way out and it is worth naming: locking this config drops
+         * the key we are failing with, the next offer is then stored rather
+         * than refused, and unlocking derives the key from the envelope that
+         * arrived. So the passphrase somebody already knows does work; it just
+         * has to be typed after the swap rather than before.
+         */
         return {
           accepted: false,
-          reason: 'That device is using a different passphrase',
+          reason:
+            'This config was made separately from theirs, so neither opens the other. ' +
+            'Lock this one and unlock it again to take theirs.',
           status: vaultStatus()
         }
       }
@@ -263,6 +302,7 @@ export function importVault(envelope: VaultEnvelope): {
   }
 
   writeEnvelope(envelope)
+  announce(envelope.version)
   return {
     accepted: true,
     reason: `Stored vault v${envelope.version}; unlock to apply it`,

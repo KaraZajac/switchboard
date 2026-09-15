@@ -14,7 +14,7 @@ setHost(headlessHost(dataDir))
 import { createInterface } from 'readline'
 import { ircManager } from './irc/manager'
 import { initDatabase, closeDatabase } from './storage/database'
-import { restoreVault, unlockVault, createVault, vaultStatus } from './vault/vault'
+import { restoreVault, unlockVault, createVault, vaultStatus, onVaultChanged } from './vault/vault'
 import { loadSTSPolicies, persistSTSPoliciesWith } from './irc/features/sts'
 import { allSTSPolicies, saveSTSPolicy, forgetSTSPolicy } from './storage/models/sts'
 import {
@@ -23,7 +23,9 @@ import {
   startPairing,
   stopRemoteLink,
   remoteStatus,
-  sessionState
+  sessionState,
+  dialPeer,
+  forgetDialledPeer
 } from './remote/link'
 import { registerIPCHandlers } from './ipc/index'
 import { encryptStoredCredentials, getAllServers } from './storage/models/server'
@@ -66,42 +68,83 @@ function suppliedPassphrase(): string | null {
   return null
 }
 
-/** Open the shared config, whichever way is available */
+/**
+ * Open the shared config, whichever way is available.
+ *
+ * Deliberately never *creates* one. A vault's key comes from the passphrase
+ * and a salt made when the vault was made, so two vaults created separately
+ * under the same passphrase cannot open each other — and the overwhelmingly
+ * common way to arrive here is with a desktop that already has one. A headless
+ * instance that made its own on first run would collide with it every time,
+ * and the collision is not recoverable from either end without throwing one
+ * away.
+ *
+ * So this opens what is here, and otherwise waits: the first peer to connect
+ * offers its vault, this adopts it, and `tryPassphrase` opens it with what the
+ * environment supplied. `vault create` at the console is the deliberate way to
+ * make the first one.
+ */
 function openVault(): void {
   const before = vaultStatus()
 
-  // The usual path: the key file remembered it, exactly as a keychain would.
-  if (before.exists) {
-    const restored = restoreVault()
-    if (restored.unlocked) {
-      console.info('Shared config open.')
-      return
-    }
-  }
-
-  const passphrase = suppliedPassphrase()
-  if (!passphrase) {
-    if (before.exists) {
-      console.warn(
-        'Shared config is locked and no passphrase was given. Set SWITCHBOARD_PASSPHRASE or ' +
-          'SWITCHBOARD_PASSPHRASE_FILE. Networks and settings will not reach paired devices ' +
-          'until it is open.'
-      )
-    } else {
-      console.info(
-        'No shared config yet. Set SWITCHBOARD_PASSPHRASE to make one, or pair a device and ' +
-          'let it send its own.'
-      )
-    }
+  if (!before.exists) {
+    console.info(
+      'No shared config yet. Pair a device and this will adopt its one, or run ' +
+        '`vault create` to start a new one.'
+    )
     return
   }
 
-  const status = before.exists ? unlockVault(passphrase) : createVault(passphrase)
-  if (status.unlocked) {
-    console.info(before.exists ? 'Shared config unlocked.' : 'Shared config created.')
-  } else {
-    console.error('That passphrase did not open the shared config.')
+  // The usual path: the key file remembered it, exactly as a keychain would.
+  if (restoreVault().unlocked) {
+    console.info('Shared config open.')
+    return
   }
+
+  if (!tryPassphrase()) {
+    console.warn(
+      'Shared config is locked and no passphrase opened it. Set SWITCHBOARD_PASSPHRASE or ' +
+        'SWITCHBOARD_PASSPHRASE_FILE. Networks and settings will not reach paired devices ' +
+        'until it is open.'
+    )
+  }
+}
+
+/** Try what the environment supplied against whatever vault is here now */
+function tryPassphrase(): boolean {
+  const passphrase = suppliedPassphrase()
+  if (!passphrase) return false
+
+  const status = unlockVault(passphrase)
+  if (status.unlocked) console.info('Shared config unlocked.')
+  return status.unlocked
+}
+
+/**
+ * A peer sent us a config we did not have.
+ *
+ * Adopting it leaves it sealed, and a sealed config reaches nothing — the
+ * networks in it are not dialled and nothing is passed on. There is nobody
+ * here to type a passphrase, so the one the environment supplied is tried
+ * against every vault that arrives. It is the same passphrase the user set on
+ * their desktop; that is the whole point of it being shared.
+ */
+function unlockWhateverArrives(): void {
+  onVaultChanged(() => {
+    if (vaultStatus().unlocked) return
+    if (tryPassphrase()) {
+      /*
+       * Dial whatever came with it.
+       *
+       * Not `autoConnectAll`, which runs at most once per launch and by this
+       * point already has — with nothing to dial, because the config had not
+       * arrived yet. `resumeConnections` asks the question that is actually
+       * being asked: what should this instance be on right now. It skips
+       * anything already up, so it is safe to call whenever a config lands.
+       */
+      ircManager.resumeConnections()
+    }
+  })
 }
 
 /**
@@ -213,6 +256,11 @@ function describeState(): void {
   console.info(`  Vault:    ${vaultStatus().unlocked ? 'open' : 'locked'}`)
   console.info(`  Link:     ${remote.running ? 'listening' : 'off'}`)
   console.info(`  Devices:  ${remote.devices.length} paired, ${remote.connected.length} connected`)
+  for (const peer of remote.dialled) {
+    console.info(
+      `    ${peer.connected ? '*' : ' '} ${peer.name ?? 'dialling'}  ${peer.ticket.slice(0, 24)}…`
+    )
+  }
   console.info(`  Session:  ${session.role}, priority ${session.priority}`)
   console.info(
     `  IRC port: ${
@@ -280,6 +328,9 @@ function readCommands(): void {
           console.info('  pair | status | networks | devices | clients')
           console.info('  add <name> <host[:port]> <nick>   — +port or a bare 6697 means TLS')
           console.info('  remove <id>')
+          console.info('  dial <ticket> [code]              — go and find a desktop')
+          console.info('  vault create                      — only for the very first instance')
+          console.info('  undial <ticket>')
           console.info('  quit')
           break
         case 'quit':
@@ -313,6 +364,53 @@ function readCommands(): void {
               ])
             )
             console.info(error ? `  ${error}` : `  Added ${name} as ${id}. Connecting.`)
+            break
+          }
+
+          if (verb === 'vault' && rest[0] === 'create') {
+            /*
+             * Making the first shared config is a deliberate act.
+             *
+             * Two vaults made separately under the same passphrase cannot open
+             * each other — the salt differs — so doing this while a desktop
+             * already has one is how somebody ends up with two configs and no
+             * way back. Refused when one is already here for the same reason.
+             */
+            if (vaultStatus().exists) {
+              console.info('  There is already a shared config here.')
+              break
+            }
+            const passphrase = suppliedPassphrase()
+            if (!passphrase) {
+              console.info(
+                '  Set SWITCHBOARD_PASSPHRASE first, so there is something to seal it with.'
+              )
+              break
+            }
+            const made = createVault(passphrase)
+            console.info(made.unlocked ? '  Shared config created.' : '  Could not create it.')
+            break
+          }
+
+          if (verb === 'dial') {
+            const [ticket, code] = rest
+            if (!ticket) {
+              console.info('  dial <ticket> [pairing code]')
+              break
+            }
+            const { ok, error } = await dialPeer(ticket, code)
+            console.info(ok ? '  Linked.' : `  ${error}`)
+            break
+          }
+
+          if (verb === 'undial') {
+            const [ticket] = rest
+            if (!ticket) {
+              console.info('  undial <ticket> — see status')
+              break
+            }
+            forgetDialledPeer(ticket)
+            console.info('  Stopped looking for it.')
             break
           }
 
@@ -388,6 +486,7 @@ async function main(): Promise<void> {
   persistSTSPoliciesWith({ save: saveSTSPolicy, forget: forgetSTSPolicy })
   loadSTSPolicies(allSTSPolicies())
 
+  unlockWhateverArrives()
   openVault()
 
   const { migrated } = encryptStoredCredentials()

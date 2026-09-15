@@ -137,6 +137,14 @@ export interface RemoteLinkStatus {
   pairing: { code: string; expiresAt: number } | null
   devices: PairedDeviceInfo[]
   connected: string[]
+  /**
+   * Instances this one dials rather than waits for.
+   *
+   * A phone dials a desktop, so a desktop never had to. A headless instance
+   * waits like a desktop does, and two waiting peers never find each other —
+   * so whichever has the other's ticket goes looking.
+   */
+  dialled: { ticket: string; name?: string; connected: boolean }[]
   error: string | null
 }
 
@@ -177,7 +185,13 @@ export interface MainToRendererEvents {
   'link:add-server': { host: string; port: number; tls: boolean; channel: string | null }
   'irc:message': { serverId: string; channel: string; message: ChatMessage }
   'irc:join': { serverId: string; channel: string; user: ChannelUser; isMe: boolean }
-  'irc:part': { serverId: string; channel: string; nick: string; reason: string | null; isMe: boolean }
+  'irc:part': {
+    serverId: string
+    channel: string
+    nick: string
+    reason: string | null
+    isMe: boolean
+  }
   'irc:quit': { serverId: string; nick: string; reason: string | null }
   'irc:nick': { serverId: string; oldNick: string; newNick: string }
   'irc:topic': { serverId: string; channel: string; topic: string; setBy: string | null }
@@ -194,11 +208,23 @@ export interface MainToRendererEvents {
     entries: MaskEntry[]
     done: boolean
   }
-  'irc:kick': { serverId: string; channel: string; nick: string; by: string; reason: string | null; isMe: boolean }
+  'irc:kick': {
+    serverId: string
+    channel: string
+    nick: string
+    by: string
+    reason: string | null
+    isMe: boolean
+  }
   'irc:names': { serverId: string; channel: string; users: ChannelUser[] }
   'irc:away': { serverId: string; nick: string; message: string | null }
   'irc:account': { serverId: string; nick: string; account: string | null }
-  'irc:typing': { serverId: string; channel: string; nick: string; status: 'active' | 'paused' | 'done' }
+  'irc:typing': {
+    serverId: string
+    channel: string
+    nick: string
+    status: 'active' | 'paused' | 'done'
+  }
   'irc:error': {
     serverId: string
     code: string
@@ -218,7 +244,13 @@ export interface MainToRendererEvents {
     removed: boolean
   }
   'irc:redact': { serverId: string; channel: string; msgid: string }
-  'irc:edit': { serverId: string; channel: string; originalId: string; newContent: string; editedAt: string }
+  'irc:edit': {
+    serverId: string
+    channel: string
+    originalId: string
+    newContent: string
+    editedAt: string
+  }
   'irc:read-marker': { serverId: string; channel: string; timestamp: string }
   'irc:cap': {
     serverId: string
@@ -240,7 +272,12 @@ export interface MainToRendererEvents {
     account: string
     message: string
   }
-  'irc:channel-rename': { serverId: string; oldName: string; newName: string; reason: string | null }
+  'irc:channel-rename': {
+    serverId: string
+    oldName: string
+    newName: string
+    reason: string | null
+  }
   /** ISUPPORT as the server sent it: PREFIX and CHANMODES decide a member menu */
   'irc:isupport': { serverId: string; tokens: Record<string, string> }
   'irc:network-icon': { serverId: string; url: string }
@@ -292,6 +329,10 @@ export interface RendererToMainInvocations {
   'remote:start-pairing': () => Promise<RemoteLinkStatus>
   'remote:cancel-pairing': () => Promise<RemoteLinkStatus>
   'remote:revoke': (endpointId: string) => Promise<RemoteLinkStatus>
+  /** Dial another Switchboard by its ticket. The code is needed the first time only. */
+  'remote:dial': (ticket: string, pairingCode?: string) => Promise<{ ok: boolean; error?: string }>
+  /** Stop looking for one. Not the same as revoking it. */
+  'remote:forget-dialled': (ticket: string) => Promise<RemoteLinkStatus>
   /** Where stored credentials are protected, and whether they really are */
   'app:secrets-status': () => Promise<StorageProtection>
   /** OS account name, cleaned up for use as an IRC nick */
@@ -304,9 +345,16 @@ export interface RendererToMainInvocations {
   'channel:join': (serverId: string, channel: string, key?: string) => Promise<void>
   'channel:part': (serverId: string, channel: string) => Promise<void>
   'channel:topic': (serverId: string, channel: string, topic: string) => Promise<void>
-  'channel:list': (serverId: string) => Promise<{ name: string; userCount: number; topic: string }[]>
+  'channel:list': (
+    serverId: string
+  ) => Promise<{ name: string; userCount: number; topic: string }[]>
   'message:send': (serverId: string, channel: string, text: string) => Promise<void>
-  'message:reply': (serverId: string, channel: string, text: string, replyTo: string) => Promise<void>
+  'message:reply': (
+    serverId: string,
+    channel: string,
+    text: string,
+    replyTo: string
+  ) => Promise<void>
   'message:react': (
     serverId: string,
     channel: string,
@@ -315,19 +363,24 @@ export interface RendererToMainInvocations {
     /** Take the reaction back rather than adding it */
     remove?: boolean
   ) => Promise<void>
-  'message:redact': (serverId: string, channel: string, msgid: string, reason?: string) => Promise<void>
-  'message:edit': (serverId: string, channel: string, msgid: string, newText: string) => Promise<void>
+  'message:redact': (
+    serverId: string,
+    channel: string,
+    msgid: string,
+    reason?: string
+  ) => Promise<void>
+  'message:edit': (
+    serverId: string,
+    channel: string,
+    msgid: string,
+    newText: string
+  ) => Promise<void>
   'message:typing': (serverId: string, channel: string, status?: 'active' | 'done') => Promise<void>
   'message:search': (serverId: string, query: string, channel?: string) => Promise<ChatMessage[]>
   'user:whois': (serverId: string, nick: string) => Promise<Record<string, string>>
   'user:kick': (serverId: string, channel: string, nick: string, reason?: string) => Promise<void>
   /** One channel mode against one person: op, halfop, voice, ban, quiet */
-  'user:mode': (
-    serverId: string,
-    channel: string,
-    change: string,
-    target: string
-  ) => Promise<void>
+  'user:mode': (serverId: string, channel: string, change: string, target: string) => Promise<void>
   'user:nick': (serverId: string, nick: string) => Promise<void>
   'user:setname': (serverId: string, realname: string) => Promise<void>
   'user:away': (serverId: string, message?: string) => Promise<void>
@@ -375,11 +428,7 @@ export interface RendererToMainInvocations {
   /** Everyone this client has been told not to hear from */
   'ignore:list': () => Promise<IgnoreEntry[]>
   /** Stop hearing from whoever matches this mask */
-  'ignore:add': (
-    mask: string,
-    network: string,
-    scope: IgnoreScope
-  ) => Promise<IgnoreEntry[]>
+  'ignore:add': (mask: string, network: string, scope: IgnoreScope) => Promise<IgnoreEntry[]>
   /** Start hearing from them again */
   'ignore:remove': (mask: string, network: string) => Promise<IgnoreEntry[]>
   /** Add or lift one entry on one of those lists */
@@ -405,12 +454,27 @@ export interface RendererToMainInvocations {
   'raw:log': (serverId: string) => Promise<RawLine[]>
   'raw:clear': (serverId: string) => Promise<void>
   'history:since': (serverId: string, after: string, limit?: number) => Promise<ChatMessage[]>
-  'history:fetch': (serverId: string, channel: string, before?: string, limit?: number) => Promise<ChatMessage[]>
-  'chathistory:request': (serverId: string, channel: string, before?: string, limit?: number) => Promise<void>
+  'history:fetch': (
+    serverId: string,
+    channel: string,
+    before?: string,
+    limit?: number
+  ) => Promise<ChatMessage[]>
+  'chathistory:request': (
+    serverId: string,
+    channel: string,
+    before?: string,
+    limit?: number
+  ) => Promise<void>
   /** Which conversations had traffic since `since` — the only way to find a missed DM */
   'chathistory:targets': (serverId: string, since: string) => Promise<void>
   /** What was said after `after`, for catching up on another device's evening */
-  'chathistory:catchup': (serverId: string, channel: string, after: string, limit?: number) => Promise<void>
+  'chathistory:catchup': (
+    serverId: string,
+    channel: string,
+    after: string,
+    limit?: number
+  ) => Promise<void>
   'notification:send': (title: string, body: string) => Promise<void>
   'tray:set-badge': (count: number) => Promise<void>
   'settings:get': (key: string) => Promise<unknown>

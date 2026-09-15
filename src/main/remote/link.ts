@@ -32,15 +32,23 @@ import { shouldAdoptVault } from '@shared/vaultorder'
 import type { VaultEnvelope } from '../vault/crypto'
 
 /**
- * The desktop half of the remote link.
+ * One instance's half of the remote link.
  *
- * Holds an iroh endpoint, accepts connections from paired devices, and gives
- * each one the same core the desktop window talks to: calls go through the IPC
- * registry, and every event the renderer receives is mirrored to the device.
+ * Holds an iroh endpoint that both accepts and dials, and gives every peer the
+ * same core the desktop window talks to: calls go through the IPC registry,
+ * and every event the renderer receives is mirrored across.
+ *
+ * Accepting alone was enough while there were two kinds of thing and only one
+ * of them moved — a phone dials a desktop, and a desktop is never the one
+ * looking for somebody. A headless instance breaks that: it is another
+ * accepting peer, so a desktop and a headless could both be running, both
+ * listening, and never see each other. Whichever of two peers has the other's
+ * ticket dials; after that the connection is symmetric and neither end is more
+ * of a server than the other.
  *
  * Identity is the endpoint's ed25519 key, authenticated by QUIC. Pairing binds
- * that key to a deliberate human act — a code shown on the desktop — and after
- * that the device is recognised by key alone.
+ * that key to a deliberate human act — a code shown on the other machine — and
+ * after that the peer is recognised by key alone.
  */
 
 // iroh's native module is loaded lazily so a machine where the binary is
@@ -59,7 +67,7 @@ interface PairingSession {
   wrong: number
 }
 
-interface RemoteClient {
+interface RemotePeer {
   endpointId: string
   name: string
   send: (frame: ServerFrame) => void
@@ -74,6 +82,14 @@ export interface RemoteStatus {
   pairing: { code: string; expiresAt: number } | null
   devices: PairedDevice[]
   connected: string[]
+  /**
+   * Instances this one dials, as opposed to waits for.
+   *
+   * Separate from `devices` because they answer different questions: that one
+   * is who may connect to us, this one is who we go looking for. A headless
+   * Switchboard is normally in both.
+   */
+  dialled: { ticket: string; name?: string; connected: boolean }[]
   error: string | null
 }
 
@@ -83,7 +99,14 @@ let acceptLoop: Promise<void> | null = null
 let stopping = false
 let pairing: PairingSession | null = null
 let lastError: string | null = null
-const clients = new Map<string, RemoteClient>()
+/**
+ * Everyone on the link right now, dialled or accepted.
+ *
+ * One map for both, because after the handshake there is no difference: either
+ * side may be holding the connections, either may have the newer vault, and
+ * the coordinator reaches all of them the same way.
+ */
+const peers = new Map<string, RemotePeer>()
 let unsubscribeEvents: (() => void) | null = null
 
 /**
@@ -100,10 +123,10 @@ export const session = new SessionCoordinator(
   {
     send: (frame: SessionFrame, peerId?: string) => {
       if (peerId) {
-        clients.get(peerId)?.send(frame)
+        peers.get(peerId)?.send(frame)
         return
       }
-      for (const client of clients.values()) client.send(frame)
+      for (const client of peers.values()) client.send(frame)
     },
     /**
      * "Could another device be holding the connections?"
@@ -115,7 +138,7 @@ export const session = new SessionCoordinator(
      * `nick` and `nick_`. Waiting out the discovery window costs six seconds and
      * removes the race entirely.
      */
-    hasPeers: () => clients.size > 0 || getPairedDevices().length > 0
+    hasPeers: () => peers.size > 0 || getPairedDevices().length > 0 || dialledPeers().length > 0
   },
   {
     // Whatever the phone was holding as well as whatever this desktop
@@ -233,7 +256,7 @@ export async function startRemoteLink(): Promise<RemoteStatus> {
   // A config change on this device is offered to the others straight away
   onVaultChanged((version) => {
     const updatedAt = exportVault()?.updatedAt
-    for (const client of clients.values()) {
+    for (const client of peers.values()) {
       client.send({ t: 'vault-offer', version, updatedAt })
     }
   })
@@ -241,6 +264,11 @@ export async function startRemoteLink(): Promise<RemoteStatus> {
   acceptLoop = runAcceptLoop()
   session.start()
   console.info(`Remote link listening as ${endpoint.id().toString()}`)
+
+  // Go and find whatever this instance was told to look for. Not awaited: a
+  // peer that is switched off would otherwise hold up everything behind it,
+  // and the retry loop is what handles that anyway.
+  void redialAll()
   return remoteStatus()
 }
 
@@ -254,8 +282,11 @@ export async function stopRemoteLink(): Promise<RemoteStatus> {
   // the heartbeat timeout wondering.
   session.leave()
 
-  for (const client of clients.values()) client.close()
-  clients.clear()
+  for (const attempt of dialling.values()) attempt.stop()
+  dialling.clear()
+
+  for (const client of peers.values()) client.close()
+  peers.clear()
 
   unsubscribeEvents?.()
   unsubscribeEvents = null
@@ -267,6 +298,343 @@ export async function stopRemoteLink(): Promise<RemoteStatus> {
   acceptLoop = null
 
   return remoteStatus()
+}
+
+// ── Dialling out ───────────────────────────────────────────────────
+
+/**
+ * Tickets this instance dials, kept so it redials on every launch.
+ *
+ * A setting rather than the device table, because these are a different fact:
+ * the table records who may connect *to* us, and this records who we go
+ * looking for. A peer ends up in both once it has answered.
+ */
+const DIALLED = 'remoteDialled'
+
+interface DialledPeer {
+  ticket: string
+  /** What it called itself when it answered, for the settings list */
+  name?: string
+  /**
+   * Its endpoint key, learned on the first successful dial.
+   *
+   * Kept so "are we connected to this one" can be answered by identity rather
+   * than by matching names, which two instances are perfectly entitled to
+   * share.
+   */
+  endpointId?: string
+}
+
+/** Attempts in flight or waiting to retry, by ticket */
+const dialling = new Map<string, { stop: () => void }>()
+
+export function dialledPeers(): DialledPeer[] {
+  return getSetting<DialledPeer[]>(DIALLED) ?? []
+}
+
+function rememberDialled(ticket: string, name?: string, endpointId?: string): void {
+  const kept = dialledPeers().filter((peer) => peer.ticket !== ticket)
+  setSetting(DIALLED, [...kept, { ticket, name, endpointId }])
+}
+
+/**
+ * Stop dialling a peer, and drop the connection if it is up.
+ *
+ * Deliberately does not revoke it: forgetting a ticket says "stop looking for
+ * this one", and revoking says "never let it in again". Somebody who moves
+ * their headless instance to another machine means the first.
+ */
+export function forgetDialledPeer(ticket: string): RemoteStatus {
+  setSetting(
+    DIALLED,
+    dialledPeers().filter((peer) => peer.ticket !== ticket)
+  )
+  dialling.get(ticket)?.stop()
+  dialling.delete(ticket)
+  return remoteStatus()
+}
+
+/**
+ * Go and find another Switchboard.
+ *
+ * The pairing code is needed the first time only; after that the far end
+ * recognises this endpoint's key. Which is also why the ticket is worth
+ * keeping — a redial on the next launch needs no human at either end.
+ */
+export async function dialPeer(
+  ticket: string,
+  pairingCode?: string
+): Promise<{ ok: boolean; error?: string }> {
+  const trimmed = ticket.trim()
+  if (!trimmed) return { ok: false, error: 'No ticket' }
+
+  if (!endpoint) {
+    const started = await startRemoteLink()
+    if (started.error) return { ok: false, error: started.error }
+  }
+  if (!endpoint || !iroh) return { ok: false, error: 'The remote link is not running' }
+
+  let addr: ReturnType<IrohModule['EndpointTicket']['fromString']>
+  try {
+    addr = iroh.EndpointTicket.fromString(trimmed)
+  } catch {
+    return { ok: false, error: 'That does not look like a Switchboard ticket' }
+  }
+
+  // Dialling ourselves would pair this instance with itself, which the
+  // coordinator would then arbitrate against — one device, two peers, both
+  // convinced the other might be holding the connections.
+  if (addr.endpointAddr().id.toString() === endpoint.id().toString()) {
+    return { ok: false, error: "That is this instance's own ticket" }
+  }
+
+  dialling.get(trimmed)?.stop()
+
+  const attempt = await openDialled(trimmed, addr.endpointAddr(), pairingCode)
+  if (attempt.ok) rememberDialled(trimmed, attempt.name, attempt.endpointId)
+  return attempt
+}
+
+/** Redial everything this instance was told to look for */
+async function redialAll(): Promise<void> {
+  for (const peer of dialledPeers()) {
+    const result = await dialPeer(peer.ticket)
+    if (!result.ok)
+      console.warn(`Could not reach ${peer.name ?? 'a paired instance'}: ${result.error}`)
+  }
+}
+
+/**
+ * One dialled connection, and the loop that puts it back.
+ *
+ * A link that does not come back on its own is a link somebody has to notice
+ * and repair by hand, which for an always-on instance means noticing it hours
+ * later. The delay grows so a machine that is simply off is not hammered, and
+ * a pairing code is deliberately not reused on a retry — it is good once, and
+ * a retry that keeps sending a spent one just collects refusals.
+ */
+async function openDialled(
+  ticket: string,
+  addr: import('@number0/iroh').EndpointAddr,
+  pairingCode?: string
+): Promise<{ ok: boolean; error?: string; name?: string; endpointId?: string }> {
+  if (!endpoint) return { ok: false, error: 'The remote link is not running' }
+
+  let closed = false
+  let retry: ReturnType<typeof setTimeout> | null = null
+  let attempts = 0
+
+  const handle = {
+    stop: () => {
+      closed = true
+      if (retry) clearTimeout(retry)
+      retry = null
+    }
+  }
+  dialling.set(ticket, handle)
+
+  const again = (): void => {
+    if (closed || stopping) return
+    attempts++
+    // Up to a minute, which is soon enough that a machine coming back is
+    // noticed while somebody is still at the keyboard
+    const delay = Math.min(60_000, 2_000 * 2 ** Math.min(attempts, 5))
+    retry = setTimeout(() => void connect(), delay)
+  }
+
+  const connect = async (): Promise<{
+    ok: boolean
+    error?: string
+    name?: string
+    endpointId?: string
+  }> => {
+    if (closed || stopping || !endpoint) return { ok: false, error: 'Stopped' }
+
+    try {
+      const connection = await endpoint.connect(addr, ALPN_BYTES)
+      attempts = 0
+      const { settled, ended } = speakTo(connection, pairingCode)
+      const outcome = await settled
+      // The code is good once. A reconnection is recognised by key.
+      pairingCode = undefined
+
+      if (!outcome.ok) {
+        // A refusal is not a network problem, and retrying it in a loop turns
+        // one wrong code into a stream of them
+        handle.stop()
+        dialling.delete(ticket)
+        return outcome
+      }
+
+      /*
+       * Wait for it to end before lining up the next one.
+       *
+       * The handshake settles the moment the welcome lands, which is not the
+       * moment the connection ends. Scheduling the retry there redialled a
+       * link that was working — and each new dial closed the previous one,
+       * so the two instances spent their time hanging up on each other
+       * instead of talking.
+       */
+      void ended.then(again)
+      return outcome
+    } catch (err) {
+      again()
+      return { ok: false, error: err instanceof Error ? err.message : String(err) }
+    }
+  }
+
+  return connect()
+}
+
+/**
+ * The dialling side of the handshake, and the read loop after it.
+ *
+ * The mirror of `handleConnection`: that one accepts a stream and authorises a
+ * hello, this one opens a stream and sends one. Everything after the welcome
+ * is the same code, because after the welcome there is no difference.
+ */
+function speakTo(
+  connection: IrohConnection,
+  pairingCode?: string
+): {
+  /** Resolves when the far end has welcomed us, or refused */
+  settled: Promise<{ ok: boolean; error?: string; name?: string; endpointId?: string }>
+  /** Resolves when the connection is over, which is a different moment */
+  ended: Promise<void>
+} {
+  const endpointId = connection.remoteId().toString()
+  const decoder = new FrameDecoder()
+
+  let closed = false
+  let name = 'Switchboard'
+  let welcomed = false
+  let stream: Awaited<ReturnType<IrohConnection['openBi']>> | null = null
+
+  let writes: Promise<void> = Promise.resolve()
+  const send = (frame: ClientFrame | ServerFrame): void => {
+    if (closed) return
+    writes = writes
+      .then(async () => {
+        if (!stream) return
+        await stream.send.writeAll(Array.from(encodeFrame(frame)))
+      })
+      .catch((err) => {
+        if (closed) return
+        closed = true
+        peers.delete(endpointId)
+        console.error(`Remote link to ${name} failed while writing:`, err)
+      })
+  }
+
+  const close = (): void => {
+    closed = true
+    connection.close(0n, Array.from(Buffer.from('closed')))
+  }
+
+  // Not Promise.withResolvers: the node tsconfig targets an older lib, and a
+  // handshake is not worth raising it for.
+  let resolveSettled: (result: {
+    ok: boolean
+    error?: string
+    name?: string
+    endpointId?: string
+  }) => void = () => {}
+  let alreadySettled = false
+  const settled = new Promise<{
+    ok: boolean
+    error?: string
+    name?: string
+    endpointId?: string
+  }>((resolve) => {
+    resolveSettled = (result) => {
+      if (alreadySettled) return
+      alreadySettled = true
+      resolve(result)
+    }
+  })
+
+  const ended = (async () => {
+    try {
+      stream = await connection.openBi()
+      send({
+        t: 'hello',
+        v: PROTOCOL_VERSION,
+        name: peerName(),
+        ...(pairingCode ? { pairingCode } : {})
+      })
+
+      for (;;) {
+        const chunk = await stream.recv.read(64 * 1024)
+        if (!chunk || chunk.length === 0) break
+
+        for (const raw of decoder.push(chunk)) {
+          const frame = raw as ServerFrame
+
+          if (!welcomed) {
+            if (frame.t === 'denied') {
+              console.warn(`Refused by ${endpointId.slice(0, 12)}…: ${frame.reason}`)
+              resolveSettled({ ok: false, error: frame.reason })
+              close()
+              return
+            }
+            if (frame.t !== 'welcome') continue
+
+            welcomed = true
+            name = frame.name?.slice(0, 64) || 'Switchboard'
+
+            // Recognised by key from here on, at both ends
+            pairDevice(endpointId, name)
+
+            peers.get(endpointId)?.close()
+            peers.set(endpointId, { endpointId, name, send, close })
+            console.info(`Linked to ${name} (${endpointId.slice(0, 12)}…)`)
+
+            session.peerConnected(endpointId)
+            const vault = exportVault()
+            if (vault) {
+              send({ t: 'vault-offer', version: vault.version, updatedAt: vault.updatedAt })
+            }
+            resolveSettled({ ok: true, name, endpointId })
+            continue
+          }
+
+          if (isPeerFrame(frame)) {
+            handlePeerFrame(endpointId, frame, send)
+            touchDevice(endpointId)
+            continue
+          }
+
+          /*
+           * A call from the far end.
+           *
+           * The peer that dialled is not thereby the follower — a headless
+           * instance might dial a desktop, or the other way round, and either
+           * may end up primary. So this side answers calls as well as making
+           * them.
+           */
+          const asCall = frame as unknown as ClientFrame
+          if (asCall.t === 'call') {
+            void handleCall(asCall, send)
+            touchDevice(endpointId)
+          }
+        }
+      }
+    } catch (err) {
+      if (!stopping) console.error('Remote link stream error:', err)
+    } finally {
+      closed = true
+      if (peers.get(endpointId)?.send === send) peers.delete(endpointId)
+      session.peerGone(endpointId)
+      resolveSettled({ ok: welcomed, name, endpointId })
+    }
+  })()
+
+  return { settled, ended }
+}
+
+/** What this instance calls itself to a peer */
+function peerName(): string {
+  return host().idleSeconds() === null ? 'Switchboard (always on)' : 'Switchboard desktop'
 }
 
 /** Open a pairing window and return the ticket a new device should scan. */
@@ -287,8 +655,8 @@ export function revokeRemoteDevice(endpointId: string): RemoteStatus {
   revokeDevice(endpointId)
   // Revoking has to drop the live connection too, or the device keeps its
   // access until it happens to disconnect.
-  clients.get(endpointId)?.close()
-  clients.delete(endpointId)
+  peers.get(endpointId)?.close()
+  peers.delete(endpointId)
   return remoteStatus()
 }
 
@@ -303,13 +671,20 @@ export function remoteStatus(): RemoteStatus {
     ticket: endpoint && iroh ? iroh.EndpointTicket.fromAddr(endpoint.addr()).toString() : null,
     pairing: active ? { code: active.code, expiresAt: active.expiresAt } : null,
     devices: getPairedDevices(),
-    connected: [...clients.keys()],
+    connected: [...peers.keys()],
+    dialled: dialledPeers().map((peer) => ({
+      ticket: peer.ticket,
+      name: peer.name,
+      // "Looking" and "found" look identical in a settings list otherwise, and
+      // the difference is the whole question somebody has when they open it
+      connected: !!peer.endpointId && peers.has(peer.endpointId)
+    })),
     error: lastError
   }
 }
 
 function broadcast(frame: ServerFrame): void {
-  for (const client of clients.values()) {
+  for (const client of peers.values()) {
     try {
       client.send(frame)
     } catch (err) {
@@ -362,7 +737,7 @@ async function handleConnection(connection: IrohConnection): Promise<void> {
       .catch((err) => {
         if (closed) return
         closed = true
-        clients.delete(endpointId)
+        peers.delete(endpointId)
         console.error(`Remote link to ${name} failed while writing:`, err)
       })
   }
@@ -400,10 +775,13 @@ async function handleConnection(connection: IrohConnection): Promise<void> {
           pairDevice(endpointId, name)
           pairing = null // a code is good for one device
 
-          clients.get(endpointId)?.close()
-          clients.set(endpointId, { endpointId, name, send, close })
+          peers.get(endpointId)?.close()
+          peers.set(endpointId, { endpointId, name, send, close })
 
-          send({ t: 'welcome', v: PROTOCOL_VERSION, name: 'Switchboard', paired: true })
+          // What kind of instance this is, not just that it is one. A
+          // settings list showing two entries both called "Switchboard" is a
+          // list nobody can act on.
+          send({ t: 'welcome', v: PROTOCOL_VERSION, name: peerName(), paired: true })
           console.info(`Paired device connected: ${name} (${endpointId.slice(0, 12)}…)`)
 
           // Say who is holding the connections, and what config we have
@@ -431,7 +809,7 @@ async function handleConnection(connection: IrohConnection): Promise<void> {
     if (!stopping) console.error('Remote link stream error:', err)
   } finally {
     closed = true
-    if (clients.get(endpointId)?.send === send) clients.delete(endpointId)
+    if (peers.get(endpointId)?.send === send) peers.delete(endpointId)
     session.peerGone(endpointId)
   }
 }
