@@ -111,7 +111,7 @@ internal fun registerChannelHandlers() {
             // so ask. NAMES rather than WHOX even where WHOX is available: the
             // 366 that ends it is what marks the roster complete, and the WHOX
             // enrichment already hangs off that.
-            if (state.capabilities.contains("no-implicit-names")) {
+            if (CapNames.has(state.capabilities, CapNames.NO_IMPLICIT_NAMES)) {
                 session.send("NAMES", channel.name)
             }
             Metadata.sync(session, channel.name)

@@ -6,6 +6,7 @@ import type { ChannelUser } from '@shared/types/channel'
 import { sendWHOX } from '../features/whox'
 import { syncMetadata } from '../features/metadata'
 import { advertises } from '@shared/isupport'
+import { hasCapability, CAP_NAMES } from '@shared/capnames'
 
 /**
  * JOIN — Someone joined a channel
@@ -41,7 +42,7 @@ registerHandler('JOIN', (client, msg) => {
     // it is what marks the roster complete, and the WHOX enrichment already
     // hangs off that. Asking WHOX first only means asking twice — once here,
     // and again when the NAMES we still needed comes back.
-    if (client.state.capabilities.has('no-implicit-names')) {
+    if (hasCapability(client.state.capabilities, CAP_NAMES.noImplicitNames)) {
       client.connection.send('NAMES', channel)
     }
   }
@@ -206,9 +207,7 @@ registerHandler('333', (client, msg) => {
   const ch = client.state.channels.get(client.state.casemap(channel))
   if (ch) {
     ch.topicSetBy = setBy
-    ch.topicSetAt = timestamp
-      ? new Date(parseInt(timestamp) * 1000).toISOString()
-      : null
+    ch.topicSetAt = timestamp ? new Date(parseInt(timestamp) * 1000).toISOString() : null
   }
 })
 
@@ -287,7 +286,12 @@ registerHandler('MODE', (client, msg) => {
   const target = msg.params[0]
 
   // Channel mode
-  if (target.startsWith('#') || target.startsWith('&') || target.startsWith('!') || target.startsWith('+')) {
+  if (
+    target.startsWith('#') ||
+    target.startsWith('&') ||
+    target.startsWith('!') ||
+    target.startsWith('+')
+  ) {
     const modeStr = msg.params[1] || ''
     const modeParams = msg.params.slice(2)
     const setBy = msg.source?.nick || null
@@ -520,8 +524,14 @@ function trackMaskListChange(
   let at = 0
 
   for (const char of modeStr) {
-    if (char === '+') { adding = true; continue }
-    if (char === '-') { adding = false; continue }
+    if (char === '+') {
+      adding = true
+      continue
+    }
+    if (char === '-') {
+      adding = false
+      continue
+    }
     if (!listModes.has(char)) {
       // Only list modes are tracked here, but every mode that takes a
       // parameter still consumes one — miscounting would attribute the wrong

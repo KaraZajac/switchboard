@@ -1,4 +1,5 @@
 import { registerHandler } from '../handlers/registry'
+import { hasCapability, CAP_NAMES } from '@shared/capnames'
 
 /**
  * draft/webpush — asking the server to push to us when we are not connected.
@@ -54,7 +55,7 @@ export function registerPushEndpoint(
   endpoint: string,
   keys: WebPushKeys
 ): boolean {
-  if (!client.state.capabilities.has('draft/webpush')) return false
+  if (!hasCapability(client.state.capabilities, CAP_NAMES.webpush)) return false
 
   client.connection.send(
     'WEBPUSH',
@@ -74,7 +75,7 @@ export function unregisterPushEndpoint(
   },
   endpoint: string
 ): boolean {
-  if (!client.state.capabilities.has('draft/webpush')) return false
+  if (!hasCapability(client.state.capabilities, CAP_NAMES.webpush)) return false
 
   client.connection.send('WEBPUSH', 'UNREGISTER', endpoint)
   return true

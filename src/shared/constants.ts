@@ -45,6 +45,7 @@ export const REQUESTED_CAPS = [
   'invite-notify',
   'standard-replies',
   'no-implicit-names',
+  'soju.im/no-implicit-names',
   'monitor',
   'extended-monitor',
   // Not registered — WHOX is de facto throughout, signalled by the WHOX
@@ -55,7 +56,11 @@ export const REQUESTED_CAPS = [
   'draft/message-edit',
   'draft/chathistory',
   'draft/read-marker',
+  // Two spellings, because soju calls it `soju.im/webpush` and asking only for
+  // the draft name meant push through a soju never worked — see
+  // `@shared/capnames`
   'draft/webpush',
+  'soju.im/webpush',
   'draft/multiline',
   'draft/channel-rename',
   'draft/account-registration',

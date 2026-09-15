@@ -42,6 +42,7 @@ import org.switchboard.android.vault.shouldAdoptVault
 import org.switchboard.android.irc.ClientTags
 import org.switchboard.android.irc.Completion
 import org.switchboard.android.irc.Decoding
+import org.switchboard.android.irc.CapNames
 import org.switchboard.android.irc.Ctcp
 import org.switchboard.android.irc.CtcpGuard
 import org.switchboard.android.irc.Filehost
@@ -2418,6 +2419,25 @@ class SharedCorpusTest {
                 case["name"]!!.jsonPrimitive.content,
                 case["ok"]!!.jsonPrimitive.content.toBoolean(),
                 Filehost.acceptsType(accept, case["type"]!!.jsonPrimitive.content)
+            )
+        }
+    }
+
+    @Test
+    fun `reads a capability that goes by more than one name the same way`() {
+        val features = mapOf(
+            "webpush" to CapNames.WEBPUSH,
+            "noImplicitNames" to CapNames.NO_IMPLICIT_NAMES
+        )
+
+        for (entry in load("capabilities.json")["aliases"]!!.jsonArray) {
+            val case = entry.jsonObject
+            val offered = case["offered"]!!.jsonArray.map { it.jsonPrimitive.content }
+            val names = features[case["feature"]!!.jsonPrimitive.content]!!
+            assertEquals(
+                case["name"]!!.jsonPrimitive.content,
+                case["negotiatedAs"]!!.jsonPrimitive.contentOrNull,
+                CapNames.negotiatedAs(offered, names)
             )
         }
     }

@@ -19,6 +19,7 @@
     "invite-notify",
     "standard-replies",
     "no-implicit-names",
+    "soju.im/no-implicit-names",
     "monitor",
     "extended-monitor",
     "draft/message-redaction",
@@ -26,6 +27,7 @@
     "draft/chathistory",
     "draft/read-marker",
     "draft/webpush",
+    "soju.im/webpush",
     "draft/multiline",
     "draft/channel-rename",
     "draft/account-registration",
@@ -70,5 +72,62 @@
   ],
   "deliberatelyNotRequested": {
     "draft/persistence": "A real capability, and nothing here implements the PERSISTENCE command. Enabling it changes what a server does when a client goes away, which is not something to ask for and then ignore."
-  }
+  },
+  "$aliases": "Capabilities that go by more than one name. A client that knows only one negotiates nothing and the feature is quietly absent — soju offers soju.im/webpush and we asked for draft/webpush, so push through a soju never worked. Read by tests/shared/capnames.test.ts and the Android SharedCorpusTest.",
+  "aliases": [
+    {
+      "name": "soju's spelling of webpush",
+      "feature": "webpush",
+      "offered": [
+        "soju.im/webpush",
+        "batch",
+        "sasl"
+      ],
+      "negotiatedAs": "soju.im/webpush"
+    },
+    {
+      "name": "the draft spelling, preferred where both are there",
+      "feature": "webpush",
+      "offered": [
+        "draft/webpush",
+        "soju.im/webpush"
+      ],
+      "negotiatedAs": "draft/webpush"
+    },
+    {
+      "name": "a server with neither",
+      "feature": "webpush",
+      "offered": [
+        "sasl",
+        "batch",
+        "server-time"
+      ],
+      "negotiatedAs": null
+    },
+    {
+      "name": "soju's spelling of no-implicit-names",
+      "feature": "noImplicitNames",
+      "offered": [
+        "soju.im/no-implicit-names",
+        "batch"
+      ],
+      "negotiatedAs": "soju.im/no-implicit-names"
+    },
+    {
+      "name": "the unprefixed one",
+      "feature": "noImplicitNames",
+      "offered": [
+        "no-implicit-names"
+      ],
+      "negotiatedAs": "no-implicit-names"
+    },
+    {
+      "name": "a near miss is a miss",
+      "feature": "webpush",
+      "offered": [
+        "example.org/draft/webpush"
+      ],
+      "negotiatedAs": null
+    }
+  ]
 }

@@ -970,13 +970,17 @@ class IrcConnection(
             "invite-notify",
             "standard-replies",
             "no-implicit-names",
+            "soju.im/no-implicit-names",
             "monitor",
             "extended-monitor",
             "draft/message-redaction",
             "draft/message-edit",
             "draft/chathistory",
             "draft/read-marker",
+            // Two spellings, because soju calls it `soju.im/webpush` and asking
+            // only for the draft name meant push through a soju never worked
             "draft/webpush",
+            "soju.im/webpush",
             "draft/multiline",
             "draft/channel-rename",
             "draft/account-registration",
