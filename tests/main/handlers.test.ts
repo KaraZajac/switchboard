@@ -1486,3 +1486,72 @@ describe('when the reconnect ladder starts over', () => {
     expect(reconnect.closing).toBe('Trying to reconnect too fast.')
   })
 })
+
+describe('leaving a channel the server says is not there', () => {
+  it('takes it out of the list rather than leaving it stuck', () => {
+    const { client, state, events } = createMockClient()
+    state.nick = 'kara'
+    state.getChannel('#default')
+    const parted: unknown[] = []
+    events.on('part', (data: unknown) => parted.push(data))
+
+    // What a stale entry answers with. Nothing removed it, so it sat in the
+    // list and every attempt to leave produced the same error.
+    dispatchMessage(client, parseMessage(':irc.example.org 403 kara #default :No such channel'))
+
+    expect(state.channels.size).toBe(0)
+    expect(parted).toHaveLength(1)
+  })
+
+  it('says nothing about it, because that is what leaving looks like', () => {
+    const { client, state, events } = createMockClient()
+    state.nick = 'kara'
+    state.getChannel('#default')
+    const errors: unknown[] = []
+    events.on('error', (data: unknown) => errors.push(data))
+
+    dispatchMessage(client, parseMessage(':irc.example.org 403 kara #default :No such channel'))
+
+    expect(errors).toEqual([])
+  })
+
+  it('does the same when told we are not on it', () => {
+    const { client, state, events } = createMockClient()
+    state.nick = 'kara'
+    events.on('error', () => {})
+    state.getChannel('#default')
+
+    dispatchMessage(
+      client,
+      parseMessage(":irc.example.org 442 kara #default :You're not on that channel")
+    )
+
+    expect(state.channels.size).toBe(0)
+  })
+
+  it('still reports one about a channel we never had', () => {
+    const { client, state, events } = createMockClient()
+    state.nick = 'kara'
+    state.getChannel('#hax')
+    const errors: { code?: string }[] = []
+    events.on('error', (data: { code?: string }) => errors.push(data))
+
+    // A mistyped /topic, or a join that failed. Somebody needs to be told.
+    dispatchMessage(client, parseMessage(':irc.example.org 403 kara #typo :No such channel'))
+
+    expect(errors.map((e) => e.code)).toEqual(['403'])
+    expect(state.channels.size).toBe(1)
+  })
+
+  it('does not conjure the channel it is asking about', () => {
+    const { client, state, events } = createMockClient()
+    state.nick = 'kara'
+    events.on('error', () => {})
+
+    // `getChannel` creates one on a miss, so testing with it would add the
+    // very channel this is meant to detect the absence of
+    dispatchMessage(client, parseMessage(':irc.example.org 403 kara #nowhere :No such channel'))
+
+    expect(state.channels.size).toBe(0)
+  })
+})

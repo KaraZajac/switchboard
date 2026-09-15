@@ -45,6 +45,7 @@ import org.switchboard.android.irc.Decoding
 import org.switchboard.android.irc.CapNames
 import org.switchboard.android.irc.Ctcp
 import org.switchboard.android.irc.CtcpGuard
+import org.switchboard.android.irc.NotOnChannel
 import org.switchboard.android.irc.Filehost
 import org.switchboard.android.irc.dialChanged
 import org.switchboard.android.irc.Formatting
@@ -2438,6 +2439,22 @@ class SharedCorpusTest {
                 case["name"]!!.jsonPrimitive.content,
                 case["negotiatedAs"]!!.jsonPrimitive.contentOrNull,
                 CapNames.negotiatedAs(offered, names)
+            )
+        }
+    }
+
+    @Test
+    fun `decides about a channel the server denies the same way the desktop does`() {
+        for (entry in load("notonchannel.json")["cases"]!!.jsonArray) {
+            val case = entry.jsonObject
+            val have = case["have"]!!.jsonArray.map { Casemap.fold(it.jsonPrimitive.content) }.toSet()
+            val channel = case["channel"]!!.jsonPrimitive.contentOrNull
+            assertEquals(
+                case["name"]!!.jsonPrimitive.content,
+                case["action"]!!.jsonPrimitive.content,
+                NotOnChannel.action(case["numeric"]!!.jsonPrimitive.content, channel) {
+                    Casemap.fold(it) in have
+                }
             )
         }
     }

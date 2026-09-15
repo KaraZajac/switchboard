@@ -1,4 +1,5 @@
 import { registerHandler } from './registry'
+import { absenceAction } from '@shared/notonchannel'
 
 /**
  * ERROR — Server-side error (usually before disconnect)
@@ -102,14 +103,45 @@ registerHandler('451', (client, msg) => {
   })
 })
 
-/** ERR_NOSUCHCHANNEL (403) */
-registerHandler('403', (client, msg) => {
-  client.events.emit('error', {
-    code: '403',
-    command: msg.params[1] || '',
-    message: msg.params[2] || 'No such channel'
+/**
+ * ERR_NOSUCHCHANNEL (403) and ERR_NOTONCHANNEL (442).
+ *
+ * Both say we are not in the channel named. Where our own list says otherwise,
+ * the server is the one that knows — so the channel comes out, and quietly,
+ * because "you are not in it" is exactly the outcome somebody asked for when
+ * they pressed leave. It used to be an error beside a channel that stayed in
+ * the list and could never be left. See `@shared/notonchannel`.
+ */
+function notOnChannel(code: '403' | '442', fallback: string): void {
+  registerHandler(code, (client, msg) => {
+    const channel = msg.params[1]
+    // Looked up directly: `getChannel` creates one on a miss, which would
+    // conjure the very channel this is testing for
+    const action = absenceAction(code, channel, (name) =>
+      client.state.channels.has(client.state.casemap(name))
+    )
+
+    if (action === 'leave' && channel) {
+      client.state.removeChannel(channel)
+      client.events.emit('part', {
+        channel,
+        nick: client.state.nick,
+        isMe: true,
+        reason: undefined,
+        time: new Date().toISOString()
+      })
+      return
+    }
+
+    client.events.emit('error', {
+      code,
+      command: channel || '',
+      message: msg.params[2] || fallback
+    })
   })
-})
+}
+
+notOnChannel('403', 'No such channel')
 
 /** ERR_CANNOTSENDTOCHAN (404) */
 registerHandler('404', (client, msg) => {
@@ -130,13 +162,7 @@ registerHandler('405', (client, msg) => {
 })
 
 /** ERR_NOTONCHANNEL (442) */
-registerHandler('442', (client, msg) => {
-  client.events.emit('error', {
-    code: '442',
-    command: msg.params[1] || '',
-    message: msg.params[2] || "You're not on that channel"
-  })
-})
+notOnChannel('442', "You're not on that channel")
 
 /** ERR_NEEDMOREPARAMS (461) */
 registerHandler('461', (client, msg) => {

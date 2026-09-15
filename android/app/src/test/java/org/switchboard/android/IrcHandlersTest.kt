@@ -578,6 +578,48 @@ class IrcHandlersTest {
         assertEquals(1, session.sent.size)
     }
 
+    // ── a channel the server says we are not in ──────────────────────
+
+    @Test
+    fun `a channel the server denies comes out of the list`() {
+        register()
+        feed(":kara!u@h JOIN #default")
+        session.events.clear()
+
+        // What a stale entry answers a PART with. Nothing removed it, so it
+        // sat in the list and every attempt to leave produced the same error.
+        feed(":irc.example.org 403 kara #default :No such channel")
+
+        assertTrue(session.state.channels.isEmpty())
+        assertEquals(1, session.eventsOn("irc:part").size)
+        assertTrue(session.eventsOn("irc:error").isEmpty())
+    }
+
+    @Test
+    fun `and so does one it says we are not on`() {
+        register()
+        feed(":kara!u@h JOIN #default")
+        session.events.clear()
+
+        feed(":irc.example.org 442 kara #default :You're not on that channel")
+
+        assertTrue(session.state.channels.isEmpty())
+        assertTrue(session.eventsOn("irc:error").isEmpty())
+    }
+
+    @Test
+    fun `one about a channel we never had is still reported`() {
+        register()
+        feed(":kara!u@h JOIN #hax")
+        session.events.clear()
+
+        // A mistyped /topic, or a join that failed. Somebody needs to be told.
+        feed(":irc.example.org 403 kara #typo :No such channel")
+
+        assertEquals(1, session.state.channels.size)
+        assertEquals(1, session.eventsOn("irc:error").size)
+    }
+
     @Test
     fun `a CTCP PING comes back with what was sent`() {
         register()

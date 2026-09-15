@@ -1,0 +1,70 @@
+{
+  "$comment": "When the server disagrees with us about being in a channel. A channel stuck in the list because PART came back as 403 could never be left — the same error every time. Shared by tests/shared/notonchannel.test.ts and the Android SharedCorpusTest.",
+  "$cases": "`have` is the channels our own list claims. `action` is leave (take it out, quietly) or report.",
+  "cases": [
+    {
+      "name": "leaving a channel the server says is not there",
+      "numeric": "403",
+      "channel": "#default",
+      "have": [
+        "#default",
+        "#hax"
+      ],
+      "action": "leave"
+    },
+    {
+      "name": "and one it says we are not on",
+      "numeric": "442",
+      "channel": "#default",
+      "have": [
+        "#default"
+      ],
+      "action": "leave"
+    },
+    {
+      "name": "a channel we never had is somebody else's mistake to hear about",
+      "numeric": "403",
+      "channel": "#typo",
+      "have": [
+        "#hax"
+      ],
+      "action": "report"
+    },
+    {
+      "name": "case is the server's to decide",
+      "numeric": "403",
+      "channel": "#HaX",
+      "have": [
+        "#hax"
+      ],
+      "action": "leave"
+    },
+    {
+      "name": "a numeric about something else is reported",
+      "numeric": "474",
+      "channel": "#hax",
+      "have": [
+        "#hax"
+      ],
+      "action": "report"
+    },
+    {
+      "name": "no channel named at all",
+      "numeric": "403",
+      "channel": null,
+      "have": [
+        "#hax"
+      ],
+      "action": "report"
+    },
+    {
+      "name": "an empty name is not a channel",
+      "numeric": "442",
+      "channel": "",
+      "have": [
+        "#hax"
+      ],
+      "action": "report"
+    }
+  ]
+}

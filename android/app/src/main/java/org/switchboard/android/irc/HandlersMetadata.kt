@@ -300,12 +300,40 @@ internal fun registerErrorHandlers() {
 
     for ((numeric, fallback) in messages) {
         Handlers.on(numeric) { session, message ->
+            val state = session.state
+            val channel = message.param(1)
+
+            /*
+             * `403` and `442` both say we are not in the channel named. Where
+             * our own list says otherwise, the server is the one that knows —
+             * so the channel comes out, and quietly, because "you are not in
+             * it" is the outcome somebody asked for when they pressed leave.
+             *
+             * It used to be an error beside a channel that stayed in the list
+             * and could never be left, because leaving it produced the same
+             * error again. See [NotOnChannel].
+             */
+            val action = NotOnChannel.action(numeric, channel) {
+                state.channels.containsKey(state.casemap(it))
+            }
+
+            if (action == "leave" && channel != null) {
+                state.channels.remove(state.casemap(channel))
+                session.emit("irc:part", buildJsonObject {
+                    put("serverId", state.serverId)
+                    put("channel", channel)
+                    put("nick", state.nick)
+                    put("isMe", true)
+                })
+                return@on
+            }
+
             session.emit("irc:error", buildJsonObject {
-                put("serverId", session.state.serverId)
+                put("serverId", state.serverId)
                 put("code", numeric)
                 // `command` rather than `target`, because that is what the
                 // desktop calls it — the store reads whichever client sent it
-                put("command", message.param(1))
+                put("command", channel)
                 put("message", message.params.lastOrNull()?.takeIf { it.isNotBlank() } ?: fallback)
             })
         }
