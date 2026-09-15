@@ -563,3 +563,77 @@ describe('answering CHATHISTORY from what the bouncer kept', () => {
     expect(socket.written.find((line) => line.includes('first'))).toContain('msgid=m1')
   })
 })
+
+describe('when the network goes and comes back', () => {
+  it('follows the connection to a new object rather than going quiet', () => {
+    const first = fakeUpstream()
+    const { socket, session } = attach(first)
+    register(socket)
+
+    // Reconnecting through the manager builds a new IRCClient; a session
+    // holding the old one keeps a subscription to an emitter nothing will ever
+    // emit on again — attached, no error, receiving nothing
+    const second = fakeUpstream({ nick: 'kara2' })
+    session.networkBack({ id: 'net1', name: 'example', client: second.client })
+    socket.written.length = 0
+
+    second.raw(':bunny!b@h PRIVMSG #test :after the reconnect')
+    first.raw(':bunny!b@h PRIVMSG #test :from the dead one')
+
+    expect(socket.written.join(' ')).toContain('after the reconnect')
+    expect(socket.written.join(' ')).not.toContain('from the dead one')
+  })
+
+  it('does not welcome the client a second time', () => {
+    const upstream = fakeUpstream()
+    const { socket, session } = attach(upstream)
+    register(socket)
+    socket.written.length = 0
+
+    session.networkBack({ id: 'net1', name: 'example', client: upstream.client })
+
+    // A fresh 001 every time a network hiccups resets a client's idea of the
+    // whole session
+    expect(socket.lines('001')).toEqual([])
+    // But the windows are stale, so the channels come back
+    expect(socket.written).toContain(':kara!kara@host JOIN #test')
+  })
+
+  it('does not replay the backlog again', () => {
+    const upstream = fakeUpstream()
+    const { socket, session } = attach(upstream, {
+      backlog: () => [{ time: '2026-01-01T00:00:00.000Z', nick: 'bunny', text: 'said earlier' }]
+    })
+    register(socket, 'kara/example', 'server-time batch')
+    socket.written.length = 0
+
+    session.networkBack({ id: 'net1', name: 'example', client: upstream.client })
+
+    // The client has been watching it arrive live
+    expect(socket.written.join(' ')).not.toContain('said earlier')
+  })
+
+  it('says the network went, without ending the client connection', () => {
+    const upstream = fakeUpstream()
+    const { socket, session } = attach(upstream)
+    register(socket)
+    socket.written.length = 0
+
+    session.networkLost('Connection reset')
+
+    expect(socket.lines('NOTICE')[0]).toContain('Connection reset')
+    expect(socket.lines('ERROR')).toEqual([])
+    expect(socket.destroyed).toBe(false)
+  })
+
+  it('leaves a session bound elsewhere alone', () => {
+    const upstream = fakeUpstream()
+    const { socket, session } = attach(upstream)
+    register(socket)
+    socket.written.length = 0
+
+    session.networkBack({ id: 'other', name: 'somewhere else', client: upstream.client })
+
+    expect(socket.written).toEqual([])
+  })
+})

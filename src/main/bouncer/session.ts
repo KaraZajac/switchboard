@@ -572,9 +572,53 @@ export class BouncerSession {
     this.wantedNick = nick
 
     this.welcome(network.name, nick, upstream)
-    this.replayChannels(upstream)
+    this.replayChannels(upstream, { backlog: true })
 
     if (upstream) this.detachRelay = this.relayFrom(upstream)
+  }
+
+  /**
+   * The network went away.
+   *
+   * Said rather than left silent, because from the client's side nothing
+   * happens at all: its own socket is fine, it is simply talking to a channel
+   * nobody is listening on. `ERROR` is deliberately not relayed for the same
+   * reason it is not relayed anywhere else — it would end this connection too.
+   */
+  networkLost(reason: string): void {
+    if (!this.registered || !this.bound) return
+    this.detachRelay?.()
+    this.detachRelay = null
+    this.fromServer('NOTICE', this.wantedNick, `${this.bound.name} disconnected: ${reason}`)
+  }
+
+  /**
+   * The network came back — possibly on a different connection object.
+   *
+   * Reconnecting through the manager builds a new `IRCClient`, so a session
+   * holding the old one kept a subscription to an emitter nothing would ever
+   * emit on again. The client stayed attached, saw no error, and simply
+   * stopped receiving anything.
+   *
+   * No second welcome: the client registered once, with us, and a fresh 001
+   * every time a network hiccups resets its idea of the whole session. The
+   * channels are re-sent because its windows are stale — the nick may even
+   * have changed — but not the backlog, which it has been watching arrive.
+   */
+  networkBack(network: { id: string; name: string; client: IRCClient | undefined }): void {
+    if (!this.registered || this.bound?.id !== network.id) return
+
+    this.detachRelay?.()
+    this.bound = network
+
+    const upstream = network.client
+    if (upstream) {
+      this.wantedNick = upstream.state.nick || this.wantedNick
+      this.detachRelay = this.relayFrom(upstream)
+    }
+
+    this.fromServer('NOTICE', this.wantedNick, `${network.name} is back.`)
+    this.replayChannels(upstream, { backlog: false })
   }
 
   private welcomeToBouncer(): void {
@@ -642,7 +686,10 @@ export class BouncerSession {
    * the user's own nick, because that is the line every client watches for to
    * open a window.
    */
-  private replayChannels(upstream: IRCClient | undefined): void {
+  private replayChannels(
+    upstream: IRCClient | undefined,
+    options: { backlog: boolean } = { backlog: true }
+  ): void {
     if (!upstream) return
 
     const nick = upstream.state.nick
@@ -672,7 +719,7 @@ export class BouncerSession {
       }
       this.fromServer('366', nick, channel.name, 'End of /NAMES list.')
 
-      this.replayBacklog(channel.name)
+      if (options.backlog) this.replayBacklog(channel.name)
     }
   }
 

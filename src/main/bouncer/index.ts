@@ -95,6 +95,37 @@ function storedMessages(
   }
 }
 
+/**
+ * Keep attached clients pointed at the live connection.
+ *
+ * Reconnecting through the manager builds a new `IRCClient`, so a session that
+ * bound to the old one kept a subscription to an emitter nothing would ever
+ * emit on again — attached, no error, receiving nothing. Watching the manager
+ * is the only way to notice: the session cannot see it from where it sits.
+ */
+function followReconnects(): () => void {
+  return ircManager.subscribe((channel, data) => {
+    const event = data as { serverId?: string; reason?: string }
+    const serverId = event.serverId
+    if (!serverId) return
+
+    if (channel === 'irc:connected') {
+      const live = networks().find((network) => network.id === serverId)
+      if (!live) return
+      for (const session of sessions) session.networkBack(live)
+      return
+    }
+
+    if (channel === 'irc:disconnected') {
+      for (const session of sessions) {
+        if (session.boundTo === serverId) session.networkLost(event.reason ?? 'connection lost')
+      }
+    }
+  })
+}
+
+let stopFollowing: (() => void) | null = null
+
 export async function startBouncer(options: BouncerOptions): Promise<BouncerStatus> {
   if (server) return bouncerStatus()
 
@@ -206,6 +237,7 @@ export async function startBouncer(options: BouncerOptions): Promise<BouncerStat
     })
 
     if (listening) {
+      stopFollowing ??= followReconnects()
       console.info(
         `IRC port open on ${address}:${options.port}${options.tls ? ' (TLS)' : ''}` +
           `${options.password ? '' : ', no password'}`
@@ -220,6 +252,8 @@ export async function startBouncer(options: BouncerOptions): Promise<BouncerStat
 }
 
 export function stopBouncer(): BouncerStatus {
+  stopFollowing?.()
+  stopFollowing = null
   for (const session of [...sessions]) session.close()
   sessions.clear()
   server?.close()
