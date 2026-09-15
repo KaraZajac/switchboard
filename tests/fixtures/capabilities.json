@@ -41,6 +41,8 @@
     "znc.in/self-message",
     "draft/extended-isupport",
     "draft/channel-context",
+    "soju.im/bouncer-networks",
+    "soju.im/bouncer-networks-notify",
     "draft/react",
     "draft/unreact",
     "typing",

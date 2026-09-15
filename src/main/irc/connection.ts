@@ -9,6 +9,7 @@ import type { IRCMessage } from '@shared/types/irc'
 import type { ServerConfig } from '@shared/types/server'
 import { parseMessage } from './parser'
 import { reconnectDelay, THROTTLED_FLOOR_MS } from '@shared/reconnect'
+import { bindBeforeRegistration } from '@shared/bouncer'
 import { addressForAttempt } from '@shared/addresses'
 import { formatFingerprint, sameFingerprint, type CertificateProblem } from '@shared/certificate'
 import { redactLine } from '@shared/redact'
@@ -188,6 +189,23 @@ export class IRCConnection extends EventEmitter {
   /** Lines waiting on the token bucket, oldest first */
   private readonly sendQueue: string[] = []
   private tokens = SEND_BURST
+
+  /**
+   * Whether this registration has already sent its `BOUNCER BIND`.
+   *
+   * Reset on every connect, because every registration binds again — a
+   * reconnection to a bouncer lands nowhere without it.
+   */
+  private bound = false
+
+  /**
+   * What was negotiated, asked of the client that owns the state.
+   *
+   * The connection has the config and the socket; which capabilities came back
+   * is the client's. Injected rather than imported, because the client already
+   * owns this connection and reaching back the other way would close the loop.
+   */
+  negotiated: () => Iterable<string> = () => []
   private lastRefill = Date.now()
   private drainTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -289,6 +307,7 @@ export class IRCConnection extends EventEmitter {
     this.certificateRefused = false
     this.buffer = Buffer.alloc(0)
     this.discarding = false
+    this.bound = false
 
     // WebSocket transport
     if (this.config.websocketUrl) {
@@ -623,6 +642,26 @@ export class IRCConnection extends EventEmitter {
     const sanitized = stripNewlines(line)
 
     const command = commandOf(sanitized)
+
+    /*
+     * `BOUNCER BIND` goes out immediately before `CAP END`, whoever sends it.
+     *
+     * Bind is a registration-time command: it has to arrive while negotiation
+     * is still open, because the welcome that follows describes the network it
+     * bound to, and a client reads that once. soju refuses it afterwards and
+     * so does Switchboard's own bouncer.
+     *
+     * Here rather than at the nine places that end negotiation — three in the
+     * capability handler and six in the SASL one, depending on how the
+     * exchange went. A tenth added later would silently skip the bind and the
+     * connection would land on the wrong network, which is not a failure
+     * anybody would trace back to a missing line.
+     */
+    if (command === 'CAP' && /^CAP\s+END$/i.test(sanitized) && !this.bound) {
+      this.bound = true
+      const bind = bindBeforeRegistration(this.config.bouncerNetId, this.negotiated())
+      if (bind) this.writeLine(bind)
+    }
 
     // Keepalive always goes now. Registration goes now too, but only while
     // nothing is waiting — which is every time it actually happens.

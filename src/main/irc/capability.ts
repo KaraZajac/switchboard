@@ -125,6 +125,21 @@ registerHandler('CAP', (client, msg) => {
       if (client.state.pendingCapRequests > 0) client.state.pendingCapRequests--
       if (client.state.pendingCapRequests > 0) break
 
+      /*
+       * An ACK after registration ends nothing, because nothing is open.
+       *
+       * `cap-notify` means a server may offer a capability at any time, and
+       * soju offers two the moment registration finishes. Asking for them is
+       * right; running the end-of-negotiation path on the answer is not, and
+       * it sent a second and third `CAP END` down a connection that had been
+       * registered for a while. Harmless on soju, and not something to rely on
+       * elsewhere.
+       */
+      if (!client.state.capNegotiating) {
+        client.events.emit('capNegotiated', Array.from(client.state.capabilities))
+        break
+      }
+
       // draft/pre-away: set away before registration completes (bouncer support)
       if (client.state.capabilities.has('draft/pre-away') && client.config.preAwayMessage) {
         client.connection.send('AWAY', client.config.preAwayMessage)

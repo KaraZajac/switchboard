@@ -158,3 +158,36 @@ export function isBouncer(
   }
   return false
 }
+
+/** The capability a client negotiates to speak this extension at all */
+export const BOUNCER_NETWORKS_CAP = 'soju.im/bouncer-networks'
+
+/** And the one that asks to be told when the list changes */
+export const BOUNCER_NETWORKS_NOTIFY_CAP = 'soju.im/bouncer-networks-notify'
+
+/**
+ * What to send before `CAP END` to land on one of a bouncer's networks.
+ *
+ * `BOUNCER BIND` is a registration-time command: it has to arrive while
+ * negotiation is still open, because the welcome that follows describes the
+ * network it bound to — its name, its nick, its limits — and a client reads
+ * those once. soju refuses it afterwards with `REGISTRATION_IS_COMPLETED`, and
+ * so does Switchboard's own bouncer.
+ *
+ * Null when there is nothing to bind or nobody to bind with. A network id
+ * configured against a server that does not speak the extension is not an
+ * error worth failing the connection over — it is an ordinary server, and the
+ * connection works, it just lands wherever that server puts it.
+ */
+export function bindBeforeRegistration(
+  netId: string | null | undefined,
+  negotiated: Iterable<string>
+): string | null {
+  const id = netId?.trim()
+  if (!id) return null
+
+  for (const cap of negotiated) {
+    if (cap === BOUNCER_NETWORKS_CAP) return `BOUNCER BIND ${id}`
+  }
+  return null
+}

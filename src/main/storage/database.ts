@@ -394,6 +394,19 @@ function runMigrations(): void {
     db.run('ALTER TABLE servers ADD COLUMN alt_addresses TEXT DEFAULT NULL')
     db.run("INSERT INTO migrations (name) VALUES ('017_alt_addresses')")
   }
+
+  /*
+   * Which of a bouncer's networks this row is.
+   *
+   * A bouncer holds several networks behind one address, and `BOUNCER BIND`
+   * during registration is how a client says which one it wants. Until now the
+   * only way to say it was to fold the name into the username, which soju
+   * accepts and other bouncers do not.
+   */
+  if (!applied.has('018_bouncer_netid')) {
+    db.run('ALTER TABLE servers ADD COLUMN bouncer_netid TEXT DEFAULT NULL')
+    db.run("INSERT INTO migrations (name) VALUES ('018_bouncer_netid')")
+  }
 }
 
 /** Whether the search index exists — it does not on a build without FTS5 */

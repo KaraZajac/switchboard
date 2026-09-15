@@ -158,6 +158,10 @@ export class IRCClient {
     this.state.username = config.username || config.nick
     this.state.realname = config.realname || config.nick
 
+    // What came back from CAP negotiation, for the connection to consult when
+    // it is about to end it — see `BOUNCER BIND` in `sendRaw`
+    this.connection.negotiated = () => this.state.capabilities
+
     this.setupConnectionListeners()
   }
 

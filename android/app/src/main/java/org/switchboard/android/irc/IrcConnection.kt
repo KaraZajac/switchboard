@@ -997,6 +997,12 @@ class IrcConnection(
             "znc.in/self-message",
             "draft/extended-isupport",
             "draft/channel-context",
+            // A bouncer holding several networks behind one address. Asked for
+            // always: an ordinary server does not offer it, and a bouncer that
+            // does is one we can name a network to rather than folding it into
+            // the username.
+            "soju.im/bouncer-networks",
+            "soju.im/bouncer-networks-notify",
             "draft/react",
             "draft/unreact",
             "typing",

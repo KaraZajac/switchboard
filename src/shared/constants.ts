@@ -85,6 +85,11 @@ export const REQUESTED_CAPS = [
   'draft/extended-isupport',
   // Server-side names for features that are client tags in the spec
   'draft/channel-context',
+  // A bouncer holding several networks behind one address. Asked for always:
+  // an ordinary server does not offer it, and a bouncer that does is one we
+  // can name a network to rather than folding it into the username.
+  'soju.im/bouncer-networks',
+  'soju.im/bouncer-networks-notify',
   'draft/react',
   'draft/unreact',
   'typing',

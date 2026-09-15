@@ -3,12 +3,7 @@ import type { ServerConfig } from '@shared/types/server'
 import type { SASLMechanism } from '@shared/types/irc'
 import type { UserMetadata } from '@shared/types/metadata'
 import { v4 as uuid } from 'uuid'
-import {
-  encryptSecret,
-  readSecret,
-  isPlaintextSecret,
-  secretsProtected
-} from '../secrets'
+import { encryptSecret, readSecret, isPlaintextSecret, secretsProtected } from '../secrets'
 
 /**
  * Server CRUD operations.
@@ -83,6 +78,9 @@ export function addServer(config: Omit<ServerConfig, 'id' | 'sortOrder'>): strin
       id
     ])
   }
+  if (config.bouncerNetId) {
+    db.run('UPDATE servers SET bouncer_netid = ? WHERE id = ?', [config.bouncerNetId, id])
+  }
   return id
 }
 
@@ -150,6 +148,10 @@ export function updateServer(id: string, updates: Partial<ServerConfig>): void {
   if (updates.altNicks !== undefined) {
     fields.push('alt_nicks = ?')
     values.push(JSON.stringify(updates.altNicks))
+  }
+  if (updates.bouncerNetId !== undefined) {
+    fields.push('bouncer_netid = ?')
+    values.push(updates.bouncerNetId)
   }
   if (updates.autoConnect !== undefined) {
     fields.push('auto_connect = ?')
@@ -230,8 +232,8 @@ export function upsertServer(config: ServerConfig): void {
     `INSERT INTO servers (id, name, host, port, tls, password, nick, username, realname,
      sasl_mechanism, sasl_username, sasl_password, auto_connect, auto_join, sort_order,
      websocket_url, identify_command, avatar_url, pre_away_message, profile_metadata,
-     client_cert, trusted_cert, alt_nicks, alt_addresses)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     client_cert, trusted_cert, alt_nicks, alt_addresses, bouncer_netid)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       config.id,
       config.name,
@@ -258,7 +260,8 @@ export function upsertServer(config: ServerConfig): void {
       config.altNicks && config.altNicks.length > 0 ? JSON.stringify(config.altNicks) : null,
       config.altAddresses && config.altAddresses.length > 0
         ? JSON.stringify(config.altAddresses)
-        : null
+        : null,
+      config.bouncerNetId ?? null
     ]
   )
 }
@@ -409,6 +412,7 @@ function objectToConfig(row: Record<string, unknown>): ServerConfig {
     trustedCertificate: (row['trusted_cert'] as string) || null,
     altNicks: parseList(row['alt_nicks'] as string | null),
     altAddresses: parseList(row['alt_addresses'] as string | null),
+    bouncerNetId: (row['bouncer_netid'] as string) || null,
     ...secretsOf({
       password: row['password'],
       saslPassword: row['sasl_password'],

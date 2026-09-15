@@ -74,6 +74,15 @@ export interface ServerConfig {
    * `host`, `host:6667` or `host:+6697` — see `@shared/addresses`.
    */
   altAddresses?: string[]
+  /**
+   * Which of a bouncer's networks this is, for `BOUNCER BIND`.
+   *
+   * A bouncer holds several networks behind one address, and this is how a
+   * client says which one it wants — sent during registration, because the
+   * welcome that follows describes the network it bound to. Absent for an
+   * ordinary server, which is nearly all of them. See `@shared/bouncer`.
+   */
+  bouncerNetId?: string | null
 }
 
 /** Runtime server state (not persisted) */
