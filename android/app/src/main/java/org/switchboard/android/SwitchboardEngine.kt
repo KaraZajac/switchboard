@@ -2030,6 +2030,47 @@ class SwitchboardEngine(
             if (store.servers.containsKey(config.id)) continue
             seedServer(config)
         }
+
+        // And drop what the shared config no longer lists. This only ever
+        // added, so every network the phone had ever seen stayed on the rail
+        // for good — the same server under two ids showed up twice, and a
+        // network removed on the desktop never went away here.
+        val configured = vault.servers().map { it.id }.toSet()
+        if (configured.isEmpty()) return
+
+        for (id in store.servers.keys.toList()) {
+            if (id in configured || connections.containsKey(id)) continue
+            Log.i(TAG, "dropping $id; the shared config no longer lists it")
+            store.forgetServer(id)
+            runCatching { history.forgetServer(id) }
+        }
+
+        // And anything left in the database for a network that is not listed
+        // at all. These are what a spell of disagreement leaves behind: rows
+        // caught up from the desktop under an id it has since stopped using,
+        // belonging to no network here and reachable from nothing.
+        runCatching {
+            for (id in history.knownServers()) {
+                if (id in configured || connections.containsKey(id)) continue
+                Log.i(TAG, "dropping stored messages for $id; no such network")
+                history.forgetServer(id)
+            }
+        }
+    }
+
+    /**
+     * Move what is stored for a network onto the id the config knows it by.
+     *
+     * Before the prune, or the rows would be dropped as belonging to a network
+     * that is no longer listed — which is exactly what they are, under an id
+     * nobody uses any more.
+     */
+    private fun applyReidentified(moves: Map<String, String>) {
+        for ((from, to) in moves) {
+            Log.i(TAG, "the shared config knows $from as $to; moving what is stored")
+            runCatching { history.reidentify(from, to) }
+            store.servers.remove(from)
+        }
     }
 
     private fun seedServer(config: ServerConfig) {
@@ -2120,6 +2161,7 @@ class SwitchboardEngine(
             "vault-payload" -> {
                 val envelope = frame["envelope"] ?: return
                 val result = runCatching { vault.accept(VaultCrypto.decode(envelope)) }.getOrNull()
+                result?.reidentified?.takeIf { it.isNotEmpty() }?.let { applyReidentified(it) }
                     ?: return
                 vaultVersion = vault.version
                 store.status = result.reason

@@ -7,6 +7,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.JsonObject
+import org.switchboard.android.irc.NetworkId
 import org.switchboard.android.irc.ServerConfig
 import java.io.File
 import java.time.Instant
@@ -276,7 +277,17 @@ class VaultStore(context: Context) {
     }
 
     /** What the desktop's import did, and why it did it, for the UI to show */
-    data class Import(val accepted: Boolean, val reason: String)
+    data class Import(
+        val accepted: Boolean,
+        val reason: String,
+        /**
+         * Networks this phone already had, under the id the adopted config
+         * knows them by. Both devices generate their own ids, so the same
+         * server set up twice is two entries pointing at one place — and what
+         * is stored here is keyed by the id that is about to be replaced.
+         */
+        val reidentified: Map<String, String> = emptyMap()
+    )
 
     /**
      * Take a vault offered by the desktop.
@@ -314,8 +325,9 @@ class VaultStore(context: Context) {
                 return Import(true, "Adopted vault v${incoming.version}; unlock to apply it")
             }
 
+            val moves = NetworkId.reidentified(servers(), opened.servers)
             adopt(incoming, opened)
-            return Import(true, "Adopted vault v${incoming.version}")
+            return Import(true, "Adopted vault v${incoming.version}", moves)
         }
 
         // Locked: we cannot check it opens, but storing it is still right — the

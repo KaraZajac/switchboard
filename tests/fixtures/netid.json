@@ -1,0 +1,215 @@
+{
+  "note": "Which network a server entry is, independent of the id it was given. Read by tests/shared/netid.test.ts and SharedCorpusTest.",
+  "same": [
+    {
+      "name": "the same host, port and nick is the same network",
+      "a": {
+        "host": "irc.netslum.io",
+        "port": 6697,
+        "nick": "sbtest"
+      },
+      "b": {
+        "host": "irc.netslum.io",
+        "port": 6697,
+        "nick": "sbtest"
+      },
+      "same": true
+    },
+    {
+      "name": "the host is not case sensitive",
+      "a": {
+        "host": "IRC.Netslum.IO",
+        "port": 6697,
+        "nick": "sbtest"
+      },
+      "b": {
+        "host": "irc.netslum.io",
+        "port": 6697,
+        "nick": "sbtest"
+      },
+      "same": true
+    },
+    {
+      "name": "nor is the nick, by the IRC casemap",
+      "a": {
+        "host": "irc.netslum.io",
+        "port": 6697,
+        "nick": "Kara[]"
+      },
+      "b": {
+        "host": "irc.netslum.io",
+        "port": 6697,
+        "nick": "kara{}"
+      },
+      "same": true
+    },
+    {
+      "name": "surrounding space is not part of either",
+      "a": {
+        "host": " irc.netslum.io ",
+        "port": 6697,
+        "nick": " sbtest "
+      },
+      "b": {
+        "host": "irc.netslum.io",
+        "port": 6697,
+        "nick": "sbtest"
+      },
+      "same": true
+    },
+    {
+      "name": "two accounts on one server are two networks",
+      "a": {
+        "host": "irc.netslum.io",
+        "port": 6697,
+        "nick": "sbtest"
+      },
+      "b": {
+        "host": "irc.netslum.io",
+        "port": 6697,
+        "nick": "sbtest2"
+      },
+      "same": false
+    },
+    {
+      "name": "a different port is a different network",
+      "a": {
+        "host": "irc.netslum.io",
+        "port": 6697,
+        "nick": "sbtest"
+      },
+      "b": {
+        "host": "irc.netslum.io",
+        "port": 6667,
+        "nick": "sbtest"
+      },
+      "same": false
+    },
+    {
+      "name": "a different host is a different network",
+      "a": {
+        "host": "irc.netslum.io",
+        "port": 6697,
+        "nick": "sbtest"
+      },
+      "b": {
+        "host": "irc.d0ll.link",
+        "port": 6697,
+        "nick": "sbtest"
+      },
+      "same": false
+    }
+  ],
+  "reidentified": [
+    {
+      "name": "the same network under two ids is a move",
+      "mine": [
+        {
+          "id": "old",
+          "host": "irc.netslum.io",
+          "port": 6697,
+          "nick": "sbtest"
+        }
+      ],
+      "theirs": [
+        {
+          "id": "new",
+          "host": "irc.netslum.io",
+          "port": 6697,
+          "nick": "sbtest"
+        }
+      ],
+      "moves": {
+        "old": "new"
+      }
+    },
+    {
+      "name": "an id both sides already agree on is not a move",
+      "mine": [
+        {
+          "id": "same",
+          "host": "irc.netslum.io",
+          "port": 6697,
+          "nick": "sbtest"
+        }
+      ],
+      "theirs": [
+        {
+          "id": "same",
+          "host": "irc.netslum.io",
+          "port": 6697,
+          "nick": "sbtest"
+        }
+      ],
+      "moves": {}
+    },
+    {
+      "name": "a network only this device has stays where it is",
+      "mine": [
+        {
+          "id": "mine",
+          "host": "irc.d0ll.link",
+          "port": 6697,
+          "nick": "sbtest"
+        }
+      ],
+      "theirs": [
+        {
+          "id": "new",
+          "host": "irc.netslum.io",
+          "port": 6697,
+          "nick": "sbtest"
+        }
+      ],
+      "moves": {}
+    },
+    {
+      "name": "two accounts on one server move to their own ids",
+      "mine": [
+        {
+          "id": "a-old",
+          "host": "irc.netslum.io",
+          "port": 6697,
+          "nick": "sbtest"
+        },
+        {
+          "id": "b-old",
+          "host": "irc.netslum.io",
+          "port": 6697,
+          "nick": "sbtest2"
+        }
+      ],
+      "theirs": [
+        {
+          "id": "a-new",
+          "host": "irc.netslum.io",
+          "port": 6697,
+          "nick": "sbtest"
+        },
+        {
+          "id": "b-new",
+          "host": "irc.netslum.io",
+          "port": 6697,
+          "nick": "sbtest2"
+        }
+      ],
+      "moves": {
+        "a-old": "a-new",
+        "b-old": "b-new"
+      }
+    },
+    {
+      "name": "nothing to adopt is nothing to move",
+      "mine": [
+        {
+          "id": "old",
+          "host": "irc.netslum.io",
+          "port": 6697,
+          "nick": "sbtest"
+        }
+      ],
+      "theirs": [],
+      "moves": {}
+    }
+  ]
+}

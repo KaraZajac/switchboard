@@ -258,6 +258,49 @@ class MessageStoreTest {
         assertNull(store.readMarker("srv", "#lobby"))
     }
 
+    // ── the same network under another id ───────────────────────────
+
+    @Test
+    fun `moving a network takes its messages with it`() {
+        store.remember("old", "#lobby", message("m1", "still here"), needsHandover = false)
+
+        store.reidentify("old", "new")
+
+        assertTrue(store.recent("old", "#lobby").isEmpty())
+        assertEquals(listOf("still here"), store.recent("new", "#lobby").map { it.content })
+    }
+
+    @Test
+    fun `and what is still owed to the desktop`() {
+        // The case that lost messages: handed over under an id the desktop had
+        // never heard of, and dropped
+        store.remember("old", "robin", message("m1"), needsHandover = true)
+
+        store.reidentify("old", "new")
+
+        assertEquals("new", store.pendingHandover()!!.serverId)
+        assertEquals(1, store.pendingCount())
+    }
+
+    @Test
+    fun `and its read markers`() {
+        store.rememberReadMarker("old", "#lobby", "2026-09-14T01:00:00.000Z")
+
+        store.reidentify("old", "new")
+
+        assertNull(store.readMarker("old", "#lobby"))
+        assertEquals("2026-09-14T01:00:00.000Z", store.readMarker("new", "#lobby"))
+    }
+
+    @Test
+    fun `moving a network onto itself changes nothing`() {
+        store.remember("srv", "#lobby", message("m1"), needsHandover = false)
+
+        store.reidentify("srv", "srv")
+
+        assertEquals(1, store.recent("srv", "#lobby").size)
+    }
+
     // ── forgetting ──────────────────────────────────────────────────
 
     @Test

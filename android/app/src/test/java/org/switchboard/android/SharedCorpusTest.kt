@@ -56,6 +56,7 @@ import org.switchboard.android.irc.Emoji
 import org.switchboard.android.irc.Nicks
 import org.switchboard.android.irc.IrcUrl
 import org.switchboard.android.irc.TrustedCertificate
+import org.switchboard.android.irc.NetworkId
 import org.switchboard.android.irc.ServerConfig
 import org.switchboard.android.irc.Reconnect
 import org.switchboard.android.irc.Powers
@@ -1830,6 +1831,59 @@ class SharedCorpusTest {
                 name,
                 expected,
                 LineLength.split(c["text"]!!.jsonPrimitive.content, c["budget"]!!.jsonPrimitive.int)
+            )
+        }
+    }
+
+    // ── which network an entry is ────────────────────────────────────
+
+    @Test
+    fun `knows the same network under two ids`() {
+        for (case in load("netid.json")["same"]!!.jsonArray) {
+            val c = case.jsonObject
+            val a = c["a"]!!.jsonObject
+            val b = c["b"]!!.jsonObject
+            assertEquals(
+                c["name"]!!.jsonPrimitive.content,
+                c["same"]!!.jsonPrimitive.content.toBoolean(),
+                NetworkId.key(
+                    a["host"]!!.jsonPrimitive.content,
+                    a["port"]!!.jsonPrimitive.int,
+                    a["nick"]!!.jsonPrimitive.content
+                ) == NetworkId.key(
+                    b["host"]!!.jsonPrimitive.content,
+                    b["port"]!!.jsonPrimitive.int,
+                    b["nick"]!!.jsonPrimitive.content
+                )
+            )
+        }
+    }
+
+    @Test
+    fun `matches a config about to be adopted the way the desktop does`() {
+        fun configs(array: kotlinx.serialization.json.JsonArray) = array.map {
+            val o = it.jsonObject
+            ServerConfig(
+                id = o["id"]!!.jsonPrimitive.content,
+                name = o["id"]!!.jsonPrimitive.content,
+                host = o["host"]!!.jsonPrimitive.content,
+                port = o["port"]!!.jsonPrimitive.int,
+                nick = o["nick"]!!.jsonPrimitive.content
+            )
+        }
+
+        for (case in load("netid.json")["reidentified"]!!.jsonArray) {
+            val c = case.jsonObject
+            val expected = c["moves"]!!.jsonObject
+                .mapValues { (_, v) -> v.jsonPrimitive.content }
+
+            assertEquals(
+                c["name"]!!.jsonPrimitive.content,
+                expected,
+                NetworkId.reidentified(
+                    configs(c["mine"]!!.jsonArray),
+                    configs(c["theirs"]!!.jsonArray)
+                )
             )
         }
     }

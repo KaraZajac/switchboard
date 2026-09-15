@@ -292,6 +292,31 @@ class MessageStore(context: Context) {
         )
     }
 
+    /** Every network this store holds anything for, by id */
+    fun knownServers(): Set<String> {
+        val found = mutableSetOf<String>()
+        db.rawQuery("SELECT DISTINCT server_id FROM messages", emptyArray()).use { cursor ->
+            while (cursor.moveToNext()) found.add(cursor.getString(0))
+        }
+        return found
+    }
+
+    /**
+     * The same network, under the id the shared config knows it by.
+     *
+     * Everything here is keyed by a server id that each device generated for
+     * itself, so adopting a config used to strand a network's whole record
+     * under an id nothing referred to any more — including messages still
+     * owed to the desktop, which were then handed over under an id it had
+     * never heard of and quietly dropped.
+     */
+    fun reidentify(from: String, to: String) {
+        if (from == to) return
+        val values = ContentValues().apply { put("server_id", to) }
+        db.update("messages", values, "server_id = ?", arrayOf(from))
+        db.update("read_markers", values, "server_id = ?", arrayOf(from))
+    }
+
     /** A network this phone no longer has is a conversation it no longer keeps */
     fun forgetServer(serverId: String) {
         db.delete("messages", "server_id = ?", arrayOf(serverId))

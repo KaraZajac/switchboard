@@ -9,8 +9,14 @@ import {
 import { getSetting, setSetting } from '../storage/models/settings'
 import { SHARED_SETTINGS } from '@shared/settings'
 import { shouldAdoptVault } from '@shared/vaultorder'
+import { reidentified } from '@shared/netid'
 import { serversChanged, settingChanged, monitorChanged } from '../ipc/notify'
-import { getAllServers, removeServer, upsertServer } from '../storage/models/server'
+import {
+  getAllServers,
+  reidentifyServer,
+  removeServer,
+  upsertServer
+} from '../storage/models/server'
 import { addToMonitorList, clearMonitorList, getMonitorList } from '../storage/models/monitor'
 import type { ServerConfig } from '@shared/types/server'
 import {
@@ -308,11 +314,28 @@ function watchedNicks(): Record<string, string[]> {
 }
 
 function applyPayload(payload: VaultPayload): void {
-  const local = new Map(getAllServers().map((server) => [server.id, server]))
+  const mine = getAllServers()
+  const local = new Map(mine.map((server) => [server.id, server]))
+
+  /*
+   * Match on what a network *is* before trusting the id it arrived under.
+   *
+   * Both devices generate their own ids, so the same server added twice is
+   * two entries agreeing on nothing but where they point. Without this the
+   * whole incoming list looked new, every local row was removed, and removal
+   * cascades — the history of a network you already had went with it.
+   */
+  const moves = reidentified(mine, payload.servers)
 
   for (const server of payload.servers) {
     upsertServer(server)
     local.delete(server.id)
+  }
+
+  // After the new rows exist, so the children have a parent to point at
+  for (const [from, to] of Object.entries(moves)) {
+    reidentifyServer(from, to)
+    local.delete(from)
   }
 
   for (const id of local.keys()) {
