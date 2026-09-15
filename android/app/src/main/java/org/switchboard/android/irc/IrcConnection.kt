@@ -1,5 +1,6 @@
 package org.switchboard.android.irc
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -184,6 +185,10 @@ class IrcConnection(
 
     private suspend fun runWithRetries() {
         while (!stopping) {
+            // Set when this turn round the loop ended because the coroutine was
+            // cancelled, so the tidying below still runs before it is rethrown
+            var cancellation: CancellationException? = null
+
             try {
                 connectOnce()
                 // Deliberately not resetting `attempt` here. A socket that
@@ -195,11 +200,37 @@ class IrcConnection(
                 pingJob = scope.launch(Dispatchers.IO) { keepalive() }
                 readLoop()
             } catch (e: Exception) {
-                android.util.Log.w("SwitchboardIrc", "${config.host}:${config.port} failed", e)
+                /*
+                 * Whether this is news depends on who ended it.
+                 *
+                 * `stop()` closes the socket and then cancels the read job, so
+                 * a deliberate stop — handing the connection back to the
+                 * desktop, leaving a network, the service going away — lands
+                 * here as whichever of the two won the race: `Socket closed`,
+                 * or `StandaloneCoroutine was cancelled`. Both were described
+                 * as though the network had done it and shown to the user in
+                 * red, so a clean hand-over looked like the server refusing
+                 * something. Kara saw the coroutine's own words on her phone
+                 * in a channel she was only reading.
+                 *
+                 * Deliberate is the question, not which exception arrived.
+                 */
+                cancellation = e as? CancellationException
+                val deliberate = stopping || cancellation != null
+                android.util.Log.w(
+                    "SwitchboardIrc",
+                    "${config.host}:${config.port} ${if (deliberate) "stopped" else "failed"}",
+                    e
+                )
+
                 val untrusted = generateSequence<Throwable>(e) { it.cause }
                     .filterIsInstance<UntrustedCertificate>()
                     .firstOrNull()
-                if (untrusted != null) {
+                if (deliberate) {
+                    // Nothing to tell anyone. The cleanup below still runs, and
+                    // a cancelled coroutine is rethrown after it so this job
+                    // ends rather than going round to dial again.
+                } else if (untrusted != null) {
                     // Dialling again cannot change the answer. Say what was
                     // refused, with the fingerprint, and wait to be told.
                     certificateRefused = true
@@ -227,6 +258,7 @@ class IrcConnection(
                 state.registered = false
                 emit("irc:disconnected", buildJsonObject { put("serverId", config.id) })
             }
+            cancellation?.let { throw it }
             if (stopping) return
 
             // Back off, but stay reachable: a phone that gives up is a phone

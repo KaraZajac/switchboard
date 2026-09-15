@@ -26,6 +26,7 @@ import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withContext
 import org.switchboard.android.irc.Filehost
 import org.switchboard.android.irc.MaskLists
@@ -1274,8 +1275,16 @@ suspend fun SwitchboardEngine.attach(serverId: String, uri: Uri, context: Contex
                     password = connection.config.saslPassword
                 )
             }
+        } catch (cancelled: CancellationException) {
+            // Leaving the screen or dismissing the banner cancels the upload.
+            // Nothing to tell anyone; see the connection's own note.
+            throw cancelled
         } catch (e: Exception) {
-            store.noteRefusal(e.message ?: "That file could not be sent.")
+            // In words. Every other refusal in here is a sentence somebody
+            // wrote, and a raw exception message is written for whoever is
+            // reading a stack trace.
+            android.util.Log.w("Switchboard", "upload to $endpoint failed", e)
+            store.noteRefusal("That file could not be sent.")
             null
         }
     }
