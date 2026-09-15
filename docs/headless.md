@@ -102,9 +102,16 @@ not answering. So after five minutes with nothing attached — no IRC client on
 the port, no paired device on the link — it goes away, and comes back the
 moment something attaches.
 
-An away you set yourself is never touched. Change the delay with the
-`bouncerAwayMinutes` setting, or set it to 0 to switch the behaviour off;
-`bouncerAwayMessage` says what it says.
+It says "Not reading right now — messages will be waiting", which is the useful
+thing for somebody to know before deciding whether to send one. An away you set
+yourself is never touched. Change the delay with the `bouncerAwayMinutes`
+setting, or set it to 0 to switch the behaviour off; `bouncerAwayMessage` says
+what it says instead.
+
+Going away waits for a timer, because it is a decision about minutes. Coming
+back does not: attaching clears it at once, since half a minute listed as away
+while sitting in the channel is exactly the window in which somebody gives up
+and messages you instead.
 
 ### Scrollback
 

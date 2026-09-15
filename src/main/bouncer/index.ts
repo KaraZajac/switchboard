@@ -6,6 +6,7 @@ import { ircManager } from '../irc/manager'
 import { getAllServers } from '../storage/models/server'
 import { getMessages, conversationsWithin } from '../storage/models/message'
 import { findNetwork } from '@shared/bouncerlogin'
+import { nudgeWhoIsReading } from './presence'
 import { createNetwork, changeNetwork, deleteNetwork } from './networks'
 import type { IRCClient } from '../irc/client'
 
@@ -187,9 +188,18 @@ export async function startBouncer(options: BouncerOptions): Promise<BouncerStat
           void upstream
         }
       },
-      (closed) => sessions.delete(closed)
+      (closed) => {
+        sessions.delete(closed)
+        // Going away can wait for the timer. It is a decision about minutes.
+        nudgeWhoIsReading()
+      }
     )
     sessions.add(session)
+
+    // Coming back cannot wait: the reason anybody attaches is to talk, and
+    // half a minute listed as away while sitting in the channel is the window
+    // in which somebody gives up and messages them instead.
+    nudgeWhoIsReading()
   }
 
   try {

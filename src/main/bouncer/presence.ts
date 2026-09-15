@@ -31,7 +31,21 @@ const AWAY_MESSAGE = 'bouncerAwayMessage'
 /** A default worth having, because the feature is useless switched off */
 const DEFAULT_AFTER_MINUTES = 5
 
+/**
+ * What an away from a bouncer says, when nobody has set one.
+ *
+ * Not the desktop's "Away from the keyboard", which here would be a small lie:
+ * the keyboard is not the point, and there may not be one. The honest version
+ * is also the more useful one — somebody reading it learns that a message will
+ * be waiting rather than lost, which is the thing they actually want to know
+ * before deciding whether to send it.
+ */
+const DEFAULT_MESSAGE = 'Not reading right now — messages will be waiting'
+
 let timer: ReturnType<typeof setInterval> | null = null
+
+/** What the timer looks at, kept so an attach can ask the same question now */
+let watching: { manager: IRCManager; watchers: Watchers } | null = null
 
 /** Networks we put into away ourselves, so we only take back what we set */
 const setByUs = new Set<string>()
@@ -48,6 +62,7 @@ export interface Watchers {
 
 export function watchWhoIsReading(manager: IRCManager, watchers: Watchers): void {
   stopWatchingWhoIsReading()
+  watching = { manager, watchers }
   timer = setInterval(() => tick(manager, watchers), TICK_MS)
   // Look once immediately: waiting half a minute to notice that a machine
   // which has just started has nobody on it is half a minute of claiming to be
@@ -55,9 +70,22 @@ export function watchWhoIsReading(manager: IRCManager, watchers: Watchers): void
   tick(manager, watchers)
 }
 
+/**
+ * Somebody just attached. Look now rather than at the next tick.
+ *
+ * Going away can wait for a timer — it is a decision about minutes. Coming
+ * back cannot: the reason anybody attaches is to talk, and up to half a minute
+ * of being listed as away while sitting in the channel is exactly the window
+ * in which somebody gives up and messages them instead.
+ */
+export function nudgeWhoIsReading(): void {
+  if (watching) tick(watching.manager, watching.watchers)
+}
+
 export function stopWatchingWhoIsReading(): void {
   if (timer) clearInterval(timer)
   timer = null
+  watching = null
   setByUs.clear()
   aloneSince = Date.now()
 }
@@ -88,7 +116,10 @@ function tick(manager: IRCManager, watchers: Watchers): void {
     })
 
     if (action === 'set') {
-      client.connection.send('AWAY', awayMessage(getSetting<string>(AWAY_MESSAGE)))
+      client.connection.send(
+        'AWAY',
+        awayMessage(getSetting<string>(AWAY_MESSAGE) ?? DEFAULT_MESSAGE)
+      )
       setByUs.add(serverId)
     } else if (action === 'clear') {
       client.connection.send('AWAY')

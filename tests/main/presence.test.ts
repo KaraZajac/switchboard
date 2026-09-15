@@ -14,7 +14,11 @@ vi.mock('../../src/main/storage/models/settings', () => ({
   getSetting: (key: string) => settings.values[key] ?? null
 }))
 
-import { watchWhoIsReading, stopWatchingWhoIsReading } from '../../src/main/bouncer/presence'
+import {
+  watchWhoIsReading,
+  stopWatchingWhoIsReading,
+  nudgeWhoIsReading
+} from '../../src/main/bouncer/presence'
 import type { IRCManager } from '../../src/main/irc/manager'
 
 function fakeManager(): { manager: IRCManager; sent: string[][]; away: { value: boolean } } {
@@ -128,5 +132,49 @@ describe('going away while nobody is attached', () => {
     vi.advanceTimersByTime(60 * 60 * 1000)
 
     expect(sent).toEqual([])
+  })
+})
+
+describe('coming back the moment somebody attaches', () => {
+  beforeEach(() => {
+    settings.values = {}
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    stopWatchingWhoIsReading()
+    vi.useRealTimers()
+  })
+
+  it('does not make them wait for the next tick', () => {
+    const { manager, sent, away } = fakeManager()
+    let attached = 0
+    watchWhoIsReading(manager, { attached: () => attached, linked: () => 0 })
+
+    vi.advanceTimersByTime(6 * 60 * 1000)
+    away.value = true
+    expect(sent).toHaveLength(1)
+
+    // Half a minute listed as away while sitting in the channel is the window
+    // in which somebody gives up and messages them instead
+    attached = 1
+    nudgeWhoIsReading()
+
+    expect(sent).toHaveLength(2)
+    expect(sent[1]).toEqual(['AWAY'])
+  })
+
+  it('says something a reader can act on', () => {
+    const { manager, sent } = fakeManager()
+    watchWhoIsReading(manager, { attached: () => 0, linked: () => 0 })
+    vi.advanceTimersByTime(6 * 60 * 1000)
+
+    // "Away from the keyboard" would be a small lie: there may not be one
+    expect(sent[0][1]).toContain('waiting')
+  })
+
+  it('is quiet when nothing is watching', () => {
+    // Called after a stop, or before a start
+    expect(() => nudgeWhoIsReading()).not.toThrow()
   })
 })
