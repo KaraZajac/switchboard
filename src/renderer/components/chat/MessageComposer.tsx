@@ -43,6 +43,8 @@ import {
   mentioned
 } from '@shared/completion'
 import { mark, colourise, IRC_PALETTE, type FormattingMark } from '@shared/formatting'
+import { useUIStore } from '../../stores/uiStore'
+import { wording } from '../../utils/speak'
 
 /** Composer grows with its content up to this height, then scrolls */
 const MAX_COMPOSER_HEIGHT = 320
@@ -196,7 +198,8 @@ export function MessageComposer({
         const bytes = new Uint8Array(await file.arrayBuffer())
         // The clipboard names a pasted image "image.png"; a bare blob has no name at all
         const name =
-          file.name || (file.type.startsWith('image/') ? `pasted.${file.type.split('/')[1]}` : 'upload')
+          file.name ||
+          (file.type.startsWith('image/') ? `pasted.${file.type.split('/')[1]}` : 'upload')
         const result = await window.switchboard.invoke(
           'file:upload-bytes',
           serverId,
@@ -210,7 +213,16 @@ export function MessageComposer({
           onSend(result.url)
         }
       } catch (err) {
-        console.error('Upload failed:', err)
+        /*
+         * Said, not logged.
+         *
+         * Every refusal the upload can produce is a sentence somebody can act
+         * on — the file is too large, the network only takes images, the
+         * filehost would not accept your account. All of them went to a
+         * console nobody has open, so a failed upload looked exactly like
+         * nothing happening.
+         */
+        useUIStore.getState().addToast({ title: 'That file was not sent', body: wording(err) })
       } finally {
         setUploading(false)
       }
@@ -585,11 +597,22 @@ export function MessageComposer({
       {/* Reply preview bar */}
       {replyTarget && (
         <div className="mb-1 flex items-center gap-2 rounded-t-lg bg-gray-700/50 px-4 py-2">
-          <CornerUpLeft size={ICON.sm} strokeWidth={2} className="shrink-0 text-gray-400" aria-hidden="true" />
+          <CornerUpLeft
+            size={ICON.sm}
+            strokeWidth={2}
+            className="shrink-0 text-gray-400"
+            aria-hidden="true"
+          />
           <span className="text-xs text-gray-400">Replying to</span>
           <span className="text-xs font-medium text-gray-200">{replyTarget.nick}</span>
           <span className="flex-1 truncate text-xs text-gray-500">{replyTarget.content}</span>
-          <IconButton size="sm" surface="raised" icon={X} label="Cancel reply" onClick={onCancelReply} />
+          <IconButton
+            size="sm"
+            surface="raised"
+            icon={X}
+            label="Cancel reply"
+            onClick={onCancelReply}
+          />
         </div>
       )}
 
@@ -605,7 +628,9 @@ export function MessageComposer({
                   acceptEmoji(entry)
                 }}
                 className={`flex w-full items-center gap-3 px-3 py-1.5 text-left text-sm ${
-                  i === emojiIndex ? 'bg-indigo-500/30 text-white' : 'text-gray-300 hover:bg-gray-700'
+                  i === emojiIndex
+                    ? 'bg-indigo-500/30 text-white'
+                    : 'text-gray-300 hover:bg-gray-700'
                 }`}
               >
                 <span className="text-lg">{entry.emoji}</span>
@@ -655,7 +680,9 @@ export function MessageComposer({
                     onSend(result.url)
                   }
                 } catch (err) {
-                  console.error('File upload failed:', err)
+                  useUIStore
+                    .getState()
+                    .addToast({ title: 'That file was not sent', body: wording(err) })
                 } finally {
                   setUploading(false)
                 }
