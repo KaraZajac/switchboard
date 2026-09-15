@@ -1,3 +1,5 @@
+import { Download, ExternalLink, Play, X } from 'lucide-react'
+import { ICON, IconButton } from '../common/IconButton'
 import { useState, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import {
@@ -290,9 +292,7 @@ function YouTubeEmbed({ videoId, url }: { videoId: string; url: string }) {
             className="absolute top-2 right-2 flex h-7 w-7 items-center justify-center rounded-full bg-black/70 text-white hover:bg-black/90 transition-colors z-10"
             title="Close inline player"
           >
-            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-              <path d="M18 6L6 18M6 6l12 12" />
-            </svg>
+            <X size={ICON.sm} strokeWidth={2} aria-hidden="true" />
           </button>
         </div>
       </div>
@@ -317,9 +317,7 @@ function YouTubeEmbed({ videoId, url }: { videoId: string; url: string }) {
           className="pointer-events-auto flex h-14 w-20 items-center justify-center rounded-xl bg-red-600 shadow-lg hover:bg-red-500 transition-colors"
           title="Play inline"
         >
-          <svg className="h-8 w-8 text-white ml-1" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M8 5v14l11-7z" />
-          </svg>
+          <Play size={28} strokeWidth={2} fill="currentColor" className="ml-1 text-white" aria-hidden="true" />
         </button>
       </div>
       {/* Open in browser — bottom right */}
@@ -330,9 +328,7 @@ function YouTubeEmbed({ videoId, url }: { videoId: string; url: string }) {
         className="absolute bottom-2 right-2 flex items-center gap-1.5 rounded bg-black/70 px-2 py-1 text-xs text-white opacity-0 group-hover:opacity-100 hover:bg-black/90 transition-all"
         title="Open on YouTube"
       >
-        <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-          <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3" />
-        </svg>
+        <ExternalLink size={ICON.sm} strokeWidth={2} aria-hidden="true" />
         YouTube
       </a>
     </div>
@@ -496,9 +492,7 @@ function ImageLightbox({ url, onClose }: { url: string; onClose: () => void }) {
           className="flex items-center gap-1.5 rounded bg-gray-800 px-3 py-1.5 text-sm text-gray-200 hover:bg-gray-700"
           title="Download"
         >
-          <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" />
-          </svg>
+          <Download size={ICON.sm} strokeWidth={2} aria-hidden="true" />
           Download
         </a>
         <a
@@ -508,19 +502,9 @@ function ImageLightbox({ url, onClose }: { url: string; onClose: () => void }) {
           className="flex items-center gap-1.5 rounded bg-gray-800 px-3 py-1.5 text-sm text-gray-200 hover:bg-gray-700"
           title="Open in browser"
         >
-          <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M19 19H5V5h7V3H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z" />
-          </svg>
+          <ExternalLink size={ICON.sm} strokeWidth={2} aria-hidden="true" />
         </a>
-        <button
-          onClick={onClose}
-          className="flex items-center justify-center rounded bg-gray-800 p-1.5 text-gray-200 hover:bg-gray-700"
-          title="Close"
-        >
-          <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
-          </svg>
-        </button>
+        <IconButton icon={X} label="Close" className="bg-gray-800 text-gray-200" onClick={onClose} />
       </div>
 
       {/* Image */}
@@ -573,9 +557,7 @@ function FileCard({ url }: { url: string }) {
             {fileSize !== null && typeInfo ? ` · ${typeInfo.label}` : ''}
           </div>
         </div>
-        <svg className="h-5 w-5 flex-shrink-0 text-gray-400" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" />
-        </svg>
+        <Download size={ICON.md} strokeWidth={2} className="shrink-0 text-gray-400" aria-hidden="true" />
       </a>
     </div>
   )

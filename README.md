@@ -6,7 +6,7 @@ A modern IRC client with a familiar, Discord-like interface. Built with Electron
 ![Platform](https://img.shields.io/badge/platform-linux%20%7C%20macos%20%7C%20windows-blue)
 ![License](https://img.shields.io/badge/license-BSD--3--Clause-blue)
 
-![Switchboard](images/switchboard.png)
+![Switchboard on a desktop and a phone, side by side](images/screenshots/hero.png)
 
 ## Download
 

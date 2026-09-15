@@ -1,4 +1,13 @@
-import { CornerUpLeft, Pencil, SmilePlus, Trash2 } from 'lucide-react'
+import {
+  CornerUpLeft,
+  Loader2,
+  MessageSquare,
+  Pencil,
+  SmilePlus,
+  Trash2,
+  UserMinus,
+  UserPlus
+} from 'lucide-react'
 import { ICON, IconButton } from '../common/IconButton'
 import { useState, useCallback, useRef, useEffect } from 'react'
 import type { ChatMessage } from '@shared/types/message'
@@ -738,15 +747,7 @@ function NickWithPopup({
             </div>
           ) : (
             <div className="flex items-center gap-2 text-sm text-gray-400">
-              <svg
-                className="h-4 w-4 animate-spin"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-              >
-                <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
-              </svg>
+              <Loader2 size={ICON.sm} strokeWidth={2} className="animate-spin" aria-hidden="true" />
               Loading...
             </div>
           )}
@@ -799,9 +800,7 @@ function PopupActions({
         onClick={handleMessage}
         className="flex flex-1 items-center justify-center gap-1.5 rounded bg-indigo-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-400"
       >
-        <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z" />
-        </svg>
+        <MessageSquare size={ICON.sm} strokeWidth={2} aria-hidden="true" />
         Message
       </button>
       <button
@@ -812,13 +811,11 @@ function PopupActions({
             : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
         }`}
       >
-        <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor">
-          {isFriend ? (
-            <path d="M15 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-9-2V7H4v3H1v2h3v3h2v-3h3v-2H6zm9 4c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
-          ) : (
-            <path d="M15 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-9-2V7H4v3H1v2h3v3h2v-3h3v-2H6zm9 4c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
-          )}
-        </svg>
+        {isFriend ? (
+          <UserMinus size={ICON.sm} strokeWidth={2} aria-hidden="true" />
+        ) : (
+          <UserPlus size={ICON.sm} strokeWidth={2} aria-hidden="true" />
+        )}
         {isFriend ? 'Unfriend' : 'Add Friend'}
       </button>
     </div>

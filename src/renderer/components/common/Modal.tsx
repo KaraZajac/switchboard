@@ -1,3 +1,5 @@
+import { X } from 'lucide-react'
+import { IconButton } from './IconButton'
 import { type ReactNode, useEffect, useRef } from 'react'
 
 interface ModalProps {
@@ -34,14 +36,7 @@ export function Modal({ title, onClose, children, width = 'max-w-lg' }: ModalPro
         {/* Header */}
         <div className="flex items-center justify-between border-b border-gray-700 px-6 py-4">
           <h2 className="text-lg font-semibold text-gray-100">{title}</h2>
-          <button
-            onClick={onClose}
-            className="rounded p-1 text-gray-400 hover:bg-gray-700 hover:text-gray-200"
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
-            </svg>
-          </button>
+          <IconButton icon={X} label="Close" onClick={onClose} />
         </div>
 
         {/* Body */}

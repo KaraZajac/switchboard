@@ -1,3 +1,5 @@
+import { Search } from 'lucide-react'
+import { ICON } from '../common/IconButton'
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { Modal } from '../common/Modal'
 import { useUIStore } from '../../stores/uiStore'
@@ -98,16 +100,12 @@ export function SearchModal() {
         {/* Search input */}
         <div className="flex gap-2">
           <div className="relative flex-1">
-            <svg
-              className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <circle cx="11" cy="11" r="8" />
-              <path d="M21 21l-4.35-4.35" />
-            </svg>
+            <Search
+              size={ICON.sm}
+              strokeWidth={2}
+              aria-hidden="true"
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+            />
             <input
               ref={inputRef}
               type="text"

@@ -1,3 +1,5 @@
+import { Plus } from 'lucide-react'
+import { ICON } from '../common/IconButton'
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useServerStore } from '../../stores/serverStore'
 import { useChannelStore } from '../../stores/channelStore'
@@ -227,9 +229,7 @@ export function ChannelBrowser({ onClose }: ChannelBrowserProps) {
                   : 'text-gray-300 hover:bg-gray-700/50'
               }`}
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" className="shrink-0 text-indigo-400">
-                <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
-              </svg>
+              <Plus size={ICON.sm} strokeWidth={2} className="shrink-0 text-indigo-400" aria-hidden="true" />
               <span>
                 Join or create <span className="font-semibold text-indigo-400">{queryAsChannel}</span>
               </span>

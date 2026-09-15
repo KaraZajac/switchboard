@@ -1,3 +1,5 @@
+import { ChevronDown } from 'lucide-react'
+import { ICON } from '../common/IconButton'
 import { useRef, useEffect, useLayoutEffect, useState, useCallback, useMemo } from 'react'
 import { useServerStore } from '../../stores/serverStore'
 import { useChannelStore } from '../../stores/channelStore'
@@ -421,9 +423,7 @@ export function ChatArea() {
           }}
           className="mx-4 mb-1 flex items-center justify-center gap-1.5 rounded-md bg-gray-700/90 py-1 text-xs font-medium text-gray-200 shadow-lg transition-colors hover:bg-gray-600"
         >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-            <path d="M12 16.5l-6-6 1.41-1.41L12 13.67l4.59-4.58L18 10.5z" />
-          </svg>
+          <ChevronDown size={ICON.sm} strokeWidth={2} aria-hidden="true" />
           Jump to present
         </button>
       )}

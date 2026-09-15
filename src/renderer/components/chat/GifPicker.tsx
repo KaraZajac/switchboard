@@ -1,3 +1,5 @@
+import { Loader2, Search, X } from 'lucide-react'
+import { ICON, IconButton } from '../common/IconButton'
 import { useState, useEffect, useRef, useCallback } from 'react'
 
 import {
@@ -134,10 +136,7 @@ export function GifPicker({ onSelect, onClose }: GifPickerProps) {
       {/* Search */}
       <div className="border-b border-gray-700 px-3 py-2">
         <div className="flex items-center gap-2 rounded bg-gray-900 px-3 py-1.5">
-          <svg className="h-4 w-4 shrink-0 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <circle cx="11" cy="11" r="8" />
-            <path d="M21 21l-4.35-4.35" />
-          </svg>
+          <Search size={ICON.sm} strokeWidth={2} className="shrink-0 text-gray-500" aria-hidden="true" />
           <input
             autoFocus
             value={query}
@@ -146,14 +145,7 @@ export function GifPicker({ onSelect, onClose }: GifPickerProps) {
             className="flex-1 bg-transparent text-sm text-gray-100 placeholder-gray-500 outline-none"
           />
           {query && (
-            <button
-              onClick={() => { setQuery(''); fetchTrending(activeTab) }}
-              className="text-gray-500 hover:text-gray-300"
-            >
-              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
-              </svg>
-            </button>
+            <IconButton size="sm" icon={X} label="Clear" onClick={() => { setQuery(''); fetchTrending(activeTab) }} />
           )}
         </div>
       </div>
@@ -162,9 +154,7 @@ export function GifPicker({ onSelect, onClose }: GifPickerProps) {
       <div className="max-h-80 overflow-y-auto p-2">
         {loading && results.length === 0 && (
           <div className="flex items-center justify-center py-12 text-sm text-gray-500">
-            <svg className="mr-2 h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
-            </svg>
+            <Loader2 size={ICON.sm} strokeWidth={2} className="mr-2 animate-spin" aria-hidden="true" />
             Loading...
           </div>
         )}
