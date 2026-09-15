@@ -187,6 +187,22 @@ const NOT_RELAYED = new Set([
 ])
 
 /**
+ * ISUPPORT tokens that do not survive the bouncer.
+ *
+ * Only the filehost, and for one reason: the spec says a client that
+ * authenticated by SASL MUST send those credentials to the upload URI. Through
+ * a bouncer the two identities are not the same one. An attached client
+ * authenticated to *this bouncer*, so what it would send to the network's
+ * filehost is the bouncer's password — to a host that has no business seeing
+ * it and will refuse it anyway.
+ *
+ * Relaying it would be handing one service's password to another every time
+ * somebody shared a photograph. A client connected to that network directly
+ * still gets the token, with the credentials that belong to it.
+ */
+const NOT_RELAYED_ISUPPORT = new Set(['FILEHOST', 'DRAFT/FILEHOST'])
+
+/**
  * Commands an attached client sends that stop here.
  *
  * `QUIT` above all. A client closing is a client closing — passing it upstream
@@ -690,6 +706,7 @@ export class BouncerSession {
      * here behaves exactly as it would connected directly.
      */
     const isupport = Object.entries(upstream?.state.isupport ?? {})
+      .filter(([key]) => !NOT_RELAYED_ISUPPORT.has(key.toUpperCase()))
       .map(([key, value]) => (value === true ? key : `${key}=${value}`))
       .filter((token) => token.length > 0)
 

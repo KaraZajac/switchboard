@@ -757,3 +757,21 @@ describe('what a client is allowed to claim', () => {
     expect(upstream.sent.join(' ')).toContain('label=xyz')
   })
 })
+
+describe('what the bouncer does not pass on', () => {
+  it("keeps the network's filehost to itself", () => {
+    const upstream = fakeUpstream()
+    upstream.client.state.isupport['draft/FILEHOST'] = 'https://files.example.org/upload'
+    const { socket } = attach(upstream)
+    register(socket)
+
+    /*
+     * The spec makes a client send its SASL credentials to the upload URI, and
+     * through a bouncer those are the bouncer's — so sharing a photograph
+     * would hand one service's password to another.
+     */
+    expect(socket.lines('005').join(' ')).not.toContain('FILEHOST')
+    // Everything else still goes
+    expect(socket.lines('005').join(' ')).toContain('CHANTYPES=#')
+  })
+})
