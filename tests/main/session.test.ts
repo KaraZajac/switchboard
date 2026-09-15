@@ -578,3 +578,127 @@ describe('telling the transport a peer is gone', () => {
     coordinator.stop()
   })
 })
+
+/**
+ * Three devices that do not all see each other.
+ *
+ * The phone is paired to the desktop, the desktop to the always-on instance,
+ * and nothing pairs the phone to the always-on instance — which is exactly how
+ * somebody arrives at three, one pairing at a time. The phone can see one peer,
+ * a follower, and has to work out from that alone that the network is already
+ * being held.
+ */
+function chain() {
+  const links = new Map<string, Set<string>>()
+  const nodes = new Map<string, { coordinator: SessionCoordinator; connections: number }>()
+
+  const make = (id: string, priority: number, reaches: string[]) => {
+    links.set(id, new Set(reaches))
+    const node = { coordinator: null as unknown as SessionCoordinator, connections: 0 }
+
+    node.coordinator = new SessionCoordinator(
+      priority,
+      {
+        send: (frame: SessionFrame, peerId?: string) => {
+          for (const other of links.get(id) ?? []) {
+            if (peerId && peerId !== other) continue
+            nodes.get(other)?.coordinator.handleFrame(id, frame)
+          }
+        },
+        hasPeers: () => (links.get(id)?.size ?? 0) > 0
+      },
+      {
+        resume: () => {
+          node.connections++
+        },
+        release: () => {
+          node.connections--
+        },
+        vaultVersion: () => 1,
+        holding: () => []
+      }
+    )
+
+    nodes.set(id, node)
+    return node
+  }
+
+  return { make, nodes, links }
+}
+
+describe('three devices, only two of them paired to each other', () => {
+  it('does not put the phone on the network beside an instance it cannot see', () => {
+    const { make } = chain()
+    const server = make('server', 1000, ['desktop'])
+    const desktop = make('desktop', DESKTOP_PRIORITY, ['server', 'phone'])
+    const phone = make('phone', PHONE_PRIORITY, ['desktop'])
+
+    server.coordinator.start()
+    desktop.coordinator.start()
+    phone.coordinator.start()
+
+    // Long enough for every discovery window to close and for the phone to
+    // have concluded, wrongly, that nobody was holding anything
+    vi.advanceTimersByTime(DISCOVERY_CAP_MS + HEARTBEAT_TIMEOUT_MS * 2)
+
+    expect({
+      server: server.coordinator.state().role,
+      desktop: desktop.coordinator.state().role,
+      phone: phone.coordinator.state().role
+    }).toEqual({ server: 'primary', desktop: 'follower', phone: 'follower' })
+
+    server.coordinator.stop()
+    desktop.coordinator.stop()
+    phone.coordinator.stop()
+  })
+
+  it('lets the phone take over when the whole chain above it is gone', () => {
+    const { make, links } = chain()
+    const server = make('server', 1000, ['desktop'])
+    const desktop = make('desktop', DESKTOP_PRIORITY, ['server', 'phone'])
+    const phone = make('phone', PHONE_PRIORITY, ['desktop'])
+
+    server.coordinator.start()
+    desktop.coordinator.start()
+    phone.coordinator.start()
+    vi.advanceTimersByTime(DISCOVERY_CAP_MS + HEARTBEAT_INTERVAL_MS * 2)
+    expect(phone.coordinator.state().role).toBe('follower')
+
+    // Both of the others go away. Holding off forever would be the opposite
+    // failure: a phone that will not connect because of a desktop that is not
+    // there.
+    links.set('phone', new Set())
+    links.set('desktop', new Set())
+    server.coordinator.stop()
+    desktop.coordinator.stop()
+
+    vi.advanceTimersByTime(HEARTBEAT_TIMEOUT_MS + HEARTBEAT_INTERVAL_MS * 2)
+
+    expect(phone.coordinator.state().role).toBe('primary')
+    phone.coordinator.stop()
+  })
+
+  it('hands the phone to the desktop when only the always-on instance goes', () => {
+    const { make, links } = chain()
+    const server = make('server', 1000, ['desktop'])
+    const desktop = make('desktop', DESKTOP_PRIORITY, ['server', 'phone'])
+    const phone = make('phone', PHONE_PRIORITY, ['desktop'])
+
+    server.coordinator.start()
+    desktop.coordinator.start()
+    phone.coordinator.start()
+    vi.advanceTimersByTime(DISCOVERY_CAP_MS + HEARTBEAT_INTERVAL_MS * 2)
+
+    links.set('desktop', new Set(['phone']))
+    server.coordinator.stop()
+
+    vi.advanceTimersByTime(HEARTBEAT_TIMEOUT_MS + HEARTBEAT_INTERVAL_MS * 2)
+
+    // Exactly one of them, and it is the better one
+    expect(desktop.coordinator.state().role).toBe('primary')
+    expect(phone.coordinator.state().role).toBe('follower')
+
+    desktop.coordinator.stop()
+    phone.coordinator.stop()
+  })
+})

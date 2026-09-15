@@ -120,6 +120,20 @@ export type SessionFrame =
       vaultVersion: number
       /** Optional: a peer on an older build does not send it */
       holding?: string[]
+      /**
+       * The rank of the primary this device is following, if any.
+       *
+       * Three devices do not always all see each other. The phone is paired to
+       * the desktop, the desktop to the always-on instance, and nothing pairs
+       * the phone to the always-on instance — so the phone sees one peer, a
+       * follower, concludes that nobody is holding the network, and takes over
+       * beside an instance that has been holding it all along.
+       *
+       * Saying "I am following somebody at this rank" is enough to stop that
+       * without inventing a routing layer. Optional, because a peer on an
+       * older build does not send it; absent means only what it used to mean.
+       */
+      following?: number
     }
   | { t: 'claim'; priority: number }
   | { t: 'yielded' }
@@ -133,7 +147,7 @@ export class SessionCoordinator {
   private claiming = false
   private readonly peers = new Map<
     string,
-    { role: SessionRole; priority: number; lastSeen: number }
+    { role: SessionRole; priority: number; lastSeen: number; following?: number }
   >()
 
   /** What each peer last said it was holding, kept after the peer is gone */
@@ -235,7 +249,8 @@ export class SessionCoordinator {
         this.peers.set(peerId, {
           role: frame.role,
           priority: frame.priority,
-          lastSeen: Date.now()
+          lastSeen: Date.now(),
+          following: frame.following
         })
         // Remembered past the peer going away, which is when it is needed:
         // the whole point is to dial what it had once it is gone.
@@ -330,9 +345,21 @@ export class SessionCoordinator {
     // — and cannot tell "no peer" apart from "a peer that is following me".
     this.sendHeartbeat()
 
-    // No primary in sight for long enough: take over. Not while discovery is
-    // still open, though — that is the window's whole purpose.
-    if (this.role !== 'primary' && !this.discoveryTimer && !this.livePrimary()) this.takeOver()
+    /*
+     * No primary for long enough: take over.
+     *
+     * "No primary" has to mean none anywhere, not none we can see. With three
+     * devices the phone is paired to the desktop and the desktop to the
+     * always-on instance, and nothing pairs the phone to the always-on
+     * instance — so the phone saw one peer, a follower, and would have taken
+     * over beside something that had been holding the network all along.
+     *
+     * Not while discovery is still open, though — that is the window's whole
+     * purpose.
+     */
+    if (this.role !== 'primary' && !this.discoveryTimer && this.heldElsewhere() === null) {
+      this.takeOver()
+    }
   }
 
   private expirePeers(): void {
@@ -397,8 +424,17 @@ export class SessionCoordinator {
       return
     }
 
+    /*
+     * Nobody is holding — but "nobody" has to mean nobody anywhere.
+     *
+     * `livePrimary` only sees peers this device is paired with. Three devices
+     * are not always all paired: the phone to the desktop, the desktop to the
+     * always-on instance, and nothing between the phone and the always-on
+     * instance. The phone then sees one peer, a follower, and would take over
+     * beside something that has been holding the network the whole time.
+     */
     if (this.role === 'follower' && !primary && !this.claiming) {
-      this.takeOver()
+      if (this.heldElsewhere() === null) this.takeOver()
     }
   }
 
@@ -464,10 +500,47 @@ export class SessionCoordinator {
         priority: this.priority,
         since: this.since,
         vaultVersion: this.connections.vaultVersion(),
-        holding: this.connections.holding()
+        holding: this.connections.holding(),
+        /*
+         * Pass on that somebody is holding, for a peer who cannot see them.
+         *
+         * Only what this device can see itself, never what it was told. A
+         * relayed report comes straight back: the phone hears "somebody at
+         * 1000 is holding" from the desktop, repeats it, and the desktop then
+         * refuses to take over when that instance dies because the phone is
+         * still saying it is there. One hop covers the topology that actually
+         * occurs — phone, desktop, always-on — and cannot loop.
+         */
+        ...(this.role === 'follower'
+          ? { following: this.livePrimary()?.priority ?? undefined }
+          : {})
       },
       peerId
     )
+  }
+
+  /**
+   * The rank of the primary that is holding the network, seen or heard about.
+   *
+   * Directly if we can see it. Otherwise from a peer that says it can — which
+   * is the only thing a device at the far end of a chain has to go on, and is
+   * what stops a phone paired only to the desktop taking over beside an
+   * always-on instance it has never met.
+   *
+   * Used to decide whether to take over, never to decide what to say. Saying
+   * it on would send it back where it came from.
+   */
+  private heldElsewhere(): number | null {
+    const direct = this.livePrimary()
+    if (direct) return direct.priority
+
+    const cutoff = Date.now() - HEARTBEAT_TIMEOUT_MS
+    let best: number | null = null
+    for (const peer of this.peers.values()) {
+      if (peer.lastSeen < cutoff || peer.following === undefined) continue
+      if (best === null || peer.following > best) best = peer.following
+    }
+    return best
   }
 
   private emit(): void {

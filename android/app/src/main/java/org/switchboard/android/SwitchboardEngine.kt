@@ -20,6 +20,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import android.util.Log
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.add
@@ -2145,7 +2146,10 @@ class SwitchboardEngine(
                         vaultVersion = frame["vaultVersion"]?.jsonPrimitive?.int ?: 0,
                         holding = frame["holding"]?.jsonArray
                             ?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull() }
-                            .orEmpty()
+                            .orEmpty(),
+                        // Absent from a peer on an older build, which reads as
+                        // "I can see nobody holding" — what it used to mean
+                        following = frame["following"]?.jsonPrimitive?.intOrNull
                     )
                 )
 
@@ -2224,6 +2228,9 @@ class SwitchboardEngine(
             put("since", frame.since?.let { JsonPrimitive(it) } ?: kotlinx.serialization.json.JsonNull)
             put("vaultVersion", JsonPrimitive(frame.vaultVersion))
             put("holding", buildJsonArray { frame.holding.forEach { add(JsonPrimitive(it)) } })
+            // Left out rather than sent null, so a peer that reads it as
+            // absent and one that reads it as null agree
+            frame.following?.let { put("following", JsonPrimitive(it)) }
         }
 
         is SessionFrame.Claim -> buildJsonObject {

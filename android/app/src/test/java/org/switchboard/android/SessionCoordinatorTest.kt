@@ -69,6 +69,131 @@ class SessionCoordinatorTest {
         }
     }
 
+    /**
+     * Three devices that do not all see each other.
+     *
+     * The phone is paired to the desktop, the desktop to the always-on
+     * instance, and nothing pairs the phone to the always-on instance — which
+     * is how somebody arrives at three, one pairing at a time. The phone can
+     * see one peer, a follower, and has to work out from that alone that the
+     * network is already being held. Mirrors the same cases in
+     * `tests/main/session.test.ts`.
+     */
+    private class Chain {
+        val clock = FakeClock()
+        private val links = mutableMapOf<String, MutableSet<String>>()
+        private val nodes = mutableMapOf<String, SessionCoordinator>()
+
+        fun make(id: String, priority: Int, reaches: List<String>): SessionCoordinator {
+            links[id] = reaches.toMutableSet()
+
+            val coordinator = SessionCoordinator(
+                priority,
+                object : CoordinatorTransport {
+                    override fun send(frame: SessionFrame, peerId: String?) {
+                        for (other in links[id].orEmpty().toList()) {
+                            if (peerId != null && peerId != other) continue
+                            nodes[other]?.handleFrame(id, frame)
+                        }
+                    }
+
+                    override fun hasPeers(): Boolean = links[id].orEmpty().isNotEmpty()
+                },
+                object : ConnectionControl {
+                    override fun resume() {}
+                    override fun release() {}
+                    override fun vaultVersion(): Int = 1
+                    override fun holding(): List<String> = emptyList()
+                },
+                clock
+            )
+
+            nodes[id] = coordinator
+            return coordinator
+        }
+
+        fun cut(id: String) {
+            links[id] = mutableSetOf()
+        }
+
+        fun reaches(id: String, vararg others: String) {
+            links[id] = others.toMutableSet()
+        }
+    }
+
+    @Test
+    fun `does not put the phone on the network beside an instance it cannot see`() {
+        val chain = Chain()
+        val server = chain.make("server", 1_000, listOf("desktop"))
+        val desktop = chain.make("desktop", DESKTOP_PRIORITY, listOf("server", "phone"))
+        val phone = chain.make("phone", PHONE_PRIORITY, listOf("desktop"))
+
+        server.start()
+        desktop.start()
+        phone.start()
+
+        chain.clock.advance(DISCOVERY_MS * 4 + HEARTBEAT_TIMEOUT_MS * 2)
+
+        assertEquals(SessionRole.PRIMARY, server.state().role)
+        assertEquals(SessionRole.FOLLOWER, desktop.state().role)
+        assertEquals(SessionRole.FOLLOWER, phone.state().role)
+
+        server.stop()
+        desktop.stop()
+        phone.stop()
+    }
+
+    @Test
+    fun `lets the phone take over when the whole chain above it is gone`() {
+        val chain = Chain()
+        val server = chain.make("server", 1_000, listOf("desktop"))
+        val desktop = chain.make("desktop", DESKTOP_PRIORITY, listOf("server", "phone"))
+        val phone = chain.make("phone", PHONE_PRIORITY, listOf("desktop"))
+
+        server.start()
+        desktop.start()
+        phone.start()
+        chain.clock.advance(DISCOVERY_MS * 4 + HEARTBEAT_INTERVAL_MS * 2)
+        assertEquals(SessionRole.FOLLOWER, phone.state().role)
+
+        // Holding off forever would be the opposite failure: a phone that will
+        // not connect because of a desktop that is not there
+        chain.cut("phone")
+        chain.cut("desktop")
+        server.stop()
+        desktop.stop()
+
+        chain.clock.advance(HEARTBEAT_TIMEOUT_MS + HEARTBEAT_INTERVAL_MS * 2)
+
+        assertEquals(SessionRole.PRIMARY, phone.state().role)
+        phone.stop()
+    }
+
+    @Test
+    fun `hands the phone to the desktop when only the always-on instance goes`() {
+        val chain = Chain()
+        val server = chain.make("server", 1_000, listOf("desktop"))
+        val desktop = chain.make("desktop", DESKTOP_PRIORITY, listOf("server", "phone"))
+        val phone = chain.make("phone", PHONE_PRIORITY, listOf("desktop"))
+
+        server.start()
+        desktop.start()
+        phone.start()
+        chain.clock.advance(DISCOVERY_MS * 4 + HEARTBEAT_INTERVAL_MS * 2)
+
+        chain.reaches("desktop", "phone")
+        server.stop()
+
+        chain.clock.advance(HEARTBEAT_TIMEOUT_MS + HEARTBEAT_INTERVAL_MS * 2)
+
+        // Exactly one of them, and it is the better one
+        assertEquals(SessionRole.PRIMARY, desktop.state().role)
+        assertEquals(SessionRole.FOLLOWER, phone.state().role)
+
+        desktop.stop()
+        phone.stop()
+    }
+
     private class Harness {
         val clock = FakeClock()
         val events = mutableListOf<String>()

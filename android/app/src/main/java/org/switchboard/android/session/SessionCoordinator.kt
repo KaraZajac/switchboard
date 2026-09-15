@@ -30,7 +30,13 @@ const val HEARTBEAT_TIMEOUT_MS = 16_000L
  */
 const val DISCOVERY_MS = 6_000L
 
-data class PeerInfo(val role: SessionRole, val priority: Int, val lastSeen: Long)
+data class PeerInfo(
+    val role: SessionRole,
+    val priority: Int,
+    val lastSeen: Long,
+    /** The rank of a primary this peer can see, when it can see one */
+    val following: Int? = null
+)
 
 data class SessionState(
     val role: SessionRole,
@@ -54,7 +60,24 @@ sealed interface SessionFrame {
          * what the other one actually had. Empty from a peer on an older
          * build, which reads the same as holding nothing.
          */
-        val holding: List<String> = emptyList()
+        val holding: List<String> = emptyList(),
+        /**
+         * The rank of the primary this device is following, if any.
+         *
+         * Three devices do not always all see each other. The phone is paired
+         * to the desktop, the desktop to the always-on instance, and nothing
+         * pairs the phone to the always-on instance — so the phone sees one
+         * peer, a follower, concludes that nobody is holding the network, and
+         * takes over beside an instance that has been holding it all along.
+         *
+         * Only ever what this device can see itself, never what it was told: a
+         * relayed report comes straight back, and the desktop would then refuse
+         * to take over when that instance died because the phone was still
+         * saying it was there.
+         *
+         * Null from a peer on an older build, which reads as it always did.
+         */
+        val following: Int? = null
     ) : SessionFrame
 
     data class Claim(val priority: Int) : SessionFrame
@@ -208,7 +231,7 @@ class SessionCoordinator(
 
         when (frame) {
             is SessionFrame.Heartbeat -> {
-                peers[peerId] = PeerInfo(frame.role, frame.priority, clock.now())
+                peers[peerId] = PeerInfo(frame.role, frame.priority, clock.now(), frame.following)
                 evaluate()
             }
 
@@ -263,8 +286,9 @@ class SessionCoordinator(
         // there — and cannot tell "no peer" apart from "a peer following me".
         sendHeartbeat()
 
-        // No primary in sight for long enough: take over.
-        if (role != SessionRole.PRIMARY && livePrimary() == null) takeOver()
+        // No primary for long enough: take over. "No primary" has to mean none
+        // anywhere, not none this device happens to be paired with.
+        if (role != SessionRole.PRIMARY && heldElsewhere() == null) takeOver()
     }
 
     private fun expirePeers() {
@@ -281,6 +305,23 @@ class SessionCoordinator(
         return peers.entries.firstOrNull {
             it.value.role == SessionRole.PRIMARY && it.value.lastSeen >= cutoff
         }
+    }
+
+    /**
+     * The rank of the primary holding the network, seen or heard about.
+     *
+     * Directly if this device can see it, otherwise from a peer that says it
+     * can. Used to decide whether to take over, never to decide what to say —
+     * saying it on would send it back where it came from.
+     */
+    private fun heldElsewhere(): Int? {
+        livePrimary()?.let { return it.value.priority }
+
+        val cutoff = clock.now() - HEARTBEAT_TIMEOUT_MS
+        return peers.values
+            .filter { it.lastSeen >= cutoff }
+            .mapNotNull { it.following }
+            .maxOrNull()
     }
 
     /**
@@ -320,8 +361,18 @@ class SessionCoordinator(
             return
         }
 
+        /*
+         * Nobody is holding — but "nobody" has to mean nobody anywhere.
+         *
+         * `livePrimary` only sees peers this device is paired with, and three
+         * devices are not always all paired: the phone to the desktop, the
+         * desktop to the always-on instance, and nothing between the phone and
+         * the always-on instance. The phone would then see one peer, a
+         * follower, and take over beside something that had been holding the
+         * network the whole time.
+         */
         if (role == SessionRole.FOLLOWER && primary == null && !claiming) {
-            takeOver()
+            if (heldElsewhere() == null) takeOver()
         }
     }
 
@@ -371,7 +422,8 @@ class SessionCoordinator(
                 priority,
                 since,
                 connections.vaultVersion(),
-                connections.holding()
+                connections.holding(),
+                if (role == SessionRole.FOLLOWER) livePrimary()?.value?.priority else null
             ),
             peerId
         )
