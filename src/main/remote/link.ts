@@ -25,12 +25,7 @@ import {
   type PeerFrame,
   type ServerFrame
 } from './protocol'
-import {
-  DESKTOP_PRIORITY,
-  SessionCoordinator,
-  type SessionFrame,
-  type SessionState
-} from '../session/coordinator'
+import { SessionCoordinator, type SessionFrame, type SessionState } from '../session/coordinator'
 import { exportVault, importVault, onVaultChanged, vaultStatus } from '../vault/vault'
 import { setDeviceNotifier } from '../ipc/notify'
 import { shouldAdoptVault } from '@shared/vaultorder'
@@ -94,12 +89,14 @@ let unsubscribeEvents: (() => void) | null = null
 /**
  * Which device is on the network.
  *
- * The desktop outranks a phone, so in normal use this stays primary and the
- * phone follows; when the desktop is gone the phone takes over and this hands
- * the connections back on return.
+ * Rank comes from the machine rather than from this file, because the same
+ * engine runs on all three: a headless instance outranks a desktop, which
+ * outranks a phone. In normal use the best one present stays primary and the
+ * rest follow; when it goes the next one takes over, and it takes the
+ * connections back on return.
  */
 export const session = new SessionCoordinator(
-  DESKTOP_PRIORITY,
+  () => host().sessionPriority(),
   {
     send: (frame: SessionFrame, peerId?: string) => {
       if (peerId) {

@@ -38,6 +38,22 @@ export type SessionRole = 'primary' | 'follower'
 export const DESKTOP_PRIORITY = 100
 export const PHONE_PRIORITY = 10
 
+/**
+ * A Switchboard with no window, on something that never sleeps.
+ *
+ * It outranks both, and the gap is deliberately wide rather than 101: this is
+ * a different kind of thing, not a slightly better desktop. Somebody who runs
+ * one has said what they want by running it — the connections live there, and
+ * a laptop opening or closing does not move them.
+ *
+ * That is also what makes the nick survive. With a desktop and a phone the
+ * connection changes hands every time the better device comes and goes, and
+ * each hand-over is a moment on the network where you are briefly gone. A
+ * headless instance simply never leaves, so there is nothing to hand over and
+ * the nick is held continuously — which is the whole point of a bouncer.
+ */
+export const SERVER_PRIORITY = 1_000
+
 export const HEARTBEAT_INTERVAL_MS = 5_000
 /** Three missed beats before a follower concludes the primary is gone */
 export const HEARTBEAT_TIMEOUT_MS = 16_000
@@ -131,11 +147,27 @@ export class SessionCoordinator {
    */
   private deferredTo: string | null = null
 
+  /**
+   * Rank is asked for rather than captured.
+   *
+   * It comes from the host — what kind of machine this is — and the host is
+   * installed by the entry point, which on some builds happens after this
+   * module has been loaded. A number read at construction time is a number
+   * read too early.
+   */
+  private readonly rank: () => number
+
   constructor(
-    private readonly priority: number,
+    priority: number | (() => number),
     private readonly transport: CoordinatorTransport,
     private readonly connections: ConnectionControl
-  ) {}
+  ) {
+    this.rank = typeof priority === 'function' ? priority : () => priority
+  }
+
+  private get priority(): number {
+    return this.rank()
+  }
 
   start(): void {
     this.heartbeatTimer ??= setInterval(() => this.tick(), HEARTBEAT_INTERVAL_MS)
@@ -265,10 +297,13 @@ export class SessionCoordinator {
   private armDiscovery(delayMs: number): void {
     if (this.discoveryTimer) clearTimeout(this.discoveryTimer)
     const remaining = Math.max(0, this.discoveryDeadline - Date.now())
-    this.discoveryTimer = setTimeout(() => {
-      this.discoveryTimer = null
-      this.evaluate()
-    }, Math.min(delayMs, remaining))
+    this.discoveryTimer = setTimeout(
+      () => {
+        this.discoveryTimer = null
+        this.evaluate()
+      },
+      Math.min(delayMs, remaining)
+    )
   }
 
   private endDiscovery(): void {

@@ -6,7 +6,7 @@ import { logsFolder } from '../logging'
 import { mkdir } from 'fs/promises'
 import { formatFingerprint } from '@shared/certificate'
 import { isPrivateAddress } from '@shared/privateaddress'
-import { BrowserWindow, Notification, app, dialog, type IpcMainInvokeEvent, shell } from 'electron'
+import type { BrowserWindow, IpcMainInvokeEvent } from 'electron'
 import { hasMetadata } from '@shared/metadata'
 import { transcript, transcriptFilename } from '@shared/transcript'
 import { listTransfers, acceptTransfer, declineTransfer, offerFile } from '../irc/features/dcc'
@@ -16,7 +16,6 @@ import { userInfo } from 'os'
 import { basename, extname } from 'path'
 import https from 'node:https'
 import http from 'node:http'
-import { autoUpdater } from 'electron-updater'
 import { ircManager } from '../irc/manager'
 import { runCommand, type CommandEffect } from '../irc/commands'
 import { expandAliases, type Alias } from '@shared/aliases'
@@ -64,7 +63,9 @@ import {
   settingChanged,
   readMarkerChanged,
   conversationCleared,
-  ignoresChanged, historyChanged } from './notify'
+  ignoresChanged,
+  historyChanged
+} from './notify'
 import {
   createVault,
   lockVault,
@@ -100,6 +101,24 @@ type ChannelListEntry = { name: string; userCount: number; topic: string }
 
 /** LIST is slow and answers once; concurrent askers share the same request. */
 const channelListRequests = new Map<string, Promise<ChannelListEntry[]>>()
+
+/**
+ * Electron, asked for only when something actually needs it.
+ *
+ * Every handler below runs in one implementation whether the caller is this
+ * desktop's window or a paired phone — but a headless Switchboard runs the
+ * same file with no Electron underneath it at all, and a plain `import` at
+ * the top would try to load it on the way in and fail before a single
+ * connection was made.
+ *
+ * So the handful that genuinely need a window, a dialog or a desktop
+ * notification ask on the way past. None of them is in REMOTE_ALLOWED, for
+ * the same reason they need Electron: they act on somebody's screen. A
+ * headless instance is never asked for them and so never loads it.
+ */
+const electron = (): Promise<typeof import('electron')> => import('electron')
+const updater = async (): Promise<typeof import('electron-updater').autoUpdater> =>
+  (await import('electron-updater')).autoUpdater
 
 export function registerIPCHandlers(): void {
   // ── Server management ────────────────────────────────────────────
@@ -152,15 +171,15 @@ export function registerIPCHandlers(): void {
 
   // Window controls act on the window that asked. A paired device has no
   // window here, which is also why these are absent from REMOTE_ALLOWED.
-  const senderWindow = (event: IpcMainInvokeEvent | null): BrowserWindow | null =>
-    event ? BrowserWindow.fromWebContents(event.sender) : null
+  const senderWindow = async (event: IpcMainInvokeEvent | null): Promise<BrowserWindow | null> =>
+    event ? (await electron()).BrowserWindow.fromWebContents(event.sender) : null
 
   handle('window:minimize', async (event) => {
-    senderWindow(event)?.minimize()
+    ;(await senderWindow(event))?.minimize()
   })
 
   handle('window:maximize', async (event) => {
-    const window = senderWindow(event)
+    const window = await senderWindow(event)
     if (!window) return false
     if (window.isMaximized()) {
       window.unmaximize()
@@ -171,11 +190,11 @@ export function registerIPCHandlers(): void {
   })
 
   handle('window:close', async (event) => {
-    senderWindow(event)?.close()
+    ;(await senderWindow(event))?.close()
   })
 
   handle('window:is-maximized', async (event) => {
-    return senderWindow(event)?.isMaximized() ?? false
+    return (await senderWindow(event))?.isMaximized() ?? false
   })
 
   handle('server:add', async (_event, config: ServerConfig) => {
@@ -232,7 +251,7 @@ export function registerIPCHandlers(): void {
   handle('logs:folder', async () => logsFolder())
   handle('logs:open', async () => {
     await mkdir(logsFolder(), { recursive: true })
-    await shell.openPath(logsFolder())
+    await (await electron()).shell.openPath(logsFolder())
   })
 
   handle('server:remove', async (_event, serverId: string) => {
@@ -789,7 +808,8 @@ export function registerIPCHandlers(): void {
 
     // Null when this came over the link rather than from a window, which the
     // allowlist already prevents — belt as well as braces.
-    const window = event ? BrowserWindow.fromWebContents(event.sender) : null
+    const { dialog } = await electron()
+    const window = await senderWindow(event)
     const chosen = await (window
       ? dialog.showSaveDialog(window, {
           defaultPath: transcriptFilename(network, channel),
@@ -825,7 +845,8 @@ export function registerIPCHandlers(): void {
   handle('dcc:list', async () => listTransfers())
 
   handle('dcc:accept', async (event, id: string) => {
-    const window = event ? BrowserWindow.fromWebContents(event.sender) : null
+    const { dialog } = await electron()
+    const window = await senderWindow(event)
     const chosen = await (window
       ? dialog.showOpenDialog(window, { properties: ['openDirectory', 'createDirectory'] })
       : dialog.showOpenDialog({ properties: ['openDirectory'] }))
@@ -842,7 +863,8 @@ export function registerIPCHandlers(): void {
     const client = ircManager.getClient(serverId)
     if (!client) throw new Error('Not connected')
 
-    const window = event ? BrowserWindow.fromWebContents(event.sender) : null
+    const { dialog } = await electron()
+    const window = await senderWindow(event)
     const chosen = await (window
       ? dialog.showOpenDialog(window, { properties: ['openFile'] })
       : dialog.showOpenDialog({ properties: ['openFile'] }))
@@ -987,12 +1009,9 @@ export function registerIPCHandlers(): void {
   handle('raw:log', async (_event, serverId: string) => rawLogFor(serverId))
   handle('raw:clear', async (_event, serverId: string) => clearRawLog(serverId))
 
-  handle(
-    'history:since',
-    async (_event, serverId: string, after: string, limit?: number) => {
-      return getMessagesSince(serverId, after, Math.min(limit ?? 500, 500))
-    }
-  )
+  handle('history:since', async (_event, serverId: string, after: string, limit?: number) => {
+    return getMessagesSince(serverId, after, Math.min(limit ?? 500, 500))
+  })
 
   handle(
     'history:fetch',
@@ -1104,6 +1123,7 @@ export function registerIPCHandlers(): void {
   // ── Notifications ───────────────────────────────────────────
 
   handle('notification:send', async (_event, title: string, body: string) => {
+    const { Notification } = await electron()
     if (Notification.isSupported()) {
       const notification = new Notification({ title, body, silent: false })
       notification.show()
@@ -1112,6 +1132,7 @@ export function registerIPCHandlers(): void {
 
   handle('tray:set-badge', async (_event, count: number) => {
     if (process.platform === 'darwin') {
+      const { app } = await electron()
       app.dock?.setBadge(count > 0 ? count.toString() : '')
     }
   })
@@ -1119,12 +1140,12 @@ export function registerIPCHandlers(): void {
   // ── Auto-update ────────────────────────────────────────────────
 
   handle('updater:install', async () => {
-    autoUpdater.quitAndInstall(false, true)
+    ;(await updater()).quitAndInstall(false, true)
   })
 
   handle('updater:check', async () => {
-    if (!app.isPackaged) return { available: false }
-    const result = await autoUpdater.checkForUpdates()
+    if (!(await electron()).app.isPackaged) return { available: false }
+    const result = await (await updater()).checkForUpdates()
     return { available: !!result?.updateInfo, version: result?.updateInfo?.version }
   })
 
@@ -1253,7 +1274,9 @@ export function registerIPCHandlers(): void {
     const filehostUrl = filehostOf(client.state.isupport)
     if (!filehostUrl) throw new Error('Server does not support file uploads')
 
-    const result = await dialog.showOpenDialog({
+    const result = await (
+      await electron()
+    ).dialog.showOpenDialog({
       properties: ['openFile'],
       filters: [
         { name: 'All Files', extensions: ['*'] },
@@ -1266,7 +1289,12 @@ export function registerIPCHandlers(): void {
     if (result.canceled || result.filePaths.length === 0) return null
 
     const filePath = result.filePaths[0]
-    return uploadToFilehost(serverId, basename(filePath), mimeOf(filePath), await readFile(filePath))
+    return uploadToFilehost(
+      serverId,
+      basename(filePath),
+      mimeOf(filePath),
+      await readFile(filePath)
+    )
   })
 
   // What the clipboard or a drop hands over: bytes with a name and a type,
@@ -1282,7 +1310,6 @@ export function registerIPCHandlers(): void {
       )
     }
   )
-
 
   // ── Link previews ──────────────────────────────────────────────────
 

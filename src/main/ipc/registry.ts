@@ -1,4 +1,4 @@
-import { ipcMain, type IpcMainInvokeEvent } from 'electron'
+import type { IpcMainInvokeEvent } from 'electron'
 import { isSharedSetting } from '@shared/settings'
 
 /**
@@ -15,10 +15,34 @@ type Handler = (event: IpcMainInvokeEvent | null, ...args: never[]) => unknown
 
 const handlers = new Map<string, Handler>()
 
+/**
+ * Where a local window's calls arrive, when there is a local window.
+ *
+ * The registry's own map is what a paired device reaches, and it is enough on
+ * its own — a headless Switchboard has no window, no `ipcMain` and no Electron
+ * to take it from. So the desktop hands in its own way of listening at
+ * startup, and everything here works the same with or without one.
+ */
+type LocalBridge = (channel: string, handler: Handler) => void
+
+let bridge: LocalBridge | null = null
+
+/**
+ * Install the local front-end's transport.
+ *
+ * Handlers already registered are replayed, so this works whether it is
+ * installed before or after `registerIPCHandlers`. Order being load-bearing is
+ * the kind of thing that works until somebody moves a line.
+ */
+export function useLocalBridge(next: LocalBridge): void {
+  bridge = next
+  for (const [channel, handler] of handlers) next(channel, handler)
+}
+
 /** Register a handler for both the local window and paired devices. */
 export function handle(channel: string, handler: Handler): void {
   handlers.set(channel, handler)
-  ipcMain.handle(channel, handler as (event: IpcMainInvokeEvent, ...args: unknown[]) => unknown)
+  bridge?.(channel, handler)
 }
 
 /**

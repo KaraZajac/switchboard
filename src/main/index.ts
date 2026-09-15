@@ -1,4 +1,14 @@
-import { app, BrowserWindow, Menu, Tray, session, shell, nativeImage } from 'electron'
+import {
+  app,
+  BrowserWindow,
+  Menu,
+  Tray,
+  session,
+  shell,
+  nativeImage,
+  ipcMain,
+  type IpcMainInvokeEvent
+} from 'electron'
 import { setHost } from './host'
 import { electronHost } from './host/electron'
 
@@ -23,6 +33,7 @@ import { setNotifier } from './ipc/notify'
 import { join } from 'path'
 import { autoUpdater } from 'electron-updater'
 import { registerIPCHandlers } from './ipc/index'
+import { useLocalBridge } from './ipc/registry'
 import { ircManager } from './irc/manager'
 import { parseIrcUrl } from '@shared/ircurl'
 import { restoreVault } from './vault/vault'
@@ -305,7 +316,12 @@ function openIrcLink(raw: string): void {
   )
   const known = sameHost.find((server) => server.port === link.port) ?? sameHost[0]
   if (!known) {
-    sendToRenderer('link:add-server', { host: link.host, port: link.port, tls: link.tls, channel: link.channel })
+    sendToRenderer('link:add-server', {
+      host: link.host,
+      port: link.port,
+      tls: link.tls,
+      channel: link.channel
+    })
     return
   }
 
@@ -315,7 +331,10 @@ function openIrcLink(raw: string): void {
     if (link.channel) client.join(link.channel)
   } else {
     // Joined on arrival, along with whatever the network always joins
-    const autoJoin = link.channel && !known.autoJoin.includes(link.channel) ? [...known.autoJoin, link.channel] : known.autoJoin
+    const autoJoin =
+      link.channel && !known.autoJoin.includes(link.channel)
+        ? [...known.autoJoin, link.channel]
+        : known.autoJoin
     ircManager.connect({ ...known, autoJoin })
   }
   if (target) sendToRenderer('link:open', { serverId: known.id, channel: target })
@@ -422,7 +441,12 @@ app.whenReady().then(async () => {
     console.error('Could not tidy seeded profiles:', err)
   }
 
-  // Register IPC handlers
+  // Register IPC handlers. The window listens over Electron IPC; the registry
+  // keeps the same handlers for a paired device, and for a headless instance
+  // that has no window to listen for.
+  useLocalBridge((channel, handler) =>
+    ipcMain.handle(channel, handler as (event: IpcMainInvokeEvent, ...args: unknown[]) => unknown)
+  )
   registerIPCHandlers()
 
   // A paired phone should be able to reach this desktop the moment it is

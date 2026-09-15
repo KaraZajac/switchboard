@@ -1,3 +1,4 @@
+import { DESKTOP_PRIORITY } from '../session/coordinator'
 /**
  * What the engine needs from the machine it is running on.
  *
@@ -42,6 +43,16 @@ export interface Host {
 
   /** A fetch that honours the system proxy, where the platform has one */
   fetch: typeof globalThis.fetch
+
+  /**
+   * How good a host for the connections this machine is.
+   *
+   * A property of the machine rather than of the app, which is why it is
+   * asked for here: mains power, no Doze, and — for a headless instance —
+   * never being closed. The session coordinator uses it to decide who holds
+   * the network when more than one device is up.
+   */
+  sessionPriority(): number
 }
 
 let installed: Host | null = null
@@ -89,6 +100,7 @@ export function testHost(dataDir: string, options: { keychain?: boolean } = {}):
       describe: () => (keychain ? 'test' : 'none')
     },
     idleSeconds: () => 0,
-    fetch: globalThis.fetch
+    fetch: globalThis.fetch,
+    sessionPriority: () => DESKTOP_PRIORITY
   }
 }

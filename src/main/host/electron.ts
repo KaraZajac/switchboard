@@ -1,5 +1,6 @@
 import { app, net, powerMonitor, safeStorage } from 'electron'
 import type { Host } from './index'
+import { DESKTOP_PRIORITY } from '../session/coordinator'
 
 /**
  * The machine, as Electron sees it.
@@ -29,5 +30,7 @@ export const electronHost: Host = {
 
   // Electron's own fetch, which goes through the session and so honours the
   // proxy the app is configured with
-  fetch: ((input, init) => net.fetch(input as string, init)) as typeof globalThis.fetch
+  fetch: ((input, init) => net.fetch(input as string, init)) as typeof globalThis.fetch,
+
+  sessionPriority: () => DESKTOP_PRIORITY
 }
