@@ -244,6 +244,9 @@ private fun ServerForm(
     var nick by remember { mutableStateOf(existing?.nick.orEmpty()) }
     // Nicks to try when the first is taken — see [org.switchboard.android.irc.Nicks]
     var altNicks by remember { mutableStateOf(existing?.altNicks?.joinToString(", ").orEmpty()) }
+    var altAddresses by remember {
+        mutableStateOf(existing?.altAddresses?.joinToString(", ").orEmpty())
+    }
     var saslUser by remember { mutableStateOf(existing?.saslUsername.orEmpty()) }
     var saslPass by remember { mutableStateOf("") }
     var clientCert by remember { mutableStateOf(existing?.clientCert.orEmpty()) }
@@ -301,6 +304,10 @@ private fun ServerForm(
             // Tried in order when the first is taken; the hint stays one line so
             // the box stays the height of the others
             Field("Other nicks to try", "yourname2, yourname_", altNicks) { altNicks = it }
+            // Tried in turn when one will not answer; `+6697` for TLS
+            Field("Other addresses", "eu.example.org, us.example.org:+6697", altAddresses) {
+                altAddresses = it
+            }
             Field("Account (SASL)", "Leave blank if you do not have one", saslUser) { saslUser = it }
             Field(
                 "Account password",
@@ -335,6 +342,8 @@ private fun ServerForm(
                             tls = tls,
                             nick = nick.trim(),
                             altNicks = altNicks.split(",").map { it.trim() }.filter { it.isNotEmpty() },
+                            altAddresses = altAddresses.split(",").map { it.trim() }
+                                .filter { it.isNotEmpty() },
                             username = existing?.username.orEmpty(),
                             realname = existing?.realname.orEmpty(),
                             saslMechanism = when {

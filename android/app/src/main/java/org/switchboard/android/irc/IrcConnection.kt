@@ -312,6 +312,19 @@ class IrcConnection(
         // whatever the saved settings say. Checked on every dial, because the
         // connection a cached policy protects is the one *after* the one that
         // learned about it.
+        // Which address to try. A network can list more than one, and a failed
+        // attempt falls through to the next rather than retrying the same dead
+        // address for ever. Written onto the config because the proxy path,
+        // the TLS handshake and the certificate check all read it from there.
+        val address = Addresses.forAttempt(config, attempt)
+        if (address.host != config.host || address.port != config.port || address.tls != config.tls) {
+            android.util.Log.i(
+                "SwitchboardIrc",
+                "trying ${address.host}:${address.port}${if (address.tls) " over TLS" else ""}"
+            )
+        }
+        config = config.copy(host = address.host, port = address.port, tls = address.tls)
+
         Sts.upgradeFor(config.host, config.port, config.tls)?.let { (port, _) ->
             android.util.Log.i("SwitchboardIrc", "STS: dialling ${config.host}:$port over TLS")
             config = config.copy(port = port, tls = true)
@@ -1044,7 +1057,9 @@ data class ServerConfig(
      */
     val trustedCertificate: String? = null,
     /** Nicks to try, in order, when [nick] is taken — see [Nicks] */
-    val altNicks: List<String> = emptyList()
+    val altNicks: List<String> = emptyList(),
+    /** Other addresses this network answers on — see [Addresses] */
+    val altAddresses: List<String> = emptyList()
 ) {
     /** These settings, as the shared login rule wants them */
     fun saslPlanConfig(): SaslPlan.Config = SaslPlan.Config(

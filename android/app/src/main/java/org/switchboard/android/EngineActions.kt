@@ -942,6 +942,7 @@ suspend fun SwitchboardEngine.listServers(): List<ServerConfig> {
             websocketUrl = row["websocketUrl"].text(),
             trustedCertificate = row["trustedCertificate"].text(),
             altNicks = (row["altNicks"] as? JsonArray)?.mapNotNull { it.text() }.orEmpty(),
+            altAddresses = (row["altAddresses"] as? JsonArray)?.mapNotNull { it.text() }.orEmpty(),
             profile = (row["profile"] as? JsonObject)
                 ?.mapNotNull { (key, value) -> value.text()?.let { key to it } }
                 ?.toMap()
@@ -1188,6 +1189,7 @@ private fun ServerConfig.toJson(omitBlankSecrets: Boolean = false): JsonObject =
     put("websocketUrl", websocketUrl?.let { JsonPrimitive(it) } ?: JsonNull)
     put("trustedCertificate", trustedCertificate?.let { JsonPrimitive(it) } ?: JsonNull)
     put("altNicks", altNicks.asJson())
+    put("altAddresses", altAddresses.asJson())
 
     val secrets = listOf(
         "password" to password,

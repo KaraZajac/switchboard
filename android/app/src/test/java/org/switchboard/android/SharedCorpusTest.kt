@@ -56,6 +56,7 @@ import org.switchboard.android.irc.Emoji
 import org.switchboard.android.irc.Nicks
 import org.switchboard.android.irc.IrcUrl
 import org.switchboard.android.irc.TrustedCertificate
+import org.switchboard.android.irc.Addresses
 import org.switchboard.android.irc.NetworkId
 import org.switchboard.android.irc.ServerConfig
 import org.switchboard.android.irc.Reconnect
@@ -1831,6 +1832,61 @@ class SharedCorpusTest {
                 name,
                 expected,
                 LineLength.split(c["text"]!!.jsonPrimitive.content, c["budget"]!!.jsonPrimitive.int)
+            )
+        }
+    }
+
+    // ── the addresses a network answers on ───────────────────────────
+
+    @Test
+    fun `reads a written address the way the desktop reads it`() {
+        for (case in load("addresses.json")["parse"]!!.jsonArray) {
+            val c = case.jsonObject
+            val fallback = c["fallback"]!!.jsonObject
+            val got = Addresses.parse(
+                c["text"]!!.jsonPrimitive.content,
+                fallback["port"]!!.jsonPrimitive.int,
+                fallback["tls"]!!.jsonPrimitive.content.toBoolean()
+            )
+
+            val expected = c["address"]
+            if (expected == null || expected is kotlinx.serialization.json.JsonNull) {
+                assertEquals(c["name"]!!.jsonPrimitive.content, null, got)
+            } else {
+                val want = expected.jsonObject
+                assertEquals(
+                    c["name"]!!.jsonPrimitive.content,
+                    Addresses.Address(
+                        want["host"]!!.jsonPrimitive.content,
+                        want["port"]!!.jsonPrimitive.int,
+                        want["tls"]!!.jsonPrimitive.content.toBoolean()
+                    ),
+                    got
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `falls through them in the same order`() {
+        val corpus = load("addresses.json")
+        val c = corpus["attemptsConfig"]!!.jsonObject
+        val config = ServerConfig(
+            id = "a",
+            name = "a",
+            host = c["host"]!!.jsonPrimitive.content,
+            port = c["port"]!!.jsonPrimitive.int,
+            tls = c["tls"]!!.jsonPrimitive.content.toBoolean(),
+            nick = "sbtest",
+            altAddresses = c["altAddresses"]!!.jsonArray.map { it.jsonPrimitive.content }
+        )
+
+        for (case in corpus["attempts"]!!.jsonArray) {
+            val a = case.jsonObject
+            assertEquals(
+                a["name"]!!.jsonPrimitive.content,
+                a["host"]!!.jsonPrimitive.content,
+                Addresses.forAttempt(config, a["attempt"]!!.jsonPrimitive.int).host
             )
         }
     }
