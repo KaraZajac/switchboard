@@ -107,3 +107,29 @@ export function networkFrom(
 export function isRemoval(attributes: Map<string, string | null>): boolean {
   return attributes.has('*')
 }
+
+/** The other direction: escape a value so it survives the attribute list */
+function escape(value: string): string {
+  return value
+    .replace(/\\/g, '\\\\')
+    .replace(/;/g, '\\:')
+    .replace(/ /g, '\\s')
+    .replace(/\r/g, '\\r')
+    .replace(/\n/g, '\\n')
+}
+
+/**
+ * Write an attribute list for a `BOUNCER NETWORK` line.
+ *
+ * The mirror of `parseAttributes`, for a Switchboard that is *being* the
+ * bouncer rather than talking to one. Empty values are dropped rather than
+ * sent bare, because an attribute with no `=` means removal — sending
+ * `nickname` to say "the nick is empty" would tell the client to forget the
+ * nick it has.
+ */
+export function formatAttributes(attributes: Record<string, string | undefined>): string {
+  return Object.entries(attributes)
+    .filter(([, value]) => value !== undefined && value !== '')
+    .map(([key, value]) => `${key}=${escape(value as string)}`)
+    .join(';')
+}

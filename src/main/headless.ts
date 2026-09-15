@@ -32,6 +32,8 @@ import { useNetworkSettings } from './irc/connection'
 import { setAppVersion } from './irc/handlers/message'
 import { secretsBackendDescription } from './storage/secrets'
 import { getPairedDevices } from './storage/models/device'
+import { startBouncer, stopBouncer, bouncerStatus } from './bouncer/index'
+import { createNetwork, deleteNetwork } from './bouncer/networks'
 import type { ProxySettings } from '@shared/socks'
 
 const VERSION = process.env['SWITCHBOARD_VERSION'] ?? 'headless'
@@ -124,11 +126,84 @@ async function announcePairing(): Promise<void> {
   console.info('')
 }
 
+/**
+ * Open the IRC port, unless somebody said not to.
+ *
+ * On loopback by default, which is the case that needs no decision: the
+ * operating system already decides who may connect, and the way people reach a
+ * headless bouncer is `ssh -L 6667:localhost:6667`. Anything else has to be
+ * asked for, and asking for it requires a password — see `startBouncer`.
+ *
+ * `SWITCHBOARD_BOUNCER_PORT=0` turns it off.
+ */
+async function openBouncerPort(): Promise<void> {
+  const wanted = process.env['SWITCHBOARD_BOUNCER_PORT']
+  const port = wanted === undefined ? 6667 : Number(wanted)
+  if (!Number.isInteger(port) || port <= 0) {
+    console.info('IRC port off.')
+    return
+  }
+
+  const cert = process.env['SWITCHBOARD_BOUNCER_TLS_CERT']
+  const key = process.env['SWITCHBOARD_BOUNCER_TLS_KEY']
+
+  const status = await startBouncer({
+    port,
+    address: process.env['SWITCHBOARD_BOUNCER_BIND'] ?? '127.0.0.1',
+    password: process.env['SWITCHBOARD_BOUNCER_PASS'] ?? null,
+    tls: cert && key ? { cert, key } : null,
+    version: VERSION
+  })
+
+  if (status.error) console.error(`IRC port: ${status.error}`)
+}
+
+/**
+ * Say what the connections are doing.
+ *
+ * A desktop shows this in a sidebar. Here there is no sidebar, and a bouncer
+ * that fails to reach a network in silence is a bouncer nobody can debug —
+ * the first symptom is a client attaching to an empty session hours later,
+ * with nothing anywhere saying why.
+ *
+ * Only the events a person would want in a log. The message traffic is not
+ * among them: it is in the database, it is somebody's private conversation,
+ * and a server log is the wrong place for it.
+ */
+function reportConnections(): void {
+  const named = (serverId: string): string =>
+    getAllServers().find((server) => server.id === serverId)?.name ?? serverId
+
+  ircManager.subscribe((channel, data) => {
+    const event = data as Record<string, unknown>
+    const server = typeof event['serverId'] === 'string' ? named(event['serverId']) : '?'
+
+    switch (channel) {
+      case 'irc:connected':
+        console.info(`${server}: connected as ${String(event['nick'])}`)
+        break
+      case 'irc:disconnected':
+        console.info(`${server}: disconnected — ${String(event['reason'])}`)
+        break
+      case 'irc:reconnecting':
+        console.info(`${server}: reconnecting in ${Number(event['delayMs']) / 1000}s`)
+        break
+      case 'irc:error':
+        console.error(`${server}: ${String(event['message'] ?? event['error'] ?? 'error')}`)
+        break
+      case 'irc:certificate':
+        console.error(`${server}: certificate — ${String(event['reason'] ?? 'not trusted')}`)
+        break
+    }
+  })
+}
+
 function describeState(): void {
   const remote = remoteStatus()
   const session = sessionState()
   const servers = getAllServers()
   const connected = ircManager.connectedServerIds()
+  const bouncer = bouncerStatus()
 
   console.info('')
   console.info(`  Switchboard ${VERSION} — headless`)
@@ -138,6 +213,13 @@ function describeState(): void {
   console.info(`  Link:     ${remote.running ? 'listening' : 'off'}`)
   console.info(`  Devices:  ${remote.devices.length} paired, ${remote.connected.length} connected`)
   console.info(`  Session:  ${session.role}, priority ${session.priority}`)
+  console.info(
+    `  IRC port: ${
+      bouncer.running
+        ? `${bouncer.address}:${bouncer.port}${bouncer.tls ? ' TLS' : ''}, ${bouncer.clients.length} attached`
+        : 'off'
+    }`
+  )
   console.info(`  Networks: ${connected.length} of ${servers.length} connected`)
   for (const server of servers) {
     const mark = connected.includes(server.id) ? '*' : ' '
@@ -155,10 +237,10 @@ function describeState(): void {
  * you cannot answer from a device that is not paired yet.
  */
 function readCommands(): void {
-  if (!process.stdin.isTTY) return
+  const interactive = process.stdin.isTTY === true
 
   const rl = createInterface({ input: process.stdin, output: process.stdout, prompt: '> ' })
-  rl.prompt()
+  if (interactive) rl.prompt()
 
   rl.on('line', (line) => {
     const command = line.trim()
@@ -172,27 +254,96 @@ function readCommands(): void {
         case 'status':
           describeState()
           break
+        case 'networks':
+          for (const server of getAllServers()) {
+            const live = ircManager.connectedServerIds().includes(server.id)
+            console.info(
+              `  ${live ? '*' : ' '} ${server.name}  ${server.host}:${server.port}  ${server.nick}  ${server.id}`
+            )
+          }
+          break
+        case 'clients':
+          for (const client of bouncerStatus().clients) {
+            const network = client.network
+              ? (getAllServers().find((s) => s.id === client.network)?.name ?? client.network)
+              : 'no network'
+            console.info(`  ${client.name}  ${network}`)
+          }
+          break
         case 'devices':
           for (const device of getPairedDevices()) {
             console.info(`  ${device.name}  ${device.endpointId}`)
           }
           break
         case 'help':
-          console.info('  pair | status | devices | quit')
+          console.info('  pair | status | networks | devices | clients')
+          console.info('  add <name> <host[:port]> <nick>   — +port or a bare 6697 means TLS')
+          console.info('  remove <id>')
+          console.info('  quit')
           break
         case 'quit':
         case 'exit':
           rl.close()
           await leave(0)
           return
-        default:
+        default: {
+          /*
+           * Enough of a console to set up a first network.
+           *
+           * Before a device is paired there is nothing else that can: the vault
+           * arrives with a phone or a desktop, and somebody who means to use
+           * this with irssi alone may never run either. An attached client can
+           * do the same over `BOUNCER ADDNETWORK`, which is the same code
+           * underneath.
+           */
+          const [verb, ...rest] = command.split(/\s+/)
+
+          if (verb === 'add') {
+            const [name, address, nick] = rest
+            if (!name || !address || !nick) {
+              console.info('  add <name> <host[:port]> <nick>')
+              break
+            }
+            const { id, error } = createNetwork(
+              new Map([
+                ['name', name],
+                ['host', address],
+                ['nickname', nick]
+              ])
+            )
+            console.info(error ? `  ${error}` : `  Added ${name} as ${id}. Connecting.`)
+            break
+          }
+
+          if (verb === 'remove') {
+            const [id] = rest
+            if (!id) {
+              console.info('  remove <id> — see networks')
+              break
+            }
+            const { error } = deleteNetwork(id)
+            console.info(error ? `  ${error}` : `  Removed ${id}.`)
+            break
+          }
+
           console.info(`  Unknown: ${command}. Try help.`)
+        }
       }
-      rl.prompt()
+      if (interactive) rl.prompt()
     })()
   })
 
-  rl.on('close', () => void leave(0))
+  /*
+   * A closed input is not a reason to stop.
+   *
+   * Under systemd stdin is `/dev/null`, which is at end of file the moment it
+   * is opened — so a process that quits when input ends quits before it has
+   * connected to anything, and the unit restarts forever. A person pressing
+   * ctrl-D at a terminal does mean to leave; nothing else does.
+   */
+  rl.on('close', () => {
+    if (interactive) void leave(0)
+  })
 }
 
 let leaving = false
@@ -215,6 +366,7 @@ async function leave(code: number): Promise<void> {
     new Promise((resolve) => setTimeout(resolve, 1_500))
   ])
 
+  stopBouncer()
   ircManager.destroyAll()
   closeDatabase()
   process.exit(code)
@@ -240,6 +392,7 @@ async function main(): Promise<void> {
   if (migrated > 0) console.info(`Encrypted stored credentials for ${migrated} server(s)`)
 
   registerIPCHandlers()
+  reportConnections()
 
   /*
    * The link is the whole point of this process, so it starts whether or not
@@ -253,6 +406,8 @@ async function main(): Promise<void> {
   await resumeRemoteLink()
   const link = await startRemoteLink()
   if (link.error) console.error(`Remote link: ${link.error}`)
+
+  await openBouncerPort()
 
   // Nothing is paired yet, so nothing can ever reach this. Say how.
   if (getPairedDevices().length === 0) {
