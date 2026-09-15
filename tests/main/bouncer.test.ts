@@ -831,3 +831,153 @@ describe('a question the bouncer has already answered', () => {
     expect(socket.written.join(' ')).toContain('DCC SEND cat.png')
   })
 })
+
+describe('speaking soju.im/bouncer-networks the way soju does', () => {
+  const manage = {
+    add: () => ({ id: 'net2', error: null }),
+    change: () => ({ error: null }),
+    remove: () => ({ error: null })
+  }
+
+  it('answers LISTNETWORKS in a batch, which is how the list ends', () => {
+    const upstream = fakeUpstream()
+    const { socket } = attach(upstream)
+    register(socket, 'kara', 'batch soju.im/bouncer-networks')
+    socket.written.length = 0
+
+    socket.feed('BOUNCER LISTNETWORKS')
+
+    // There is no closing numeric in the extension and soju sends none. This
+    // used to send a RPL_LISTEND of its own invention, so a client following
+    // the extension waited for an end that never came.
+    const batches = socket.lines('BATCH')
+    expect(batches[0]).toContain('soju.im/bouncer-networks')
+    expect(batches).toHaveLength(2)
+    expect(socket.written.join(' ')).not.toContain('RPL_LISTEND')
+    expect(socket.written.join(' ')).toContain('BOUNCER NETWORK net1')
+  })
+
+  it('refuses a bind once registration is over', () => {
+    const upstream = fakeUpstream()
+    const { socket } = attach(upstream)
+    register(socket)
+    socket.written.length = 0
+
+    socket.feed('BOUNCER BIND net1')
+
+    expect(socket.lines('FAIL')[0]).toBe(
+      ':switchboard FAIL BOUNCER REGISTRATION_IS_COMPLETED BIND :Cannot bind to a network after registration'
+    )
+  })
+
+  it('binds what was asked for before CAP END, once registration finishes', () => {
+    const upstream = fakeUpstream()
+    const { socket } = attach(upstream)
+    socket.feed('CAP LS 302', 'NICK probe', 'USER kara 0 * :probe', 'BOUNCER BIND net1', 'CAP END')
+
+    // The welcome has to carry the network's own name and limits, so the bind
+    // happens before it goes out rather than after
+    expect(socket.lines('001')[0]).toContain('example')
+    expect(socket.written).toContain(':kara!kara@host JOIN #test')
+  })
+
+  it('puts the subcommand in every FAIL, as the grammar says', () => {
+    const upstream = fakeUpstream()
+    const { socket } = attach(upstream, { manage })
+    register(socket)
+    socket.written.length = 0
+
+    socket.feed('BOUNCER DELNETWORK nope')
+    socket.feed('BOUNCER NONSENSE')
+
+    // `FAIL BOUNCER <code> <subcommand> [context…] :<description>`. Two of
+    // these left the subcommand out, which reads as a context word to a client
+    // following the grammar.
+    expect(socket.lines('FAIL')[0]).toContain('DELNETWORK')
+    expect(socket.lines('FAIL')[1]).toContain('UNKNOWN_COMMAND NONSENSE')
+  })
+
+  it('will not let a client set what the bouncer reports', () => {
+    const upstream = fakeUpstream()
+    const { socket } = attach(upstream, { manage })
+    register(socket)
+    socket.written.length = 0
+
+    socket.feed('BOUNCER CHANGENETWORK net1 state=connected')
+
+    // Quietly ignoring it leaves the client with no way to tell it was ignored
+    expect(socket.lines('FAIL')[0]).toContain('UNKNOWN_ATTRIBUTE CHANGENETWORK state')
+  })
+
+  it('needs at least one attribute to change', () => {
+    const upstream = fakeUpstream()
+    const { socket } = attach(upstream, { manage })
+    register(socket)
+    socket.written.length = 0
+
+    socket.feed('BOUNCER CHANGENETWORK net1')
+
+    expect(socket.lines('FAIL')[0]).toContain('NEED_ATTRIBUTE CHANGENETWORK')
+  })
+
+  it('tells a client that asked to be told when the networks change', () => {
+    const upstream = fakeUpstream()
+    const { socket, session } = attach(upstream)
+    register(socket, 'kara', 'batch soju.im/bouncer-networks soju.im/bouncer-networks-notify')
+    socket.written.length = 0
+
+    session.networksChanged()
+
+    // The capability was advertised and then nothing was ever sent after the
+    // first batch, so a client that asked to be told sat on a stale list
+    expect(socket.written.join(' ')).toContain('BOUNCER NETWORK net1')
+  })
+
+  it('says a removed network is gone in the shape the extension uses', () => {
+    const upstream = fakeUpstream()
+    const { socket, session } = attach(upstream)
+    register(socket, 'kara', 'batch soju.im/bouncer-networks soju.im/bouncer-networks-notify')
+    socket.written.length = 0
+
+    session.networksChanged('net1')
+
+    expect(socket.written.join(' ')).toContain('BOUNCER NETWORK net1 *')
+  })
+
+  it('says nothing to a client that did not ask to be told', () => {
+    const upstream = fakeUpstream()
+    const { socket, session } = attach(upstream)
+    register(socket, 'kara', 'batch')
+    socket.written.length = 0
+
+    session.networksChanged()
+
+    expect(socket.written).toEqual([])
+  })
+
+  it('tells an unbound client there are no channels here', () => {
+    const upstream = fakeUpstream()
+    const network = { id: 'net1', name: 'example', client: upstream.client }
+    const socket = new FakeSocket()
+    new BouncerSession(
+      socket as never,
+      {
+        serverName: 'switchboard',
+        password: null,
+        version: 'test',
+        // Two networks, so nothing is bound by default
+        networks: {
+          all: () => [network, { ...network, id: 'net2', name: 'other' }],
+          find: () => null
+        }
+      },
+      () => {}
+    )
+    register(socket, 'kara', 'batch soju.im/bouncer-networks')
+
+    // A client told `CHANTYPES=#` while bound to nothing offers a join box
+    // that can only fail
+    expect(socket.lines('005').join(' ')).toContain('CHANTYPES=')
+    expect(socket.lines('005').join(' ')).not.toContain('CHANTYPES=#')
+  })
+})

@@ -22,10 +22,31 @@ import { CTCP_ANSWERS } from '@shared/ctcp'
  * everything else in the world speaks.
  */
 
+/**
+ * One network as an attached client sees it.
+ *
+ * `config` is what is stored rather than what is connected, because a network
+ * that is down still has a host and a port and a client asking for the list
+ * still needs them — to show it, and to change it.
+ */
+export interface BouncerNetwork {
+  id: string
+  name: string
+  client: IRCClient | undefined
+  config?: {
+    host: string
+    port: number
+    tls: boolean
+    nick: string
+    username: string
+    realname: string
+  }
+}
+
 export type NetworkLookup = {
   /** Every network this bouncer holds */
-  all: () => { id: string; name: string; client: IRCClient | undefined }[]
-  find: (wanted: string) => { id: string; name: string; client: IRCClient | undefined } | null
+  all: () => BouncerNetwork[]
+  find: (wanted: string) => BouncerNetwork | null
 }
 
 export interface SessionOptions {
@@ -61,6 +82,12 @@ export interface SessionOptions {
    * network. The server owns the list of sessions, so it does the sending.
    */
   onEcho?: (from: BouncerSession, upstream: IRCClient, line: string) => void
+  /**
+   * Tell every attached client the networks changed, so the ones that asked
+   * for `soju.im/bouncer-networks-notify` hear about it. The server owns the
+   * list of sessions, so it does the telling.
+   */
+  announceNetworks?: (removed?: string) => void
   /**
    * Adding, changing and removing networks from an attached client.
    *
@@ -232,7 +259,15 @@ export class BouncerSession {
   private saslBuffer = ''
 
   /** The network this client is bound to, once it has one */
-  private bound: { id: string; name: string; client: IRCClient | undefined } | null = null
+  private bound: BouncerNetwork | null = null
+
+  /**
+   * What `BOUNCER BIND` asked for, held until registration finishes.
+   *
+   * BIND arrives during negotiation, before there is a welcome to send, and
+   * binding right then would send the network's welcome in the middle of CAP.
+   */
+  private bindOnRegister: BouncerNetwork | null = null
   private detachRelay: (() => void) | null = null
 
   constructor(
@@ -273,7 +308,7 @@ export class BouncerSession {
     // A client that never sends a newline must not be able to grow this
     // without limit.
     if (this.buffer.length > 64 * 1024) {
-      this.fail('Line too long')
+      this.hangUp('Line too long')
       return
     }
 
@@ -505,13 +540,25 @@ export class BouncerSession {
     this.registered = true
 
     /*
-     * A client that named a network is bound before it sees the welcome.
+     * `BOUNCER BIND` first, because it is the deliberate one.
      *
-     * That matters: the welcome carries the network's own ISUPPORT, its nick
-     * and its name, and a client reads those once. Binding afterwards would
-     * leave it believing it was on a server called `switchboard` with default
-     * limits, and every line it composed after that would be sized wrong.
+     * A client that sent it named a network id; a login name is a convention
+     * for clients that have nowhere else to put it. Where both are present the
+     * explicit one wins.
+     *
+     * Either way the binding happens before the welcome goes out: the welcome
+     * carries the network's own ISUPPORT, its nick and its name, and a client
+     * reads those once. Binding afterwards would leave it believing it was on
+     * a server called `switchboard` with default limits, and every line it
+     * composed after that would be sized wrong.
      */
+    if (this.bindOnRegister) {
+      const network = this.bindOnRegister
+      this.bindOnRegister = null
+      this.bind(network)
+      return
+    }
+
     if (this.login.network) {
       const found = this.options.networks.find(this.login.network)
       if (!found) {
@@ -541,39 +588,78 @@ export class BouncerSession {
     const sub = (msg.params[0] ?? '').toUpperCase()
 
     if (sub === 'BIND') {
+      /*
+       * Before registration only, which is what soju enforces and therefore
+       * what every client written against it expects. Binding late would put
+       * this connection on a network after it had already been told, in its
+       * welcome, what network it was on and what that network's limits are.
+       */
+      if (this.registered) {
+        this.fail(
+          'REGISTRATION_IS_COMPLETED',
+          'BIND',
+          [],
+          'Cannot bind to a network after registration'
+        )
+        return
+      }
+
       const wanted = msg.params[1] ?? ''
       const found = this.options.networks.find(wanted)
       if (!found) {
-        this.fromServer('FAIL', 'BOUNCER', 'INVALID_NETID', wanted, 'No such network')
+        this.fail('INVALID_NETID', 'BIND', [wanted], 'Invalid network ID')
         return
       }
-      this.bind(found)
+      this.bindOnRegister = found
       return
     }
 
     if (sub === 'ADDNETWORK') {
-      const { id, error } = this.options.manage?.add(parseAttributes(msg.params[1] ?? '')) ?? {
+      const attributes = parseAttributes(msg.params[1] ?? '')
+      const refused = this.refusedAttribute(attributes)
+      if (refused) {
+        this.fail('UNKNOWN_ATTRIBUTE', 'ADDNETWORK', [refused], 'Unknown attribute')
+        return
+      }
+
+      const { id, error } = this.options.manage?.add(attributes) ?? {
         id: null,
         error: 'This bouncer does not take new networks from a client'
       }
       if (error || !id) {
-        this.fromServer('FAIL', 'BOUNCER', 'UNKNOWN_ERROR', 'ADDNETWORK', error ?? 'Failed')
+        const code = /host/i.test(error ?? '') ? 'NEED_ATTRIBUTE' : 'UNKNOWN_ERROR'
+        this.fail(code, 'ADDNETWORK', [], error ?? 'Failed')
         return
       }
       this.fromServer('BOUNCER', 'ADDNETWORK', id)
+      this.options.announceNetworks?.()
       return
     }
 
     if (sub === 'CHANGENETWORK') {
       const id = msg.params[1] ?? ''
+      const attributes = parseAttributes(msg.params[2] ?? '')
+
+      const refused = this.refusedAttribute(attributes)
+      if (refused) {
+        this.fail('UNKNOWN_ATTRIBUTE', 'CHANGENETWORK', [refused], 'Unknown attribute')
+        return
+      }
+      if (attributes.size === 0) {
+        this.fail('NEED_ATTRIBUTE', 'CHANGENETWORK', [], 'Expected at least one attribute')
+        return
+      }
+
       const error =
-        this.options.manage?.change(id, parseAttributes(msg.params[2] ?? '')).error ??
+        this.options.manage?.change(id, attributes).error ??
         'This bouncer does not take changes from a client'
       if (error) {
-        this.fromServer('FAIL', 'BOUNCER', 'UNKNOWN_ERROR', 'CHANGENETWORK', error)
+        const code = /no such network/i.test(error) ? 'INVALID_NETID' : 'UNKNOWN_ERROR'
+        this.fail(code, 'CHANGENETWORK', code === 'INVALID_NETID' ? [id] : [], error)
         return
       }
       this.fromServer('BOUNCER', 'CHANGENETWORK', id)
+      this.options.announceNetworks?.()
       return
     }
 
@@ -582,37 +668,126 @@ export class BouncerSession {
       const error =
         this.options.manage?.remove(id).error ?? 'This bouncer does not take removals from a client'
       if (error) {
-        this.fromServer('FAIL', 'BOUNCER', 'INVALID_NETID', id, error)
+        this.fail('INVALID_NETID', 'DELNETWORK', [id], 'Invalid network ID')
         return
       }
       this.fromServer('BOUNCER', 'DELNETWORK', id)
+      this.options.announceNetworks?.(id)
       return
     }
 
     if (sub === 'LISTNETWORKS') {
-      for (const network of this.options.networks.all()) {
-        this.fromServer('BOUNCER', 'NETWORK', network.id, this.describe(network))
-      }
-      this.fromServer('BOUNCER', 'LISTNETWORKS', 'RPL_LISTEND')
+      this.listNetworks()
       return
     }
 
-    this.fromServer('FAIL', 'BOUNCER', 'UNKNOWN_COMMAND', sub, 'Unknown subcommand')
+    this.fail('UNKNOWN_COMMAND', sub, [], 'Unknown subcommand')
   }
 
-  describe(network: { id: string; name: string; client: IRCClient | undefined }): string {
+  /**
+   * `FAIL BOUNCER <code> <subcommand> [context…] :<description>`
+   *
+   * The subcommand goes in, always. It was left out of two of these, which
+   * reads as a context word to a client following the grammar — so a refusal
+   * to bind looked like a refusal of something else.
+   */
+  private fail(code: string, subcommand: string, context: string[], description: string): void {
+    this.fromServer('FAIL', 'BOUNCER', code, subcommand, ...context, description)
+  }
+
+  /**
+   * An attribute a client is not allowed to set, if it tried.
+   *
+   * `state` and `error` are the bouncer's to report, and soju answers a client
+   * that tries to set one with `UNKNOWN_ATTRIBUTE` rather than quietly
+   * ignoring it — which is the better answer, because a client that was
+   * ignored has no way to tell it was.
+   */
+  private refusedAttribute(attributes: Map<string, string | null>): string | null {
+    for (const key of attributes.keys()) {
+      if (key === 'state' || key === 'error') return key
+    }
+    return null
+  }
+
+  /**
+   * The networks this bouncer holds, in a batch.
+   *
+   * The batch is how a client knows the list has ended — there is no closing
+   * numeric, and soju sends none. This used to send a `BOUNCER LISTNETWORKS
+   * RPL_LISTEND` line of its own invention, which no client waits for, so a
+   * client following the extension waited for an end that never came.
+   */
+  private listNetworks(): void {
+    const batch = this.openBatch('soju.im/bouncer-networks')
+    for (const network of this.options.networks.all()) {
+      this.networkLine(network.id, this.describe(network), batch)
+    }
+    this.closeBatch(batch)
+  }
+
+  /** One `BOUNCER NETWORK` line, inside a batch when the client takes batches */
+  private networkLine(id: string, attributes: string, batch: string | null): void {
+    if (!batch) {
+      this.fromServer('BOUNCER', 'NETWORK', id, attributes)
+      return
+    }
+    this.write(
+      `@batch=${batch} :${this.options.serverName} ${cmd('BOUNCER', 'NETWORK', id, attributes)}`
+    )
+  }
+
+  /**
+   * Tell this client that the networks have changed.
+   *
+   * Only a client that asked for `soju.im/bouncer-networks-notify`, which is
+   * what that capability is: we were advertising it and then never sending
+   * anything after the first batch, which is a promise made and not kept.
+   *
+   * A removal is `BOUNCER NETWORK <id> *`, the same shape the extension uses
+   * for an attribute with no value.
+   */
+  networksChanged(removed?: string): void {
+    if (!this.registered) return
+    if (!this.caps.has('soju.im/bouncer-networks-notify')) return
+
+    if (removed) {
+      this.fromServer('BOUNCER', 'NETWORK', removed, '*')
+      return
+    }
+
+    for (const network of this.options.networks.all()) {
+      this.networkLine(network.id, this.describe(network), null)
+    }
+  }
+
+  /**
+   * A network as the extension describes one.
+   *
+   * Everything soju sends, because a client reads this list to show the
+   * networks *and* to change them — and it cannot offer to change a port it
+   * was never told. `state` is the live connection; the rest is what is
+   * stored, so a network that is down still describes itself properly.
+   */
+  describe(network: BouncerNetwork): string {
     const upstream = network.client
+    const config = network.config
     const connected = upstream?.state.registrationState === 'connected'
+
     return formatAttributes({
       name: network.name,
       state: connected ? 'connected' : 'disconnected',
-      nickname: upstream?.state.nick ?? '',
-      host: upstream?.config.host ?? ''
+      host: config?.host ?? upstream?.config.host ?? '',
+      port: config ? String(config.port) : undefined,
+      tls: config ? (config.tls ? '1' : '0') : undefined,
+      nickname: upstream?.state.nick || config?.nick || '',
+      username: config?.username || undefined,
+      realname: config?.realname || undefined
     })
   }
 
   /** Attach to a network, and tell the client everything it has missed */
-  bind(network: { id: string; name: string; client: IRCClient | undefined }): void {
+  bind(network: BouncerNetwork): void {
     this.detachRelay?.()
     this.bound = network
 
@@ -654,7 +829,7 @@ export class BouncerSession {
    * channels are re-sent because its windows are stale — the nick may even
    * have changed — but not the backlog, which it has been watching arrive.
    */
-  networkBack(network: { id: string; name: string; client: IRCClient | undefined }): void {
+  networkBack(network: BouncerNetwork): void {
     if (!this.registered || this.bound?.id !== network.id) return
 
     this.detachRelay?.()
@@ -684,11 +859,13 @@ export class BouncerSession {
             .join(', ')}`
     )
 
-    if (this.caps.has('soju.im/bouncer-networks-notify')) {
-      for (const network of networks) {
-        this.fromServer('BOUNCER', 'NETWORK', network.id, this.describe(network))
-      }
-    }
+    /*
+     * The list, unasked, for a client that wanted to be told.
+     *
+     * In a batch, because the batch is how a client knows the list has ended.
+     * soju sends this the moment registration finishes and so does this.
+     */
+    if (this.caps.has('soju.im/bouncer-networks-notify')) this.listNetworks()
   }
 
   private welcome(networkName: string, nick: string, upstream: IRCClient | undefined): void {
@@ -710,6 +887,15 @@ export class BouncerSession {
       .filter(([key]) => !NOT_RELAYED_ISUPPORT.has(key.toUpperCase()))
       .map(([key, value]) => (value === true ? key : `${key}=${value}`))
       .filter((token) => token.length > 0)
+
+    /*
+     * Bound to nothing, so there are no channels here.
+     *
+     * An empty `CHANTYPES` is how soju says it, and it is the honest answer: a
+     * client talking to the bouncer itself cannot join anything, and one that
+     * is told `#` will offer a join box that can only fail.
+     */
+    if (!upstream) isupport.push('CHANTYPES=', 'CASEMAPPING=ascii')
 
     isupport.push(`BOUNCER=${this.options.serverName}`)
 
@@ -1027,7 +1213,7 @@ export class BouncerSession {
     this.socket.write(`${line}\r\n`)
   }
 
-  private fail(reason: string): void {
+  private hangUp(reason: string): void {
     this.write(cmd('ERROR', reason))
     this.close()
   }

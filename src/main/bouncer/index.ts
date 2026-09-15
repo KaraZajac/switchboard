@@ -8,7 +8,7 @@ import { getMessages, conversationsWithin } from '../storage/models/message'
 import { findNetwork } from '@shared/bouncerlogin'
 import { nudgeWhoIsReading } from './presence'
 import { createNetwork, changeNetwork, deleteNetwork } from './networks'
-import type { IRCClient } from '../irc/client'
+import type { BouncerNetwork } from './session'
 
 /**
  * Switchboard, being the bouncer.
@@ -50,11 +50,22 @@ let lastError: string | null = null
 const sessions = new Set<BouncerSession>()
 
 /** Every network this bouncer can offer, whether or not it is dialled in */
-function networks(): { id: string; name: string; client: IRCClient | undefined }[] {
+function networks(): BouncerNetwork[] {
   return getAllServers().map((server) => ({
     id: server.id,
     name: server.name,
-    client: ircManager.getClient(server.id)
+    client: ircManager.getClient(server.id),
+    // What is stored rather than what is connected: a network that is down
+    // still has a host and a port, and a client asking for the list still
+    // needs them
+    config: {
+      host: server.host,
+      port: server.port,
+      tls: server.tls,
+      nick: server.nick,
+      username: server.username,
+      realname: server.realname
+    }
   }))
 }
 
@@ -178,6 +189,15 @@ export async function startBouncer(options: BouncerOptions): Promise<BouncerStat
           add: createNetwork,
           change: changeNetwork,
           remove: deleteNetwork
+        },
+        /*
+         * Every attached client hears about a change, not just the one that
+         * made it. `soju.im/bouncer-networks-notify` was advertised and then
+         * nothing was ever sent after the first batch, which is a promise made
+         * and not kept — a client that asked to be told sat on a stale list.
+         */
+        announceNetworks: (removed) => {
+          for (const session of sessions) session.networksChanged(removed)
         },
         onEcho: (from, upstream, line) => {
           for (const other of sessions) {
