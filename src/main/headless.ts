@@ -32,7 +32,8 @@ import { useNetworkSettings } from './irc/connection'
 import { setAppVersion } from './irc/handlers/message'
 import { secretsBackendDescription } from './storage/secrets'
 import { getPairedDevices } from './storage/models/device'
-import { startBouncer, stopBouncer, bouncerStatus } from './bouncer/index'
+import { startBouncer, stopBouncer, bouncerStatus, attachedClients } from './bouncer/index'
+import { watchWhoIsReading, stopWatchingWhoIsReading } from './bouncer/presence'
 import { createNetwork, deleteNetwork } from './bouncer/networks'
 import type { ProxySettings } from '@shared/socks'
 
@@ -366,6 +367,7 @@ async function leave(code: number): Promise<void> {
     new Promise((resolve) => setTimeout(resolve, 1_500))
   ])
 
+  stopWatchingWhoIsReading()
   stopBouncer()
   ircManager.destroyAll()
   closeDatabase()
@@ -393,6 +395,20 @@ async function main(): Promise<void> {
 
   registerIPCHandlers()
   reportConnections()
+
+  /*
+   * Away while nobody is reading.
+   *
+   * The desktop's version of this watches the keyboard, and there is no
+   * keyboard here — `idleSeconds` is null precisely because a headless
+   * instance is not a person. What it has instead is a count of who is
+   * attached, which answers the same question better: an IRC client on the
+   * port or a paired device on the link means somebody can see this.
+   */
+  watchWhoIsReading(ircManager, {
+    attached: attachedClients,
+    linked: () => remoteStatus().connected.length
+  })
 
   /*
    * The link is the whole point of this process, so it starts whether or not

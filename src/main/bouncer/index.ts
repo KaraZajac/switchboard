@@ -4,7 +4,7 @@ import { readFileSync } from 'fs'
 import { BouncerSession, type RelayableMessage } from './session'
 import { ircManager } from '../irc/manager'
 import { getAllServers } from '../storage/models/server'
-import { getMessages } from '../storage/models/message'
+import { getMessages, conversationsWithin } from '../storage/models/message'
 import { findNetwork } from '@shared/bouncerlogin'
 import { createNetwork, changeNetwork, deleteNetwork } from './networks'
 import type { IRCClient } from '../irc/client'
@@ -65,8 +65,17 @@ function networks(): { id: string; name: string; client: IRCClient | undefined }
  * the message irssi shows you when you attach.
  */
 function backlog(serverId: string, target: string, limit: number): RelayableMessage[] {
+  return storedMessages(serverId, target, { limit })
+}
+
+/** The same rows, for a `CHATHISTORY` window rather than an attach */
+function storedMessages(
+  serverId: string,
+  target: string,
+  window: { before?: string; after?: string; limit: number }
+): RelayableMessage[] {
   try {
-    return getMessages(serverId, target, { limit })
+    return getMessages(serverId, target, window)
       .filter(
         (message) =>
           message.type === 'privmsg' || message.type === 'notice' || message.type === 'action'
@@ -77,7 +86,8 @@ function backlog(serverId: string, target: string, limit: number): RelayableMess
         // An action was stored with its CTCP wrapper taken off. Put it back, or
         // the replay reads as somebody saying their own name.
         text: message.type === 'action' ? `\u0001ACTION ${message.content}\u0001` : message.content,
-        kind: message.type === 'notice' ? ('notice' as const) : ('privmsg' as const)
+        kind: message.type === 'notice' ? ('notice' as const) : ('privmsg' as const),
+        msgid: message.id
       }))
   } catch {
     // No history is a worse attach, not a failed one
@@ -112,6 +122,16 @@ export async function startBouncer(options: BouncerOptions): Promise<BouncerStat
         password: options.password,
         version: options.version,
         backlog,
+        history: {
+          messages: storedMessages,
+          targets: (serverId, after, before, limit) => {
+            try {
+              return conversationsWithin(serverId, after, before, limit)
+            } catch {
+              return []
+            }
+          }
+        },
         networks: {
           all: networks,
           find: (wanted) =>

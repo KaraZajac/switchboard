@@ -37,6 +37,25 @@ export interface SessionOptions {
   /** Backlog for a client that has just attached, newest last */
   backlog?: (serverId: string, target: string, limit: number) => RelayableMessage[]
   /**
+   * The bouncer's own history, for `CHATHISTORY` on a network that keeps none.
+   *
+   * Absent means every request goes upstream, which on a network without
+   * `draft/chathistory` means it goes nowhere.
+   */
+  history?: {
+    messages: (
+      serverId: string,
+      target: string,
+      window: { before?: string; after?: string; limit: number }
+    ) => RelayableMessage[]
+    targets: (
+      serverId: string,
+      after: string,
+      before: string,
+      limit: number
+    ) => { target: string; latest: string }[]
+  }
+  /**
    * Hand a line this client just said to every other client on the same
    * network. The server owns the list of sessions, so it does the sending.
    */
@@ -60,6 +79,8 @@ export interface RelayableMessage {
   text: string
   /** PRIVMSG unless the stored message says otherwise */
   kind?: 'privmsg' | 'notice'
+  /** The network's own id for it, where we kept one */
+  msgid?: string | null
 }
 
 /**
@@ -78,6 +99,7 @@ export interface RelayableMessage {
  */
 const OWN_CAPS: Record<string, string | null> = {
   'server-time': null,
+  'draft/chathistory': null,
   'message-tags': null,
   batch: null,
   'echo-message': null,
@@ -277,6 +299,9 @@ export class BouncerSession {
       case 'BOUNCER':
         this.bouncerCommand(msg)
         return
+      case 'CHATHISTORY':
+        if (this.registered && this.answerHistory(msg)) return
+        break
     }
 
     if (!this.registered) return
@@ -666,16 +691,114 @@ export class BouncerSession {
     const messages = this.options.backlog(this.bound.id, target, 50)
     if (messages.length === 0) return
 
-    const batch = `sb${this.id}${Math.random().toString(36).slice(2, 8)}`
-    const batched = this.caps.has('batch')
+    const batch = this.openBatch('chathistory', target)
+    for (const message of messages) this.writeHistory(message, target, batch)
+    this.closeBatch(batch)
+  }
 
-    if (batched) this.fromServer('BATCH', `+${batch}`, 'chathistory', target)
-    for (const message of messages) {
-      const tags = batched ? `@time=${message.time};batch=${batch} ` : `@time=${message.time} `
-      const command = message.kind === 'notice' ? 'NOTICE' : 'PRIVMSG'
-      this.write(`${tags}:${message.nick} ${command} ${target} :${message.text}`)
+  // ── History ────────────────────────────────────────────────────
+
+  /**
+   * Answer `CHATHISTORY` from what this bouncer kept.
+   *
+   * Only when the network cannot answer it itself. Where a network keeps
+   * history — netslum, and any ircd with `draft/chathistory` — its copy goes
+   * further back than ours and is the one to use, so the request is passed on
+   * untouched. Where it does not, this is the whole reason somebody runs a
+   * bouncer: the scrollback exists because *we* were connected, and nothing
+   * else on the network can produce it.
+   *
+   * Returns false to let the line go upstream.
+   */
+  private answerHistory(msg: IRCMessage): boolean {
+    const upstream = this.bound?.client
+    if (!upstream || !this.bound) return false
+    if (!this.options.history) return false
+
+    // The network keeps its own, and keeps more of it
+    if (upstream.state.capabilities.has('draft/chathistory')) return false
+
+    // Without a time on each line, replayed history reads as happening now
+    if (!this.caps.has('server-time')) {
+      this.fromServer('FAIL', 'CHATHISTORY', 'NEED_MORE_PARAMS', 'server-time is required')
+      return true
     }
-    if (batched) this.fromServer('BATCH', `-${batch}`)
+
+    const sub = (msg.params[0] ?? '').toUpperCase()
+    const serverId = this.bound.id
+
+    if (sub === 'TARGETS') {
+      const after = stamp(msg.params[1]) ?? '0000'
+      const before = stamp(msg.params[2]) ?? '9999'
+      const limit = clamp(msg.params[3])
+
+      const batch = this.openBatch('draft/chathistory-targets')
+      for (const found of this.options.history.targets(serverId, after, before, limit)) {
+        this.fromServer('CHATHISTORY', 'TARGETS', found.target, found.latest)
+      }
+      this.closeBatch(batch)
+      return true
+    }
+
+    const target = msg.params[1] ?? ''
+    if (!target) {
+      this.fromServer('FAIL', 'CHATHISTORY', 'NEED_MORE_PARAMS', sub, 'Missing target')
+      return true
+    }
+
+    // `LATEST` is the last of it; `BEFORE` and `AFTER` page from a point.
+    // `AROUND` and `BETWEEN` are relayed rather than half-answered — a client
+    // that asked for a window around a message and got the end of the channel
+    // would have no way to tell.
+    const window: { before?: string; after?: string; limit: number } = {
+      limit: clamp(msg.params[3])
+    }
+
+    switch (sub) {
+      case 'LATEST':
+        break
+      case 'BEFORE': {
+        const point = stamp(msg.params[2])
+        if (!point) return false
+        window.before = point
+        break
+      }
+      case 'AFTER': {
+        const point = stamp(msg.params[2])
+        if (!point) return false
+        window.after = point
+        break
+      }
+      default:
+        return false
+    }
+
+    const messages = this.options.history.messages(serverId, target, window)
+    const batch = this.openBatch('chathistory', target)
+    for (const message of messages) this.writeHistory(message, target, batch)
+    this.closeBatch(batch)
+    return true
+  }
+
+  private openBatch(type: string, ...params: string[]): string | null {
+    if (!this.caps.has('batch')) return null
+    const id = `sb${this.id}${Math.random().toString(36).slice(2, 8)}`
+    this.fromServer('BATCH', `+${id}`, type, ...params)
+    return id
+  }
+
+  private closeBatch(id: string | null): void {
+    if (id) this.fromServer('BATCH', `-${id}`)
+  }
+
+  /** One stored line, dressed as the network would have sent it */
+  private writeHistory(message: RelayableMessage, target: string, batch: string | null): void {
+    const tags = [`time=${message.time}`]
+    if (batch) tags.push(`batch=${batch}`)
+    if (message.msgid && this.caps.has('message-tags')) tags.push(`msgid=${message.msgid}`)
+
+    const command = message.kind === 'notice' ? 'NOTICE' : 'PRIVMSG'
+    this.write(`@${tags.join(';')} :${message.nick} ${command} ${target} :${message.text}`)
   }
 
   // ── Relaying ───────────────────────────────────────────────────
@@ -795,4 +918,28 @@ export class BouncerSession {
     this.socket.destroy()
     this.onClose(this)
   }
+}
+
+/**
+ * Read a `timestamp=…` or `msgid=…` selector as something to compare.
+ *
+ * Only timestamps. A `msgid=` selector means "from this message", and
+ * answering it needs the id to be findable in the store — ours are the
+ * network's ids, and a network that does not keep history has not given us
+ * many. Returning null sends the request upstream rather than answering the
+ * wrong question.
+ */
+function stamp(selector: string | undefined): string | null {
+  if (!selector) return null
+  const match = /^timestamp=(.+)$/i.exec(selector)
+  if (!match?.[1]) return null
+  const when = new Date(match[1])
+  return Number.isNaN(when.getTime()) ? null : when.toISOString()
+}
+
+/** A limit somebody asked for, kept to something a socket can carry */
+function clamp(raw: string | undefined): number {
+  const asked = Number(raw)
+  if (!Number.isFinite(asked) || asked <= 0) return 50
+  return Math.min(Math.floor(asked), 1_000)
 }

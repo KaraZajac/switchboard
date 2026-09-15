@@ -430,3 +430,136 @@ describe('managing networks from an attached client', () => {
     expect(listed[0]).toContain('state=connected')
   })
 })
+
+describe('answering CHATHISTORY from what the bouncer kept', () => {
+  const stored = [
+    { time: '2026-01-01T10:00:00.000Z', nick: 'bunny', text: 'first', msgid: 'm1' },
+    { time: '2026-01-01T11:00:00.000Z', nick: 'bunny', text: 'second', msgid: 'm2' }
+  ]
+
+  const withHistory = (upstream: FakeUpstream): { socket: FakeSocket; asked: unknown[] } => {
+    const asked: unknown[] = []
+    const { socket } = attach(upstream, {
+      history: {
+        messages: (serverId, target, window) => {
+          asked.push({ serverId, target, window })
+          return stored
+        },
+        targets: () => [{ target: '#test', latest: '2026-01-01T11:00:00.000Z' }]
+      }
+    })
+    return { socket, asked }
+  }
+
+  it('serves a network that keeps none itself', () => {
+    const upstream = fakeUpstream()
+    const { socket, asked } = withHistory(upstream)
+    register(socket, 'kara/example', 'server-time batch')
+    socket.written.length = 0
+    upstream.sent.length = 0
+
+    socket.feed('CHATHISTORY LATEST #test * 100')
+
+    expect(socket.written.join(' ')).toContain('first')
+    expect(asked).toHaveLength(1)
+    // The network cannot answer, so nothing should be asked of it
+    expect(upstream.sent).toEqual([])
+  })
+
+  it('leaves it to a network that keeps more than we do', () => {
+    const upstream = fakeUpstream()
+    upstream.client.state.capabilities.add('draft/chathistory')
+    const { socket, asked } = withHistory(upstream)
+    register(socket, 'kara/example', 'server-time batch')
+    upstream.sent.length = 0
+
+    socket.feed('CHATHISTORY LATEST #test * 100')
+
+    expect(asked).toEqual([])
+    expect(upstream.sent).toContain('CHATHISTORY LATEST #test * 100')
+  })
+
+  it('pages backwards from a timestamp', () => {
+    const upstream = fakeUpstream()
+    const { socket, asked } = withHistory(upstream)
+    register(socket, 'kara/example', 'server-time batch')
+
+    socket.feed('CHATHISTORY BEFORE #test timestamp=2026-01-01T12:00:00.000Z 50')
+
+    expect(asked[0]).toMatchObject({
+      target: '#test',
+      window: { before: '2026-01-01T12:00:00.000Z', limit: 50 }
+    })
+  })
+
+  it('pages forwards from a timestamp', () => {
+    const upstream = fakeUpstream()
+    const { socket, asked } = withHistory(upstream)
+    register(socket, 'kara/example', 'server-time batch')
+
+    socket.feed('CHATHISTORY AFTER #test timestamp=2026-01-01T09:00:00.000Z 50')
+
+    expect(asked[0]).toMatchObject({ window: { after: '2026-01-01T09:00:00.000Z' } })
+  })
+
+  it('passes on a selector it cannot answer rather than answering another question', () => {
+    const upstream = fakeUpstream()
+    const { socket, asked } = withHistory(upstream)
+    register(socket, 'kara/example', 'server-time batch')
+    upstream.sent.length = 0
+
+    // A msgid selector needs the id to be findable, and a network that keeps
+    // no history has not given us many
+    socket.feed('CHATHISTORY BEFORE #test msgid=abc 50')
+
+    expect(asked).toEqual([])
+    expect(upstream.sent).toContain('CHATHISTORY BEFORE #test msgid=abc 50')
+  })
+
+  it('does not answer a client that cannot tell when a line was said', () => {
+    const upstream = fakeUpstream()
+    const { socket, asked } = withHistory(upstream)
+    register(socket, 'kara/example', 'batch')
+    socket.written.length = 0
+
+    socket.feed('CHATHISTORY LATEST #test * 100')
+
+    expect(asked).toEqual([])
+    expect(socket.lines('FAIL')).toHaveLength(1)
+  })
+
+  it('keeps an outlandish limit to something a socket can carry', () => {
+    const upstream = fakeUpstream()
+    const { socket, asked } = withHistory(upstream)
+    register(socket, 'kara/example', 'server-time batch')
+
+    socket.feed('CHATHISTORY LATEST #test * 99999999')
+
+    expect(asked[0]).toMatchObject({ window: { limit: 1000 } })
+  })
+
+  it('names the conversations that had anything in them', () => {
+    const upstream = fakeUpstream()
+    const { socket } = withHistory(upstream)
+    register(socket, 'kara/example', 'server-time batch')
+    socket.written.length = 0
+
+    socket.feed(
+      'CHATHISTORY TARGETS timestamp=2026-01-01T00:00:00.000Z timestamp=2026-01-02T00:00:00.000Z 50'
+    )
+
+    // How a client finds the direct message that arrived while it was away
+    expect(socket.lines('CHATHISTORY')[0]).toContain('#test')
+  })
+
+  it('carries the msgid so a reply can be addressed to it', () => {
+    const upstream = fakeUpstream()
+    const { socket } = withHistory(upstream)
+    register(socket, 'kara/example', 'server-time batch message-tags')
+    socket.written.length = 0
+
+    socket.feed('CHATHISTORY LATEST #test * 10')
+
+    expect(socket.written.find((line) => line.includes('first'))).toContain('msgid=m1')
+  })
+})

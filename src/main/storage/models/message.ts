@@ -31,12 +31,30 @@ export function storeMessage(msg: Omit<ChatMessage, 'pending' | 'reactions'>): v
 export function getMessages(
   serverId: string,
   channel: string,
-  options: { before?: string; limit?: number } = {}
+  options: { before?: string; after?: string; limit?: number } = {}
 ): ChatMessage[] {
   const db = getDb()
   const limit = options.limit || 50
   let query: string
   let params: unknown[]
+
+  if (options.after) {
+    /*
+     * Forwards from a point, in one conversation.
+     *
+     * What `CHATHISTORY AFTER` asks for. Ordered ascending in SQL rather than
+     * descending and reversed, because the two disagree about *which* rows the
+     * limit keeps: taking the newest 50 and turning them round answers "the
+     * last 50" when the question was "the first 50 after this", and a client
+     * paging forwards through a busy channel would skip everything between.
+     */
+    query = `SELECT * FROM messages WHERE server_id = ? AND channel = ? AND timestamp > ?
+             ORDER BY timestamp ASC LIMIT ?`
+    params = [serverId, channel, options.after, limit]
+    const ascending = db.exec(query, params as number[])
+    if (ascending.length === 0) return []
+    return withReactions(serverId, channel, ascending[0].values.map(rowToMessage))
+  }
 
   if (options.before) {
     query = `SELECT * FROM messages WHERE server_id = ? AND channel = ? AND timestamp < ?
@@ -55,6 +73,33 @@ export function getMessages(
 }
 
 /**
+ * The conversations with anything in them, newest first.
+ *
+ * What `CHATHISTORY TARGETS` asks for: a client that has been away does not
+ * know which conversations it missed, and a direct message from somebody new
+ * leaves nothing else behind to notice.
+ */
+export function conversationsWithin(
+  serverId: string,
+  after: string,
+  before: string,
+  limit = 100
+): { target: string; latest: string }[] {
+  const db = getDb()
+  const rows = db.exec(
+    `SELECT channel, MAX(timestamp) AS latest FROM messages
+     WHERE server_id = ? AND timestamp > ? AND timestamp < ?
+     GROUP BY channel ORDER BY latest DESC LIMIT ?`,
+    [serverId, after, before, limit] as unknown as number[]
+  )
+  if (rows.length === 0) return []
+  return rows[0].values.map((row) => ({
+    target: row[0] as string,
+    latest: row[1] as string
+  }))
+}
+
+/**
  * Everything said after a moment, across every conversation on a network.
  *
  * What a paired device asks for when it comes back. `getMessages` is the wrong
@@ -66,11 +111,7 @@ export function getMessages(
  * walks forward through it a page at a time rather than asking for a year of
  * a busy channel in one call. The last row's timestamp is the next cursor.
  */
-export function getMessagesSince(
-  serverId: string,
-  after: string,
-  limit = 500
-): ChatMessage[] {
+export function getMessagesSince(serverId: string, after: string, limit = 500): ChatMessage[] {
   const db = getDb()
   const rows = db.exec(
     `SELECT * FROM messages WHERE server_id = ? AND timestamp > ?
@@ -101,7 +142,11 @@ export function getMessagesSince(
 
 /** Hang the stored reactions back on the messages they belong to */
 function withReactions(serverId: string, channel: string, messages: ChatMessage[]): ChatMessage[] {
-  const found = reactionsFor(serverId, channel, messages.map((m) => m.id))
+  const found = reactionsFor(
+    serverId,
+    channel,
+    messages.map((m) => m.id)
+  )
   if (Object.keys(found).length === 0) return messages
   return messages.map((message) =>
     found[message.id] ? { ...message, reactions: found[message.id] } : message
@@ -188,9 +233,7 @@ function ftsQuery(text: string): string | null {
 
 /** Whether the FTS5 index exists — it does not when SQLite was built without FTS5. */
 function hasFtsIndex(db: ReturnType<typeof getDb>): boolean {
-  const rows = db.exec(
-    "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'messages_fts'"
-  )
+  const rows = db.exec("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'messages_fts'")
   return rows.length > 0 && rows[0].values.length > 0
 }
 

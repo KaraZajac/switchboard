@@ -94,6 +94,26 @@ All of these are environment variables, read at startup.
 | `SWITCHBOARD_BOUNCER_PASS`             | required to bind anything but loopback                                                              |
 | `SWITCHBOARD_BOUNCER_TLS_CERT`, `_KEY` | a certificate and key, for a port you expose                                                        |
 
+### Away while nobody is reading
+
+A bouncer stays on the network whether or not anybody is looking at it, which
+is the point and also the problem: to everybody else you are present and simply
+not answering. So after five minutes with nothing attached — no IRC client on
+the port, no paired device on the link — it goes away, and comes back the
+moment something attaches.
+
+An away you set yourself is never touched. Change the delay with the
+`bouncerAwayMinutes` setting, or set it to 0 to switch the behaviour off;
+`bouncerAwayMessage` says what it says.
+
+### Scrollback
+
+Attaching replays the last of each conversation, and `CHATHISTORY` pages
+further back. Where a network keeps its own history the request goes there
+instead, because its copy goes back further than ours. Where it does not — most
+networks — this is the whole reason to run a bouncer, and the scrollback exists
+because it was connected when you were not.
+
 ### About binding off loopback
 
 On `127.0.0.1` the operating system has already decided who may connect, and
