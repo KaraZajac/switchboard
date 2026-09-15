@@ -890,6 +890,16 @@ class SwitchboardEngine(
                 val by = (payload["by"] as? JsonPrimitive)?.contentOrNull() ?: "someone"
                 runCatching { history.redact(id, by) }
             }
+
+            // Somebody read this conversation — on the desktop, or on this
+            // phone in an earlier run. Either way it is where the line goes.
+            "irc:read-marker" -> {
+                val payload = data as? JsonObject ?: return
+                val server = (payload["serverId"] as? JsonPrimitive)?.contentOrNull() ?: return
+                val channel = (payload["channel"] as? JsonPrimitive)?.contentOrNull() ?: return
+                val at = (payload["timestamp"] as? JsonPrimitive)?.contentOrNull() ?: return
+                runCatching { history.rememberReadMarker(server, channel, at) }
+            }
         }
     }
 

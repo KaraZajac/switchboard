@@ -206,6 +206,58 @@ class MessageStoreTest {
         assertEquals("robin", store.recent("srv", "#lobby").first().redactedBy)
     }
 
+    // ── read markers ────────────────────────────────────────────────
+
+    @Test
+    fun `remembers where a conversation was read up to`() {
+        store.rememberReadMarker("srv", "#lobby", "2026-09-14T01:00:00.000Z")
+        assertEquals("2026-09-14T01:00:00.000Z", store.readMarker("srv", "#lobby"))
+    }
+
+    @Test
+    fun `a conversation nobody has read has no marker`() {
+        assertNull(store.readMarker("srv", "#lobby"))
+    }
+
+    @Test
+    fun `the marker is the same whatever case the channel is written in`() {
+        store.rememberReadMarker("srv", "#Lobby", "2026-09-14T01:00:00.000Z")
+        assertEquals("2026-09-14T01:00:00.000Z", store.readMarker("srv", "#LOBBY"))
+    }
+
+    @Test
+    fun `reading further moves the marker down`() {
+        store.rememberReadMarker("srv", "#lobby", "2026-09-14T01:00:00.000Z")
+        store.rememberReadMarker("srv", "#lobby", "2026-09-14T02:00:00.000Z")
+        assertEquals("2026-09-14T02:00:00.000Z", store.readMarker("srv", "#lobby"))
+    }
+
+    @Test
+    fun `an older marker arriving late does not drag the line back up`() {
+        // Three things set this — the phone reading, the desktop's copy, and
+        // the server echoing MARKREAD — and they do not arrive in order
+        store.rememberReadMarker("srv", "#lobby", "2026-09-14T02:00:00.000Z")
+        store.rememberReadMarker("srv", "#lobby", "2026-09-14T01:00:00.000Z")
+        assertEquals("2026-09-14T02:00:00.000Z", store.readMarker("srv", "#lobby"))
+    }
+
+    @Test
+    fun `markers are kept per conversation and per network`() {
+        store.rememberReadMarker("one", "#lobby", "2026-09-14T01:00:00.000Z")
+        store.rememberReadMarker("one", "robin", "2026-09-14T02:00:00.000Z")
+        store.rememberReadMarker("two", "#lobby", "2026-09-14T03:00:00.000Z")
+
+        assertEquals("2026-09-14T01:00:00.000Z", store.readMarker("one", "#lobby"))
+        assertEquals("2026-09-14T02:00:00.000Z", store.readMarker("one", "robin"))
+        assertEquals("2026-09-14T03:00:00.000Z", store.readMarker("two", "#lobby"))
+    }
+
+    @Test
+    fun `nothing is written for a marker with no timestamp`() {
+        store.rememberReadMarker("srv", "#lobby", "")
+        assertNull(store.readMarker("srv", "#lobby"))
+    }
+
     // ── forgetting ──────────────────────────────────────────────────
 
     @Test
@@ -217,5 +269,16 @@ class MessageStoreTest {
 
         assertTrue(store.recent("gone", "#lobby").isEmpty())
         assertEquals(1, store.recent("kept", "#lobby").size)
+    }
+
+    @Test
+    fun `a network removed takes its read markers with it`() {
+        store.rememberReadMarker("gone", "#lobby", "2026-09-14T01:00:00.000Z")
+        store.rememberReadMarker("kept", "#lobby", "2026-09-14T01:00:00.000Z")
+
+        store.forgetServer("gone")
+
+        assertNull(store.readMarker("gone", "#lobby"))
+        assertEquals("2026-09-14T01:00:00.000Z", store.readMarker("kept", "#lobby"))
     }
 }

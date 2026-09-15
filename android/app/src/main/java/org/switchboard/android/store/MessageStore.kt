@@ -58,11 +58,26 @@ class MessageStore(context: Context) {
             // hand-over is always "what has not gone yet"
             db.execSQL("CREATE INDEX messages_conversation ON messages (server_id, conversation, timestamp)")
             db.execSQL("CREATE INDEX messages_pending ON messages (needs_handover)")
+            createReadMarkers(db)
         }
 
         override fun onUpgrade(db: SQLiteDatabase, from: Int, to: Int) {
-            // Nothing here has ever shipped with a second version. When it
-            // does, migrate rather than drop: this is somebody's history.
+            // Migrate, never drop: this is somebody's history.
+            if (from < 2) createReadMarkers(db)
+        }
+
+        /** Where each conversation was read up to — see [readMarker] */
+        private fun createReadMarkers(db: SQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS read_markers (
+                    server_id TEXT NOT NULL,
+                    conversation TEXT NOT NULL,
+                    timestamp TEXT NOT NULL,
+                    PRIMARY KEY (server_id, conversation)
+                )
+                """.trimIndent()
+            )
         }
     }
 
@@ -220,14 +235,60 @@ class MessageStore(context: Context) {
             if (it.moveToFirst()) it.getInt(0) else 0
         }
 
+    // ── read markers ────────────────────────────────────────────────
+
+    /**
+     * Where this conversation was read up to.
+     *
+     * The phone had nowhere to keep this, so `readMarkerFor` simply answered
+     * null whenever the phone was the connection — and the "new messages" line
+     * is drawn from that answer. The one mode this client exists for was the
+     * one mode without it: come back to the phone after an hour and there was
+     * nothing to say where you had got to.
+     *
+     * The desktop keeps the shared copy and its answer still wins while the
+     * two are linked. This is what there is when they are not.
+     */
+    fun readMarker(serverId: String, channel: String): String? =
+        db.rawQuery(
+            "SELECT timestamp FROM read_markers WHERE server_id = ? AND conversation = ?",
+            arrayOf(serverId, folded(channel))
+        ).use { if (it.moveToFirst()) it.getString(0) else null }
+
+    /**
+     * Note where it was read up to.
+     *
+     * Forward only. Markers arrive from three directions — this phone reading,
+     * the desktop's stored copy, and the server echoing `MARKREAD` — and one
+     * of them turning up late must not drag the line back up the conversation.
+     */
+    fun rememberReadMarker(serverId: String, channel: String, timestamp: String) {
+        if (timestamp.isBlank()) return
+        val known = readMarker(serverId, channel)
+        if (known != null && known >= timestamp) return
+
+        db.insertWithOnConflict(
+            "read_markers",
+            null,
+            ContentValues().apply {
+                put("server_id", serverId)
+                put("conversation", folded(channel))
+                put("timestamp", timestamp)
+            },
+            SQLiteDatabase.CONFLICT_REPLACE
+        )
+    }
+
     /** A network this phone no longer has is a conversation it no longer keeps */
     fun forgetServer(serverId: String) {
         db.delete("messages", "server_id = ?", arrayOf(serverId))
+        db.delete("read_markers", "server_id = ?", arrayOf(serverId))
     }
 
     /** Everything, for somebody who wants it gone */
     fun forgetEverything() {
         db.delete("messages", null, null)
+        db.delete("read_markers", null, null)
     }
 
     /**
@@ -264,7 +325,7 @@ class MessageStore(context: Context) {
 
     companion object {
         private const val NAME = "switchboard-messages.db"
-        private const val VERSION = 1
+        private const val VERSION = 2
 
         /**
          * The recent end of a conversation, not the whole of it.

@@ -584,12 +584,18 @@ private suspend fun openWhenJoined(
  * to be a full log.
  */
 private suspend fun loadHistory(engine: SwitchboardEngine, serverId: String, channel: String) {
-    if (engine.mode == EngineMode.HOLDING) return
-
     // Where we left off, before anything is marked read — opening the
     // conversation is what moves the marker, so asking afterwards always
     // answers "the end".
+    //
+    // Both modes. This used to sit behind the return below, so a phone holding
+    // its own connection never marked an entry point and never drew the line —
+    // the one mode this client exists for was the one mode without it.
     engine.store.markEntryPoint(serverId, channel, engine.readMarkerFor(serverId, channel))
+
+    // The rest of this is the desktop's stored history, and there is none to
+    // ask for when this phone is the connection.
+    if (engine.mode == EngineMode.HOLDING) return
 
     if (engine.store.messagesFor(serverId, channel).isNotEmpty()) return
 

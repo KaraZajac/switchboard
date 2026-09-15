@@ -872,9 +872,19 @@ suspend fun SwitchboardEngine.searchMessages(
  * read is not one.
  */
 suspend fun SwitchboardEngine.readMarkerFor(serverId: String, channel: String): String? {
-    // Our own connection has no stored markers to read; the desktop does.
-    if (holds(serverId)) return null
-    return ask("read-marker:get", JsonPrimitive(serverId), JsonPrimitive(channel)).text()
+    // Following: the desktop keeps the copy both devices share, so its answer
+    // wins. Kept here as well, because it is the answer this phone will need
+    // the next time it is the one holding the connection.
+    if (!holds(serverId)) {
+        val theirs = ask("read-marker:get", JsonPrimitive(serverId), JsonPrimitive(channel)).text()
+        if (!theirs.isNullOrBlank()) {
+            runCatching { history.rememberReadMarker(serverId, channel, theirs) }
+            return theirs
+        }
+    }
+
+    // Holding, or linked to a desktop that has never seen this conversation.
+    return runCatching { history.readMarker(serverId, channel) }.getOrNull()
 }
 
 /**
@@ -883,7 +893,11 @@ suspend fun SwitchboardEngine.readMarkerFor(serverId: String, channel: String): 
  * The point of this on a phone: catching up in bed should not leave the desktop
  * showing the same forty unread messages in the morning.
  */
-fun SwitchboardEngine.markReadUpTo(serverId: String, channel: String, timestamp: String) =
+fun SwitchboardEngine.markReadUpTo(serverId: String, channel: String, timestamp: String) {
+    // Ours first. With no desktop and a server that does not carry
+    // `draft/read-marker`, this is the only place it is written down at all.
+    runCatching { history.rememberReadMarker(serverId, channel, timestamp) }
+
     act(
         serverId, "read-marker:set",
         JsonPrimitive(channel), JsonPrimitive(timestamp),
@@ -891,6 +905,7 @@ fun SwitchboardEngine.markReadUpTo(serverId: String, channel: String, timestamp:
         // the socket; the marker goes across when there is one.
         quiet = true
     ) { it.markRead(channel, timestamp) }
+}
 
 // ── the networks themselves ──────────────────────────────────────────
 
