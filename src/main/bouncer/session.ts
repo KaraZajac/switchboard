@@ -109,29 +109,38 @@ const OWN_CAPS: Record<string, string | null> = {
 }
 
 /**
- * Capabilities worth passing on from the network.
+ * Capabilities that stay with our connection to the network.
  *
- * An allowlist rather than everything the upstream has, because some of what a
- * network negotiates is about *our* connection to it and means nothing
- * downstream — `sasl` most of all, where offering it would invite a client to
- * authenticate to a network it is not connected to.
+ * A deny list rather than an allowlist, and the reasoning is the opposite way
+ * round from REMOTE_ALLOWED. There, a handler nobody has thought about should
+ * be unreachable. Here, a capability nobody has thought about is one the
+ * network already agreed to send us — we are relaying its lines verbatim
+ * either way — and *not* offering it means an attached client silently loses a
+ * feature it would otherwise have. An allowlist did exactly that: edits,
+ * redactions, metadata, typing, reactions and replies were all negotiated
+ * upstream and none of them were offered on.
+ *
+ * What is left here is the short list of things that describe *this* socket
+ * rather than what the network will send:
+ *
+ *  - `sasl` authenticates us to the network. Offering it would invite a client
+ *    to log in to a network it has no connection to. The bouncer offers a
+ *    `sasl` of its own, for logging in to the bouncer, which is a different
+ *    thing with the same name.
+ *  - `draft/webpush` subscribes a device to push. The subscription is per
+ *    connection and belongs to whichever device will be woken by it.
+ *  - `cap-notify` promises `CAP NEW` and `CAP DEL` when what is available
+ *    changes. Nothing here sends them, and a promise not kept is worse than a
+ *    capability not offered.
+ *  - `draft/pre-away` and `draft/auto-join` only do anything during
+ *    registration, and registration with the network is ours.
  */
-const RELAYED_CAPS = new Set([
-  'account-notify',
-  'account-tag',
-  'away-notify',
-  'chghost',
-  'extended-join',
-  'invite-notify',
-  'multi-prefix',
-  'setname',
-  'userhost-in-names',
-  'message-tags',
-  'batch',
-  'labeled-response',
-  'draft/chathistory',
-  'draft/read-marker',
-  'draft/multiline'
+const NOT_RELAYED_CAPS = new Set([
+  'sasl',
+  'draft/webpush',
+  'cap-notify',
+  'draft/pre-away',
+  'draft/auto-join'
 ])
 
 /**
@@ -330,7 +339,30 @@ export class BouncerSession {
       this.echo(msg, upstream)
     }
 
-    upstream.connection.sendRaw(serializeMessage(msg))
+    upstream.connection.sendRaw(serializeMessage(this.sanitized(msg)))
+  }
+
+  /**
+   * A line from a client, as a client is allowed to send it.
+   *
+   * Two things come off. A prefix, because clients do not send one — the
+   * network decides who a line is from, and a client that sends
+   * `:someone-else PRIVMSG …` is either broken or trying something. Servers
+   * vary between ignoring it and refusing the line, and neither is a result
+   * worth passing on.
+   *
+   * And server tags. `msgid`, `time` and `account` are the network's to
+   * assign, and a client that sets them is claiming a message was sent at a
+   * time it was not, or by an account it was not. Client tags — the ones
+   * written with a `+` — are exactly the ones a client is meant to set, and
+   * `label` is how labeled-response works, so both stay.
+   */
+  private sanitized(msg: IRCMessage): IRCMessage {
+    const tags: Record<string, string | true> = {}
+    for (const [key, value] of Object.entries(msg.tags)) {
+      if (key.startsWith('+') || key === 'label') tags[key] = value
+    }
+    return { ...msg, prefix: null, source: null, tags }
   }
 
   // ── Registration ───────────────────────────────────────────────
@@ -375,7 +407,7 @@ export class BouncerSession {
     const offered: Record<string, string | null> = { ...OWN_CAPS }
     const upstream = this.bound?.client ?? this.options.networks.all()[0]?.client
     for (const name of upstream?.state.capabilities ?? []) {
-      if (RELAYED_CAPS.has(name)) offered[name] = null
+      if (!NOT_RELAYED_CAPS.has(name)) offered[name] = null
     }
     return offered
   }

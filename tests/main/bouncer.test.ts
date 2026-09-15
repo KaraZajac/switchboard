@@ -48,7 +48,16 @@ interface FakeUpstream {
 function fakeUpstream(options: { nick?: string; echoMessage?: boolean } = {}): FakeUpstream {
   const sent: string[] = []
   const events = new EventEmitter()
-  const capabilities = new Set<string>(['multi-prefix'])
+  const capabilities = new Set<string>([
+    'multi-prefix',
+    'draft/message-edit',
+    'draft/message-redaction',
+    'draft/metadata-2',
+    'typing',
+    'draft/react',
+    'sasl',
+    'draft/webpush'
+  ])
   if (options.echoMessage) capabilities.add('echo-message')
 
   const channels = new Map([
@@ -635,5 +644,116 @@ describe('when the network goes and comes back', () => {
     session.networkBack({ id: 'other', name: 'somewhere else', client: upstream.client })
 
     expect(socket.written).toEqual([])
+  })
+})
+
+describe('what an attached client is offered', () => {
+  it('offers on everything the network agreed to send', () => {
+    const upstream = fakeUpstream()
+    const { socket } = attach(upstream)
+    socket.feed('CAP LS 302')
+
+    const offered = socket.lines('CAP')[0] ?? ''
+    // An allowlist quietly dropped every one of these, so edits, redactions,
+    // profiles, typing and reactions all stopped at the bouncer
+    for (const name of [
+      'draft/message-edit',
+      'draft/message-redaction',
+      'draft/metadata-2',
+      'typing',
+      'draft/react'
+    ]) {
+      expect(offered).toContain(name)
+    }
+  })
+
+  it("keeps the network's own sasl to itself", () => {
+    const upstream = fakeUpstream()
+    const { socket } = attach(upstream)
+    socket.feed('CAP LS 302')
+
+    const offered = socket.lines('CAP')[0] ?? ''
+    // The bouncer offers a sasl of its own, for logging in to the bouncer.
+    // Offering the network's would invite a client to authenticate to a
+    // network it has no connection to.
+    expect(offered).toContain('sasl=PLAIN')
+    expect(offered).not.toContain('draft/webpush')
+  })
+
+  it('carries a client tag both ways once message-tags is on', () => {
+    const upstream = fakeUpstream()
+    const { socket } = attach(upstream)
+    register(socket, 'kara/example', 'server-time message-tags')
+    socket.written.length = 0
+    upstream.sent.length = 0
+
+    socket.feed('@+typing=active TAGMSG #test')
+    expect(upstream.sent).toContain('@+typing=active TAGMSG #test')
+
+    upstream.raw('@+reply=abc;+draft/react=\u{1F44D};msgid=x :bunny!b@h TAGMSG #test')
+    const relayed = socket.written.join(' ')
+    expect(relayed).toContain('+reply=abc')
+    expect(relayed).toContain('+draft/react=')
+    expect(relayed).toContain('msgid=x')
+  })
+
+  it('passes an edit and a redaction through untouched', () => {
+    const upstream = fakeUpstream()
+    const { socket } = attach(upstream)
+    register(socket, 'kara/example', 'server-time message-tags')
+    socket.written.length = 0
+    upstream.sent.length = 0
+
+    socket.feed('REDACT #test abc :a longer reason')
+    // The wire form of a single-word trailing parameter is the serializer's
+    // business; what must survive is a reason with a space in it staying one
+    // parameter
+    expect(upstream.sent).toContain('REDACT #test abc :a longer reason')
+
+    upstream.raw(':bunny!b@h REDACT #test abc :tidy')
+    upstream.raw('@+draft/edit=abc :bunny!b@h PRIVMSG #test :fixed')
+    expect(socket.written.join(' ')).toContain('REDACT #test abc')
+    expect(socket.written.join(' ')).toContain('+draft/edit=abc')
+  })
+})
+
+describe('what a client is allowed to claim', () => {
+  it('will not let a client sign a line as somebody else', () => {
+    const upstream = fakeUpstream()
+    const { socket } = attach(upstream)
+    register(socket, 'kara/example', 'server-time message-tags')
+    upstream.sent.length = 0
+
+    socket.feed(':someone-else!x@y PRIVMSG #test :not from them')
+
+    expect(upstream.sent).toContain('PRIVMSG #test :not from them')
+    expect(upstream.sent.join(' ')).not.toContain('someone-else')
+  })
+
+  it('will not let a client set the tags the network assigns', () => {
+    const upstream = fakeUpstream()
+    const { socket } = attach(upstream)
+    register(socket, 'kara/example', 'server-time message-tags')
+    upstream.sent.length = 0
+
+    socket.feed('@msgid=forged;time=1999-01-01T00:00:00.000Z;+reply=abc PRIVMSG #test :hello')
+
+    const sent = upstream.sent.join(' ')
+    // Claiming a message was sent at a time it was not
+    expect(sent).not.toContain('msgid=forged')
+    expect(sent).not.toContain('1999')
+    // But the client tag is exactly the kind a client is meant to set
+    expect(sent).toContain('+reply=abc')
+  })
+
+  it('keeps a label, because that is how the answer finds its way back', () => {
+    const upstream = fakeUpstream()
+    const { socket } = attach(upstream)
+    register(socket, 'kara/example', 'server-time message-tags')
+    upstream.sent.length = 0
+
+    socket.feed('@label=xyz WHOIS bunny')
+
+    expect(upstream.sent.join(' ')).toContain('label=xyz')
   })
 })
