@@ -4,7 +4,7 @@ import { parseMessage } from '../irc/parser'
 import { serializeMessage, cmd } from '../irc/serializer'
 import type { IRCMessage } from '@shared/types/irc'
 import type { IRCClient } from '../irc/client'
-import { parseLogin, type BouncerLogin } from '@shared/bouncerlogin'
+import { parseLogin, loginInPassword, type BouncerLogin } from '@shared/bouncerlogin'
 import { formatAttributes, parseAttributes } from '@shared/bouncer'
 import { CTCP_ANSWERS } from '@shared/ctcp'
 
@@ -516,14 +516,30 @@ export class BouncerSession {
     if (!expected) return true
     if (!this.password) return false
 
-    // Same length or not, the comparison takes the same time
-    const a = Buffer.from(this.password)
-    const b = Buffer.from(expected)
-    if (a.length !== b.length) {
-      timingSafeEqual(b, b)
-      return false
-    }
-    return timingSafeEqual(a, b)
+    if (matches(this.password, expected)) return true
+
+    /*
+     * ZNC's shape: `PASS <user>/<network>:<password>`.
+     *
+     * Every ZNC user has a client configured that way — the password field is
+     * the one thing every IRC client has, however old — so accepting it means
+     * somebody moving to Switchboard points their existing config at the new
+     * address rather than editing four clients.
+     *
+     * Tried only after the whole string has failed, so a password that
+     * genuinely contains a colon still works. The other order would break
+     * those silently, and a password nobody can use is worse than a
+     * convenience nobody gets.
+     */
+    const embedded = loginInPassword(this.password)
+    if (!embedded || !matches(embedded.password, expected)) return false
+
+    // The network named there counts as the one asked for, the same as a
+    // network named in USER
+    if (!this.login.user) this.login = embedded.login
+    else if (!this.login.network) this.login = { ...this.login, network: embedded.login.network }
+
+    return true
   }
 
   private finishRegistration(): void {
@@ -1250,4 +1266,15 @@ function clamp(raw: string | undefined): number {
   const asked = Number(raw)
   if (!Number.isFinite(asked) || asked <= 0) return 50
   return Math.min(Math.floor(asked), 1_000)
+}
+
+/** A comparison that takes the same time whether or not it matches */
+function matches(given: string, expected: string): boolean {
+  const a = Buffer.from(given)
+  const b = Buffer.from(expected)
+  if (a.length !== b.length) {
+    timingSafeEqual(b, b)
+    return false
+  }
+  return timingSafeEqual(a, b)
 }

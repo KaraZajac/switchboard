@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseLogin, formatLogin, findNetwork } from '@shared/bouncerlogin'
+import { parseLogin, formatLogin, findNetwork, loginInPassword } from '@shared/bouncerlogin'
 import fixture from '../fixtures/bouncerlogin.json'
 
 describe('the name a client logs into a bouncer with', () => {
@@ -78,4 +78,20 @@ describe('finding the network somebody asked for', () => {
       )?.name
     ).toBe('somewhere else')
   })
+})
+
+describe('a login hidden in the password, which is how ZNC has always taken one', () => {
+  for (const c of fixture.embedded) {
+    it(c.name, () => {
+      const found = loginInPassword(c.raw)
+      if (c.user === null) {
+        expect(found).toBeNull()
+        return
+      }
+      expect(found).toEqual({
+        login: { user: c.user, client: c.client, network: c.network },
+        password: c.password
+      })
+    })
+  }
 })

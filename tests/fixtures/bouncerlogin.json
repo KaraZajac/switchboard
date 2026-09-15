@@ -1,17 +1,136 @@
 {
   "comment": "How a client names the network it wants, in the username. Shared between the desktop engine and the phone.",
   "logins": [
-    { "raw": "kara", "user": "kara", "client": null, "network": null },
-    { "raw": "kara/netslum", "user": "kara", "client": null, "network": "netslum" },
-    { "raw": "kara@laptop", "user": "kara", "client": "laptop", "network": null },
-    { "raw": "kara@laptop/netslum", "user": "kara", "client": "laptop", "network": "netslum" },
-    { "raw": "kara@*/netslum", "user": "kara", "client": null, "network": "netslum" },
-    { "raw": "kara/*", "user": "kara", "client": null, "network": null },
-    { "raw": "kara/", "user": "kara", "client": null, "network": null },
-    { "raw": "kara@", "user": "kara", "client": null, "network": null },
-    { "raw": "", "user": "", "client": null, "network": null },
-    { "raw": "/netslum", "user": "", "client": null, "network": "netslum" },
-    { "raw": "kara/irc@example.com", "user": "kara", "client": null, "network": "irc@example.com" },
-    { "raw": "kara@phone/irc.d0ll.link", "user": "kara", "client": "phone", "network": "irc.d0ll.link" }
+    {
+      "raw": "kara",
+      "user": "kara",
+      "client": null,
+      "network": null
+    },
+    {
+      "raw": "kara/netslum",
+      "user": "kara",
+      "client": null,
+      "network": "netslum"
+    },
+    {
+      "raw": "kara@laptop",
+      "user": "kara",
+      "client": "laptop",
+      "network": null
+    },
+    {
+      "raw": "kara@laptop/netslum",
+      "user": "kara",
+      "client": "laptop",
+      "network": "netslum"
+    },
+    {
+      "raw": "kara@*/netslum",
+      "user": "kara",
+      "client": null,
+      "network": "netslum"
+    },
+    {
+      "raw": "kara/*",
+      "user": "kara",
+      "client": null,
+      "network": null
+    },
+    {
+      "raw": "kara/",
+      "user": "kara",
+      "client": null,
+      "network": null
+    },
+    {
+      "raw": "kara@",
+      "user": "kara",
+      "client": null,
+      "network": null
+    },
+    {
+      "raw": "",
+      "user": "",
+      "client": null,
+      "network": null
+    },
+    {
+      "raw": "/netslum",
+      "user": "",
+      "client": null,
+      "network": "netslum"
+    },
+    {
+      "raw": "kara/irc@example.com",
+      "user": "kara",
+      "client": null,
+      "network": "irc@example.com"
+    },
+    {
+      "raw": "kara@phone/irc.d0ll.link",
+      "user": "kara",
+      "client": "phone",
+      "network": "irc.d0ll.link"
+    }
+  ],
+  "$embedded": "ZNC's `PASS <user>/<network>:<password>`. Only ever a fallback for when the whole string is not the password, so a password that genuinely contains a colon still works.",
+  "embedded": [
+    {
+      "name": "user, network and password",
+      "raw": "kara/netslum:hunter2",
+      "user": "kara",
+      "client": null,
+      "network": "netslum",
+      "password": "hunter2"
+    },
+    {
+      "name": "user and password, no network",
+      "raw": "kara:hunter2",
+      "user": "kara",
+      "client": null,
+      "network": null,
+      "password": "hunter2"
+    },
+    {
+      "name": "a client name comes along too",
+      "raw": "kara@laptop/netslum:hunter2",
+      "user": "kara",
+      "client": "laptop",
+      "network": "netslum",
+      "password": "hunter2"
+    },
+    {
+      "name": "a password with colons in it keeps them",
+      "raw": "kara/netslum:a:b:c",
+      "user": "kara",
+      "client": null,
+      "network": "netslum",
+      "password": "a:b:c"
+    },
+    {
+      "name": "no colon is not a login",
+      "raw": "hunter2",
+      "user": null,
+      "client": null,
+      "network": null,
+      "password": null
+    },
+    {
+      "name": "nothing before the colon is not a login",
+      "raw": ":hunter2",
+      "user": null,
+      "client": null,
+      "network": null,
+      "password": null
+    },
+    {
+      "name": "nothing after it is not a password",
+      "raw": "kara/netslum:",
+      "user": null,
+      "client": null,
+      "network": null,
+      "password": null
+    }
   ]
 }

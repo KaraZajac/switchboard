@@ -94,3 +94,31 @@ export function findNetwork<T>(
   // guessing which one they meant would hide it.
   return matches.length === 1 ? (matches[0] ?? null) : null
 }
+
+/**
+ * The other place a bouncer's login hides: the password.
+ *
+ * ZNC has always taken `PASS <user>/<network>:<password>`, and every ZNC user
+ * has a client configured that way — it is the one field in an IRC client that
+ * is always there, on every client, however old. Accepting it means somebody
+ * moving from ZNC to Switchboard points their existing config at the new
+ * address and it works, rather than editing four clients.
+ *
+ * Only ever a fallback. The password is tried whole first, so a password that
+ * genuinely contains a colon still works; this is what to try when that fails
+ * and there is a colon to split on. Doing it the other way round would break
+ * those passwords silently, and a password nobody can use is worse than a
+ * convenience nobody gets.
+ */
+export function loginInPassword(raw: string): { login: BouncerLogin; password: string } | null {
+  const colon = raw.indexOf(':')
+  if (colon <= 0) return null
+
+  const password = raw.slice(colon + 1)
+  if (!password) return null
+
+  const login = parseLogin(raw.slice(0, colon))
+  if (!login.user) return null
+
+  return { login, password }
+}

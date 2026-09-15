@@ -981,3 +981,38 @@ describe('speaking soju.im/bouncer-networks the way soju does', () => {
     expect(socket.lines('005').join(' ')).not.toContain('CHANTYPES=#')
   })
 })
+
+describe('a client configured for ZNC, pointed at this bouncer unchanged', () => {
+  it('takes the password with the login folded into it', () => {
+    const upstream = fakeUpstream()
+    const { socket } = attach(upstream, { password: 'hunter2' })
+
+    // The shape every ZNC user already has in every client they own
+    socket.feed('PASS kara/example:hunter2', 'NICK probe', 'USER kara 0 * :probe')
+
+    expect(socket.lines('001')[0]).toContain('example')
+    expect(socket.written).toContain(':kara!kara@host JOIN #test')
+  })
+
+  it('still takes a password that simply contains a colon', () => {
+    const upstream = fakeUpstream()
+    const { socket } = attach(upstream, { password: 'a:b:c' })
+
+    // Tried whole first, so this is not mistaken for a login. The other order
+    // would break these silently.
+    socket.feed('PASS a:b:c', 'NICK probe', 'USER kara/example 0 * :probe')
+
+    expect(socket.lines('001')).toHaveLength(1)
+    expect(socket.lines('464')).toEqual([])
+  })
+
+  it('refuses a wrong password however it is spelled', () => {
+    const upstream = fakeUpstream()
+    const { socket } = attach(upstream, { password: 'hunter2' })
+
+    socket.feed('PASS kara/example:wrong', 'NICK probe', 'USER kara 0 * :probe')
+
+    expect(socket.lines('464')).toHaveLength(1)
+    expect(socket.destroyed).toBe(true)
+  })
+})
