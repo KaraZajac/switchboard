@@ -57,6 +57,7 @@ import org.switchboard.android.irc.Nicks
 import org.switchboard.android.irc.IrcUrl
 import org.switchboard.android.irc.TrustedCertificate
 import org.switchboard.android.irc.Addresses
+import org.switchboard.android.irc.Bouncer
 import org.switchboard.android.irc.NetworkId
 import org.switchboard.android.irc.ServerConfig
 import org.switchboard.android.irc.Reconnect
@@ -1832,6 +1833,53 @@ class SharedCorpusTest {
                 name,
                 expected,
                 LineLength.split(c["text"]!!.jsonPrimitive.content, c["budget"]!!.jsonPrimitive.int)
+            )
+        }
+    }
+
+    // ── what a bouncer says about its networks ───────────────────────
+
+    @Test
+    fun `reads a bouncer's attributes the way the desktop reads them`() {
+        for (case in load("bouncer.json")["attributes"]!!.jsonArray) {
+            val c = case.jsonObject
+            val expected = c["pairs"]!!.jsonObject.mapValues { (_, v) ->
+                if (v is kotlinx.serialization.json.JsonNull) null else v.jsonPrimitive.content
+            }
+            assertEquals(
+                c["name"]!!.jsonPrimitive.content,
+                expected,
+                Bouncer.attributes(c["text"]!!.jsonPrimitive.content)
+            )
+        }
+    }
+
+    @Test
+    fun `builds the same network from them`() {
+        fun network(o: kotlinx.serialization.json.JsonObject) = Bouncer.Network(
+            id = o["id"]!!.jsonPrimitive.content,
+            name = o["name"]!!.jsonPrimitive.content,
+            host = o["host"]!!.jsonPrimitive.content,
+            port = o["port"]!!.jsonPrimitive.int,
+            tls = o["tls"]!!.jsonPrimitive.content.toBoolean(),
+            nickname = o["nickname"]!!.jsonPrimitive.content,
+            state = o["state"]!!.jsonPrimitive.content,
+            error = o["error"].let { if (it == null || it is kotlinx.serialization.json.JsonNull) null else it.jsonPrimitive.content }
+        )
+
+        for (case in load("bouncer.json")["networks"]!!.jsonArray) {
+            val c = case.jsonObject
+            val previous = c["previous"].let {
+                if (it == null || it is kotlinx.serialization.json.JsonNull) null else network(it.jsonObject)
+            }
+            assertEquals(
+                c["name"]!!.jsonPrimitive.content,
+                network(c["network"]!!.jsonObject),
+                Bouncer.networkFrom(
+                    c["id"]!!.jsonPrimitive.content,
+                    Bouncer.attributes(c["text"]!!.jsonPrimitive.content),
+                    previous
+                )
             )
         }
     }

@@ -1,0 +1,171 @@
+{
+  "note": "soju.im/bouncer-networks. Lines here are what a real soju sent on 2026-09-15, plus the escaping and removal cases the spec requires. Read by tests/shared/bouncer.test.ts and SharedCorpusTest.",
+  "attributes": [
+    {
+      "name": "what soju sends for a new network",
+      "text": "realname=sbtest;tls=1;host=irc.netslum.io;port=6697;name=netslum;state=disconnected;nickname=sbtest",
+      "pairs": {
+        "realname": "sbtest",
+        "tls": "1",
+        "host": "irc.netslum.io",
+        "port": "6697",
+        "name": "netslum",
+        "state": "disconnected",
+        "nickname": "sbtest"
+      }
+    },
+    {
+      "name": "a later line carries only what changed",
+      "text": "state=connected",
+      "pairs": {
+        "state": "connected"
+      }
+    },
+    {
+      "name": "an attribute with no equals is being removed",
+      "text": "error;state=connected",
+      "pairs": {
+        "error": null,
+        "state": "connected"
+      }
+    },
+    {
+      "name": "an empty value is a value, not a removal",
+      "text": "name=;state=connected",
+      "pairs": {
+        "name": "",
+        "state": "connected"
+      }
+    },
+    {
+      "name": "a semicolon inside a value is escaped",
+      "text": "name=one\\:two;state=connected",
+      "pairs": {
+        "name": "one;two",
+        "state": "connected"
+      }
+    },
+    {
+      "name": "so are spaces and newlines",
+      "text": "name=a\\sb;error=one\\r\\ntwo",
+      "pairs": {
+        "name": "a b",
+        "error": "one\r\ntwo"
+      }
+    },
+    {
+      "name": "nothing at all is no attributes",
+      "text": "",
+      "pairs": {}
+    }
+  ],
+  "networks": [
+    {
+      "name": "a full listing becomes a network",
+      "id": "1",
+      "text": "name=netslum;state=connected;nickname=sbtest;realname=sbtest;tls=1;host=irc.netslum.io;port=6697",
+      "previous": null,
+      "network": {
+        "id": "1",
+        "name": "netslum",
+        "host": "irc.netslum.io",
+        "port": 6697,
+        "tls": true,
+        "nickname": "sbtest",
+        "state": "connected",
+        "error": null
+      }
+    },
+    {
+      "name": "a change keeps what it did not mention",
+      "id": "1",
+      "text": "state=connecting",
+      "previous": {
+        "id": "1",
+        "name": "netslum",
+        "host": "irc.netslum.io",
+        "port": 6697,
+        "tls": true,
+        "nickname": "sbtest",
+        "state": "connected",
+        "error": null
+      },
+      "network": {
+        "id": "1",
+        "name": "netslum",
+        "host": "irc.netslum.io",
+        "port": 6697,
+        "tls": true,
+        "nickname": "sbtest",
+        "state": "connecting",
+        "error": null
+      }
+    },
+    {
+      "name": "an error is carried, and cleared when removed",
+      "id": "1",
+      "text": "error",
+      "previous": {
+        "id": "1",
+        "name": "netslum",
+        "host": "irc.netslum.io",
+        "port": 6697,
+        "tls": true,
+        "nickname": "sbtest",
+        "state": "connected",
+        "error": "refused"
+      },
+      "network": {
+        "id": "1",
+        "name": "netslum",
+        "host": "irc.netslum.io",
+        "port": 6697,
+        "tls": true,
+        "nickname": "sbtest",
+        "state": "connected",
+        "error": null
+      }
+    },
+    {
+      "name": "a network with no name is called by its host",
+      "id": "2",
+      "text": "host=irc.example.org;port=6667;tls=0;nickname=kara;state=connected",
+      "previous": null,
+      "network": {
+        "id": "2",
+        "name": "irc.example.org",
+        "host": "irc.example.org",
+        "port": 6667,
+        "tls": false,
+        "nickname": "kara",
+        "state": "connected",
+        "error": null
+      }
+    },
+    {
+      "name": "a port that is not a number keeps the one we had",
+      "id": "3",
+      "text": "port=nonsense",
+      "previous": {
+        "id": "3",
+        "name": "n",
+        "host": "h",
+        "port": 6697,
+        "tls": true,
+        "nickname": "k",
+        "state": "connected",
+        "error": null
+      },
+      "network": {
+        "id": "3",
+        "name": "n",
+        "host": "h",
+        "port": 6697,
+        "tls": true,
+        "nickname": "k",
+        "state": "connected",
+        "error": null
+      }
+    }
+  ]
+}
