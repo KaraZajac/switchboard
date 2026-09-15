@@ -163,6 +163,71 @@ WantedBy=multi-user.target
 Run it as its own user. `journalctl -u switchboard -f` shows what the
 connections are doing.
 
+## What carries over the IRC port
+
+Everything the network agreed to send. The bouncer offers an attached client
+every capability it negotiated upstream, minus the five that describe its own
+socket rather than what the network sends — so typing notifications,
+reactions, replies, edits, redactions, profiles, away-notify, account tags and
+the rest all arrive.
+
+Reactions and replies in particular are client tags on a `TAGMSG`, and they
+carry the network's own message id, which is what a reply, a reaction and a
+redaction are addressed to. Two clients attached at once each see what the
+other says, exactly once.
+
+The five kept back: `sasl`, because logging in to the _network_ is the
+bouncer's job and it offers a `sasl` of its own for logging in to the bouncer;
+`draft/webpush`, because a push subscription belongs to the device that will be
+woken by it; `cap-notify`, because nothing here sends `CAP NEW` or `CAP DEL`
+and a promise not kept is worse than a capability not offered; and
+`draft/pre-away` and `draft/auto-join`, which only do anything during
+registration.
+
+Going the other way, a line from a client is sanitised: the prefix comes off,
+because clients do not send one, and so do `msgid`, `time` and `account`, which
+are the network's to assign. Client tags and `label` stay, being exactly what a
+client is meant to set.
+
+## Linking it to your desktop and phone
+
+The IRC port is one of two ways in, and the other one is what makes the
+hand-over work.
+
+Pair the desktop and the phone to the always-on instance the same way you pair
+them to each other. The desktop can go looking for it — Settings → Devices →
+Always-on Switchboard, paste the ticket and the code — or the instance can go
+looking for the desktop, with `dial <ticket> <code>` at its console. Either
+direction works; whichever end has the other's ticket is the one that moves.
+The code is needed once. After that each recognises the other by its key and
+finds it again on every restart with nobody involved.
+
+Once they are linked, the always-on instance holds the connections and the
+others follow. If it stops, the desktop notices within about twenty seconds,
+opens the shared config and takes over; the phone keeps following the desktop.
+If the desktop stops too, the phone takes over. When the always-on instance
+comes back it takes the connections again and everything follows it. None of
+that needs anybody to do anything.
+
+You do not have to pair all three to each other. A phone paired to the desktop
+and a desktop paired to the always-on instance is enough: a device that cannot
+see who is holding the network is told by the one that can.
+
+### One shared config, made once
+
+A config's key comes from your passphrase _and_ a salt made when the config was
+made, so two configs created separately under the same passphrase cannot open
+each other. Make one, on whichever device you set up first, and let the others
+adopt it.
+
+That is why a headless instance never makes one on its own. Give it
+`SWITCHBOARD_PASSPHRASE` and it opens whatever arrives; `vault create` at the
+console makes the first one, for somebody whose server really is the first
+thing they set up.
+
+If you do end up with two, the way out is to lock the one you want to replace
+and unlock it again once the other's has arrived.
+
 ## How it decides who holds the network
 
 Every Switchboard advertises how good a host it is: a headless instance
@@ -178,6 +243,11 @@ bouncer is built to multiplex, so every device stays on at once. Switchboard
 recognises a bouncer from what it says about itself (`BOUNCER` in ISUPPORT, or
 the `soju.im/bouncer-networks` capability) and turns the arbitration off for
 that network.
+
+A device that is following does not dial the network at all, including while it
+is still working out whether it should be. That is deliberate: a desktop that
+connected first and handed over afterwards would appear in your channels as
+`nick___` for a few seconds, every time it started.
 
 ## Where the secrets are
 

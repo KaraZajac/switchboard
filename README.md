@@ -77,9 +77,15 @@ It is also a bouncer in the ordinary sense. It listens on IRC, so irssi,
 WeeChat, Halloy, Textual or Switchboard itself attaches to it and arrives
 already joined to your channels, under your nick, with the last of what was
 said while you were away. Several clients can be attached at once and each sees
-what the others say. Networks can be added and changed over
-`soju.im/bouncer-networks`, the same extension Switchboard speaks when it is
-the one talking to a soju.
+what the others say — typing, reactions, replies, edits and redactions all
+included, because an attached client is offered every capability the network
+agreed to. Networks can be added and changed over `soju.im/bouncer-networks`,
+the same extension Switchboard speaks when it is the one talking to a soju.
+
+Pair your devices to it and the hand-over goes three deep. The always-on
+instance holds; if it stops the desktop takes over within about twenty seconds
+and the phone keeps following the desktop; if the desktop stops too the phone
+takes over. Everything hands back when it returns, and none of it needs you.
 
 None of it is required. If you already run soju, add it to Switchboard as a
 network and both devices attach to that instead.
