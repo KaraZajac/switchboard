@@ -71,8 +71,11 @@ describe('taking what the phone heard', () => {
     expect(world.stored[0].replyTo).toBe('m0')
   })
 
-  it('writes nothing for a network this desktop does not have', () => {
-    expect(storeHandover('unknown', [message()])).toBe(0)
+  it('refuses a network this desktop does not have, rather than dropping it', () => {
+    // Returning 0 here is indistinguishable from "already had them all", and
+    // the phone marked them handed over on the strength of it — losing the
+    // only copy of everything it heard while it was the connection.
+    expect(() => storeHandover('unknown', [message()])).toThrow(/No such network/)
     expect(world.stored).toEqual([])
   })
 

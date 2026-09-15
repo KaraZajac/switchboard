@@ -57,10 +57,20 @@ function usable(entry: unknown): entry is HandoverMessage {
  */
 export function storeHandover(serverId: string, entries: unknown[]): number {
   if (!getServer(serverId)) {
-    // A network this desktop does not have. Not an error — the phone may have
-    // been given one while we were away — but not something to write rows for
-    // either, because nothing here could ever show them.
-    return 0
+    /*
+     * A network this desktop does not have.
+     *
+     * This used to return 0, which the phone could not tell apart from "all of
+     * these were already here" — so it marked them handed over and pruned the
+     * only copy there was. Exactly what happened when the two devices ended up
+     * holding different ids for the same network: every message the phone took
+     * while it was the connection went into the gap between them.
+     *
+     * Refused now. The phone keeps them and tries again, which is the right
+     * answer whether the network is about to arrive in a shared config or the
+     * two have genuinely drifted apart.
+     */
+    throw new Error(`No such network on this desktop: ${serverId}`)
   }
 
   let stored = 0

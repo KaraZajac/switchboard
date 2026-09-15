@@ -1044,8 +1044,14 @@ class SwitchboardEngine(
 
             val answer = ask("history:store", JsonPrimitive(batch.serverId), rows)
             if (answer == null) {
-                // The desktop did not take them; they stay marked for next time
-                Log.w(TAG, "handing over ${batch.rows.size} message(s) failed; keeping them")
+                // The desktop did not take them; they stay marked for next
+                // time. It refuses outright for a network it does not have,
+                // which is the case worth keeping them for.
+                Log.w(
+                    TAG,
+                    "the desktop would not take ${batch.rows.size} message(s) " +
+                        "for ${batch.serverId}; keeping them"
+                )
                 return
             }
 
