@@ -170,16 +170,31 @@ export function acceptTransfer(
   socket.on('error', (err: Error) => fail(err.message))
 
   socket.on('close', () => {
-    file.end()
-    if (transfer.state !== 'active') return
+    if (transfer.state !== 'active') {
+      file.end()
+      return
+    }
 
     // A sender that hung up early left a file that is not the file
     if (transfer.size > 0 && transfer.transferred < transfer.size) {
       fail('The sender hung up before the file was finished')
       return
     }
-    transfer.state = 'done'
-    watch(transfer)
+
+    /*
+     * Not "done" until the bytes are actually on the disk.
+     *
+     * `end()` asks the stream to finish; the flush happens after it returns.
+     * Announcing here meant the row said the file was complete while it was
+     * still being written — and the path in that row is what the UI hands to
+     * "open" and to the file manager. Nearly always the flush won the race,
+     * which is exactly why it went unnoticed: under load the test that reads
+     * the file back found it empty.
+     */
+    file.end(() => {
+      transfer.state = 'done'
+      watch(transfer)
+    })
   })
 }
 
