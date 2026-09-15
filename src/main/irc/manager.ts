@@ -25,6 +25,7 @@ import { isServiceNick } from '@shared/constants'
 import { performLines } from '@shared/aliases'
 import { logMessage } from '../storage/logfile'
 import { noteDccOffer } from './features/dcc'
+import { rememberRaw } from './rawlog'
 import { runCommand } from './commands'
 import { isIgnored, type IgnoreEntry, type IgnoreScope } from '@shared/ignore'
 import { getSetting } from '../storage/models/settings'
@@ -1183,6 +1184,10 @@ export class IRCManager {
     // Raw (debug)
     client.events.on('raw', (direction, line) => {
       this.send('irc:raw', { serverId, direction, line })
+      // And kept, so the server log opens on the connection that has already
+      // gone wrong rather than on whatever happens next. Credentials are
+      // masked as it is kept — see `rawlog`.
+      this.send('irc:raw-line', { serverId, entry: rememberRaw(serverId, direction, line) })
     })
   }
 }

@@ -24,6 +24,7 @@ type Modal =
   | 'quick-switcher'
   | 'account'
   | 'channel-lists'
+  | 'server-log'
   | null
 
 export interface WhoisData {
@@ -91,6 +92,15 @@ interface UIState {
   showJoinsParts: boolean
   whoisData: WhoisData | null
   editServerId: string | null
+  /**
+   * Which network the server log is for.
+   *
+   * Carried rather than read from whichever network happens to be active: the
+   * menu this opens from is also reachable by right-clicking a network in the
+   * rail, and a log that shows a different one than the menu you opened is
+   * worse than no log.
+   */
+  serverLogId: string | null
   dmMode: boolean
   /**
    * The conversation Messages was last left on.
@@ -126,6 +136,7 @@ interface UIState {
   setShowJoinsParts: (on: boolean) => void
   showWhois: (data: WhoisData) => void
   setEditServerId: (id: string | null) => void
+  openServerLog: (id: string) => void
   setPopupWhoisNick: (nick: string | null) => void
   setPopupWhoisData: (data: WhoisData | null) => void
   addToast: (toast: Omit<Toast, 'id'>) => void
@@ -171,6 +182,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   showJoinsParts: false,
   whoisData: null,
   editServerId: null,
+  serverLogId: null,
   dmMode: false,
   lastDm: null,
   popupWhoisNick: null,
@@ -191,7 +203,13 @@ export const useUIStore = create<UIState>((set, get) => ({
   addServerPrefill: null,
   openAddServer: (prefill) => set({ activeModal: 'add-server', addServerPrefill: prefill }),
   closeModal: () =>
-    set({ activeModal: null, whoisData: null, editServerId: null, accountServerId: null }),
+    set({
+      activeModal: null,
+      whoisData: null,
+      editServerId: null,
+      accountServerId: null,
+      serverLogId: null
+    }),
 
   /** Open the account panel for one network */
   showAccount: (serverId) => set({ activeModal: 'account', accountServerId: serverId }),
@@ -214,6 +232,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   setShowJoinsParts: (on) => set({ showJoinsParts: on }),
   showWhois: (data) => set({ activeModal: 'whois', whoisData: data }),
   setEditServerId: (id) => set({ editServerId: id, activeModal: id ? 'edit-server' : null }),
+  openServerLog: (id) => set({ serverLogId: id, activeModal: 'server-log' }),
   setDmMode: (dm) => set({ dmMode: dm }),
   rememberDm: (serverId, nick) => set({ lastDm: { serverId, nick } }),
   setPopupWhoisNick: (nick) =>

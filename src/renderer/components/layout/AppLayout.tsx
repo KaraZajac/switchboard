@@ -13,6 +13,7 @@ import { AddServerModal } from '../server/AddServerModal'
 import { AccountModal } from '../user/AccountModal'
 import { WhoisModal } from '../user/WhoisModal'
 import { SearchModal } from '../chat/SearchModal'
+import { ServerLogModal } from '../server/ServerLogModal'
 import { QuickSwitcher } from '../common/QuickSwitcher'
 import { WelcomeScreen } from '../onboarding/WelcomeScreen'
 import { ChannelLists } from '../channel/ChannelLists'
@@ -68,6 +69,7 @@ export function AppLayout() {
       {activeModal === 'whois' && <WhoisModal />}
       {activeModal === 'account' && <AccountModal />}
       {activeModal === 'search' && <SearchModal />}
+      {activeModal === 'server-log' && <ServerLogModal />}
       {activeModal === 'quick-switcher' && <QuickSwitcher />}
       {activeModal === 'channel-lists' && <ChannelLists />}
     </div>

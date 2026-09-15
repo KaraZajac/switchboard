@@ -39,6 +39,9 @@ export function ServerMenu({ serverId, x, y, onClose, extraItems = [] }: ServerM
       onClick: () => useUIStore.getState().showAccount(serverId)
     },
     { label: 'Server Settings', onClick: () => useUIStore.getState().setEditServerId(serverId) },
+    // What is actually on the wire, for when the polite messages are not
+    // saying why a network will not behave
+    { label: 'Server log…', onClick: () => useUIStore.getState().openServerLog(serverId) },
     { label: '', onClick: () => {}, separator: true },
     ...(isMuted
       ? [{ label: 'Unmute Server', onClick: () => store.unmuteServer(serverId) }]

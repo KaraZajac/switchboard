@@ -1,5 +1,6 @@
 import { fetchForPreview, BlockedAddressError } from '../net/safefetch'
 import { storeHandover } from '../storage/handover'
+import { rawLogFor, clearRawLog } from '../irc/rawlog'
 import { getMessagesSince } from '../storage/models/message'
 import { logsFolder } from '../logging'
 import { mkdir } from 'fs/promises'
@@ -975,6 +976,17 @@ export function registerIPCHandlers(): void {
    * happened to be open — so the two databases drifted apart every time they
    * were separated, which is the opposite of what pairing promises.
    */
+  /*
+   * The wire, for the network you are looking at.
+   *
+   * Deliberately absent from `REMOTE_ALLOWED`. The lines are masked, but a
+   * debug stream is not something to hand a paired device by default — see
+   * the note on `NEVER_RELAYED` in `remote/link.ts`, which keeps `irc:raw`
+   * off the wire for the same reason.
+   */
+  handle('raw:log', async (_event, serverId: string) => rawLogFor(serverId))
+  handle('raw:clear', async (_event, serverId: string) => clearRawLog(serverId))
+
   handle(
     'history:since',
     async (_event, serverId: string, after: string, limit?: number) => {

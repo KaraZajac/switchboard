@@ -85,6 +85,18 @@ export interface HandoverMessage {
   replyTo?: string | null
 }
 
+/**
+ * One line of the wire, for the server log.
+ *
+ * Credentials are already masked: the desktop does it as the line is kept, so
+ * a log that is copied or saved has never held the secret at all.
+ */
+export interface RawLine {
+  at: string
+  direction: 'in' | 'out'
+  line: string
+}
+
 export interface VaultStatusInfo {
   exists: boolean
   unlocked: boolean
@@ -215,6 +227,8 @@ export interface MainToRendererEvents {
     values: Record<string, string>
   }
   'irc:raw': { serverId: string; direction: 'in' | 'out'; line: string }
+  /** One line of the wire, as the server log shows it — see `RawLine` */
+  'irc:raw-line': { serverId: string; entry: RawLine }
   'irc:verify': { serverId: string; status: string; account: string; message: string }
   'irc:webpush': { serverId: string; subcommand: string; endpoint: string }
   'irc:setname': { serverId: string; nick: string; realname: string }
@@ -387,6 +401,9 @@ export interface RendererToMainInvocations {
    */
   'history:store': (serverId: string, messages: HandoverMessage[]) => Promise<number>
   /** Everything after a moment, across every conversation — see `history:since` */
+  /** Everything on the wire for a network, oldest first */
+  'raw:log': (serverId: string) => Promise<RawLine[]>
+  'raw:clear': (serverId: string) => Promise<void>
   'history:since': (serverId: string, after: string, limit?: number) => Promise<ChatMessage[]>
   'history:fetch': (serverId: string, channel: string, before?: string, limit?: number) => Promise<ChatMessage[]>
   'chathistory:request': (serverId: string, channel: string, before?: string, limit?: number) => Promise<void>
