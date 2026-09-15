@@ -424,13 +424,17 @@ fun App(
             pairingAsked?.let { payload ->
                 AlertDialog(
                     onDismissRequest = { pairingAsked = null; onPairingConsumed() },
-                    title = { Text("Pair with a desktop?") },
+                    // Not "a desktop": the other end may be a Switchboard
+                    // running on a server, which is the setup somebody is most
+                    // likely to be pairing into deliberately
+                    title = { Text("Pair with another Switchboard?") },
                     text = {
                         Text(
-                            "Something asked this phone to pair with a desktop running " +
-                                "Switchboard. Only continue if you have just scanned a QR " +
-                                "code on your own computer.\n\nPairing replaces whichever " +
-                                "desktop this phone is paired with now."
+                            "Something asked this phone to pair with another computer " +
+                                "running Switchboard. Only continue if you have just " +
+                                "scanned a QR code on your own computer, or pasted a ticket " +
+                                "you printed yourself.\n\nPairing replaces whatever this " +
+                                "phone is paired with now."
                         )
                     },
                     confirmButton = {

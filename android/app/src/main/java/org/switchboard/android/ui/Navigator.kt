@@ -85,6 +85,7 @@ fun Navigator(
     modeDetail: String,
     takingOver: Boolean,
     pairedWithDesktop: Boolean,
+    followingAlwaysOn: Boolean,
     vaultUnlocked: Boolean,
     onSelect: (serverId: String, channel: String) -> Unit,
     onSelectServer: (serverId: String) -> Unit,
@@ -148,8 +149,8 @@ fun Navigator(
                 )
             }
             UserPanel(
-                store, mode, modeDetail, takingOver, pairedWithDesktop, vaultUnlocked,
-                onOpenSettings, onEditProfile, onToggleAway
+                store, mode, modeDetail, takingOver, pairedWithDesktop, followingAlwaysOn,
+                vaultUnlocked, onOpenSettings, onEditProfile, onToggleAway
             )
         }
     }
@@ -1069,6 +1070,7 @@ private fun UserPanel(
     modeDetail: String,
     takingOver: Boolean,
     pairedWithDesktop: Boolean,
+    followingAlwaysOn: Boolean,
     vaultUnlocked: Boolean,
     onOpenSettings: () -> Unit,
     onEditProfile: () -> Unit,
@@ -1123,7 +1125,7 @@ private fun UserPanel(
                 overflow = TextOverflow.Ellipsis
             )
             Row(verticalAlignment = Alignment.CenterVertically) {
-                ModePill(mode, takingOver, pairedWithDesktop)
+                ModePill(mode, takingOver, pairedWithDesktop, followingAlwaysOn)
                 Spacer(Modifier.width(6.dp))
                 Text(
                     modeDetail,
@@ -1188,10 +1190,15 @@ fun ModePill(
      * on, while what is actually happening — a socket dialling — has a perfectly
      * ordinary name.
      */
-    pairedWithDesktop: Boolean = false
+    pairedWithDesktop: Boolean = false,
+    /** Whether the peer being followed is an always-on Switchboard */
+    followingAlwaysOn: Boolean = false
 ) = when {
     mode == EngineMode.HOLDING -> Pill("LIVE", Green)
-    mode == EngineMode.FOLLOWING -> Pill("DESKTOP", Blue)
+    // What it is actually following. An always-on instance is not a desktop,
+    // and calling it one is confusing in exactly the setup where it matters:
+    // somebody checking why their phone is not holding the connection.
+    mode == EngineMode.FOLLOWING -> Pill(if (followingAlwaysOn) "SERVER" else "DESKTOP", Blue)
     takingOver && pairedWithDesktop -> Pill("TAKING OVER", Yellow)
     takingOver -> Pill("CONNECTING", Yellow)
     else -> Pill("OFFLINE", Overlay)

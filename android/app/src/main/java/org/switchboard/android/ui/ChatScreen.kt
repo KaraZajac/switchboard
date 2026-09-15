@@ -231,6 +231,7 @@ fun ChatScreen(
                                 modeDetail = engine.modeDetail,
                                 takingOver = engine.isTakingOver,
                                 pairedWithDesktop = engine.pairedWithDesktop,
+                                followingAlwaysOn = engine.followingAlwaysOn,
                                 vaultUnlocked = engine.isVaultUnlocked,
                                 onSelect = { serverId, channel ->
                                     store.select(serverId, channel)
@@ -837,7 +838,12 @@ private fun ChannelHeader(
                     modifier = Modifier.weight(1f, fill = false)
                 )
                 Spacer(Modifier.width(6.dp))
-                ModePill(engine.mode, engine.isTakingOver, engine.pairedWithDesktop)
+                ModePill(
+                    engine.mode,
+                    engine.isTakingOver,
+                    engine.pairedWithDesktop,
+                    engine.followingAlwaysOn
+                )
             }
             Text(
                 // The banner already carries the mode when there is one to

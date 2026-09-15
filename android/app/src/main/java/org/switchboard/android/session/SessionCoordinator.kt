@@ -19,6 +19,15 @@ enum class SessionRole { PRIMARY, FOLLOWER }
 const val DESKTOP_PRIORITY = 100
 const val PHONE_PRIORITY = 10
 
+/**
+ * A Switchboard with no window, on something that never sleeps.
+ *
+ * Outranks both, and the gap is wide on purpose: it is a different kind of
+ * thing, not a slightly better desktop. Kept here so the phone can tell what it
+ * is following, and can say so rather than calling a server a desktop.
+ */
+const val SERVER_PRIORITY = 1_000
+
 const val HEARTBEAT_INTERVAL_MS = 5_000L
 /** Three missed beats before a follower concludes the primary is gone */
 const val HEARTBEAT_TIMEOUT_MS = 16_000L

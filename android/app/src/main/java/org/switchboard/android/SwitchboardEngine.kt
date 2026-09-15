@@ -42,6 +42,7 @@ import org.switchboard.android.session.Cancellable
 import org.switchboard.android.session.ConnectionControl
 import org.switchboard.android.session.CoordinatorTransport
 import org.switchboard.android.session.PHONE_PRIORITY
+import org.switchboard.android.session.SERVER_PRIORITY
 import org.switchboard.android.session.SessionClock
 import org.switchboard.android.session.SessionCoordinator
 import org.switchboard.android.session.SessionFrame
@@ -539,6 +540,9 @@ class SwitchboardEngine(
      * case none of those sentences were written for.
      */
     var pairedWithDesktop by mutableStateOf(false)
+
+    /** Whether the peer we follow is an always-on Switchboard rather than a desktop */
+    var followingAlwaysOn by mutableStateOf(false)
         private set
 
     /**
@@ -1034,6 +1038,14 @@ class SwitchboardEngine(
      * raced a reconnect, an answer this phone never heard — costs nothing.
      * Dropped from the queue only once the desktop has actually answered.
      */
+    /**
+     * Networks a peer has already refused, so it is said once and not per beat.
+     *
+     * Cleared when the shared config changes, because that is the one event
+     * that can make a refusal stale.
+     */
+    private val refusedHandover = mutableSetOf<String>()
+
     internal suspend fun handOverHistory() {
         if (!remote.isLinked) return
         if (runCatching { history.pendingCount() }.getOrDefault(0) == 0) return
@@ -1044,6 +1056,31 @@ class SwitchboardEngine(
     private suspend fun handOverPending() {
         while (true) {
             val batch = runCatching { history.pendingHandover() }.getOrNull() ?: return
+
+            /*
+             * Messages for a network nobody has any more.
+             *
+             * The queue means "give these to whichever device is holding this
+             * network". If this phone's own config no longer contains it —
+             * because the shared config was replaced by one from another
+             * device, and the two were different accounts on the same server —
+             * then there is nobody to give them to, ever. They stayed queued
+             * and were re-offered and refused every few seconds for as long as
+             * the phone was linked.
+             *
+             * Taken out of the queue, not deleted: they are still the person's
+             * history and still show in the conversation. Only the promise to
+             * hand them somewhere is given up.
+             */
+            if (vault.isUnlocked && vault.servers().none { it.id == batch.serverId }) {
+                Log.i(
+                    TAG,
+                    "${batch.rows.size} message(s) for ${batch.serverId} belong to a network " +
+                        "nothing has any more; keeping them here and giving up on handing them on"
+                )
+                history.markHandedOver(batch.rows.map { (_, message) -> message.id })
+                continue
+            }
 
             val rows = JsonArray(
                 batch.rows.map { (channel, message) ->
@@ -1063,18 +1100,29 @@ class SwitchboardEngine(
 
             val answer = ask("history:store", JsonPrimitive(batch.serverId), rows)
             if (answer == null) {
-                // The desktop did not take them; they stay marked for next
-                // time. It refuses outright for a network it does not have,
-                // which is the case worth keeping them for.
-                Log.w(
-                    TAG,
-                    "the desktop would not take ${batch.rows.size} message(s) " +
-                        "for ${batch.serverId}; keeping them"
-                )
+                /*
+                 * They stay queued. It refuses outright for a network it does
+                 * not have, which is exactly the case worth keeping them for —
+                 * the config may still be on its way.
+                 *
+                 * Said once per network rather than every time. Two devices
+                 * can hold the same server under different accounts, which are
+                 * different networks and rightly do not merge; those messages
+                 * are then refused for as long as the two are linked, and a
+                 * warning on every attempt buries everything else in the log.
+                 */
+                if (refusedHandover.add(batch.serverId)) {
+                    Log.w(
+                        TAG,
+                        "the other device would not take ${batch.rows.size} message(s) " +
+                            "for ${batch.serverId}; keeping them here"
+                    )
+                }
                 return
             }
 
-            Log.i(TAG, "handed ${batch.rows.size} message(s) to the desktop for ${batch.serverId}")
+            refusedHandover.remove(batch.serverId)
+            Log.i(TAG, "handed ${batch.rows.size} message(s) on for ${batch.serverId}")
             history.markHandedOver(batch.rows.map { (_, message) -> message.id })
         }
     }
@@ -1980,6 +2028,16 @@ class SwitchboardEngine(
         // none of these messages were written for.
         pairedWithDesktop = hasPairedDesktop() || remote.isLinked
 
+        /*
+         * What this phone is following, when it is following something.
+         *
+         * A desktop and an always-on instance are not the same thing to
+         * somebody looking at the badge and wondering why their phone is not
+         * holding the connection. Told apart by rank, which is the one thing
+         * every peer advertises.
+         */
+        followingAlwaysOn = coordinator.state().peers.values.any { it.priority >= SERVER_PRIORITY }
+
         // Sitting out a backoff is not dialling. The two look identical from
         // here and read completely differently to somebody watching: a client
         // that has been told to slow down and is doing so says so, rather than
@@ -2202,9 +2260,25 @@ class SwitchboardEngine(
 
             "vault-payload" -> {
                 val envelope = frame["envelope"] ?: return
+                /*
+                 * The guard belongs to the result, not to the renaming.
+                 *
+                 * It used to hang off the end of the `reidentified` chain,
+                 * where it also fired whenever there was nothing to rename —
+                 * which is the ordinary case. A config adopted from another
+                 * device with the same network ids then returned here and
+                 * never reached `applySharedState`, so the version, the status
+                 * line and the connections were all left on the old one.
+                 */
                 val result = runCatching { vault.accept(VaultCrypto.decode(envelope)) }.getOrNull()
-                result?.reidentified?.takeIf { it.isNotEmpty() }?.let { applyReidentified(it) }
                     ?: return
+
+                result.reidentified.takeIf { it.isNotEmpty() }?.let { applyReidentified(it) }
+
+                // A config that has changed is the one event that can make a
+                // refused hand-over worth trying again
+                if (result.accepted) refusedHandover.clear()
+
                 vaultVersion = vault.version
                 store.status = result.reason
                 applySharedState()
