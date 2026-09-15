@@ -238,9 +238,12 @@ export class IRCManager {
    * perfectly well stay on.
    */
   private throughABouncer(serverId: string): boolean {
-    const client = this.clients.get(serverId)
-    if (!client) return false
-    return isBouncer(client.state.isupport, client.state.capabilities)
+    const state = this.clients.get(serverId)?.state
+    // A connection that has not been told anything yet is not known to be one,
+    // and treating it as one would let both devices on a server that will not
+    // have them
+    if (!state) return false
+    return isBouncer(state.isupport, state.capabilities)
   }
 
   /** The networks this device is holding, for a peer deciding what to take over */
