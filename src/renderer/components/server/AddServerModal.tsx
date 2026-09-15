@@ -45,6 +45,7 @@ export function AddServerModal({ editServer }: AddServerModalProps = {}) {
   const [autoJoin, setAutoJoin] = useState(editServer?.autoJoin?.join(', ') ?? prefill?.channel ?? '')
   // Nicks to try when the first is taken — see `@shared/nicks`
   const [altNicks, setAltNicks] = useState(editServer?.altNicks?.join(', ') ?? '')
+  const [altAddresses, setAltAddresses] = useState(editServer?.altAddresses?.join(', ') ?? '')
   const [identifyCommand, setIdentifyCommand] = useState(editServer?.identifyCommand ?? '')
   const [performOnConnect, setPerformOnConnect] = useState(editServer?.performOnConnect ?? '')
   const [clientCert, setClientCert] = useState(editServer?.clientCert ?? '')
@@ -95,6 +96,10 @@ export function AddServerModal({ editServer }: AddServerModalProps = {}) {
       altNicks: altNicks
         .split(',')
         .map((n) => n.trim())
+        .filter(Boolean),
+      altAddresses: altAddresses
+        .split(',')
+        .map((a) => a.trim())
         .filter(Boolean),
       username: username.trim() || nick.trim(),
       realname: realname.trim() || nick.trim(),
@@ -229,6 +234,25 @@ export function AddServerModal({ editServer }: AddServerModalProps = {}) {
             className="w-full rounded bg-gray-900 px-3 py-2 text-gray-100 outline-none ring-1 ring-gray-700 focus:ring-indigo-500"
             required
           />
+        </div>
+
+        {/* Addresses to try when one will not answer */}
+        <div>
+          <label className="mb-1 block text-sm font-medium text-gray-300">
+            Other addresses
+          </label>
+          <input
+            type="text"
+            value={altAddresses}
+            onChange={(e) => setAltAddresses(e.target.value)}
+            placeholder="eu.example.org, us.example.org:+6697"
+            title="Tried in turn when one will not answer"
+            className="w-full rounded bg-gray-900 px-3 py-2 text-gray-100 outline-none ring-1 ring-gray-700 focus:ring-indigo-500"
+          />
+          <p className="mt-1 text-xs text-gray-500">
+            Tried in turn when one will not answer, then back round to the first. A port on its
+            own is plain; write <span className="font-mono">+6697</span> for TLS.
+          </p>
         </div>
 
         {/* Nicks to try when the first is taken */}

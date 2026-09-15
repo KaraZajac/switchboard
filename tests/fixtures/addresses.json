@@ -1,0 +1,249 @@
+{
+  "note": "Addresses a network can be reached at. Read by tests/shared/addresses.test.ts and SharedCorpusTest.",
+  "parse": [
+    {
+      "name": "a bare host inherits the network's port and TLS",
+      "text": "irc.example.org",
+      "fallback": {
+        "port": 6697,
+        "tls": true
+      },
+      "address": {
+        "host": "irc.example.org",
+        "port": 6697,
+        "tls": true
+      }
+    },
+    {
+      "name": "a port written without a plus is plain",
+      "text": "irc.example.org:6668",
+      "fallback": {
+        "port": 6697,
+        "tls": true
+      },
+      "address": {
+        "host": "irc.example.org",
+        "port": 6668,
+        "tls": false
+      }
+    },
+    {
+      "name": "a plus means TLS whatever the network says",
+      "text": "irc.example.org:+6697",
+      "fallback": {
+        "port": 6667,
+        "tls": false
+      },
+      "address": {
+        "host": "irc.example.org",
+        "port": 6697,
+        "tls": true
+      }
+    },
+    {
+      "name": "surrounding space is not part of it",
+      "text": "  irc.example.org:6667  ",
+      "fallback": {
+        "port": 6697,
+        "tls": true
+      },
+      "address": {
+        "host": "irc.example.org",
+        "port": 6667,
+        "tls": false
+      }
+    },
+    {
+      "name": "IPv6 goes in brackets",
+      "text": "[2001:db8::1]:6697",
+      "fallback": {
+        "port": 6667,
+        "tls": false
+      },
+      "address": {
+        "host": "2001:db8::1",
+        "port": 6697,
+        "tls": false
+      }
+    },
+    {
+      "name": "bracketed IPv6 with a plus is TLS",
+      "text": "[2001:db8::1]:+6697",
+      "fallback": {
+        "port": 6667,
+        "tls": false
+      },
+      "address": {
+        "host": "2001:db8::1",
+        "port": 6697,
+        "tls": true
+      }
+    },
+    {
+      "name": "a bare IPv6 address inherits everything",
+      "text": "2001:db8::1",
+      "fallback": {
+        "port": 6697,
+        "tls": true
+      },
+      "address": {
+        "host": "2001:db8::1",
+        "port": 6697,
+        "tls": true
+      }
+    },
+    {
+      "name": "nothing is not an address",
+      "text": "   ",
+      "fallback": {
+        "port": 6697,
+        "tls": true
+      },
+      "address": null
+    },
+    {
+      "name": "a port that is not a number is not an address",
+      "text": "irc.example.org:nope",
+      "fallback": {
+        "port": 6697,
+        "tls": true
+      },
+      "address": null
+    },
+    {
+      "name": "a port out of range is not an address",
+      "text": "irc.example.org:99999",
+      "fallback": {
+        "port": 6697,
+        "tls": true
+      },
+      "address": null
+    }
+  ],
+  "order": [
+    {
+      "name": "the network's own comes first",
+      "config": {
+        "host": "a.example.org",
+        "port": 6697,
+        "tls": true,
+        "altAddresses": [
+          "b.example.org"
+        ]
+      },
+      "addresses": [
+        {
+          "host": "a.example.org",
+          "port": 6697,
+          "tls": true
+        },
+        {
+          "host": "b.example.org",
+          "port": 6697,
+          "tls": true
+        }
+      ]
+    },
+    {
+      "name": "with none listed there is only the one",
+      "config": {
+        "host": "a.example.org",
+        "port": 6697,
+        "tls": true,
+        "altAddresses": []
+      },
+      "addresses": [
+        {
+          "host": "a.example.org",
+          "port": 6697,
+          "tls": true
+        }
+      ]
+    },
+    {
+      "name": "the primary listed again is not tried twice",
+      "config": {
+        "host": "a.example.org",
+        "port": 6697,
+        "tls": true,
+        "altAddresses": [
+          "a.example.org:+6697",
+          "b.example.org"
+        ]
+      },
+      "addresses": [
+        {
+          "host": "a.example.org",
+          "port": 6697,
+          "tls": true
+        },
+        {
+          "host": "b.example.org",
+          "port": 6697,
+          "tls": true
+        }
+      ]
+    },
+    {
+      "name": "one that cannot be read is skipped, the rest still tried",
+      "config": {
+        "host": "a.example.org",
+        "port": 6697,
+        "tls": true,
+        "altAddresses": [
+          "",
+          "nope:abc",
+          "b.example.org:6667"
+        ]
+      },
+      "addresses": [
+        {
+          "host": "a.example.org",
+          "port": 6697,
+          "tls": true
+        },
+        {
+          "host": "b.example.org",
+          "port": 6667,
+          "tls": false
+        }
+      ]
+    }
+  ],
+  "attempts": [
+    {
+      "name": "the first attempt is the network's own",
+      "attempt": 0,
+      "host": "a.example.org"
+    },
+    {
+      "name": "the next falls through to the second",
+      "attempt": 1,
+      "host": "b.example.org"
+    },
+    {
+      "name": "and the third",
+      "attempt": 2,
+      "host": "c.example.org"
+    },
+    {
+      "name": "then it comes back round to the first",
+      "attempt": 3,
+      "host": "a.example.org"
+    },
+    {
+      "name": "and keeps going round",
+      "attempt": 4,
+      "host": "b.example.org"
+    }
+  ],
+  "attemptsConfig": {
+    "host": "a.example.org",
+    "port": 6697,
+    "tls": true,
+    "altAddresses": [
+      "b.example.org",
+      "c.example.org"
+    ]
+  }
+}

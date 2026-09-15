@@ -81,6 +81,15 @@ describe('adopting a network from a shared config', () => {
     expect(servers.getAllServers().map((s) => s.id)).toEqual(['srv'])
   })
 
+  it('keeps the other addresses the network answers on', () => {
+    servers.upsertServer(config({ altAddresses: ['b.example.org', 'c.example.org:+6697'] }))
+
+    expect(servers.getServer('srv')?.altAddresses).toEqual([
+      'b.example.org',
+      'c.example.org:+6697'
+    ])
+  })
+
   it('keeps a pinned certificate and the alternate nicks', () => {
     // Bound only by the update path before, so a network arriving in a shared
     // config lost both on the way in

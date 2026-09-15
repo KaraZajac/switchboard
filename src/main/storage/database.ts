@@ -388,6 +388,12 @@ function runMigrations(): void {
     db.run('ALTER TABLE servers ADD COLUMN alt_nicks TEXT DEFAULT NULL')
     db.run("INSERT INTO migrations (name) VALUES ('016_alt_nicks')")
   }
+
+  // Other addresses the same network answers on, tried in turn when one fails
+  if (!applied.has('017_alt_addresses')) {
+    db.run('ALTER TABLE servers ADD COLUMN alt_addresses TEXT DEFAULT NULL')
+    db.run("INSERT INTO migrations (name) VALUES ('017_alt_addresses')")
+  }
 }
 
 /** Whether the search index exists — it does not on a build without FTS5 */

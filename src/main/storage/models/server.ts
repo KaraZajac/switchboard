@@ -77,6 +77,12 @@ export function addServer(config: Omit<ServerConfig, 'id' | 'sortOrder'>): strin
   if (config.altNicks && config.altNicks.length > 0) {
     db.run('UPDATE servers SET alt_nicks = ? WHERE id = ?', [JSON.stringify(config.altNicks), id])
   }
+  if (config.altAddresses && config.altAddresses.length > 0) {
+    db.run('UPDATE servers SET alt_addresses = ? WHERE id = ?', [
+      JSON.stringify(config.altAddresses),
+      id
+    ])
+  }
   return id
 }
 
@@ -136,6 +142,10 @@ export function updateServer(id: string, updates: Partial<ServerConfig>): void {
   if (updates.trustedCertificate !== undefined) {
     fields.push('trusted_cert = ?')
     values.push(updates.trustedCertificate)
+  }
+  if (updates.altAddresses !== undefined) {
+    fields.push('alt_addresses = ?')
+    values.push(JSON.stringify(updates.altAddresses))
   }
   if (updates.altNicks !== undefined) {
     fields.push('alt_nicks = ?')
@@ -220,8 +230,8 @@ export function upsertServer(config: ServerConfig): void {
     `INSERT INTO servers (id, name, host, port, tls, password, nick, username, realname,
      sasl_mechanism, sasl_username, sasl_password, auto_connect, auto_join, sort_order,
      websocket_url, identify_command, avatar_url, pre_away_message, profile_metadata,
-     client_cert, trusted_cert, alt_nicks)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     client_cert, trusted_cert, alt_nicks, alt_addresses)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       config.id,
       config.name,
@@ -245,7 +255,10 @@ export function upsertServer(config: ServerConfig): void {
       JSON.stringify(config.profile ?? {}),
       encryptSecret(config.clientCert),
       config.trustedCertificate ?? null,
-      config.altNicks && config.altNicks.length > 0 ? JSON.stringify(config.altNicks) : null
+      config.altNicks && config.altNicks.length > 0 ? JSON.stringify(config.altNicks) : null,
+      config.altAddresses && config.altAddresses.length > 0
+        ? JSON.stringify(config.altAddresses)
+        : null
     ]
   )
 }
@@ -363,6 +376,7 @@ function rowToConfig(row: unknown[]): ServerConfig {
     performOnConnect: (row[23] as string) || null,
     trustedCertificate: (row[24] as string) || null,
     altNicks: parseList(row[25] as string | null),
+    altAddresses: parseList(row[26] as string | null),
     ...secretsOf({
       password: row[5],
       saslPassword: row[11],
@@ -394,6 +408,7 @@ function objectToConfig(row: Record<string, unknown>): ServerConfig {
     performOnConnect: (row['perform_on_connect'] as string) || null,
     trustedCertificate: (row['trusted_cert'] as string) || null,
     altNicks: parseList(row['alt_nicks'] as string | null),
+    altAddresses: parseList(row['alt_addresses'] as string | null),
     ...secretsOf({
       password: row['password'],
       saslPassword: row['sasl_password'],

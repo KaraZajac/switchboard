@@ -9,6 +9,7 @@ import type { IRCMessage } from '@shared/types/irc'
 import type { ServerConfig } from '@shared/types/server'
 import { parseMessage } from './parser'
 import { reconnectDelay, THROTTLED_FLOOR_MS } from '@shared/reconnect'
+import { addressForAttempt } from '@shared/addresses'
 import { formatFingerprint, sameFingerprint, type CertificateProblem } from '@shared/certificate'
 import { redactLine } from '@shared/redact'
 import { cmd } from './serializer'
@@ -280,6 +281,24 @@ export class IRCConnection extends EventEmitter {
     }
 
     this.useWebSocket = false
+
+    /*
+     * Which address to try.
+     *
+     * A network can list more than one, and a failed attempt falls through to
+     * the next rather than retrying the same dead address for ever. The list
+     * comes back round to the first, which is how a client notices the
+     * primary has returned.
+     *
+     * Written onto the config rather than carried separately because the
+     * proxy path, the TLS options and the certificate check all read it from
+     * there, and one of them quietly using the previous address is the bug
+     * this would otherwise introduce.
+     */
+    const address = addressForAttempt(this.config, this.reconnectAttempts)
+    this.config.host = address.host
+    this.config.port = address.port
+    this.config.tls = address.tls
 
     // A server that has told us it is TLS-only gets reached over TLS, whatever
     // this server's saved settings say. Checked on every dial rather than only

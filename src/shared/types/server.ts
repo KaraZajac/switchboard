@@ -68,6 +68,12 @@ export interface ServerConfig {
    * `@shared/nicks`. An underscore goes on the end once these run out.
    */
   altNicks?: string[]
+  /**
+   * Other addresses this network answers on, tried in turn when one fails.
+   *
+   * `host`, `host:6667` or `host:+6697` — see `@shared/addresses`.
+   */
+  altAddresses?: string[]
 }
 
 /** Runtime server state (not persisted) */
