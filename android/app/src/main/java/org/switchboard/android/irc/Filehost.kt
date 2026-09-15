@@ -28,7 +28,7 @@ object Filehost {
      * Both spellings, because the token was renamed when the draft moved and
      * servers are on both sides of that.
      */
-    fun url(isupport: Map<String, String>): String? {
+    fun url(isupport: Map<String, String>, overTls: Boolean = true): String? {
         val value = isupport["FILEHOST"] ?: isupport["draft/FILEHOST"] ?: return null
         if (value.isEmpty()) return null
 
@@ -37,7 +37,143 @@ object Filehost {
         val scheme = uri.scheme?.lowercase()
         if (scheme != "https" && scheme != "http") return null
         if (uri.host.isNullOrEmpty()) return null
+
+        /*
+         * The spec: a client MUST refuse a plaintext upload URI when the IRC
+         * connection is encrypted. Worth saying why, because "we already send
+         * the password over it" reads it backwards. Somebody who connected
+         * over TLS has said what they expect of this network, and the upload
+         * URI is a string that network chose — so a plaintext one is either a
+         * misconfiguration or somebody redirecting the files, and either way
+         * the file and its address go somewhere nobody agreed to.
+         *
+         * Defaulting to strict, so a caller that forgets to say gets the safe
+         * answer rather than the permissive one.
+         */
+        if (overTls && scheme != "https") return null
+
         return value
+    }
+
+    /**
+     * The `Content-Disposition` for an upload, with the name intact.
+     *
+     * Quoting the name and hoping is not enough. A filename on a phone may
+     * contain a quote, a backslash or a comma, and the quoted-string form says
+     * what to do about it — escape it — which is what stops `my "best"
+     * shot.png` arriving as `my `.
+     *
+     * A header value is ASCII, and both runtimes refuse to send one outside it
+     * rather than guessing an encoding. So a photo named in Japanese did not
+     * upload at all. The real name travels in `filename*` per RFC 6266, and
+     * the quoted form carries a stand-in that keeps the extension.
+     *
+     * `inline`, following the spec's own example: a file sent as `attachment`
+     * downloads when somebody opens the link, and an image posted in a channel
+     * should open.
+     */
+    fun contentDisposition(fileName: String): String {
+        // A newline would be a second header and a NUL ends the string in some
+        // parsers. Neither belongs in a filename anybody meant to use.
+        val clean = fileName.filter { it.code >= 0x20 && it.code != 0x7f }.trim()
+            .ifEmpty { "file" }
+
+        val plain = asciiOnly(clean)
+        val escaped = plain.replace("\\", "\\\\").replace("\"", "\\\"")
+        val ascii = "inline; filename=\"$escaped\""
+
+        // Nothing was lost, so there is nothing for the second form to carry
+        if (plain == clean) return ascii
+
+        return "$ascii; filename*=UTF-8''${encodeRfc5987(clean)}"
+    }
+
+    /** The same name with everything a header cannot carry taken out */
+    private fun asciiOnly(name: String): String {
+        val stripped = name
+            .map { if (it.code in 0x20..0x7e) it else '_' }
+            .joinToString("")
+            .replace(Regex("_+"), "_")
+
+        // Judged on the stem, not the extension: `写真.jpg` keeps a `.jpg`
+        // either way, and `_.jpg` is not a name — it is what is left of one.
+        val dot = stripped.lastIndexOf('.')
+        val stem = if (dot > 0) stripped.substring(0, dot) else stripped
+        if (stem.replace(Regex("[_\\s]"), "").isNotEmpty()) return stripped
+
+        val extension =
+            if (dot > 0) stripped.substring(dot + 1).replace(Regex("[^A-Za-z0-9]"), "") else ""
+        return if (extension.isNotEmpty()) "file.$extension" else "file"
+    }
+
+    /**
+     * Percent-encode for the `filename*` form.
+     *
+     * `!'()*` are not `attr-char` in RFC 5987, and a receiver following the
+     * grammar rejects the whole parameter — so a name with an apostrophe in it
+     * silently loses its accents everywhere.
+     */
+    private fun encodeRfc5987(value: String): String = buildString {
+        for (byte in value.toByteArray(Charsets.UTF_8)) {
+            val c = byte.toInt().toChar()
+            if (c.isLetterOrDigit() && c.code < 0x80 || c in "-._~") {
+                append(c)
+            } else {
+                append('%').append("%02X".format(byte.toInt() and 0xff))
+            }
+        }
+    }
+
+    /**
+     * Whether this filehost will take a file of this type.
+     *
+     * From `Accept-Post`, which the spec lets a server return from `OPTIONS`
+     * on the upload URI. Asking first is worth one round trip: the alternative
+     * is sending a video over a phone connection and being told at the end of
+     * it that this network only takes images.
+     *
+     * A server that says nothing accepts everything, which is what the spec
+     * means by MAY — refusing on silence would break every filehost that has
+     * not implemented `OPTIONS`.
+     */
+    fun acceptsType(acceptPost: String?, contentType: String): Boolean {
+        val offered = acceptPost?.trim()
+        if (offered.isNullOrEmpty()) return true
+
+        val type = contentType.substringBefore(';').trim().lowercase()
+        if (type.isEmpty()) return false
+
+        for (raw in offered.split(',')) {
+            // `image/*; q=0.8` — the parameters are not part of the match
+            val pattern = raw.substringBefore(';').trim().lowercase()
+            if (pattern.isEmpty()) continue
+
+            if (pattern == "*/*" || pattern == type) return true
+
+            val group = pattern.substringBefore('/')
+            if (pattern.endsWith("/*") && group.isNotEmpty() && type.startsWith("$group/")) {
+                return true
+            }
+        }
+
+        return false
+    }
+
+    /**
+     * What to tell somebody whose file was refused before it was sent.
+     *
+     * Names what the server does take, because "that file type is not allowed"
+     * on its own leaves them guessing which of their photos might work.
+     */
+    fun describeAccepted(acceptPost: String?): String? {
+        val offered = acceptPost?.trim()
+        if (offered.isNullOrEmpty()) return null
+
+        val kinds = offered.split(',')
+            .map { it.substringBefore(';').trim() }
+            .filter { it.isNotEmpty() && it != "*/*" }
+
+        return if (kinds.isNotEmpty()) kinds.joinToString(", ") else null
     }
 
     /**
@@ -72,6 +208,31 @@ object Filehost {
         return resolved.toString()
     }
 
+    /**
+     * What this filehost says it takes, or null if it does not say.
+     *
+     * `OPTIONS` on the upload URI, which the spec requires servers to answer.
+     * Worth one round trip on a phone above all: the alternative is sending a
+     * video over mobile data and being told at the end of it that this network
+     * only takes images.
+     *
+     * Never throws. A filehost that does not answer — which is most of them
+     * today, spec or no spec — must not become a filehost you cannot use.
+     */
+    fun acceptedTypes(endpoint: String): String? = runCatching {
+        val connection = (URL(endpoint).openConnection() as HttpURLConnection).apply {
+            requestMethod = "OPTIONS"
+            connectTimeout = 5_000
+            readTimeout = 5_000
+            instanceFollowRedirects = false
+        }
+        try {
+            connection.getHeaderField("Accept-Post")
+        } finally {
+            connection.disconnect()
+        }
+    }.getOrNull()
+
     /** What went wrong, in a sentence worth showing */
     class Refused(message: String) : Exception(message)
 
@@ -99,12 +260,7 @@ object Filehost {
             instanceFollowRedirects = false
 
             setRequestProperty("Content-Type", contentType)
-            // The quotes matter: a filename with a space in it is ordinary on a
-            // phone, and unquoted it ends the header early.
-            setRequestProperty(
-                "Content-Disposition",
-                "attachment; filename=\"${fileName.replace("\"", "")}\""
-            )
+            setRequestProperty("Content-Disposition", contentDisposition(fileName))
             if (length > 0) setFixedLengthStreamingMode(length)
 
             if (!account.isNullOrEmpty() && !password.isNullOrEmpty() && mayAuthenticate(endpoint)) {

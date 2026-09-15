@@ -2395,6 +2395,31 @@ class SharedCorpusTest {
         }
     }
 
+    @Test
+    fun `names an uploaded file the same way the desktop does`() {
+        for (entry in load("filehost.json")["disposition"]!!.jsonArray) {
+            val case = entry.jsonObject
+            assertEquals(
+                case["name"]!!.jsonPrimitive.content,
+                case["header"]!!.jsonPrimitive.content,
+                Filehost.contentDisposition(case["file"]!!.jsonPrimitive.content)
+            )
+        }
+    }
+
+    @Test
+    fun `reads what a filehost said it takes the same way`() {
+        for (entry in load("filehost.json")["accept"]!!.jsonArray) {
+            val case = entry.jsonObject
+            val accept = case["acceptPost"]!!.jsonPrimitive.contentOrNull
+            assertEquals(
+                case["name"]!!.jsonPrimitive.content,
+                case["ok"]!!.jsonPrimitive.content.toBoolean(),
+                Filehost.acceptsType(accept, case["type"]!!.jsonPrimitive.content)
+            )
+        }
+    }
+
     // ── uploading a file ──────────────────────────────────────────────
 
     @Test
@@ -2410,6 +2435,20 @@ class SharedCorpusTest {
                 case["name"]!!.jsonPrimitive.content,
                 case["url"]!!.jsonPrimitive.contentOrNull,
                 Filehost.url(isupport)
+            )
+        }
+
+        // The spec's MUST: a plaintext upload URI is refused when the IRC
+        // connection is encrypted
+        for (entry in corpus["tls"]!!.jsonArray) {
+            val case = entry.jsonObject
+            val isupport = case["isupport"]!!.jsonObject.mapValues { (_, v) ->
+                v.jsonPrimitive.contentOrNull ?: ""
+            }
+            assertEquals(
+                case["name"]!!.jsonPrimitive.content,
+                case["url"]!!.jsonPrimitive.contentOrNull,
+                Filehost.url(isupport, case["overTls"]!!.jsonPrimitive.content.toBoolean())
             )
         }
 

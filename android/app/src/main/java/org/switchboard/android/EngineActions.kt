@@ -1214,7 +1214,7 @@ private fun ServerConfig.toJson(omitBlankSecrets: Boolean = false): JsonObject =
  */
 fun SwitchboardEngine.canAttach(serverId: String): Boolean {
     val connection = connections[serverId] ?: return false
-    return Filehost.url(connection.state.isupport) != null
+    return Filehost.url(connection.state.isupport, connection.config.tls) != null
 }
 
 /**
@@ -1236,7 +1236,7 @@ suspend fun SwitchboardEngine.attach(serverId: String, uri: Uri, context: Contex
             return@withContext null
         }
 
-        val endpoint = Filehost.url(connection.state.isupport)
+        val endpoint = Filehost.url(connection.state.isupport, connection.config.tls)
         if (endpoint == null) {
             store.noteRefusal("This network does not take file uploads.")
             return@withContext null
@@ -1258,6 +1258,24 @@ suspend fun SwitchboardEngine.attach(serverId: String, uri: Uri, context: Contex
         val contentType = resolver.getType(uri) ?: "application/octet-stream"
         val name = displayName(resolver, uri) ?: "file"
         val size = sizeOf(resolver, uri)
+
+        /*
+         * Ask what it takes before sending it.
+         *
+         * A phone is where this matters most: the thing being shared is a
+         * photo or a video, the connection is somebody's data allowance, and
+         * finding out at the end of the upload that the network only takes
+         * images costs them both. One round trip buys the sentence instead.
+         */
+        val accepted = Filehost.acceptedTypes(endpoint)
+        if (!Filehost.acceptsType(accepted, contentType)) {
+            val kinds = Filehost.describeAccepted(accepted)
+            store.noteRefusal(
+                if (kinds != null) "This network takes $kinds, and that file is $contentType."
+                else "This network will not take a $contentType file."
+            )
+            return@withContext null
+        }
 
         try {
             val stream = resolver.openInputStream(uri)

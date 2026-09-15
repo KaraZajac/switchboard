@@ -1,5 +1,5 @@
 {
-  "$comment": "Uploading a file to the network's own filehost, shared by tests/shared/filehost.test.ts and the Android SharedCorpusTest. The desktop has had this since there was a file picker; the phone had no attach button at all, which is the wrong way round — a photograph is on the phone.",
+  "$comment": "Uploading a file to the network's own filehost, shared by tests/shared/filehost.test.ts and the Android SharedCorpusTest. Follows the draft/filehost spec: an ISUPPORT token naming an upload URI, a POST with Content-Disposition, a 201 with Location, and an OPTIONS that MAY say what types are taken.",
   "$where": "`isupport` is what the network advertised; `url` is where uploads go, or null.",
   "where": [
     {
@@ -105,6 +105,141 @@
       "location": "data:text/html,<script>alert(1)</script>",
       "base": "https://files.example.org/upload",
       "url": null
+    }
+  ],
+  "$tls": "The spec: a client MUST refuse a plaintext upload URI when the IRC connection is encrypted. `overTls` is the IRC connection, not the URI.",
+  "tls": [
+    {
+      "name": "https filehost on an encrypted connection",
+      "isupport": {
+        "draft/FILEHOST": "https://files.example.net/"
+      },
+      "overTls": true,
+      "url": "https://files.example.net/"
+    },
+    {
+      "name": "plaintext filehost on an encrypted connection is refused",
+      "isupport": {
+        "draft/FILEHOST": "http://files.example.net/"
+      },
+      "overTls": true,
+      "url": null
+    },
+    {
+      "name": "plaintext filehost on a plaintext connection is allowed",
+      "isupport": {
+        "draft/FILEHOST": "http://files.example.net/"
+      },
+      "overTls": false,
+      "url": "http://files.example.net/"
+    },
+    {
+      "name": "https filehost on a plaintext connection is still fine",
+      "isupport": {
+        "draft/FILEHOST": "https://files.example.net/"
+      },
+      "overTls": false,
+      "url": "https://files.example.net/"
+    }
+  ],
+  "$disposition": "The Content-Disposition sent with an upload. A header value is ASCII, so a name outside it travels in filename* and the quoted form carries a readable stand-in.",
+  "disposition": [
+    {
+      "name": "an ordinary name",
+      "file": "plain.png",
+      "header": "inline; filename=\"plain.png\""
+    },
+    {
+      "name": "a name with quotes in it",
+      "file": "my \"best\" shot.png",
+      "header": "inline; filename=\"my \\\"best\\\" shot.png\""
+    },
+    {
+      "name": "a name with a backslash",
+      "file": "back\\slash.txt",
+      "header": "inline; filename=\"back\\\\slash.txt\""
+    },
+    {
+      "name": "a control character is not a second header",
+      "file": "a\rb.png",
+      "header": "inline; filename=\"ab.png\""
+    },
+    {
+      "name": "accents travel in the starred form",
+      "file": "café.jpg",
+      "header": "inline; filename=\"caf_.jpg\"; filename*=UTF-8''caf%C3%A9.jpg"
+    },
+    {
+      "name": "a name with no ascii left keeps only its extension",
+      "file": "写真.jpg",
+      "header": "inline; filename=\"file.jpg\"; filename*=UTF-8''%E5%86%99%E7%9C%9F.jpg"
+    },
+    {
+      "name": "an apostrophe is encoded, or the parameter is rejected whole",
+      "file": "kara's café.jpg",
+      "header": "inline; filename=\"kara's caf_.jpg\"; filename*=UTF-8''kara%27s%20caf%C3%A9.jpg"
+    },
+    {
+      "name": "nothing usable at all",
+      "file": "   ",
+      "header": "inline; filename=\"file\""
+    }
+  ],
+  "$accept": "Accept-Post from an OPTIONS on the upload URI, which the spec says a server MAY return. Silence means everything is accepted.",
+  "accept": [
+    {
+      "name": "no answer means anything goes",
+      "acceptPost": null,
+      "type": "application/zip",
+      "ok": true
+    },
+    {
+      "name": "an exact type",
+      "acceptPost": "image/png",
+      "type": "image/png",
+      "ok": true
+    },
+    {
+      "name": "a group wildcard",
+      "acceptPost": "image/*, video/*",
+      "type": "image/jpeg",
+      "ok": true
+    },
+    {
+      "name": "a type outside every group",
+      "acceptPost": "image/*, video/*",
+      "type": "application/pdf",
+      "ok": false
+    },
+    {
+      "name": "the everything wildcard",
+      "acceptPost": "*/*",
+      "type": "application/pdf",
+      "ok": true
+    },
+    {
+      "name": "parameters are not part of the match",
+      "acceptPost": "image/*; q=0.8",
+      "type": "image/png",
+      "ok": true
+    },
+    {
+      "name": "and neither are they on the file",
+      "acceptPost": "text/plain",
+      "type": "text/plain; charset=utf-8",
+      "ok": true
+    },
+    {
+      "name": "case does not decide it",
+      "acceptPost": "IMAGE/PNG",
+      "type": "image/png",
+      "ok": true
+    },
+    {
+      "name": "a near miss is a miss",
+      "acceptPost": "image/png",
+      "type": "image/pngx",
+      "ok": false
     }
   ]
 }

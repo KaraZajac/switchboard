@@ -262,6 +262,23 @@ export class IRCConnection extends EventEmitter {
   }
 
   /**
+   * Whether this connection is encrypted.
+   *
+   * Asked because things other than the socket depend on the answer: a
+   * filehost the network advertises over plaintext is refused when the IRC
+   * connection is not, which is what the spec requires and what stops a file
+   * and its address going somewhere the user did not agree to.
+   *
+   * `config.tls` rather than the setting the user typed, because a plain port
+   * that STS upgraded ends up encrypted and a configured one that fell back
+   * does not — the connection knows which happened and nothing else does.
+   */
+  get encrypted(): boolean {
+    if (this.config.websocketUrl) return /^wss:/i.test(this.config.websocketUrl)
+    return this.config.tls
+  }
+
+  /**
    * Connect to the IRC server.
    */
   connect(): void {

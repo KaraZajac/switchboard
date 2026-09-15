@@ -106,7 +106,10 @@ class FilehostTest {
 
         assertEquals("POST", received["method"])
         assertEquals("image/png", received["Content-Type"])
-        assertEquals("attachment; filename=\"cat.png\"", received["Content-Disposition"])
+        // `inline`, as the spec's own example sends it. The difference shows
+        // up when somebody opens the link: `attachment` downloads, and an
+        // image posted in a channel should open.
+        assertEquals("inline; filename=\"cat.png\"", received["Content-Disposition"])
         assertEquals(String(content), String(body))
 
         // Relative, as the draft allows — and a relative one pasted into a
@@ -150,7 +153,7 @@ class FilehostTest {
         )
 
         // Unquoted, the header ends at the space and the name is lost
-        assertEquals("attachment; filename=\"holiday photo.jpg\"", received["Content-Disposition"])
+        assertEquals("inline; filename=\"holiday photo.jpg\"", received["Content-Disposition"])
     }
 
     @Test

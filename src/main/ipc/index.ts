@@ -92,7 +92,14 @@ import { friendListKind, friendListLines, friendListStatusLine } from '@shared/f
 import { tagToUse, TAG_NAMES } from '@shared/clienttags'
 import { readCertificate, certificateBody } from '@shared/certfp'
 import { createHash } from 'crypto'
-import { filehostUrl as filehostOf, mayAuthenticate, uploadedUrl } from '@shared/filehost'
+import {
+  filehostUrl as filehostOf,
+  mayAuthenticate,
+  uploadedUrl,
+  contentDisposition,
+  acceptsType,
+  describeAccepted
+} from '@shared/filehost'
 import { dialChanged } from '@shared/dial'
 
 /**
@@ -1286,8 +1293,11 @@ export function registerIPCHandlers(): void {
     const client = ircManager.getClient(serverId)
     if (!client) throw new Error('Not connected')
 
-    const filehostUrl = filehostOf(client.state.isupport)
-    if (!filehostUrl) throw new Error('Server does not support file uploads')
+    // The same test the upload will make, so a dialog is not opened for a
+    // filehost the upload is going to refuse
+    if (!filehostOf(client.state.isupport, { overTls: client.connection.encrypted })) {
+      throw new Error('This network does not take file uploads')
+    }
 
     const result = await (
       await electron()
@@ -1582,13 +1592,40 @@ async function uploadToFilehost(
   const client = ircManager.getClient(serverId)
   if (!client) throw new Error('Not connected')
 
-  const filehostUrl = filehostOf(client.state.isupport)
-  if (!filehostUrl) throw new Error('Server does not support file uploads')
+  const filehostUrl = filehostOf(client.state.isupport, {
+    overTls: client.connection.encrypted
+  })
+  if (!filehostUrl) {
+    // Told apart, because they are different problems with different answers
+    throw new Error(
+      filehostOf(client.state.isupport, { overTls: false })
+        ? 'This network offers uploads over an unencrypted address, so Switchboard will not use it'
+        : 'This network does not take file uploads'
+    )
+  }
 
-  // Build auth header from SASL credentials
+  /*
+   * Ask what it takes, before spending the upload finding out.
+   *
+   * `OPTIONS` on the upload URI is something the spec requires servers to
+   * answer and lets them use to name the types they accept. One round trip
+   * against sending a video over a phone connection and being refused at the
+   * end of it. A server that says nothing accepts everything — most have not
+   * implemented this — so anything other than a clear refusal goes ahead.
+   */
+  const accepted = await acceptPostOf(filehostUrl)
+  if (!acceptsType(accepted, contentType)) {
+    const kinds = describeAccepted(accepted)
+    throw new Error(
+      kinds
+        ? `This network takes ${kinds}, and that file is ${contentType}`
+        : `This network will not take a ${contentType} file`
+    )
+  }
+
   const headers: Record<string, string> = {
     'Content-Type': contentType,
-    'Content-Disposition': `attachment; filename="${fileName}"`,
+    'Content-Disposition': contentDisposition(fileName),
     'Content-Length': fileData.length.toString()
   }
 
@@ -1604,44 +1641,34 @@ async function uploadToFilehost(
     headers['Authorization'] = `Basic ${credentials}`
   }
 
-  // Use Node http/https directly — Electron patches global fetch with net.fetch
-  // which rejects Buffer bodies with ERR_INVALID_ARGUMENT
-  const url = new URL(filehostUrl)
-  const httpMod = url.protocol === 'https:' ? https : http
-
   const location = await new Promise<string>((resolve, reject) => {
-    const req = httpMod.request(
-      url,
-      {
-        method: 'POST',
-        headers
-      },
-      (res) => {
-        let body = ''
-        res.on('data', (chunk: Buffer) => {
-          body += chunk.toString()
-        })
-        res.on('end', () => {
-          if (res.statusCode !== 201) {
-            reject(new Error(`Upload failed (${res.statusCode}): ${body}`))
-            return
-          }
-          const loc = res.headers['location'] || body.trim()
-          if (!loc) {
-            reject(new Error('Server did not return a file URL'))
-            return
-          }
-          // The draft allows a relative Location, and a relative one pasted
-          // into a channel is a link to nothing
-          const resolved = uploadedUrl(typeof loc === 'string' ? loc : null, filehostUrl)
-          if (!resolved) {
-            reject(new Error('Server did not return a usable file URL'))
-            return
-          }
-          resolve(resolved)
-        })
-      }
-    )
+    const req = requestTo(filehostUrl, { method: 'POST', headers }, (res) => {
+      let body = ''
+      res.on('data', (chunk: Buffer) => {
+        // A filehost that answers an error with a whole HTML page should not
+        // put a whole HTML page in somebody's message composer
+        if (body.length < 500) body += chunk.toString()
+      })
+      res.on('end', () => {
+        if (res.statusCode !== 201) {
+          reject(new Error(refusal(res.statusCode, body)))
+          return
+        }
+        const loc = res.headers['location'] || body.trim()
+        if (!loc) {
+          reject(new Error('The filehost did not say where the file went'))
+          return
+        }
+        // The draft allows a relative Location, and a relative one pasted
+        // into a channel is a link to nothing
+        const resolved = uploadedUrl(typeof loc === 'string' ? loc : null, filehostUrl)
+        if (!resolved) {
+          reject(new Error('The filehost gave an address that is not a link'))
+          return
+        }
+        resolve(resolved)
+      })
+    })
 
     req.on('error', reject)
     req.write(fileData)
@@ -1649,4 +1676,81 @@ async function uploadToFilehost(
   })
 
   return { url: location, filename: fileName }
+}
+
+/**
+ * Node's own http, rather than fetch.
+ *
+ * Electron patches global fetch with `net.fetch`, which refuses a Buffer body
+ * with ERR_INVALID_ARGUMENT.
+ */
+function requestTo(
+  target: string,
+  options: { method: string; headers?: Record<string, string> },
+  onResponse: (res: import('http').IncomingMessage) => void
+): import('http').ClientRequest {
+  const url = new URL(target)
+  const httpMod = url.protocol === 'https:' ? https : http
+  return httpMod.request(url, options, onResponse)
+}
+
+/**
+ * What this filehost says it takes, or null if it does not say.
+ *
+ * Never throws. A filehost that does not answer `OPTIONS` — which is most of
+ * them today, spec or no spec — must not be a filehost you cannot upload to.
+ */
+async function acceptPostOf(filehostUrl: string): Promise<string | null> {
+  return new Promise((resolve) => {
+    const done = (value: string | null): void => resolve(value)
+    let settled = false
+    const once = (value: string | null): void => {
+      if (settled) return
+      settled = true
+      done(value)
+    }
+
+    try {
+      const req = requestTo(filehostUrl, { method: 'OPTIONS' }, (res) => {
+        res.resume()
+        const header = res.headers['accept-post']
+        once(typeof header === 'string' ? header : null)
+      })
+      req.on('error', () => once(null))
+      // Not worth holding up an upload for. If it has not answered by now it
+      // is not going to tell us anything we would act on.
+      req.setTimeout(4_000, () => {
+        req.destroy()
+        once(null)
+      })
+      req.end()
+    } catch {
+      once(null)
+    }
+  })
+}
+
+/** A refusal, in a sentence rather than a status code and a page of HTML */
+function refusal(status: number | undefined, body: string): string {
+  const said = body
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 140)
+
+  switch (status) {
+    case 401:
+    case 403:
+      return 'The filehost would not accept your account for that upload'
+    case 413:
+      return 'That file is too large for this network'
+    case 415:
+      return 'This network will not take that kind of file'
+    case 429:
+      return 'The filehost is asking you to slow down; try again in a moment'
+    default:
+      return said
+        ? `The filehost refused that (${status}): ${said}`
+        : `The filehost refused that (${status})`
+  }
 }

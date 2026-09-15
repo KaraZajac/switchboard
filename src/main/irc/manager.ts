@@ -1,6 +1,7 @@
 import { hasMetadata } from '@shared/metadata'
 import { canShareConnection } from '@shared/accounts'
 import { isBouncer } from '@shared/bouncer'
+import { filehostUrl } from '@shared/filehost'
 import { foldCase } from '@shared/casemap'
 import type { ServerConfig } from '@shared/types/server'
 import type { IRCMessage } from '@shared/types/irc'
@@ -1181,9 +1182,17 @@ export class IRCManager {
       if (iconUrl) {
         this.send('irc:network-icon', { serverId, url: iconUrl })
       }
-      const filehostUrl = tokens['FILEHOST'] || tokens['draft/FILEHOST']
-      if (typeof filehostUrl === 'string' && /^https?:\/\//i.test(filehostUrl)) {
-        this.send('irc:filehost', { serverId, url: filehostUrl })
+      /*
+       * Through the shared rule, not a regex of its own.
+       *
+       * This is what puts the attach button in front of somebody, so it has to
+       * agree with what the upload will actually do — including refusing a
+       * plaintext filehost on an encrypted connection. Offering the button and
+       * then refusing the file is worse than not offering it.
+       */
+      const filehost = filehostUrl(tokens, { overTls: client.connection.encrypted })
+      if (filehost) {
+        this.send('irc:filehost', { serverId, url: filehost })
       }
     })
 
