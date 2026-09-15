@@ -1,5 +1,5 @@
 {
-  "note": "soju.im/bouncer-networks. Lines here are what a real soju sent on 2026-09-15, plus the escaping and removal cases the spec requires. Read by tests/shared/bouncer.test.ts and SharedCorpusTest.",
+  "note": "soju.im/bouncer-networks. Lines here are what a real soju sent on 2026-09-15, plus the escaping and removal cases the spec requires. Also covers recognising a bouncer at all. Read by tests/shared/bouncer.test.ts and SharedCorpusTest.",
   "attributes": [
     {
       "name": "what soju sends for a new network",
@@ -166,6 +166,63 @@
         "state": "connected",
         "error": null
       }
+    }
+  ],
+  "recognised": [
+    {
+      "name": "soju says so in ISUPPORT",
+      "isupport": {
+        "BOUNCER": "soju"
+      },
+      "caps": [],
+      "bouncer": true
+    },
+    {
+      "name": "Switchboard says so in ISUPPORT",
+      "isupport": {
+        "BOUNCER": "switchboard",
+        "CHANTYPES": "#"
+      },
+      "caps": [],
+      "bouncer": true
+    },
+    {
+      "name": "the capability alone is enough",
+      "isupport": {
+        "CHANTYPES": "#"
+      },
+      "caps": [
+        "sasl",
+        "soju.im/bouncer-networks"
+      ],
+      "bouncer": true
+    },
+    {
+      "name": "an ordinary server is not one",
+      "isupport": {
+        "CHANTYPES": "#",
+        "NETWORK": "netslum"
+      },
+      "caps": [
+        "sasl",
+        "server-time",
+        "multi-prefix"
+      ],
+      "bouncer": false
+    },
+    {
+      "name": "nothing known yet is not one",
+      "isupport": {},
+      "caps": [],
+      "bouncer": false
+    },
+    {
+      "name": "a network merely called bouncer is not one",
+      "isupport": {
+        "NETWORK": "bouncer"
+      },
+      "caps": [],
+      "bouncer": false
     }
   ]
 }

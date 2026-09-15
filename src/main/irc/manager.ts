@@ -1,5 +1,6 @@
 import { hasMetadata } from '@shared/metadata'
 import { canShareConnection } from '@shared/accounts'
+import { isBouncer } from '@shared/bouncer'
 import { foldCase } from '@shared/casemap'
 import type { ServerConfig } from '@shared/types/server'
 import type { IRCMessage } from '@shared/types/irc'
@@ -194,7 +195,7 @@ export class IRCManager {
     // devices was for.
     const shared = new Set(
       getAllServers()
-        .filter((server) => canShareConnection(server))
+        .filter((server) => canShareConnection(server) || this.throughABouncer(server.id))
         .map((server) => server.id)
     )
 
@@ -226,6 +227,22 @@ export class IRCManager {
    * would drop the user off the network and bring them back under a `nick_`
    * the server hands out because their real one is still in the ping timeout.
    */
+  /**
+   * Whether this network is really a bouncer.
+   *
+   * Asked of the live connection rather than the saved config, because it is
+   * not something you configure — it is something the far end says about
+   * itself, and it can change under you when somebody moves a network behind
+   * one. A bouncer takes both devices at once, so there is nothing to hand
+   * over and dropping ours would take this device off a network it can
+   * perfectly well stay on.
+   */
+  private throughABouncer(serverId: string): boolean {
+    const client = this.clients.get(serverId)
+    if (!client) return false
+    return isBouncer(client.state.isupport, client.state.capabilities)
+  }
+
   /** The networks this device is holding, for a peer deciding what to take over */
   connectedServerIds(): string[] {
     return [...this.clients.keys()]
@@ -443,7 +460,11 @@ export class IRCManager {
   private send(channel: string, data: unknown): void {
     // Every line that reaches the window is a line for the log — see `logging.ts`
     if (channel === 'irc:message') {
-      const { serverId, channel: target, message } = data as {
+      const {
+        serverId,
+        channel: target,
+        message
+      } = data as {
         serverId: string
         channel: string
         message: ChatMessage

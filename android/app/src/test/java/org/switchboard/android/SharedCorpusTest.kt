@@ -1884,6 +1884,20 @@ class SharedCorpusTest {
         }
     }
 
+    @Test
+    fun `recognises a bouncer the same way the desktop does`() {
+        for (case in load("bouncer.json")["recognised"]!!.jsonArray) {
+            val c = case.jsonObject
+            val isupport = c["isupport"]!!.jsonObject.mapValues { (_, v) -> v.jsonPrimitive.content }
+            val caps = c["caps"]!!.jsonArray.map { it.jsonPrimitive.content }
+            assertEquals(
+                c["name"]!!.jsonPrimitive.content,
+                c["bouncer"]!!.jsonPrimitive.content.toBoolean(),
+                Bouncer.isBouncer(isupport, caps)
+            )
+        }
+    }
+
     // ── the addresses a network answers on ───────────────────────────
 
     @Test

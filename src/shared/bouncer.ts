@@ -133,3 +133,28 @@ export function formatAttributes(attributes: Record<string, string | undefined>)
     .map(([key, value]) => `${key}=${escape(value as string)}`)
     .join(';')
 }
+
+/**
+ * Whether the thing we are connected to is a bouncer.
+ *
+ * It matters for more than display. Switchboard keeps one device on a network
+ * at a time, because two connections under one nick collide — but a bouncer is
+ * built to multiplex, and holding a desktop off one because a phone is attached
+ * gives up the exact thing the bouncer was for.
+ *
+ * Two signals, either sufficient. `BOUNCER` in ISUPPORT is what soju and
+ * Switchboard both advertise; the `soju.im/bouncer-networks` capability is what
+ * a bouncer offers when it has networks to hand out. A bouncer that says
+ * neither is indistinguishable from a server and is treated as one, which is
+ * the safe way round: the cost of being wrong here is a nick collision.
+ */
+export function isBouncer(
+  isupport: Record<string, string | true>,
+  capabilities: Iterable<string>
+): boolean {
+  if ('BOUNCER' in isupport) return true
+  for (const capability of capabilities) {
+    if (capability === 'soju.im/bouncer-networks') return true
+  }
+  return false
+}

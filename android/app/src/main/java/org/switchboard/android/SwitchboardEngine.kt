@@ -28,6 +28,7 @@ import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import org.switchboard.android.irc.Aliases
+import org.switchboard.android.irc.Bouncer
 import org.switchboard.android.irc.AutoAway
 import org.switchboard.android.irc.ChatHistory
 import org.switchboard.android.irc.IrcConnection
@@ -1897,9 +1898,29 @@ class SwitchboardEngine(
      */
     private fun sharesConnection(serverId: String): Boolean {
         val config = vault.servers().find { it.id == serverId } ?: return false
+        val connection = connections[serverId]
+
+        /*
+         * A bouncer takes both of us, whatever the config says.
+         *
+         * It is built to multiplex, so there is no nick to collide over and no
+         * credentials needed to prove the second connection is also us — the
+         * bouncer already knows. Following the desktop off one would give up
+         * the exact thing somebody ran a bouncer for.
+         *
+         * Asked of the live connection rather than the config, because it is
+         * not something you configure. It is what the far end says about
+         * itself, and it changes the day somebody moves a network behind one.
+         */
+        if (connection != null &&
+            Bouncer.isBouncer(connection.state.isupport, connection.state.capabilities)
+        ) {
+            return true
+        }
+
         if (!canShareConnection(config)) return false
 
-        val connection = connections[serverId] ?: return false
+        if (connection == null) return false
         if (!connection.isConnected) return true
 
         return connection.currentNick.equals(config.nick, ignoreCase = true)

@@ -125,4 +125,22 @@ object Bouncer {
 
     /** Whether a network line says this one is gone */
     fun isRemoval(attributes: Map<String, String?>): Boolean = attributes.containsKey("*")
+
+    /**
+     * Whether the thing we are connected to is a bouncer.
+     *
+     * It matters for more than display. Switchboard keeps one device on a
+     * network at a time, because two connections under one nick collide — but a
+     * bouncer is built to multiplex, and holding the phone off one because the
+     * desktop is attached gives up the exact thing the bouncer was for.
+     *
+     * Two signals, either sufficient. `BOUNCER` in ISUPPORT is what soju and
+     * Switchboard both advertise; the `soju.im/bouncer-networks` capability is
+     * what a bouncer offers when it has networks to hand out. A bouncer that
+     * says neither is indistinguishable from a server and is treated as one,
+     * which is the safe way round: the cost of being wrong here is a nick
+     * collision.
+     */
+    fun isBouncer(isupport: Map<String, String>, capabilities: Collection<String>): Boolean =
+        isupport.containsKey("BOUNCER") || capabilities.contains("soju.im/bouncer-networks")
 }
