@@ -111,3 +111,18 @@ export function historyChanged(serverId: string): void {
 export function ignoresChanged(list: unknown): void {
   sink?.('ignore:changed', list)
 }
+
+/**
+ * How far an upload has got.
+ *
+ * The window only, because this is about a file leaving *this* machine: a
+ * paired phone showing a progress bar for a desktop's upload would be showing
+ * something nobody there can act on.
+ *
+ * Sent as it goes rather than summarised at the end, because the whole reason
+ * to want it is the minute in the middle where a spinner cannot tell you
+ * whether anything is happening.
+ */
+export function uploadProgress(serverId: string, sent: number, total: number): void {
+  sink?.('file:upload-progress', { serverId, sent, total })
+}

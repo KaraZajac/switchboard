@@ -92,6 +92,14 @@ export function MessageComposer({
   const [showGifPicker, setShowGifPicker] = useState(false)
   const [showColours, setShowColours] = useState(false)
   const [uploading, setUploading] = useState(false)
+  /**
+   * How far the upload has got, 0 to 1, or null when the size is not known.
+   *
+   * A spinner answers "is something happening" and nothing else, and the
+   * minute in the middle of sending a video is exactly when that is not the
+   * question being asked.
+   */
+  const [progress, setProgress] = useState<number | null>(null)
   // A file is being dragged over the box — see `uploadFile`
   const [dragging, setDragging] = useState(false)
   const hasFilehost = !!useServerStore((s) => s.filehostUrls[serverId])
@@ -190,6 +198,13 @@ export function MessageComposer({
    * one on Discord and The Lounge; here a button and a file dialog were the
    * only way, and a screenshot is rarely a file you want to go looking for.
    */
+  useEffect(() => {
+    return window.switchboard.on('file:upload-progress', (data) => {
+      if (data.serverId !== serverId) return
+      setProgress(data.total > 0 ? Math.min(1, data.sent / data.total) : null)
+    })
+  }, [serverId])
+
   const uploadFile = useCallback(
     async (file: File) => {
       if (!hasFilehost || uploading || disabled) return
@@ -225,6 +240,7 @@ export function MessageComposer({
         useUIStore.getState().addToast({ title: 'That file was not sent', body: wording(err) })
       } finally {
         setUploading(false)
+        setProgress(null)
       }
     },
     [hasFilehost, uploading, disabled, serverId, onSend]
@@ -685,11 +701,18 @@ export function MessageComposer({
                     .addToast({ title: 'That file was not sent', body: wording(err) })
                 } finally {
                   setUploading(false)
+                  setProgress(null)
                 }
               }}
               disabled={disabled || uploading}
               icon={uploading ? Loader2 : Plus}
-              label="Upload a file"
+              label={
+                uploading && progress !== null
+                  ? `Sending — ${Math.round(progress * 100)}%`
+                  : uploading
+                    ? 'Sending…'
+                    : 'Upload a file'
+              }
               surface="raised"
               className={`mb-2 ml-2 ${uploading ? '[&>svg]:animate-spin' : ''}`}
             />

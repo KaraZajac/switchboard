@@ -152,6 +152,13 @@ export interface RemoteLinkStatus {
 
 export interface MainToRendererEvents {
   /**
+   * How far the current upload has got, in bytes.
+   *
+   * `total` is 0 when the size is not known before sending, which a stream
+   * from some sources genuinely is not.
+   */
+  'file:upload-progress': { serverId: string; sent: number; total: number }
+  /**
    * The stored server list changed somewhere other than this window — a paired
    * phone edited it, or an adopted vault replaced it. Carries nothing: the
    * window re-reads, so there is one description of the servers.

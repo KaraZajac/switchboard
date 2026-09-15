@@ -11,7 +11,8 @@ import { hasMetadata } from '@shared/metadata'
 import { transcript, transcriptFilename } from '@shared/transcript'
 import { listTransfers, acceptTransfer, declineTransfer, offerFile } from '../irc/features/dcc'
 import { handle } from './registry'
-import { readFile, writeFile } from 'fs/promises'
+import { writeFile, stat } from 'fs/promises'
+import { createReadStream } from 'fs'
 import { userInfo } from 'os'
 import { basename, extname } from 'path'
 import https from 'node:https'
@@ -64,7 +65,8 @@ import {
   readMarkerChanged,
   conversationCleared,
   ignoresChanged,
-  historyChanged
+  historyChanged,
+  uploadProgress
 } from './notify'
 import {
   createVault,
@@ -1314,12 +1316,11 @@ export function registerIPCHandlers(): void {
     if (result.canceled || result.filePaths.length === 0) return null
 
     const filePath = result.filePaths[0]
-    return uploadToFilehost(
-      serverId,
-      basename(filePath),
-      mimeOf(filePath),
-      await readFile(filePath)
-    )
+    const { size } = await stat(filePath)
+    return uploadToFilehost(serverId, basename(filePath), mimeOf(filePath), {
+      path: filePath,
+      size
+    })
   })
 
   // What the clipboard or a drop hands over: bytes with a name and a type,
@@ -1327,12 +1328,9 @@ export function registerIPCHandlers(): void {
   handle(
     'file:upload-bytes',
     async (_event, serverId: string, fileName: string, contentType: string, data: Uint8Array) => {
-      return uploadToFilehost(
-        serverId,
-        fileName || 'upload',
-        contentType || mimeOf(fileName),
-        Buffer.from(data)
-      )
+      return uploadToFilehost(serverId, fileName || 'upload', contentType || mimeOf(fileName), {
+        bytes: Buffer.from(data)
+      })
     }
   )
 
@@ -1583,11 +1581,21 @@ function mimeOf(fileName: string): string {
  * paste or a drop, which arrive as bytes with a name. Everything from the
  * headers on is the same either way.
  */
+/**
+ * Where the bytes come from.
+ *
+ * A pasted screenshot arrives already in memory and is small. A file chosen
+ * from a dialog can be a video, and reading one of those into a Buffer to send
+ * it holds the whole thing in memory for as long as the upload takes — which
+ * on a large enough file is how a chat client runs a machine out of it.
+ */
+type UploadSource = { bytes: Buffer } | { path: string; size: number }
+
 async function uploadToFilehost(
   serverId: string,
   fileName: string,
   contentType: string,
-  fileData: Buffer
+  source: UploadSource
 ): Promise<{ url: string; filename: string } | null> {
   const client = ircManager.getClient(serverId)
   if (!client) throw new Error('Not connected')
@@ -1623,10 +1631,11 @@ async function uploadToFilehost(
     )
   }
 
+  const total = 'bytes' in source ? source.bytes.length : source.size
   const headers: Record<string, string> = {
     'Content-Type': contentType,
     'Content-Disposition': contentDisposition(fileName),
-    'Content-Length': fileData.length.toString()
+    'Content-Length': total.toString()
   }
 
   // The account password, but only where the connection to the filehost is
@@ -1671,8 +1680,27 @@ async function uploadToFilehost(
     })
 
     req.on('error', reject)
-    req.write(fileData)
-    req.end()
+
+    if ('bytes' in source) {
+      req.write(source.bytes)
+      uploadProgress(serverId, source.bytes.length, total)
+      req.end()
+      return
+    }
+
+    // Straight from disk to the socket, a chunk at a time, so the size of the
+    // file is not also the size of the memory it takes to send it
+    let sent = 0
+    const file = createReadStream(source.path)
+    file.on('data', (chunk) => {
+      sent += chunk.length
+      uploadProgress(serverId, sent, total)
+    })
+    file.on('error', (err) => {
+      req.destroy()
+      reject(err)
+    })
+    file.pipe(req)
   })
 
   return { url: location, filename: fileName }
