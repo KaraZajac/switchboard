@@ -1065,7 +1065,16 @@ data class ServerConfig(
     /** Nicks to try, in order, when [nick] is taken — see [Nicks] */
     val altNicks: List<String> = emptyList(),
     /** Other addresses this network answers on — see [Addresses] */
-    val altAddresses: List<String> = emptyList()
+    val altAddresses: List<String> = emptyList(),
+    /**
+     * Which of a bouncer's networks this is, for `BOUNCER BIND`.
+     *
+     * A bouncer holds several networks behind one address, and this is how a
+     * client says which one it wants — sent during registration, because the
+     * welcome that follows describes the network it bound to. Null for an
+     * ordinary server, which is nearly all of them. See [Bouncer].
+     */
+    val bouncerNetId: String? = null
 ) {
     /** These settings, as the shared login rule wants them */
     fun saslPlanConfig(): SaslPlan.Config = SaslPlan.Config(

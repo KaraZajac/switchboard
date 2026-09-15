@@ -182,6 +182,51 @@ internal fun registerMessagingHandlers() {
         })
     }
 
+    /**
+     * The networks a bouncer holds on our behalf.
+     *
+     * One connection reaches one of them, bound by `BOUNCER BIND` during
+     * registration, so somebody with three networks behind a soju wants three
+     * networks here. Reading the list is what makes that possible without
+     * anybody having to know a network id — on soju it is a number nothing in
+     * the interface has ever shown them.
+     *
+     * Updated in place rather than replaced, because
+     * `soju.im/bouncer-networks-notify` sends changes one line at a time.
+     */
+    Handlers.on("BOUNCER") { session, message ->
+        if (!message.param(0).equals("NETWORK", ignoreCase = true)) return@on
+        val id = message.param(1) ?: return@on
+        val attributes = Bouncer.attributes(message.param(2) ?: "")
+        val state = session.state
+
+        if (Bouncer.isRemoval(attributes)) {
+            state.bouncerNetworks.remove(id)
+        } else {
+            state.bouncerNetworks[id] =
+                Bouncer.networkFrom(id, attributes, state.bouncerNetworks[id])
+        }
+
+        session.emit("irc:bouncer-networks", buildJsonObject {
+            put("serverId", state.serverId)
+            put("boundTo", session.config.bouncerNetId?.let { JsonPrimitive(it) }
+                ?: kotlinx.serialization.json.JsonNull)
+            put("networks", buildJsonArray {
+                for (network in state.bouncerNetworks.values) {
+                    add(buildJsonObject {
+                        put("id", network.id)
+                        put("name", network.name)
+                        put("host", network.host)
+                        put("port", network.port)
+                        put("tls", network.tls)
+                        put("nickname", network.nickname)
+                        put("state", network.state)
+                    })
+                }
+            })
+        })
+    }
+
     /** draft/read-marker — where we had read up to, on another device */
     Handlers.on("MARKREAD") { session, message ->
         val timestamp = message.param(1)?.removePrefix("timestamp=")?.takeIf { it != "*" }

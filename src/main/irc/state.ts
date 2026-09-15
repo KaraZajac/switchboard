@@ -3,6 +3,7 @@ import { foldCase, casemappingOf } from '@shared/casemap'
 import type { ChannelUser } from '@shared/types/channel'
 import type { UserMetadata } from '@shared/types/metadata'
 import type { MaskEntry } from '@shared/masklists'
+import type { BouncerNetwork } from '@shared/bouncer'
 
 /**
  * Per-connection state tracking.
@@ -117,6 +118,16 @@ export class ConnectionState {
   /** Latency from last PING/PONG round-trip (ms) */
   latencyMs: number | null = null
 
+  /**
+   * The networks a bouncer says it holds, by id.
+   *
+   * Empty for an ordinary server, which is nearly all of them. Filled from
+   * `BOUNCER NETWORK` lines, which arrive unasked when
+   * `soju.im/bouncer-networks-notify` is negotiated and on demand from
+   * `BOUNCER LISTNETWORKS`. See `@shared/bouncer`.
+   */
+  bouncerNetworks = new Map<string, BouncerNetwork>()
+
   /** LIST response accumulator */
   listEntries: { name: string; userCount: number; topic: string }[] = []
 
@@ -147,6 +158,7 @@ export class ConnectionState {
     this.whoisData = null
     this.latencyMs = null
     this.listEntries = []
+    this.bouncerNetworks.clear()
     this.listInProgress = false
   }
 

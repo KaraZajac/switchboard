@@ -1196,6 +1196,22 @@ export class IRCManager {
       }
     })
 
+    /*
+     * What this bouncer says it holds.
+     *
+     * Only worth telling the window when there is something to act on: an
+     * ordinary server never sends these, and a bouncer this network is already
+     * bound to is describing networks the user has presumably already dealt
+     * with.
+     */
+    client.events.on('bouncerNetworks', (data) => {
+      this.send('irc:bouncer-networks', {
+        serverId,
+        boundTo: client.config.bouncerNetId ?? null,
+        networks: data.networks
+      })
+    })
+
     client.events.on('monitorOnline', (data) => {
       this.send('irc:monitor-online', { serverId, ...data })
     })

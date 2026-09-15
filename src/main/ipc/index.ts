@@ -272,6 +272,56 @@ export function registerIPCHandlers(): void {
     ircManager.connect(after)
   })
 
+  /**
+   * Take the networks a bouncer holds and make them networks here.
+   *
+   * One Switchboard network per bouncer network, each bound by id, all sharing
+   * the bouncer's address and credentials. That is the shape the rest of the
+   * app already understands — a rail entry, a message store, a place in the
+   * shared config — so a soju with three networks behaves like three networks
+   * rather than like one thing with a mode.
+   *
+   * The row that found them is left alone. It is the connection to the bouncer
+   * itself, which is what answers `BOUNCER LISTNETWORKS` and what hears about
+   * changes, and somebody may well want to keep it.
+   */
+  handle('bouncer:adopt', async (_event, serverId: string) => {
+    const client = ircManager.getClient(serverId)
+    if (!client) throw new Error('Not connected')
+
+    const parent = getServer(serverId)
+    if (!parent) throw new Error('That network is gone')
+
+    const known = new Set(
+      getAllServers()
+        .filter((server) => server.host === parent.host && server.port === parent.port)
+        .map((server) => server.bouncerNetId)
+        .filter((id): id is string => !!id)
+    )
+
+    const added: string[] = []
+    for (const network of client.state.bouncerNetworks.values()) {
+      if (known.has(network.id)) continue
+
+      const id = addServer({
+        ...parent,
+        // Its own name, and its own nick where the bouncer told us one
+        name: network.name || network.host || `network ${network.id}`,
+        nick: network.nickname || parent.nick,
+        autoJoin: [],
+        autoConnect: true,
+        bouncerNetId: network.id
+      } as never)
+
+      const config = getServer(id)
+      if (config) ircManager.connect(config)
+      added.push(id)
+    }
+
+    serversChanged()
+    return { added: added.length }
+  })
+
   handle('logs:folder', async () => logsFolder())
   handle('logs:open', async () => {
     await mkdir(logsFolder(), { recursive: true })

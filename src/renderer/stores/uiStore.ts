@@ -57,6 +57,13 @@ export type ToastAction =
   | { kind: 'account'; label: string; serverId: string }
   /** Trust this one certificate and dial again — see `@shared/certificate` */
   | { kind: 'trust'; label: string; serverId: string; fingerprint: string }
+  /**
+   * Take the networks a bouncer holds and make them networks here.
+   *
+   * Offered rather than done, because it adds rows to somebody's server list
+   * and the only person who knows whether they want all of them is them.
+   */
+  | { kind: 'adopt-bouncer'; label: string; serverId: string }
 
 export interface Toast {
   id: string
@@ -122,7 +129,12 @@ interface UIState {
   openModal: (modal: Modal) => void
   /** What an irc:// link said, for the add-network form to start from — see `@shared/ircurl` */
   addServerPrefill: { host: string; port: number; tls: boolean; channel: string | null } | null
-  openAddServer: (prefill: { host: string; port: number; tls: boolean; channel: string | null }) => void
+  openAddServer: (prefill: {
+    host: string
+    port: number
+    tls: boolean
+    channel: string | null
+  }) => void
   showAccount: (serverId: string) => void
   closeModal: () => void
   toggleUserList: () => void

@@ -14,7 +14,24 @@ export function getAllServers(): ServerConfig[] {
   const rows = db.exec('SELECT * FROM servers ORDER BY sort_order ASC')
   if (rows.length === 0) return []
 
-  return rows[0].values.map(rowToConfig)
+  /*
+   * By column name, not by position.
+   *
+   * This used to index `SELECT *` by number, with a comment keeping track of
+   * which migration had appended what — so every new column had to be added in
+   * two places, and one that was not appended at the very end would have
+   * silently shifted every field after it. The column a migration had just
+   * added was missing from every server the window was shown, and nothing
+   * anywhere said so.
+   */
+  const { columns, values } = rows[0]
+  return values.map((row) => {
+    const named: Record<string, unknown> = {}
+    columns.forEach((column, at) => {
+      named[column] = row[at]
+    })
+    return objectToConfig(named)
+  })
 }
 
 export function getServer(id: string): ServerConfig | null {
@@ -352,40 +369,6 @@ function parseList(raw: string | null | undefined): string[] {
     return Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === 'string') : []
   } catch {
     return []
-  }
-}
-
-function rowToConfig(row: unknown[]): ServerConfig {
-  return {
-    id: row[0] as string,
-    name: row[1] as string,
-    host: row[2] as string,
-    port: row[3] as number,
-    tls: (row[4] as number) === 1,
-    nick: row[6] as string,
-    username: row[7] as string,
-    realname: row[8] as string,
-    saslMechanism: row[9] as SASLMechanism | null,
-    saslUsername: row[10] as string | null,
-    autoConnect: (row[12] as number) === 1,
-    autoJoin: JSON.parse((row[13] as string) || '[]'),
-    sortOrder: row[14] as number,
-    websocketUrl: (row[17] as string) || null,
-    avatarUrl: (row[19] as string) || null,
-    preAwayMessage: (row[20] as string) || null,
-    profile: parseProfile(row[21] as string | null),
-    // Added by migrations 014 and 015, in that order, so these are the last
-    // columns SELECT * returns
-    performOnConnect: (row[23] as string) || null,
-    trustedCertificate: (row[24] as string) || null,
-    altNicks: parseList(row[25] as string | null),
-    altAddresses: parseList(row[26] as string | null),
-    ...secretsOf({
-      password: row[5],
-      saslPassword: row[11],
-      identifyCommand: row[18],
-      clientCert: row[22]
-    })
   }
 }
 

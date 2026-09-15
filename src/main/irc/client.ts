@@ -8,6 +8,7 @@ import type { IRCMessage } from '@shared/types/irc'
 import type { ServerConfig } from '@shared/types/server'
 import type { ChannelUser } from '@shared/types/channel'
 import { IRCConnection } from './connection'
+import type { BouncerNetwork } from '@shared/bouncer'
 import { ConnectionState } from './state'
 import { dispatchMessage, registerAllHandlers } from './handlers/index'
 import { checkBatchMembership } from './features/batch'
@@ -112,6 +113,9 @@ export interface ClientEvents {
 
   // Channel list (LIST)
   channelList: (channels: { name: string; userCount: number; topic: string }[]) => void
+
+  /** What a bouncer says it holds behind itself — see `@shared/bouncer` */
+  bouncerNetworks: (data: { networks: BouncerNetwork[] }) => void
 
   // Raw (for debug view)
   raw: (direction: 'in' | 'out', line: string) => void

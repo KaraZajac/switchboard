@@ -28,6 +28,8 @@ import '../features/chathistory'
 import '../features/readmarker'
 import '../features/rename'
 import '../features/redact'
+// What a bouncer says it holds behind itself — see `@shared/bouncer`
+import '../features/bouncer'
 import '../features/metadata'
 import '../features/webpush'
 import '../features/account-registration'

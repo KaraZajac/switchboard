@@ -1,5 +1,6 @@
 import { X } from 'lucide-react'
 import { IconButton } from './IconButton'
+import { speak } from '../../utils/speak'
 import { useUIStore } from '../../stores/uiStore'
 import { useChannelStore } from '../../stores/channelStore'
 
@@ -40,6 +41,11 @@ export function ToastContainer() {
                       action.serverId,
                       action.fingerprint
                     )
+                  } else if (action.kind === 'adopt-bouncer') {
+                    speak(
+                      window.switchboard.invoke('bouncer:adopt', action.serverId),
+                      'Those networks were not added'
+                    )
                   } else {
                     useUIStore.getState().showAccount(action.serverId)
                   }
@@ -51,7 +57,13 @@ export function ToastContainer() {
               </button>
             )}
           </div>
-          <IconButton size="sm" icon={X} label="Dismiss" className="-mr-1 -mt-1" onClick={() => removeToast(toast.id)} />
+          <IconButton
+            size="sm"
+            icon={X}
+            label="Dismiss"
+            className="-mr-1 -mt-1"
+            onClick={() => removeToast(toast.id)}
+          />
         </div>
       ))}
     </div>

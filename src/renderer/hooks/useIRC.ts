@@ -100,6 +100,43 @@ export function useIRCEvents(): void {
     // this one certificate, which is what the toast offers — with the
     // fingerprint, the one thing they can check against what the operator
     // told them. See `@shared/certificate`.
+    /*
+     * A bouncer, offering the networks it holds.
+     *
+     * Only when this connection is bound to none of them — that is the one
+     * that is talking to the bouncer itself, and the one where the list is
+     * news. A connection already bound to a network is describing its
+     * siblings, which somebody has presumably already dealt with.
+     *
+     * Offered rather than done: it adds rows to somebody's server list, and
+     * the only person who knows whether they want all of them is them.
+     */
+    cleanups.push(
+      api.on('irc:bouncer-networks', ({ serverId, boundTo, networks }) => {
+        if (boundTo || networks.length === 0) return
+
+        const servers = useServerStore.getState().servers
+        const parent = servers.find((s) => s.id === serverId)
+        const already = new Set(
+          servers
+            .filter((s) => s.host === parent?.host && s.port === parent?.port)
+            .map((s) => s.bouncerNetId)
+            .filter(Boolean)
+        )
+        const missing = networks.filter((network) => !already.has(network.id))
+        if (missing.length === 0) return
+
+        useUIStore.getState().addToast({
+          title: `${parent?.name ?? 'This bouncer'} holds ${missing.length} network${
+            missing.length === 1 ? '' : 's'
+          }`,
+          body: missing.map((network) => network.name || network.host).join(', '),
+          action: { kind: 'adopt-bouncer', label: 'Add them', serverId },
+          sticky: true
+        })
+      })
+    )
+
     cleanups.push(
       api.on('irc:certificate', ({ serverId, ...problem }) => {
         useServerStore.getState().setConnectionStatus(serverId, 'disconnected')
@@ -177,7 +214,8 @@ export function useIRCEvents(): void {
       api.on('irc:join', ({ serverId, channel, user, isMe }) => {
         useChannelStore.getState().addChannel(serverId, channel)
         useUserStore.getState().addUser(serverId, channel, user)
-        if (!isMe && showsJoins()) note(serverId, channel, eventLine({ kind: 'join', nick: user.nick }))
+        if (!isMe && showsJoins())
+          note(serverId, channel, eventLine({ kind: 'join', nick: user.nick }))
 
         // Only our own arrival is a reason to go looking for history. This ran
         // on everybody's, so a busy channel hit the database once per join.
@@ -238,7 +276,8 @@ export function useIRCEvents(): void {
 
     cleanups.push(
       api.on('irc:part', ({ serverId, channel, nick, reason, isMe }) => {
-        if (!isMe && showsJoins()) note(serverId, channel, eventLine({ kind: 'part', nick, reason }))
+        if (!isMe && showsJoins())
+          note(serverId, channel, eventLine({ kind: 'part', nick, reason }))
         useUserStore.getState().removeUser(serverId, channel, nick)
         // We left — drop the channel rather than leaving a dead row behind
         if (isMe) {
@@ -381,7 +420,12 @@ export function useIRCEvents(): void {
 
         // Desktop notification for mentions and PMs (not for services or muted servers)
         const isServerMuted = useServerStore.getState().isServerMuted(serverId)
-        if ((isMention || isPrivate || everyLine) && !isActiveChannel && !isService && !isServerMuted) {
+        if (
+          (isMention || isPrivate || everyLine) &&
+          !isActiveChannel &&
+          !isService &&
+          !isServerMuted
+        ) {
           const uiState = useUIStore.getState()
           if (uiState.notificationsEnabled) {
             const title = isPrivate ? `PM from ${message.nick}` : `${message.nick} in ${channel}`

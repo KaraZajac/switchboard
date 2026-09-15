@@ -178,6 +178,17 @@ export interface MainToRendererEvents {
   'chat:clear': { serverId: string; channel: string }
   /** The ignore list changed from somewhere other than the settings panel */
   'ignore:changed': IgnoreEntry[]
+  /**
+   * The networks a bouncer says it holds behind itself.
+   *
+   * `boundTo` is which of them this connection is on, or null when it is
+   * talking to the bouncer itself — which is when there is something to offer.
+   */
+  'irc:bouncer-networks': {
+    serverId: string
+    boundTo: string | null
+    networks: import('@shared/bouncer').BouncerNetwork[]
+  }
   'irc:connected': { serverId: string; nick: string; account: string | null }
   'irc:disconnected': { serverId: string; reason: string }
   /** The connection was lost and a retry is booked, this far away */
@@ -340,6 +351,8 @@ export interface RendererToMainInvocations {
   'remote:dial': (ticket: string, pairingCode?: string) => Promise<{ ok: boolean; error?: string }>
   /** Stop looking for one. Not the same as revoking it. */
   'remote:forget-dialled': (ticket: string) => Promise<RemoteLinkStatus>
+  /** Make each of a bouncer's networks a network here, bound by id */
+  'bouncer:adopt': (serverId: string) => Promise<{ added: number }>
   /** Where stored credentials are protected, and whether they really are */
   'app:secrets-status': () => Promise<StorageProtection>
   /** OS account name, cleaned up for use as an IRC nick */

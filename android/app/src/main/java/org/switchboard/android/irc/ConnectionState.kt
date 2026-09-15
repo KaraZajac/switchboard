@@ -154,6 +154,15 @@ class ConnectionState(val serverId: String) {
 
     val available = mutableMapOf<String, String>()
     val capabilities = mutableSetOf<String>()
+
+    /**
+     * The networks a bouncer says it holds, by id.
+     *
+     * Empty for an ordinary server, which is nearly all of them. Filled from
+     * `BOUNCER NETWORK` lines, which arrive unasked when
+     * `soju.im/bouncer-networks-notify` is negotiated. See [Bouncer].
+     */
+    val bouncerNetworks = linkedMapOf<String, Bouncer.Network>()
     val isupport = mutableMapOf<String, String>()
 
     /**

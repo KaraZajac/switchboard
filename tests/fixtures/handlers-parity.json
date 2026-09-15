@@ -90,6 +90,7 @@
     "AUTOJOIN",
     "AWAY",
     "BATCH",
+    "BOUNCER",
     "CAP",
     "CHATHISTORY",
     "CHGHOST",
