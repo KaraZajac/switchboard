@@ -249,6 +249,14 @@ is still working out whether it should be. That is deliberate: a desktop that
 connected first and handed over afterwards would appear in your channels as
 `nick___` for a few seconds, every time it started.
 
+Switchboard works out whether the far end is a bouncer rather than asking you.
+Three signals, any one of which is enough: `BOUNCER` in ISUPPORT, which soju
+and Switchboard send; the `soju.im/bouncer-networks` capability; or any
+capability under `znc.in/`, which is how ZNC announces itself — it relays its
+upstream's ISUPPORT untouched, so there is no token to look for. A bouncer that
+announces none of these is indistinguishable from a server and is treated as
+one, which costs only the taking turns.
+
 ## Where the secrets are
 
 The desktop keeps its database key in the OS keychain. There is no keychain on
@@ -261,6 +269,15 @@ machine is on. What it still buys is real — the database and the saved
 passwords are not readable from a stolen disk, a backup, or a copied volume.
 
 Back up `headless.key` with the data. Without it the data is gone.
+
+## Coming from ZNC
+
+Point your existing client at it and change nothing. Switchboard's bouncer
+takes ZNC's `PASS <user>/<network>:<password>`, which is how every ZNC client is
+already configured, and lands you on the network named there.
+
+The password is tried whole first, so if your bouncer password genuinely
+contains a colon it still works.
 
 ## Running it against someone else's bouncer instead
 
