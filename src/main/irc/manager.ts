@@ -171,6 +171,24 @@ export class IRCManager {
    */
   autoConnectAll(): void {
     if (this.autoConnected) return
+
+    /*
+     * Not while another device is holding the network.
+     *
+     * The coordinator listens for a few seconds before deciding whether this
+     * device should be the one connected, and that window is the whole reason
+     * two devices do not turn up under one nick. This runs off a timer and
+     * used to walk straight past it — so a desktop restarting beside an
+     * always-on instance dialled everything, registered as `nick___`, and only
+     * then heard the heartbeat and handed back. Everybody in the channel saw
+     * it arrive and leave.
+     *
+     * Deliberately without setting `autoConnected`: this is "not yet", not
+     * "done". Becoming primary calls `resumeConnections`, which is the right
+     * door for it to come through.
+     */
+    if (!this.shouldHold()) return
+
     this.autoConnected = true
 
     for (const server of getAllServers()) {
@@ -178,6 +196,19 @@ export class IRCManager {
         this.connect(server)
       }
     }
+  }
+
+  /**
+   * Whether this device is the one that should be on the network.
+   *
+   * Injected rather than imported: the remote link already imports this
+   * manager, and asking it directly would close the circle. True by default,
+   * because a Switchboard with no link is always the one holding.
+   */
+  private shouldHold: () => boolean = () => true
+
+  useSessionRole(shouldHold: () => boolean): void {
+    this.shouldHold = shouldHold
   }
 
   /**

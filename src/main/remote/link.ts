@@ -138,7 +138,24 @@ export const session = new SessionCoordinator(
      * `nick` and `nick_`. Waiting out the discovery window costs six seconds and
      * removes the race entirely.
      */
-    hasPeers: () => peers.size > 0 || getPairedDevices().length > 0 || dialledPeers().length > 0
+    hasPeers: () => peers.size > 0 || getPairedDevices().length > 0 || dialledPeers().length > 0,
+
+    /**
+     * Drop a connection the coordinator has given up on.
+     *
+     * The heartbeat notices a peer has gone three beats before QUIC does, and
+     * for a dialled peer that difference is the whole thing: closing here ends
+     * the read loop, which is what the retry is waiting on. Without it a
+     * desktop that restarts is not redialled until the old connection times
+     * out — by which time it has finished looking around, concluded it is
+     * alone, and joined the network beside the instance about to come back.
+     */
+    peerExpired: (peerId) => {
+      const peer = peers.get(peerId)
+      if (!peer) return
+      peers.delete(peerId)
+      peer.close()
+    }
   },
   {
     // Whatever the phone was holding as well as whatever this desktop
@@ -153,6 +170,23 @@ export const session = new SessionCoordinator(
 export function sessionState(): SessionState {
   return session.state()
 }
+
+/**
+ * Set while the link is coming up and nobody has decided who holds yet.
+ *
+ * The coordinator starts life as `primary` because that is the right answer
+ * for a Switchboard with no link at all. Binding an endpoint takes a few
+ * seconds, and in that gap the window reports itself ready and auto-connect
+ * runs — reading a role that had not been decided, and dialling everything
+ * beside an always-on instance that was already there.
+ */
+let deciding = false
+
+/*
+ * Installed here rather than when the link starts, because the race is
+ * precisely that the link has not started yet.
+ */
+ircManager.useSessionRole(() => !deciding && session.state().role === 'primary')
 
 /** Stable identity across restarts, so paired devices keep working */
 async function loadSecretKey(): Promise<number[]> {
@@ -210,8 +244,15 @@ export async function resumeRemoteLink(): Promise<void> {
   const wanted = chosen === null ? getPairedDevices().length > 0 : chosen === true
   if (!wanted) return
 
-  const status = await startRemoteLink()
-  if (status.error) console.warn(`Remote link did not resume: ${status.error}`)
+  // Hold auto-connect until the coordinator has looked around
+  deciding = true
+
+  try {
+    const status = await startRemoteLink()
+    if (status.error) console.warn(`Remote link did not resume: ${status.error}`)
+  } finally {
+    deciding = false
+  }
 }
 
 export async function startRemoteLink(): Promise<RemoteStatus> {
@@ -263,6 +304,7 @@ export async function startRemoteLink(): Promise<RemoteStatus> {
 
   acceptLoop = runAcceptLoop()
   session.start()
+  deciding = false
   console.info(`Remote link listening as ${endpoint.id().toString()}`)
 
   // Go and find whatever this instance was told to look for. Not awaited: a
@@ -290,6 +332,9 @@ export async function stopRemoteLink(): Promise<RemoteStatus> {
 
   unsubscribeEvents?.()
   unsubscribeEvents = null
+
+  // Nothing is arbitrating any more, so this instance is the one holding
+  deciding = false
 
   const current = endpoint
   endpoint = null
@@ -436,9 +481,16 @@ async function openDialled(
   const again = (): void => {
     if (closed || stopping) return
     attempts++
-    // Up to a minute, which is soon enough that a machine coming back is
-    // noticed while somebody is still at the keyboard
-    const delay = Math.min(60_000, 2_000 * 2 ** Math.min(attempts, 5))
+    /*
+     * Quick at first, then backing off to a minute.
+     *
+     * The first retry after a connection that was working is the one that
+     * matters: the peer is known good and has probably just restarted, and the
+     * other end gives up looking for it after twenty seconds. Later attempts
+     * are against a machine that is plainly off, and hammering that is rude
+     * and pointless.
+     */
+    const delay = Math.min(60_000, 1_000 * 2 ** Math.min(attempts, 6))
     retry = setTimeout(() => void connect(), delay)
   }
 

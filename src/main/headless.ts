@@ -42,6 +42,32 @@ import type { ProxySettings } from '@shared/socks'
 const VERSION = process.env['SWITCHBOARD_VERSION'] ?? 'headless'
 
 /**
+ * Put the time on every line.
+ *
+ * A desktop's console is read while you are looking at it, so "now" is
+ * obvious. A server's is read afterwards, often days later and often next to
+ * another machine's, and a line with no time on it cannot be put in order with
+ * anything. `journalctl` adds its own, but this also runs in a terminal, in a
+ * container, and piped to a file, and none of those do.
+ *
+ * Skipped for the indented lines the console commands print, which are a reply
+ * to something somebody just typed rather than a record of anything.
+ */
+function timestampOutput(): void {
+  for (const level of ['info', 'warn', 'error'] as const) {
+    const original = console[level].bind(console)
+    console[level] = (...args: unknown[]) => {
+      const first = args[0]
+      if (typeof first === 'string' && (first.startsWith('  ') || first === '')) {
+        original(...args)
+        return
+      }
+      original(`${new Date().toISOString()}`, ...args)
+    }
+  }
+}
+
+/**
  * Where the passphrase comes from when there is nobody to type it.
  *
  * The desktop keeps the vault key in the OS keychain so a restart does not
@@ -473,6 +499,8 @@ async function leave(code: number): Promise<void> {
 }
 
 async function main(): Promise<void> {
+  timestampOutput()
+
   // What a CTCP VERSION gets told
   setAppVersion(VERSION, process.platform)
 

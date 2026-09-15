@@ -153,9 +153,7 @@ describe('handing over a network both devices can share', () => {
   })
 
   it('a mechanism with no password is not something to share', () => {
-    servers.list = [
-      { id: 'half', autoConnect: true, saslMechanism: 'PLAIN', saslPassword: null }
-    ]
+    servers.list = [{ id: 'half', autoConnect: true, saslMechanism: 'PLAIN', saslPassword: null }]
     const { manager, clients } = managerWithFakeClients(['half'])
 
     manager.releaseConnections()
@@ -209,5 +207,43 @@ describe('telling the other device about a channel', () => {
     joinFor(manager, 'a', '#LOBBY')
 
     expect(vault.reseals).toBe(1)
+  })
+})
+
+describe('starting up beside a device that is already holding', () => {
+  it('does not dial while it is a follower', () => {
+    const { manager, connected } = managerWithFakeClients([])
+
+    manager.useSessionRole(() => false)
+    manager.autoConnectAll()
+
+    // A desktop restarting beside an always-on instance used to dial
+    // everything, register as `nick___`, and only then hear the heartbeat.
+    // Everybody in the channel saw it arrive and leave.
+    expect(connected).toEqual([])
+  })
+
+  it('dials once it becomes the one holding', () => {
+    const { manager, connected } = managerWithFakeClients([])
+
+    manager.useSessionRole(() => false)
+    manager.autoConnectAll()
+    expect(connected).toEqual([])
+
+    // "Not yet" rather than "done": becoming primary is the door it comes
+    // through, and it must not have been latched shut on the way past
+    manager.useSessionRole(() => true)
+    manager.autoConnectAll()
+
+    expect(connected).toEqual(['a', 'b'])
+  })
+
+  it('dials when nothing is arbitrating at all', () => {
+    const { manager, connected } = managerWithFakeClients([])
+
+    // A Switchboard with no remote link is always the one holding
+    manager.autoConnectAll()
+
+    expect(connected).toEqual(['a', 'b'])
   })
 })

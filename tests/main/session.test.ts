@@ -205,8 +205,7 @@ describe('who holds the connection', () => {
     phone.coordinator.start()
 
     const bothPrimary = () =>
-      desktop.coordinator.state().role === 'primary' &&
-      phone.coordinator.state().role === 'primary'
+      desktop.coordinator.state().role === 'primary' && phone.coordinator.state().role === 'primary'
 
     for (let step = 0; step < 20; step++) {
       vi.advanceTimersByTime(HEARTBEAT_INTERVAL_MS)
@@ -517,5 +516,65 @@ describe('taking over what the other device actually had', () => {
 
     expect(phone.coordinator.state().role).toBe('follower')
     expect(desktop.coordinator.heldByPeers()).toEqual([])
+  })
+})
+
+describe('telling the transport a peer is gone', () => {
+  it('says so at the heartbeat timeout, not at the socket timeout', () => {
+    const expired: string[] = []
+    const coordinator = new SessionCoordinator(
+      DESKTOP_PRIORITY,
+      {
+        send: () => {},
+        hasPeers: () => true,
+        peerExpired: (id) => expired.push(id)
+      },
+      { resume: () => {}, release: () => {}, vaultVersion: () => 1, holding: () => [] }
+    )
+
+    coordinator.start()
+    coordinator.handleFrame('gone-soon', {
+      t: 'heartbeat',
+      role: 'primary',
+      priority: 1000,
+      since: null,
+      vaultVersion: 1
+    })
+
+    // Three missed beats. A QUIC connection to a machine that has restarted
+    // takes longer than this to fail, and a transport that can redial wants to
+    // start now rather than then.
+    vi.advanceTimersByTime(HEARTBEAT_TIMEOUT_MS + HEARTBEAT_INTERVAL_MS)
+
+    expect(expired).toEqual(['gone-soon'])
+    coordinator.stop()
+  })
+
+  it('says nothing about a peer that is still beating', () => {
+    const expired: string[] = []
+    const coordinator = new SessionCoordinator(
+      DESKTOP_PRIORITY,
+      {
+        send: () => {},
+        hasPeers: () => true,
+        peerExpired: (id) => expired.push(id)
+      },
+      { resume: () => {}, release: () => {}, vaultVersion: () => 1, holding: () => [] }
+    )
+
+    coordinator.start()
+    for (let beat = 0; beat < 6; beat++) {
+      coordinator.handleFrame('steady', {
+        t: 'heartbeat',
+        role: 'primary',
+        priority: 1000,
+        since: null,
+        vaultVersion: 1
+      })
+      vi.advanceTimersByTime(HEARTBEAT_INTERVAL_MS)
+    }
+
+    expect(expired).toEqual([])
+    coordinator.stop()
   })
 })

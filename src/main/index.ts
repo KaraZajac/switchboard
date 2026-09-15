@@ -365,182 +365,197 @@ if (!app.requestSingleInstanceLock()) {
   })
 }
 
-app.whenReady().then(async () => {
-  // What a CTCP VERSION gets told, before anything can be asked
-  setAppVersion(app.getVersion(), process.platform)
+/**
+ * Anything that goes wrong on the way up, said out loud.
+ *
+ * `whenReady().then(...)` with nothing after it swallows a throw: the window
+ * is created at the end of that function, so a failure anywhere before it
+ * means no window, `window-all-closed`, and a clean exit zero. The app simply
+ * does not appear, and there is nothing anywhere to say why.
+ */
+app
+  .whenReady()
+  .then(async () => {
+    // What a CTCP VERSION gets told, before anything can be asked
+    setAppVersion(app.getVersion(), process.platform)
 
-  // Where connections dial through, and what they will trust. Read on each
-  // dial rather than captured, so a proxy typed into settings applies to the
-  // next connection rather than the next launch. Machine-local on purpose:
-  // both of these describe where this computer is, not who you are, so
-  // neither travels to a paired phone.
-  // Go away when the keyboard goes quiet, if that was asked for
-  watchIdleTime(ircManager)
+    // Where connections dial through, and what they will trust. Read on each
+    // dial rather than captured, so a proxy typed into settings applies to the
+    // next connection rather than the next launch. Machine-local on purpose:
+    // both of these describe where this computer is, not who you are, so
+    // neither travels to a paired phone.
+    // Go away when the keyboard goes quiet, if that was asked for
+    watchIdleTime(ircManager)
 
-  // A transfer starting, moving or finishing. One event rather than a poll:
-  // a progress bar that only moves when something else happens is worse than
-  // no progress bar.
-  onTransferChange((transfer) => sendToRenderer('dcc:transfer', transfer))
+    // A transfer starting, moving or finishing. One event rather than a poll:
+    // a progress bar that only moves when something else happens is worse than
+    // no progress bar.
+    onTransferChange((transfer) => sendToRenderer('dcc:transfer', transfer))
 
-  useNetworkSettings(() => ({
-    proxy: getSetting<ProxySettings>('proxy') ?? null,
-    caPath: getSetting<string>('customCaPath') ?? null
-  }))
+    useNetworkSettings(() => ({
+      proxy: getSetting<ProxySettings>('proxy') ?? null,
+      caPath: getSetting<string>('customCaPath') ?? null
+    }))
 
-  // Initialize database
-  try {
-    await initDatabase()
-
-    // Strict Transport Security has to outlive the session to mean anything:
-    // a client that forgets on restart offers a plaintext window on every
-    // launch, which is exactly what the policy exists to close.
-    persistSTSPoliciesWith({ save: saveSTSPolicy, forget: forgetSTSPolicy })
-    loadSTSPolicies(allSTSPolicies())
-
-    // Open the shared config with the key the keychain kept, if the user asked
-    // for that. Without it every restart left the vault locked — and a locked
-    // vault silently stops servers, settings and channels reaching the phone.
-    restoreVault()
-
-    // Credentials used to be written to disk in the clear; encrypt anything
-    // left over from an older build before anything else reads them.
-    const { migrated, protected: credentialsProtected } = encryptStoredCredentials()
-    if (migrated > 0) {
-      console.info(`Encrypted stored credentials for ${migrated} server(s)`)
-    }
-    if (!credentialsProtected) {
-      console.warn(`Credential storage: ${secretsBackendDescription()}`)
-    }
-  } catch (err) {
-    console.error('Failed to initialize database:', err)
-  }
-
-  // What a network was given rather than what it was handed a copy of.
-  //
-  // Adding a network used to copy the default profile into it, so every
-  // network has one of its own without anybody choosing that — and under the
-  // rule that a network with its own profile ignores the global, editing your
-  // name would have changed nothing anywhere.
-  //
-  // Narrowed field by field rather than all or nothing: somebody who changed
-  // their display name on one network got a whole frozen copy along with it,
-  // and only the name was ever a choice. What matches the global goes back to
-  // following it; what differs stays.
-  try {
-    const global = getSetting<Record<string, string>>('profile') ?? {}
-    let freed = 0
-    for (const server of getAllServers()) {
-      if (!hasOverride(server.profile)) continue
-      const narrowed = overrideFrom(global, server.profile) ?? {}
-      if (sameProfile(narrowed, server.profile)) continue
-      updateServer(server.id, { profile: narrowed })
-      freed++
-    }
-    if (freed > 0) console.info(`${freed} network(s) now follow your profile again`)
-  } catch (err) {
-    console.error('Could not tidy seeded profiles:', err)
-  }
-
-  // Register IPC handlers. The window listens over Electron IPC; the registry
-  // keeps the same handlers for a paired device, and for a headless instance
-  // that has no window to listen for.
-  useLocalBridge((channel, handler) =>
-    ipcMain.handle(channel, handler as (event: IpcMainInvokeEvent, ...args: unknown[]) => unknown)
-  )
-  registerIPCHandlers()
-
-  // A paired phone should be able to reach this desktop the moment it is
-  // running, not only after somebody visits Settings.
-  void resumeRemoteLink()
-
-  // Set CSP for production
-  if (app.isPackaged) {
-    session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
-      callback({
-        responseHeaders: {
-          ...details.responseHeaders,
-          'Content-Security-Policy': [
-            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; media-src 'self' https:; frame-src https://www.youtube.com; connect-src 'self' https://api.klipy.com https://static.klipy.com;"
-          ]
-        }
-      })
-    })
-  }
-
-  /*
-   * One set of rules for every window there will ever be.
-   *
-   * Three things, all on the same reasoning: the preload hands
-   * `window.switchboard` to whatever is loaded, so anything that is not
-   * Switchboard must never be loaded *here*.
-   *
-   *  - A link opens outside, and only if we are willing to open it.
-   *    `shell.openExternal` hands a URL to the operating system, which
-   *    attempts whatever scheme it is given — `file:///` reads this machine,
-   *    and on Windows a handler scheme can start a program. The URL is not
-   *    always one the user typed: a profile's `homepage` is a metadata key, so
-   *    a stranger sets it and anybody can click it.
-   *  - Nothing navigates a window away from the app.
-   *  - Nothing attaches a webview, which would come with a preload of its own.
-   *
-   * On `web-contents-created` rather than on the window, because a guard that
-   * only covers the windows written so far is a guard that stops covering.
-   */
-  app.on('web-contents-created', (_event, contents) => {
-    contents.setWindowOpenHandler((details) => {
-      const safe = safeExternalUrl(details.url)
-      if (safe) void shell.openExternal(safe)
-      return { action: 'deny' }
-    })
-
-    contents.on('will-navigate', (event, url) => {
-      // A reload of what is already showing is not navigation
-      if (url === contents.getURL()) return
-      event.preventDefault()
-      const safe = safeExternalUrl(url)
-      if (safe) void shell.openExternal(safe)
-    })
-
-    contents.on('will-attach-webview', (event) => event.preventDefault())
-  })
-
-  // Create app menu
-  createAppMenu()
-
-  // Create window
-  createWindow()
-
-  // Create tray icon
-  createTray()
-
-  // Links on web pages: `irc://` and `ircs://` open here, the way they open
-  // in every other desktop client
-  for (const scheme of ['irc', 'ircs']) {
+    // Initialize database
     try {
-      app.setAsDefaultProtocolClient(scheme)
-    } catch {
-      // A platform that will not let us — nothing to do about it
+      await initDatabase()
+
+      // Strict Transport Security has to outlive the session to mean anything:
+      // a client that forgets on restart offers a plaintext window on every
+      // launch, which is exactly what the policy exists to close.
+      persistSTSPoliciesWith({ save: saveSTSPolicy, forget: forgetSTSPolicy })
+      loadSTSPolicies(allSTSPolicies())
+
+      // Open the shared config with the key the keychain kept, if the user asked
+      // for that. Without it every restart left the vault locked — and a locked
+      // vault silently stops servers, settings and channels reaching the phone.
+      restoreVault()
+
+      // Credentials used to be written to disk in the clear; encrypt anything
+      // left over from an older build before anything else reads them.
+      const { migrated, protected: credentialsProtected } = encryptStoredCredentials()
+      if (migrated > 0) {
+        console.info(`Encrypted stored credentials for ${migrated} server(s)`)
+      }
+      if (!credentialsProtected) {
+        console.warn(`Credential storage: ${secretsBackendDescription()}`)
+      }
+    } catch (err) {
+      console.error('Failed to initialize database:', err)
     }
-  }
-  const launchLink = ircLinkIn(process.argv)
-  if (launchLink) setTimeout(() => openIrcLink(launchLink), 3_000)
 
-  // Set up auto-updater
-  setupAutoUpdater()
-
-  // Auto-connect servers once the renderer is listening (it calls
-  // 'app:renderer-ready'). This timer is the fallback for a renderer that never
-  // reports in, so a broken window still leaves the connections up.
-  setTimeout(() => ircManager.autoConnectAll(), 5_000)
-
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow()
-    } else {
-      mainWindow?.show()
+    // What a network was given rather than what it was handed a copy of.
+    //
+    // Adding a network used to copy the default profile into it, so every
+    // network has one of its own without anybody choosing that — and under the
+    // rule that a network with its own profile ignores the global, editing your
+    // name would have changed nothing anywhere.
+    //
+    // Narrowed field by field rather than all or nothing: somebody who changed
+    // their display name on one network got a whole frozen copy along with it,
+    // and only the name was ever a choice. What matches the global goes back to
+    // following it; what differs stays.
+    try {
+      const global = getSetting<Record<string, string>>('profile') ?? {}
+      let freed = 0
+      for (const server of getAllServers()) {
+        if (!hasOverride(server.profile)) continue
+        const narrowed = overrideFrom(global, server.profile) ?? {}
+        if (sameProfile(narrowed, server.profile)) continue
+        updateServer(server.id, { profile: narrowed })
+        freed++
+      }
+      if (freed > 0) console.info(`${freed} network(s) now follow your profile again`)
+    } catch (err) {
+      console.error('Could not tidy seeded profiles:', err)
     }
+
+    // Register IPC handlers. The window listens over Electron IPC; the registry
+    // keeps the same handlers for a paired device, and for a headless instance
+    // that has no window to listen for.
+    useLocalBridge((channel, handler) =>
+      ipcMain.handle(channel, handler as (event: IpcMainInvokeEvent, ...args: unknown[]) => unknown)
+    )
+    registerIPCHandlers()
+
+    // A paired phone should be able to reach this desktop the moment it is
+    // running, not only after somebody visits Settings.
+    void resumeRemoteLink()
+
+    // Set CSP for production
+    if (app.isPackaged) {
+      session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+        callback({
+          responseHeaders: {
+            ...details.responseHeaders,
+            'Content-Security-Policy': [
+              "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; media-src 'self' https:; frame-src https://www.youtube.com; connect-src 'self' https://api.klipy.com https://static.klipy.com;"
+            ]
+          }
+        })
+      })
+    }
+
+    /*
+     * One set of rules for every window there will ever be.
+     *
+     * Three things, all on the same reasoning: the preload hands
+     * `window.switchboard` to whatever is loaded, so anything that is not
+     * Switchboard must never be loaded *here*.
+     *
+     *  - A link opens outside, and only if we are willing to open it.
+     *    `shell.openExternal` hands a URL to the operating system, which
+     *    attempts whatever scheme it is given — `file:///` reads this machine,
+     *    and on Windows a handler scheme can start a program. The URL is not
+     *    always one the user typed: a profile's `homepage` is a metadata key, so
+     *    a stranger sets it and anybody can click it.
+     *  - Nothing navigates a window away from the app.
+     *  - Nothing attaches a webview, which would come with a preload of its own.
+     *
+     * On `web-contents-created` rather than on the window, because a guard that
+     * only covers the windows written so far is a guard that stops covering.
+     */
+    app.on('web-contents-created', (_event, contents) => {
+      contents.setWindowOpenHandler((details) => {
+        const safe = safeExternalUrl(details.url)
+        if (safe) void shell.openExternal(safe)
+        return { action: 'deny' }
+      })
+
+      contents.on('will-navigate', (event, url) => {
+        // A reload of what is already showing is not navigation
+        if (url === contents.getURL()) return
+        event.preventDefault()
+        const safe = safeExternalUrl(url)
+        if (safe) void shell.openExternal(safe)
+      })
+
+      contents.on('will-attach-webview', (event) => event.preventDefault())
+    })
+
+    // Create app menu
+    createAppMenu()
+
+    // Create window
+    createWindow()
+
+    // Create tray icon
+    createTray()
+
+    // Links on web pages: `irc://` and `ircs://` open here, the way they open
+    // in every other desktop client
+    for (const scheme of ['irc', 'ircs']) {
+      try {
+        app.setAsDefaultProtocolClient(scheme)
+      } catch {
+        // A platform that will not let us — nothing to do about it
+      }
+    }
+    const launchLink = ircLinkIn(process.argv)
+    if (launchLink) setTimeout(() => openIrcLink(launchLink), 3_000)
+
+    // Set up auto-updater
+    setupAutoUpdater()
+
+    // Auto-connect servers once the renderer is listening (it calls
+    // 'app:renderer-ready'). This timer is the fallback for a renderer that never
+    // reports in, so a broken window still leaves the connections up.
+    setTimeout(() => ircManager.autoConnectAll(), 5_000)
+
+    app.on('activate', () => {
+      if (BrowserWindow.getAllWindows().length === 0) {
+        createWindow()
+      } else {
+        mainWindow?.show()
+      }
+    })
   })
-})
+  .catch((err) => {
+    console.error('Switchboard could not finish starting:', err)
+    // A broken feature must not mean no window at all
+    if (!mainWindow) createWindow()
+  })
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {

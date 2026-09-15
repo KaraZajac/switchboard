@@ -87,9 +87,7 @@ export function DevicesTab() {
         </div>
         <button
           onClick={() =>
-            run(() =>
-              window.switchboard.invoke(status.running ? 'remote:stop' : 'remote:start')
-            )
+            run(() => window.switchboard.invoke(status.running ? 'remote:stop' : 'remote:start'))
           }
           disabled={busy}
           className="ml-3 shrink-0 rounded bg-gray-700 px-3 py-1.5 text-xs font-medium text-gray-100 transition-colors hover:bg-gray-600 disabled:opacity-50"
@@ -166,6 +164,8 @@ export function DevicesTab() {
         </button>
       )}
 
+      <AlwaysOn dialled={status.dialled} busy={busy} onChanged={refresh} />
+
       {/* Paired devices */}
       <div>
         <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">
@@ -211,6 +211,167 @@ export function DevicesTab() {
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+/**
+ * Joining an always-on Switchboard.
+ *
+ * The other direction from pairing a phone. A phone finds this desktop; a
+ * Switchboard running on a server has to be found, because it has no screen to
+ * show a code on and nothing to scan. So it prints a ticket, and this is where
+ * that ticket goes.
+ *
+ * Worth being plain about what it changes: the connections move there. This
+ * desktop stops holding them and follows instead, which is the point — a
+ * machine that never closes holds your nick continuously, and closing your
+ * laptop stops meaning anything.
+ */
+function AlwaysOn({
+  dialled,
+  busy,
+  onChanged
+}: {
+  dialled: RemoteLinkStatus['dialled']
+  busy: boolean
+  onChanged: () => Promise<void>
+}) {
+  const [ticket, setTicket] = useState('')
+  const [code, setCode] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [working, setWorking] = useState(false)
+  const [adding, setAdding] = useState(false)
+
+  const join = async () => {
+    setError(null)
+    setWorking(true)
+    try {
+      const result = await window.switchboard.invoke('remote:dial', ticket.trim(), code.trim())
+      if (!result.ok) {
+        setError(result.error ?? 'That did not work')
+        return
+      }
+      setTicket('')
+      setCode('')
+      setAdding(false)
+      await onChanged()
+    } catch (err) {
+      setError(wording(err) || 'That did not work')
+    } finally {
+      setWorking(false)
+    }
+  }
+
+  return (
+    <div>
+      <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">
+        Always-on Switchboard
+      </div>
+
+      {dialled.length === 0 && !adding && (
+        <p className="text-sm text-gray-500">
+          Running Switchboard on a server keeps you connected with everything closed. Paste the
+          ticket it printed and this desktop will follow it.{' '}
+          <button
+            onClick={() => setAdding(true)}
+            className="text-indigo-400 transition-colors hover:text-indigo-300"
+          >
+            Add one
+          </button>
+        </p>
+      )}
+
+      {dialled.length > 0 && (
+        <div className="space-y-2">
+          {dialled.map((peer) => (
+            <div
+              key={peer.ticket}
+              className="flex items-center justify-between rounded border border-gray-700 bg-gray-900/50 px-3 py-2"
+            >
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 text-sm text-gray-200">
+                  <span
+                    className={`h-2 w-2 shrink-0 rounded-full ${
+                      peer.connected ? 'bg-green-500' : 'bg-yellow-500'
+                    }`}
+                  />
+                  <span className="truncate">{peer.name ?? 'Always-on Switchboard'}</span>
+                </div>
+                <div className="mt-0.5 font-mono text-[11px] text-gray-500">
+                  {/* "Looking" and "found" are the whole question somebody has
+                      when they open this, and they look identical otherwise */}
+                  {peer.connected ? 'connected now' : 'looking for it…'} ·{' '}
+                  {peer.ticket.slice(0, 16)}…
+                </div>
+              </div>
+              <button
+                onClick={async () => {
+                  await window.switchboard.invoke('remote:forget-dialled', peer.ticket)
+                  await onChanged()
+                }}
+                className="ml-3 shrink-0 text-xs text-gray-400 transition-colors hover:text-red-400"
+                title="Stop looking for it. It stays paired."
+              >
+                Forget
+              </button>
+            </div>
+          ))}
+          {!adding && (
+            <button
+              onClick={() => setAdding(true)}
+              className="text-xs text-gray-400 transition-colors hover:text-gray-200"
+            >
+              Add another
+            </button>
+          )}
+        </div>
+      )}
+
+      {adding && (
+        <div className="mt-2 space-y-2">
+          <input
+            value={ticket}
+            onChange={(e) => setTicket(e.target.value)}
+            placeholder="Ticket"
+            spellCheck={false}
+            className="w-full rounded bg-gray-800 px-2.5 py-1.5 font-mono text-xs text-gray-100 outline-none ring-1 ring-gray-700 focus:ring-indigo-500"
+          />
+          <input
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') void join()
+            }}
+            placeholder="Pairing code"
+            inputMode="numeric"
+            className="w-full rounded bg-gray-800 px-2.5 py-1.5 text-sm text-gray-100 outline-none ring-1 ring-gray-700 focus:ring-indigo-500"
+          />
+          <p className="text-xs leading-relaxed text-gray-500">
+            The code is needed this once. After that it is recognised by its key, and this desktop
+            finds it again on its own every time you start up.
+          </p>
+          {error && <div className="text-xs text-red-400">{error}</div>}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => void join()}
+              disabled={busy || working || ticket.trim().length === 0}
+              className="rounded bg-gray-700 px-3 py-1.5 text-xs font-medium text-gray-100 transition-colors hover:bg-gray-600 disabled:opacity-50"
+            >
+              {working ? 'Connecting…' : 'Connect'}
+            </button>
+            <button
+              onClick={() => {
+                setAdding(false)
+                setError(null)
+              }}
+              className="text-xs text-gray-400 transition-colors hover:text-gray-200"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -354,8 +515,8 @@ function VaultPanel({
             Unlocked · v{vault.version} · fingerprint{' '}
             <span className="font-mono text-gray-400">{vault.fingerprint}</span>
             <div className="mt-0.5">
-              Your servers and passwords sync to paired devices, sealed with this passphrase.
-              Check the fingerprint matches on the other device.
+              Your servers and passwords sync to paired devices, sealed with this passphrase. Check
+              the fingerprint matches on the other device.
             </div>
             <div className="mt-0.5">
               {vault.remembered
@@ -371,11 +532,11 @@ function VaultPanel({
           // discover the gap the night the desktop goes down.
           <>
             <span className="text-yellow-500">
-              {pairedDevices === 1 ? 'Your paired device' : 'Your paired devices'} can mirror
-              this desktop but cannot take over when it goes offline.
+              {pairedDevices === 1 ? 'Your paired device' : 'Your paired devices'} can mirror this
+              desktop but cannot take over when it goes offline.
             </span>{' '}
-            Set a passphrase to share your server list and logins. It never leaves this
-            device — only the sealed config does.
+            Set a passphrase to share your server list and logins. It never leaves this device —
+            only the sealed config does.
           </>
         ) : (
           'Set a passphrase to share your server list and passwords with your phone. It never leaves this device — only the sealed config does.'
@@ -417,9 +578,9 @@ function VaultPanel({
               <span>
                 Stay unlocked on this computer
                 <span className="block text-gray-500">
-                  Keeps you from typing this every time Switchboard restarts, and keeps the
-                  two devices in step meanwhile. The key is held in the keychain, beside the
-                  one for your message history.
+                  Keeps you from typing this every time Switchboard restarts, and keeps the two
+                  devices in step meanwhile. The key is held in the keychain, beside the one for
+                  your message history.
                 </span>
               </span>
             </label>

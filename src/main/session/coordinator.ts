@@ -98,6 +98,17 @@ export interface CoordinatorTransport {
   send: (frame: SessionFrame, peerId?: string) => void
   /** True when at least one peer is connected */
   hasPeers: () => boolean
+  /**
+   * A peer has stopped beating and is being forgotten.
+   *
+   * Worth telling the transport, because the coordinator knows first. Three
+   * missed beats is sixteen seconds; a QUIC connection to a machine that has
+   * restarted takes its idle timeout to fail, which is longer. A transport
+   * that can redial wants to start now rather than then — otherwise a desktop
+   * that restarts finishes looking around, concludes it is alone, and joins
+   * the network beside the instance that is about to come back.
+   */
+  peerExpired?: (peerId: string) => void
 }
 
 export type SessionFrame =
@@ -326,14 +337,17 @@ export class SessionCoordinator {
 
   private expirePeers(): void {
     const cutoff = Date.now() - HEARTBEAT_TIMEOUT_MS
-    let changed = false
+    const expired: string[] = []
     for (const [id, peer] of this.peers) {
       if (peer.lastSeen < cutoff) {
         this.peers.delete(id)
-        changed = true
+        expired.push(id)
       }
     }
-    if (changed) this.emit()
+    if (expired.length === 0) return
+
+    for (const id of expired) this.transport.peerExpired?.(id)
+    this.emit()
   }
 
   private livePrimary(): { id: string; priority: number } | null {
