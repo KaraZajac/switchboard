@@ -3,6 +3,7 @@ package org.switchboard.android
 import androidx.test.core.app.ApplicationProvider
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -256,6 +257,45 @@ class MessageStoreTest {
     fun `nothing is written for a marker with no timestamp`() {
         store.rememberReadMarker("srv", "#lobby", "")
         assertNull(store.readMarker("srv", "#lobby"))
+    }
+
+    // ── what is worth a notification ────────────────────────────────
+
+    @Test
+    fun `a message older than the marker has been read`() {
+        store.rememberReadMarker("srv", "#lobby", "2026-09-14T02:00:00.000Z")
+        assertTrue(store.hasBeenRead("srv", "#lobby", "2026-09-14T01:00:00.000Z"))
+    }
+
+    @Test
+    fun `the message the marker points at has been read`() {
+        store.rememberReadMarker("srv", "robin", "2026-09-14T02:00:00.000Z")
+        assertTrue(store.hasBeenRead("srv", "robin", "2026-09-14T02:00:00.000Z"))
+    }
+
+    @Test
+    fun `anything newer has not`() {
+        store.rememberReadMarker("srv", "robin", "2026-09-14T02:00:00.000Z")
+        assertFalse(store.hasBeenRead("srv", "robin", "2026-09-14T03:00:00.000Z"))
+    }
+
+    @Test
+    fun `a conversation nobody has read has read nothing`() {
+        assertFalse(store.hasBeenRead("srv", "robin", "2026-09-14T01:00:00.000Z"))
+    }
+
+    @Test
+    fun `a message with no timestamp is never assumed read`() {
+        // Suppressing on a guess is how somebody misses the one that mattered
+        store.rememberReadMarker("srv", "robin", "2026-09-14T02:00:00.000Z")
+        assertFalse(store.hasBeenRead("srv", "robin", null))
+        assertFalse(store.hasBeenRead("srv", "robin", ""))
+    }
+
+    @Test
+    fun `reading one conversation says nothing about another`() {
+        store.rememberReadMarker("srv", "robin", "2026-09-14T02:00:00.000Z")
+        assertFalse(store.hasBeenRead("srv", "mara", "2026-09-14T01:00:00.000Z"))
     }
 
     // ── the same network under another id ───────────────────────────

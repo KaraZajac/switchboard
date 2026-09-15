@@ -317,6 +317,26 @@ class MessageStore(context: Context) {
         db.update("read_markers", values, "server_id = ?", arrayOf(from))
     }
 
+    /**
+     * Whether this conversation was already read past a message.
+     *
+     * The test a notification has to pass. `historical` only covers a replay
+     * the client recognised as one — the server wraps `CHATHISTORY` in a batch
+     * only for a client that negotiated both `batch` and `message-tags`, and a
+     * desktop relaying to a phone marks nothing at all. So an old message can
+     * arrive looking entirely live, and a burst of them on reconnecting reads
+     * as a pile of direct messages you answered days ago.
+     *
+     * A message with no timestamp, or a conversation nobody has read, is
+     * treated as unread: this suppresses, and suppressing on a guess is how
+     * somebody misses the message that mattered.
+     */
+    fun hasBeenRead(serverId: String, channel: String, timestamp: String?): Boolean {
+        if (timestamp.isNullOrBlank()) return false
+        val readTo = readMarker(serverId, channel) ?: return false
+        return timestamp <= readTo
+    }
+
     /** A network this phone no longer has is a conversation it no longer keeps */
     fun forgetServer(serverId: String) {
         db.delete("messages", "server_id = ?", arrayOf(serverId))

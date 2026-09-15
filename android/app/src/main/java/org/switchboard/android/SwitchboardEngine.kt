@@ -348,6 +348,23 @@ class SwitchboardEngine(
         val text = message["content"]?.jsonPrimitive?.contentOrNull() ?: return
         if (message["historical"]?.jsonPrimitive?.booleanOrNull == true) return
 
+        /*
+         * Nothing at or before where this conversation was read up to.
+         *
+         * `historical` only covers a replay this client recognised as one —
+         * the server wraps `CHATHISTORY` in a batch, but only for a client
+         * that negotiated both `batch` and `message-tags`, and the desktop
+         * marks nothing it relays. So an old message can arrive looking
+         * entirely live, and did: a reconnect brought a burst of notifications
+         * for direct messages read days ago. A direct message always notifies,
+         * which is why it showed up there first and not in channels.
+         *
+         * The read marker is the honest test, and it is the same one on both
+         * devices. Anything genuinely new is newer than it.
+         */
+        val at = message["timestamp"]?.jsonPrimitive?.contentOrNull()
+        if (runCatching { history.hasBeenRead(serverId, channel, at) }.getOrDefault(false)) return
+
         val me = store.servers[serverId]?.nick.orEmpty()
         if (me.isNotEmpty() && nick.equals(me, ignoreCase = true)) return
 
