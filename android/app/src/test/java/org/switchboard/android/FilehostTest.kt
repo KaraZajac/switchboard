@@ -91,6 +91,73 @@ class FilehostTest {
         return "http://127.0.0.1:${socket.localPort}/upload"
     }
 
+    /**
+     * A filehost that answers `OPTIONS` and says what it takes.
+     *
+     * Separate from `listening` because it answers one request and closes,
+     * which is all the preflight needs and keeps the two cases from sharing a
+     * socket's worth of state.
+     */
+    private fun offering(acceptPost: String?): String {
+        val socket = ServerSocket(0, 1, InetAddress.getByName("127.0.0.1"))
+        server = socket
+
+        thread(isDaemon = true) {
+            runCatching {
+                socket.accept().use { client ->
+                    val input = client.getInputStream()
+                    val head = StringBuilder()
+                    while (!head.endsWith("\r\n\r\n")) {
+                        val byte = input.read()
+                        if (byte == -1) return@use
+                        head.append(byte.toChar())
+                    }
+                    received["method"] = head.toString().substringBefore(' ')
+
+                    val response = buildString {
+                        append("HTTP/1.1 204 No Content\r\n")
+                        append("Allow: OPTIONS, POST\r\n")
+                        acceptPost?.let { append("Accept-Post: $it\r\n") }
+                        append("Connection: close\r\n\r\n")
+                    }
+                    client.getOutputStream().write(response.toByteArray())
+                    client.getOutputStream().flush()
+                }
+            }
+        }
+
+        return "http://127.0.0.1:${socket.localPort}/upload"
+    }
+
+    @Test
+    fun `asks the filehost what it takes before sending anything`() {
+        val endpoint = offering("image/*, text/plain")
+
+        val accepted = Filehost.acceptedTypes(endpoint)
+
+        assertEquals("OPTIONS", received["method"])
+        assertEquals("image/*, text/plain", accepted)
+        assertTrue(Filehost.acceptsType(accepted, "image/jpeg"))
+        // The whole point of asking: a video over mobile data, refused at the
+        // end of the upload, is the thing this avoids
+        assertEquals(false, Filehost.acceptsType(accepted, "video/mp4"))
+    }
+
+    @Test
+    fun `treats a filehost that says nothing as taking everything`() {
+        // Most have not implemented OPTIONS, spec or no spec, and refusing on
+        // silence would break every one of them
+        assertNull(Filehost.acceptedTypes(offering(null)))
+        assertTrue(Filehost.acceptsType(null, "application/zip"))
+    }
+
+    @Test
+    fun `does not make an unreachable filehost an unusable one`() {
+        // Nothing is listening on this port. A preflight that throws would
+        // take the upload with it.
+        assertNull(Filehost.acceptedTypes("http://127.0.0.1:1/upload"))
+    }
+
     @Test
     fun `sends the bytes and returns the link the filehost gave`() {
         val endpoint = listening()
