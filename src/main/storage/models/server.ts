@@ -201,11 +201,27 @@ export function upsertServer(config: ServerConfig): void {
     return
   }
 
+  /*
+   * Twenty-one columns and twenty values is how this stood: `client_cert` was
+   * named and never bound, so every insert threw "Too few parameter values".
+   *
+   * `server:add` writes through its own path, so nothing noticed — the only
+   * caller that inserts here is a device adopting a shared config, and only
+   * for a network it does not already have. So two devices could never take
+   * each other's networks: the adopt threw part-way, each kept its own list,
+   * and they stayed apart for good. That is how one of them ends up holding
+   * seven networks and the other five, with two ids for the same server.
+   *
+   * The two columns added since are bound here too. They were set only by the
+   * update path, so a network arriving in a shared config lost its pinned
+   * certificate and its alternate nicks on the way in.
+   */
   db.run(
     `INSERT INTO servers (id, name, host, port, tls, password, nick, username, realname,
      sasl_mechanism, sasl_username, sasl_password, auto_connect, auto_join, sort_order,
-     websocket_url, identify_command, avatar_url, pre_away_message, profile_metadata, client_cert)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     websocket_url, identify_command, avatar_url, pre_away_message, profile_metadata,
+     client_cert, trusted_cert, alt_nicks)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       config.id,
       config.name,
@@ -226,7 +242,10 @@ export function upsertServer(config: ServerConfig): void {
       encryptSecret(config.identifyCommand),
       config.avatarUrl,
       config.preAwayMessage,
-      JSON.stringify(config.profile ?? {})
+      JSON.stringify(config.profile ?? {}),
+      encryptSecret(config.clientCert),
+      config.trustedCertificate ?? null,
+      config.altNicks && config.altNicks.length > 0 ? JSON.stringify(config.altNicks) : null
     ]
   )
 }
@@ -234,6 +253,31 @@ export function upsertServer(config: ServerConfig): void {
 export function removeServer(id: string): void {
   const db = getDb()
   db.run('DELETE FROM servers WHERE id = ?', [id])
+}
+
+/** Everything that hangs off a server, so a re-key moves all of it */
+const SERVER_CHILDREN = ['messages', 'channels', 'reactions', 'monitor_list', 'read_markers']
+
+/**
+ * The same network, under the id the other device knows it by.
+ *
+ * Every device generates its own id when a network is added, so adopting a
+ * shared config used to read as a set of networks this one had never seen —
+ * and every child table cascades on delete, so the history of a network you
+ * already had went with the old row. Moving the children across first means
+ * adopting a config costs nothing but the id.
+ *
+ * The new row must already exist: these are foreign keys, and children cannot
+ * point at a parent that is not there yet.
+ */
+export function reidentifyServer(from: string, to: string): void {
+  if (from === to) return
+
+  const db = getDb()
+  for (const table of SERVER_CHILDREN) {
+    db.run(`UPDATE ${table} SET server_id = ? WHERE server_id = ?`, [to, from])
+  }
+  removeServer(from)
 }
 
 // ── Row mapping helpers ────────────────────────────────────────────
