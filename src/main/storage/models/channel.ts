@@ -10,6 +10,14 @@ import { v4 as uuid } from 'uuid'
  */
 
 /** Names of the channels we were in on this server, in join order. */
+/**
+ * Where this machine was last time it ran.
+ *
+ * A record, not a decision. It used to be merged into the auto-join list on
+ * connect, which meant a channel left on another device was walked back into
+ * on this one — see `IRCManager.connect`. Nothing reads it now; it is kept
+ * because knowing where a client was is cheap and occasionally the question.
+ */
 export function getJoinedChannels(serverId: string): string[] {
   const db = getDb()
   const rows = db.exec(

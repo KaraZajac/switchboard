@@ -12,7 +12,7 @@ import { storeMessage, deleteMessage, editStoredMessage } from '../storage/model
 import { setReaction } from '../storage/models/reaction'
 import { getMonitorList } from '../storage/models/monitor'
 import { getAllServers, getServer, updateServer } from '../storage/models/server'
-import { getJoinedChannels, markChannelJoined, markChannelParted } from '../storage/models/channel'
+import { markChannelJoined, markChannelParted } from '../storage/models/channel'
 import { subscribeToMetadata, metadataValueFits } from './features/metadata'
 import { serversChanged } from '../ipc/notify'
 import { resealVault } from '../vault/vault'
@@ -67,16 +67,23 @@ export class IRCManager {
       this.disconnect(config.id)
     }
 
-    // Rejoin whatever we were in last time, on top of the configured auto-join.
-    // Registration already knows how to join this list (including the delay for
-    // an identify command), so merge rather than joining separately.
-    const remembered = getJoinedChannels(config.id)
-    // Folded with the default mapping: this runs before there is a connection
-    // to ask, and it is only deduplicating a list of channel names.
-    const known = new Set(config.autoJoin.map((name) => foldCase(name)))
-    const autoJoin = [...config.autoJoin, ...remembered.filter((n) => !known.has(foldCase(n)))]
-
-    const client = new IRCClient({ ...config, autoJoin })
+    /*
+     * Where to go is the config's list, and only that.
+     *
+     * It used to be the config's list *plus* whatever this machine was in the
+     * last time it ran, kept in a local table. That predates `rememberJoin`
+     * writing every join into the config, and once it did the local list
+     * stopped being extra information and became a second opinion — one that
+     * could only ever argue for rejoining.
+     *
+     * Which is how leaving a channel on the phone did not stick. The part took
+     * it out of the shared config, the desktop started, read its own stale
+     * table, walked back in — and `rememberJoin` then wrote it back into the
+     * config and resealed the vault, so the phone's decision was undone
+     * everywhere. Somebody leaving a channel had to leave it twice, and the
+     * second time on the right device.
+     */
+    const client = new IRCClient(config)
     this.clients.set(config.id, client)
     this.bindClientEvents(config.id, client)
     client.connect()
