@@ -1,4 +1,5 @@
 import type { IRCMessage } from '@shared/types/irc'
+import { unclaimedNumeric } from '@shared/numerics'
 
 /**
  * Handler function type.
@@ -39,7 +40,21 @@ export function registeredCommands(): string[] {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function dispatchMessage(client: any, msg: IRCMessage): void {
   const registered = handlers.get(msg.command.toUpperCase())
-  if (!registered) return
+  if (!registered) {
+    // A refusal nobody claimed is still the server's answer to something the
+    // user just did. Dropping it in silence is how a message to somebody who
+    // blocks strangers, or a join to a channel that forwards elsewhere, ends
+    // up looking like the client simply ignoring them.
+    const unclaimed = unclaimedNumeric(msg.command, msg.params)
+    if (unclaimed) {
+      client?.events?.emit?.('error', {
+        code: unclaimed.code,
+        command: '',
+        message: unclaimed.message
+      })
+    }
+    return
+  }
 
   for (const handler of registered) {
     try {

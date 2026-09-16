@@ -1,6 +1,8 @@
 package org.switchboard.android.irc
 
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 
 /**
  * What a handler is allowed to do.
@@ -73,7 +75,21 @@ object Handlers {
     }
 
     fun dispatch(session: IrcSession, message: IrcMessage) {
-        val registered = handlers[message.command] ?: return
+        val registered = handlers[message.command] ?: run {
+            // A refusal nobody claimed is still the server's answer to
+            // something the user just did. Dropping it in silence is how a
+            // message to somebody who blocks strangers, or a join to a channel
+            // that forwards elsewhere, ends up looking like the client simply
+            // ignoring them.
+            Numerics.unclaimed(message.command, message.params)?.let { unclaimed ->
+                session.emit("irc:error", buildJsonObject {
+                    put("serverId", session.state.serverId)
+                    put("code", unclaimed.code)
+                    put("message", unclaimed.message)
+                })
+            }
+            return
+        }
         for (handler in registered) {
             try {
                 handler(session, message)

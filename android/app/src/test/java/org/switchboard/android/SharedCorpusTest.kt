@@ -55,6 +55,7 @@ import org.switchboard.android.irc.Friends
 import org.switchboard.android.irc.History
 import org.switchboard.android.irc.Isupport
 import org.switchboard.android.irc.Jump
+import org.switchboard.android.irc.Numerics
 import org.switchboard.android.irc.Links
 import org.switchboard.android.irc.Klipy
 import org.switchboard.android.irc.Events
@@ -2313,6 +2314,35 @@ class SharedCorpusTest {
                 case["name"]!!.jsonPrimitive.content,
                 case["plan"]!!.jsonPrimitive.content,
                 plan.name.lowercase()
+            )
+        }
+    }
+
+    // ── a numeric nothing was listening for ───────────────────────────
+
+    @Test
+    fun `reports an unclaimed numeric the same way the desktop does`() {
+        val corpus = load("numerics.json")
+
+        for (entry in corpus["unclaimed"]!!.jsonArray) {
+            val case = entry.jsonObject
+            val params = case["params"]!!.jsonArray.map { it.jsonPrimitive.content }
+            val unclaimed = Numerics.unclaimed(case["command"]!!.jsonPrimitive.content, params)
+
+            assertEquals(
+                case["name"]!!.jsonPrimitive.content,
+                case["message"]!!.jsonPrimitive.content,
+                unclaimed?.message
+            )
+        }
+
+        for (entry in corpus["quiet"]!!.jsonArray) {
+            val case = entry.jsonObject
+            val params = case["params"]!!.jsonArray.map { it.jsonPrimitive.content }
+
+            assertNull(
+                case["name"]!!.jsonPrimitive.content,
+                Numerics.unclaimed(case["command"]!!.jsonPrimitive.content, params)
             )
         }
     }

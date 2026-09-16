@@ -1,0 +1,194 @@
+{
+  "$comment": "What to say when nothing was listening. Both clients drop a numeric no handler claimed, which is right for the hundreds of replies that carry data and wrong for the refusals: a refusal is the server's answer to something the user just did, so dropping it means they watch nothing happen and are never told why. Shared by tests/shared/numerics.test.ts and the Android SharedCorpusTest.",
+  "$unclaimed": "Given a numeric and its parameters, the text to show — or null to stay quiet. Our own nick is the first parameter and is dropped; the rest is what the refusal was about.",
+  "unclaimed": [
+    {
+      "name": "a channel that is not there",
+      "command": "403",
+      "params": [
+        "me",
+        "#nowhere",
+        "No such channel"
+      ],
+      "message": "#nowhere: No such channel"
+    },
+    {
+      "name": "the server password was wrong, and the connection is about to close",
+      "command": "464",
+      "params": [
+        "*",
+        "Password incorrect"
+      ],
+      "message": "Password incorrect"
+    },
+    {
+      "name": "banned from the server, which otherwise looks like the network being down",
+      "command": "465",
+      "params": [
+        "me",
+        "You are banned from this server: spam"
+      ],
+      "message": "You are banned from this server: spam"
+    },
+    {
+      "name": "forwarded somewhere else, so the room you land in is not the one you asked for",
+      "command": "470",
+      "params": [
+        "me",
+        "#linux",
+        "#linux-overflow",
+        "Forwarding to another channel"
+      ],
+      "message": "#linux #linux-overflow: Forwarding to another channel"
+    },
+    {
+      "name": "not an operator",
+      "command": "481",
+      "params": [
+        "me",
+        "Permission Denied- You're not an IRC operator"
+      ],
+      "message": "Permission Denied- You're not an IRC operator"
+    },
+    {
+      "name": "a private message that went nowhere, because the other end blocks strangers",
+      "command": "716",
+      "params": [
+        "me",
+        "bob",
+        "is in +g mode (server-side ignore)"
+      ],
+      "message": "bob is in +g mode (server-side ignore)"
+    },
+    {
+      "name": "and the follow-up saying they were told you tried",
+      "command": "717",
+      "params": [
+        "me",
+        "bob",
+        "has been informed that you messaged them"
+      ],
+      "message": "bob has been informed that you messaged them"
+    },
+    {
+      "name": "somebody tried to message you while you were the one refusing",
+      "command": "718",
+      "params": [
+        "me",
+        "carol",
+        "carol@example.org",
+        "is messaging you, and you have umode +g."
+      ],
+      "message": "carol carol@example.org is messaging you, and you have umode +g."
+    },
+    {
+      "name": "a mode letter this server does not have",
+      "command": "501",
+      "params": [
+        "me",
+        "Unknown MODE flag"
+      ],
+      "message": "Unknown MODE flag"
+    },
+    {
+      "name": "the top of the block",
+      "command": "400",
+      "params": [
+        "me",
+        "WHATEVER",
+        "Unknown error"
+      ],
+      "message": "WHATEVER: Unknown error"
+    },
+    {
+      "name": "and the bottom of it",
+      "command": "599",
+      "params": [
+        "me",
+        "something went wrong"
+      ],
+      "message": "something went wrong"
+    },
+    {
+      "name": "a lone parameter is read as the sentence, because that is what servers send",
+      "command": "464",
+      "params": [
+        "Password incorrect"
+      ],
+      "message": "Password incorrect"
+    }
+  ],
+  "$quiet": "Numerics that are dropped. The ordinary replies carry data rather than news, and a client that printed them would be answering its own questions out loud; a numeric with nothing to read is not worth a line either.",
+  "quiet": [
+    {
+      "name": "an ordinary reply, which is data and not news",
+      "command": "352",
+      "params": [
+        "me",
+        "#chan",
+        "u",
+        "h",
+        "s",
+        "n",
+        "H",
+        "0 real"
+      ]
+    },
+    {
+      "name": "the end of a list",
+      "command": "315",
+      "params": [
+        "me",
+        "#chan",
+        "End of WHO list"
+      ]
+    },
+    {
+      "name": "a whois line",
+      "command": "671",
+      "params": [
+        "me",
+        "bob",
+        "is using a secure connection"
+      ]
+    },
+    {
+      "name": "monitor, which has handlers of its own either side of this range",
+      "command": "730",
+      "params": [
+        "me",
+        "bob!u@h"
+      ]
+    },
+    {
+      "name": "not a numeric at all",
+      "command": "PRIVMSG",
+      "params": [
+        "#chan",
+        "hello"
+      ]
+    },
+    {
+      "name": "four digits is not a numeric",
+      "command": "4030",
+      "params": [
+        "me",
+        "No such channel"
+      ]
+    },
+    {
+      "name": "nor when the description is only spaces",
+      "command": "403",
+      "params": [
+        "me",
+        "#chan",
+        "   "
+      ]
+    },
+    {
+      "name": "and nothing at all says nothing at all",
+      "command": "403",
+      "params": []
+    }
+  ]
+}
