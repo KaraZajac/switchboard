@@ -57,14 +57,27 @@ export function registerPushEndpoint(
 ): boolean {
   if (!hasCapability(client.state.capabilities, CAP_NAMES.webpush)) return false
 
-  client.connection.send(
-    'WEBPUSH',
-    'REGISTER',
-    endpoint,
-    `p256dh=${keys.p256dh}`,
-    `auth=${keys.auth}`
-  )
+  client.connection.send('WEBPUSH', 'REGISTER', endpoint, pushKeys(keys))
   return true
+}
+
+/**
+ * The keys, as one parameter.
+ *
+ * `p256dh=<key>;auth=<secret>` — one parameter with a semicolon in it, not two
+ * parameters. This sent them as two, so a server reading the third parameter
+ * got the public key and never saw the auth secret, answered `FAIL WEBPUSH
+ * INVALID_PARAMS :Keys must include p256dh and auth`, and registration had
+ * never once succeeded. The crypto either side of it was written, tested
+ * against a shared corpus and correct; the line that would have carried it was
+ * malformed, and nothing had reached a server that implements the draft to
+ * find out.
+ *
+ * rIRCd's own `HELP WEBPUSH` states the shape and its smoke suite sends it, so
+ * this is the wire and not a guess.
+ */
+export function pushKeys(keys: WebPushKeys): string {
+  return `p256dh=${keys.p256dh};auth=${keys.auth}`
 }
 
 /** Stop being pushed to — on unpairing, or when the endpoint is replaced */

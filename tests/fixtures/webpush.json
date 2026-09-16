@@ -4,5 +4,38 @@
   "publicKey": "BK3QczgmFer5TFYPQtP1oZ6dfFln0+5UIIKgQxpBT68ReWRi4eNBOjdGaM8oL2ganuwEyKS0RrX9qmOrZLYNLFw=",
   "privateKey": "ZZzzVjICUVedGMXe8bRYZLaJc0unJpEOxDyMHTvYNzA=",
   "authSecret": "OIrxYLBaAsvrKMreXAbuAQ==",
-  "body": "X66H5fBXZSJz2tA6wG5Q1AAAEABBBO+ueKzlLbpFxH+OzB8bjlxXcZHc6xPN/OgRJMjZnjMNq2XoxLQjL3vbU7qbbU1mW/uwI7G+Y6v5Q36wLnjGHadCMoXmDsOIUS3tQcbNwUwx5UVHVEn3617ATgCuqEPOOzWY0ciY300fyEote3CNRFPSMA=="
+  "body": "X66H5fBXZSJz2tA6wG5Q1AAAEABBBO+ueKzlLbpFxH+OzB8bjlxXcZHc6xPN/OgRJMjZnjMNq2XoxLQjL3vbU7qbbU1mW/uwI7G+Y6v5Q36wLnjGHadCMoXmDsOIUS3tQcbNwUwx5UVHVEn3617ATgCuqEPOOzWY0ciY300fyEote3CNRFPSMA==",
+  "$register": "The WEBPUSH lines, exactly as they go on the wire. The keys are one parameter with a semicolon in it, not two parameters — the desktop sent two, so a server read the public key as the whole of it, never saw the auth secret, and refused every registration the feature ever attempted. rIRCd's HELP WEBPUSH states the shape and tests/smoke/test_webpush.py in that repo sends it.",
+  "register": [
+    {
+      "name": "registering an endpoint",
+      "endpoint": "https://push.example.org/f/abc123",
+      "p256dh": "BK3QczgmFer5TFYPQtP1oZ6dfFln0-5UIIKgQxpBT68ReWRi4eNBOjdGaM8oL2ganuwEyKS0RrX9qmOrZLYNLFw",
+      "auth": "OIrxYLBaAsvrKMreXAbuAQ",
+      "line": "WEBPUSH REGISTER https://push.example.org/f/abc123 p256dh=BK3QczgmFer5TFYPQtP1oZ6dfFln0-5UIIKgQxpBT68ReWRi4eNBOjdGaM8oL2ganuwEyKS0RrX9qmOrZLYNLFw;auth=OIrxYLBaAsvrKMreXAbuAQ"
+    },
+    {
+      "name": "and giving it up",
+      "endpoint": "https://push.example.org/f/abc123",
+      "line": "WEBPUSH UNREGISTER https://push.example.org/f/abc123"
+    }
+  ],
+  "$refusals": "What rIRCd answers, so a client knows which of these is worth retrying and which is the user's to fix. None of them are retryable by sending the same line again.",
+  "refusals": [
+    {
+      "name": "not logged in",
+      "code": "ACCOUNT_REQUIRED",
+      "meaning": "A push endpoint outlives the connection that made it, so it belongs to an account rather than to whoever holds a nick."
+    },
+    {
+      "name": "a plaintext endpoint",
+      "code": "INVALID_PARAMS",
+      "meaning": "The endpoint must be https."
+    },
+    {
+      "name": "keys missing or malformed",
+      "code": "INVALID_PARAMS",
+      "meaning": "Both p256dh and auth, in one parameter, separated by a semicolon."
+    }
+  ]
 }
