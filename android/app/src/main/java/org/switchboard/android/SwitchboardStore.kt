@@ -17,6 +17,7 @@ import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import org.switchboard.android.irc.Unread
 import org.switchboard.android.irc.Formatting
 import org.switchboard.android.irc.Services
 import org.switchboard.android.irc.Events
@@ -210,6 +211,16 @@ data class UserMetadata(
 }
 
 class SwitchboardStore {
+
+    /**
+     * How far a conversation has been read, when anything knows.
+     *
+     * The markers live in the message database, which belongs to the engine;
+     * the badges live here. Installed rather than looked up so this class
+     * stays something a test can drive on its own — and so the answer is the
+     * same one the notifier already asks for. See [Unread.countsAsUnread].
+     */
+    var readMarkerFor: (serverId: String, channel: String) -> String? = { _, _ -> null }
 
     val servers = mutableStateMapOf<String, Server>()
     val channels = mutableStateMapOf<String, List<Channel>>()          // serverId -> channels
@@ -997,9 +1008,25 @@ class SwitchboardStore {
                     }
                 }
 
-                // Unread, unless this is the conversation on screen
-                if (conversation != conversationKey()) {
-                    val myNick = servers[serverId]?.nick ?: ""
+                /*
+                 * Unread — which is not simply "not on screen".
+                 *
+                 * A reconnect asks for what was missed and is handed back more
+                 * than was missed, so direct messages read days ago used to
+                 * come back wearing badges every time the connection dropped.
+                 * The notifier learned to check the read marker; the badges
+                 * did not, which is why the burst of notifications stopped and
+                 * the numbers stayed. See [Unread.countsAsUnread].
+                 */
+                val myNick = servers[serverId]?.nick ?: ""
+                val counts = Unread.countsAsUnread(
+                    timestamp = message.timestamp,
+                    readTo = runCatching { readMarkerFor(serverId, channel) }.getOrNull(),
+                    onScreen = conversation == conversationKey(),
+                    mine = myNick.isNotEmpty() && message.nick.equals(myNick, ignoreCase = true)
+                )
+
+                if (counts) {
                     // Someone messaging you directly is a mention by
                     // definition — but the server is not someone, and its
                     // connection banner is not four people saying your name.

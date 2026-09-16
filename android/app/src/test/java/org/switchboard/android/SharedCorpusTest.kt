@@ -738,6 +738,26 @@ class SharedCorpusTest {
      * their own button; and it ignored muting entirely.
      */
     @Test
+    fun `counts an arriving line toward a badge the way the desktop does`() {
+        for (case in load("unread.json")["counts"]!!.jsonArray) {
+            val c = case.jsonObject
+            fun text(key: String) = c[key]!!.jsonPrimitive.contentOrNull
+            fun flag(key: String) = c[key]!!.jsonPrimitive.boolean
+
+            assertEquals(
+                c["name"]!!.jsonPrimitive.content,
+                flag("counts"),
+                Unread.countsAsUnread(
+                    timestamp = text("timestamp"),
+                    readTo = text("readTo"),
+                    onScreen = flag("onScreen"),
+                    mine = flag("mine")
+                )
+            )
+        }
+    }
+
+    @Test
     fun `reads unread the way the desktop reads it`() {
         val corpus = load("unread.json")
 
@@ -2521,6 +2541,36 @@ class SharedCorpusTest {
     }
 
     // ── answering CTCP ────────────────────────────────────────────────
+
+    @Test
+    fun `tells the three kinds of wrapped line apart the same way`() {
+        val corpus = load("ctcp.json")
+
+        for (entry in corpus["kinds"]!!.jsonArray) {
+            val case = entry.jsonObject
+            val kind = Ctcp.kind(
+                case["command"]!!.jsonPrimitive.content,
+                case["text"]!!.jsonPrimitive.content
+            )
+            assertEquals(
+                case["name"]!!.jsonPrimitive.content,
+                case["kind"]!!.jsonPrimitive.contentOrNull,
+                kind?.name?.lowercase()
+            )
+        }
+
+        for (entry in corpus["answerLines"]!!.jsonArray) {
+            val case = entry.jsonObject
+            assertEquals(
+                case["name"]!!.jsonPrimitive.content,
+                case["line"]!!.jsonPrimitive.content,
+                Ctcp.answerLine(
+                    case["from"]!!.jsonPrimitive.content,
+                    case["body"]!!.jsonPrimitive.content
+                )
+            )
+        }
+    }
 
     @Test
     fun `answers a CTCP question the same way the desktop does`() {

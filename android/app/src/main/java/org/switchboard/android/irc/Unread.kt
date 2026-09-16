@@ -20,6 +20,40 @@ import org.switchboard.android.isChannel
  */
 object Unread {
 
+    /**
+     * Whether a line that just arrived should add to a badge.
+     *
+     * The question looks like "is this conversation on screen?" and is not.
+     * Three other things arrive looking exactly like something new:
+     *
+     * - **A line already read.** A reconnect asks for what was missed, and a
+     *   bouncer or a paired device hands back more than was missed — so direct
+     *   messages read days ago came back wearing unread badges every time the
+     *   connection dropped. The notifier was taught this and the badges were
+     *   not, which is why the burst of notifications stopped and the numbers
+     *   did not.
+     * - **A line you sent.** With `echo-message` your own words come back, and
+     *   the other device relays what you said there. You have read it: you
+     *   wrote it.
+     * - **Anything with no time on it**, which cannot be shown to be older
+     *   than the marker and so counts — the safe way round, since the cost of
+     *   being wrong is a badge rather than a missed message.
+     *
+     * Comparing the timestamps as text is deliberate: both are ISO-8601 in
+     * UTC, where lexical order is chronological order, and parsing two dates
+     * to compare them turns a bad clock into a crash.
+     */
+    fun countsAsUnread(
+        timestamp: String?,
+        readTo: String?,
+        onScreen: Boolean,
+        mine: Boolean
+    ): Boolean {
+        if (onScreen || mine) return false
+        if (!timestamp.isNullOrBlank() && !readTo.isNullOrBlank() && timestamp <= readTo) return false
+        return true
+    }
+
     data class Conversation(
         val name: String,
         val unread: Int,

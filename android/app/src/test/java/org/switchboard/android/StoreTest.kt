@@ -53,6 +53,68 @@ class StoreTest {
             put("message", message(id, nick, text, "2026-09-08T12:00:00Z"))
         }
 
+    // ── what counts as unread ────────────────────────────────────────
+
+    /**
+     * A message with a time of its own, so a replay can be told from something
+     * said now. The helper above stamps everything with the same moment.
+     */
+    private fun incomingAt(channel: String, id: String, nick: String, text: String, at: String) =
+        buildJsonObject {
+            put("serverId", server)
+            put("channel", channel)
+            put("message", message(id, nick, text, at))
+        }
+
+    @Test
+    fun `a line from before the read marker does not raise a badge`() {
+        // The reported bug: every reconnect asks for what was missed, is handed
+        // back more than was missed, and direct messages read days ago came
+        // back wearing unread badges.
+        store.readMarkerFor = { _, channel -> if (channel == "robin") "2026-09-14T10:00:00Z" else null }
+
+        store.handleEvent(
+            "irc:message",
+            incomingAt("robin", "m1", "robin", "this was read days ago", "2026-09-13T09:00:00Z")
+        )
+
+        assertEquals(1, store.messagesFor(server, "robin").size)
+        val conversation = store.channelsFor(server).first { it.name == "robin" }
+        assertEquals(0, conversation.unread)
+        assertEquals(0, conversation.mentions)
+    }
+
+    @Test
+    fun `a line from after the read marker still does`() {
+        store.readMarkerFor = { _, channel -> if (channel == "robin") "2026-09-14T10:00:00Z" else null }
+
+        store.handleEvent(
+            "irc:message",
+            incomingAt("robin", "m1", "robin", "and this is new", "2026-09-14T11:00:00Z")
+        )
+
+        val conversation = store.channelsFor(server).first { it.name == "robin" }
+        assertEquals(1, conversation.unread)
+    }
+
+    @Test
+    fun `your own line is not unread to you`() {
+        // `echo-message` brings back what you said, and the other device
+        // relays what you said there
+        store.handleEvent("irc:message", incoming("robin", "m1", "me", "said from the desktop"))
+
+        val conversation = store.channelsFor(server).first { it.name == "robin" }
+        assertEquals(0, conversation.unread)
+    }
+
+    @Test
+    fun `a conversation nothing has been read in counts everything`() {
+        store.handleEvent("irc:message", incoming("robin", "m1", "robin", "first thing you hear"))
+
+        val conversation = store.channelsFor(server).first { it.name == "robin" }
+        assertEquals(1, conversation.unread)
+    }
+
     // ── direct messages ──────────────────────────────────────────────
 
     @Test

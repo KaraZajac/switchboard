@@ -65,5 +65,101 @@
       "args": "SEND 1",
       "reply": null
     }
+  ],
+  "$kinds": "What a line wrapped in \\u0001 is. Three things arrive looking alike and the phone told only two of them apart: a CTCP reply was filed as an ordinary notice, which opened a direct message with whoever answered — and where the reply was our own, echoed back, with the person who had asked us. A reply goes in the console and never opens a conversation.",
+  "kinds": [
+    {
+      "name": "an ordinary line is not CTCP",
+      "command": "PRIVMSG",
+      "text": "hello everyone",
+      "kind": null
+    },
+    {
+      "name": "a question asked of this client",
+      "command": "PRIVMSG",
+      "text": "\u0001VERSION\u0001",
+      "kind": "request"
+    },
+    {
+      "name": "a question with an argument",
+      "command": "PRIVMSG",
+      "text": "\u0001PING 1789511265 958482\u0001",
+      "kind": "request"
+    },
+    {
+      "name": "/me is the one people see",
+      "command": "PRIVMSG",
+      "text": "\u0001ACTION waves\u0001",
+      "kind": "action"
+    },
+    {
+      "name": "ACTION is matched whatever its case",
+      "command": "PRIVMSG",
+      "text": "\u0001action waves\u0001",
+      "kind": "action"
+    },
+    {
+      "name": "ACTION with nothing after it is not one",
+      "command": "PRIVMSG",
+      "text": "\u0001ACTION\u0001",
+      "kind": "request"
+    },
+    {
+      "name": "an answer comes back as a NOTICE",
+      "command": "NOTICE",
+      "text": "\u0001VERSION Switchboard 2.5.1 (Android)\u0001",
+      "kind": "reply"
+    },
+    {
+      "name": "a NOTICE is an answer whatever verb it carries",
+      "command": "NOTICE",
+      "text": "\u0001PING 1789511265 958482\u0001",
+      "kind": "reply"
+    },
+    {
+      "name": "an ordinary notice is not CTCP",
+      "command": "NOTICE",
+      "text": "the server is going down",
+      "kind": null
+    },
+    {
+      "name": "an empty wrapping carries nothing",
+      "command": "PRIVMSG",
+      "text": "\u0001\u0001",
+      "kind": null
+    },
+    {
+      "name": "one wrapped end is not a wrapping",
+      "command": "PRIVMSG",
+      "text": "\u0001VERSION",
+      "kind": null
+    }
+  ],
+  "$answerLines": "How an answer reads in the console. It is two clients talking rather than two people, which is why it goes there and not into a conversation.",
+  "answerLines": [
+    {
+      "name": "a verb and its answer",
+      "from": "leviathan",
+      "body": "VERSION Switchboard 2.5.1 (Android)",
+      "line": "leviathan answered VERSION: Switchboard 2.5.1 (Android)"
+    },
+    {
+      "name": "a verb on its own",
+      "from": "klea",
+      "body": "TIME",
+      "line": "klea answered TIME"
+    },
+    {
+      "name": "the verb is named as the convention writes it",
+      "from": "sam",
+      "body": "version HexChat 2.16.2",
+      "line": "sam answered VERSION: HexChat 2.16.2"
+    },
+    {
+      "name": "nothing inside the wrapping",
+      "from": "jo",
+      "body": "",
+      "line": "jo sent an empty CTCP reply"
+    }
   ]
 }

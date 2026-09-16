@@ -6,6 +6,8 @@ import { useUserStore } from '../stores/userStore'
 import { useUIStore, syncThemeFromSettings } from '../stores/uiStore'
 import { isChannelName, isServiceNick } from '@shared/constants'
 import { mentionsYou } from '@shared/mentions'
+import { countsAsUnread } from '@shared/unread'
+import { foldCase } from '@shared/casemap'
 import { eventLine } from '@shared/events'
 import { certificateProblemText, certificateFingerprintLine } from '@shared/certificate'
 import { reloadNotifyAll } from '../stores/mutePersistence'
@@ -411,7 +413,24 @@ export function useIRCEvents(): void {
         // A channel where every line is worth a notification — see `notifyAll` in the channel store
         const everyLine = useChannelStore.getState().notifiesAll(serverId, channel)
 
-        if (!isActiveChannel) {
+        /*
+         * Unread — which is not simply "not the channel on screen".
+         *
+         * A reconnect asks for what was missed and a bouncer hands back more
+         * than was missed, so conversations read days ago came back wearing
+         * badges. One rule with the phone, against the same corpus — see
+         * `countsAsUnread`.
+         */
+        const readTo =
+          useChannelStore.getState().readMarkers[`${serverId}:${channel.toLowerCase()}`]
+        const counts = countsAsUnread({
+          timestamp: message.timestamp,
+          readTo,
+          onScreen: isActiveChannel,
+          mine: !!myNick && foldCase(message.nick) === foldCase(myNick)
+        })
+
+        if (counts) {
           // Service messages get unread but not mention badges
           useChannelStore
             .getState()

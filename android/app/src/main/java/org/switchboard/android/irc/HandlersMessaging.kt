@@ -49,17 +49,46 @@ internal fun registerMessagingHandlers() {
                 else -> from
             }
 
-            // CTCP: text wrapped in \u0001. ACTION is the one people see —
-            // it is `/me` — and every other one is a question asked of the
-            // client rather than of the person, so it is answered and not
-            // shown. A client that displays them shows its user a line of
-            // control characters and answers nothing.
-            val ctcp = command == "PRIVMSG" &&
-                text.length >= 2 && text.startsWith("\u0001") && text.endsWith("\u0001")
-            val isAction = ctcp && text.startsWith("\u0001ACTION ")
+            // CTCP: text wrapped in \u0001, and three different things wear
+            // that wrapping — see [Ctcp.kind], which is where the telling apart
+            // now happens for both clients.
+            val ctcp = Ctcp.kind(command, text)
+            val isAction = ctcp == Ctcp.Kind.ACTION
 
-            if (ctcp && !isAction) {
-                val body = text.substring(1, text.length - 1)
+            /*
+             * An answer to something we asked, in the console.
+             *
+             * This used to fall through to the ordinary path, because only a
+             * PRIVMSG was treated as CTCP at all — so an answer was filed as a
+             * notice, which opened a direct message with whoever sent it. With
+             * `echo-message` the answer that came back was often our own, sent
+             * to somebody who had asked *us*, so answering a stranger's CTCP
+             * silently opened a conversation with that stranger holding our own
+             * client's replies.
+             *
+             * Ours are dropped rather than shown: this client answering a
+             * question is not news to the person using it. Somebody else's is
+             * worth a line, or asking CTCP VERSION looks like it did nothing.
+             */
+            if (ctcp == Ctcp.Kind.REPLY) {
+                if (state.isMe(from)) return@on
+
+                session.emit("irc:message", buildJsonObject {
+                    put("serverId", state.serverId)
+                    put("channel", SERVER_CONSOLE)
+                    put("message", buildJsonObject {
+                        put("id", messageId(message, state.serverId))
+                        put("nick", "")
+                        put("content", Ctcp.answerLine(from, Ctcp.body(text)))
+                        put("type", "system")
+                        put("timestamp", timestampOf(message))
+                    })
+                })
+                return@on
+            }
+
+            if (ctcp == Ctcp.Kind.REQUEST) {
+                val body = Ctcp.body(text)
 
                 // DCC is an offer rather than a question, so it gets no NOTICE
                 // back — and only ever from somebody talking to us directly. A

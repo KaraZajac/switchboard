@@ -20,6 +20,67 @@
  */
 
 /**
+ * What a line wrapped in `\x01` actually is.
+ *
+ * Three different things arrive looking alike, and a client that tells only
+ * two of them apart gets the third wrong in a way somebody notices:
+ *
+ * - `action` is `/me`, and belongs in the conversation like any other line.
+ * - `request` is a question put to this client. It is answered and not shown:
+ *   displaying it shows a person a line of control characters.
+ * - `reply` is somebody's answer to a question *we* asked. It is worth seeing
+ *   — otherwise asking CTCP VERSION appears to do nothing — but it is not a
+ *   conversation. The phone filed these as ordinary notices, which opened a
+ *   direct message with whoever answered; on a network where the reply is our
+ *   own, echoed back, that meant a new conversation with the person who had
+ *   asked *us*, containing our own client's answers.
+ *
+ * Null for everything that is not wrapped at all, which is nearly every line.
+ */
+export type CtcpKind = 'action' | 'request' | 'reply'
+
+/** The byte CTCP is wrapped in */
+export const MARK = '\x01'
+
+export function ctcpKind(command: string, text: string): CtcpKind | null {
+  // Two characters is `\x01\x01`, which carries nothing and is not a CTCP
+  if (text.length < 3 || !text.startsWith(MARK) || !text.endsWith(MARK)) return null
+
+  // The wrapping is what makes it CTCP; the command is what makes it an answer.
+  // A NOTICE is never a question, whatever verb it carries — answering one
+  // would be answering an answer, which is how two clients talk to each other
+  // for ever.
+  if (command.toUpperCase() === 'NOTICE') return 'reply'
+  return text.toUpperCase().startsWith(`${MARK}ACTION `) ? 'action' : 'request'
+}
+
+/** What is inside the wrapping */
+export function ctcpBody(text: string): string {
+  // Sliced rather than matched: a regular expression over a control character
+  // is the one thing the linter objects to here, and it is right that a
+  // pattern is the wrong tool for taking one byte off each end.
+  const start = text.startsWith(MARK) ? 1 : 0
+  const end = text.length > start && text.endsWith(MARK) ? text.length - 1 : text.length
+  return text.slice(start, end)
+}
+
+/**
+ * An answer somebody sent back, as a line to read.
+ *
+ * In the console rather than a conversation: this is two clients talking, not
+ * two people, and the console is where the rest of what the client says about
+ * itself already goes.
+ */
+export function ctcpAnswerLine(from: string, body: string): string {
+  const at = body.indexOf(' ')
+  const verb = (at === -1 ? body : body.slice(0, at)).toUpperCase()
+  const rest = at === -1 ? '' : body.slice(at + 1).trim()
+
+  if (!verb) return `${from} sent an empty CTCP reply`
+  return rest ? `${from} answered ${verb}: ${rest}` : `${from} answered ${verb}`
+}
+
+/**
  * What we answer, and what we say we answer.
  *
  * One list, so a person who asks the same question of a desktop, a phone and

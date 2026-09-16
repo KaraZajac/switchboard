@@ -7,6 +7,7 @@ import {
   railLook,
   badgeLabel,
   badgeDiameter,
+  countsAsUnread,
   type ConversationState
 } from '@shared/unread'
 
@@ -20,7 +21,26 @@ const corpus = JSON.parse(readFileSync(join(__dirname, '../fixtures/unread.json'
     name: string; conversations: ConversationState[]; active: boolean; serverMuted: boolean
     chip: string; mentions: number; mentionsMuted: boolean
   }[]
+  counts: {
+    name: string; timestamp: string | null; readTo: string | null
+    onScreen: boolean; mine: boolean; counts: boolean
+  }[]
 }
+
+describe('whether an arriving line adds to a badge', () => {
+  for (const c of corpus.counts) {
+    it(c.name, () => {
+      expect(
+        countsAsUnread({
+          timestamp: c.timestamp,
+          readTo: c.readTo,
+          onScreen: c.onScreen,
+          mine: c.mine
+        })
+      ).toBe(c.counts)
+    })
+  }
+})
 
 describe('how a conversation reads', () => {
   for (const c of corpus.rows) {

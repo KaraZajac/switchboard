@@ -206,6 +206,12 @@ class SwitchboardEngine(
     )
 
     init {
+        // The badges ask the same question the notifier asks, of the same
+        // markers — see [Unread.countsAsUnread]
+        store.readMarkerFor = { serverId, channel ->
+            runCatching { history.readMarker(serverId, channel) }.getOrNull()
+        }
+
         vaultVersion = vault.version
         // Paint with the saved theme before the first frame. Read straight from
         // disk rather than from `themeId`, which is declared further down and so

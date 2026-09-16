@@ -25,6 +25,46 @@
 
 import { isChannelName } from './constants'
 
+/**
+ * Whether a line that just arrived should add to a badge.
+ *
+ * The question looks like "is this conversation on screen?" and is not. Three
+ * other things arrive looking exactly like something new:
+ *
+ * - **A line you have already read.** A reconnect asks for what was missed,
+ *   and a bouncer or a paired device hands back more than was missed — so
+ *   direct messages read days ago came back wearing unread badges, every time
+ *   the connection dropped. The phone's *notifications* were taught this and
+ *   its badges were not, which is why the burst stopped and the numbers did
+ *   not.
+ * - **A line you sent.** With `echo-message` your own words come back, and a
+ *   paired device relays what you said from the other one. You have read it:
+ *   you wrote it.
+ * - **Anything with no time on it at all**, which cannot be older than the
+ *   marker and so is treated as new — the safe way round, since the cost of
+ *   being wrong is a badge rather than a missed message.
+ *
+ * Comparing the timestamps as text is deliberate: both are ISO-8601 in UTC,
+ * where lexical order *is* chronological order, and parsing two dates to
+ * compare them is a way to turn a bad clock into a crash.
+ */
+export interface ArrivedLine {
+  /** When the line says it was said, if it says */
+  timestamp?: string | null
+  /** How far this conversation has been read, if it has */
+  readTo?: string | null
+  /** Whether this is the conversation on screen */
+  onScreen: boolean
+  /** Whether we are the one who said it */
+  mine: boolean
+}
+
+export function countsAsUnread(line: ArrivedLine): boolean {
+  if (line.onScreen || line.mine) return false
+  if (line.timestamp && line.readTo && line.timestamp <= line.readTo) return false
+  return true
+}
+
 export interface ConversationState {
   name: string
   unread: number

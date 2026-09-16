@@ -68,7 +68,12 @@ export interface ClientEvents {
     channel: string
     nick: string
     content: string
-    type: 'notice'
+    /**
+     * `system` for a line this client wrote about itself rather than one
+     * somebody sent — a CTCP answer read back, say. It reaches the window as
+     * what it is instead of as a notice from a person with no name.
+     */
+    type: 'notice' | 'system'
     isPrivate: boolean
     msgid?: string
     time: string

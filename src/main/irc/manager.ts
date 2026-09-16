@@ -841,7 +841,7 @@ export class IRCManager {
         nick: data.nick,
         userHost: null,
         content: data.content,
-        type: 'notice',
+        type: data.type,
         tags: data.tags as Record<string, string>,
         replyTo: null,
         timestamp: data.time,

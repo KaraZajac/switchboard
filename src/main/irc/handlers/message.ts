@@ -3,7 +3,7 @@ import { registerHandler } from './registry'
 import { operFrom, relayedBy } from '@shared/tags'
 import { isServerSource } from '@shared/source'
 import { statusTarget } from '@shared/isupport'
-import { ctcpReply, CtcpGuard } from '@shared/ctcp'
+import { ctcpReply, ctcpKind, ctcpBody, ctcpAnswerLine, CtcpGuard } from '@shared/ctcp'
 
 /**
  * What we say we are, when asked.
@@ -52,9 +52,10 @@ registerHandler('PRIVMSG', (client, msg) => {
   const text = msg.params[1] || ''
   const nick = msg.source?.nick || ''
 
-  // Handle CTCP requests (wrapped in \x01, but not ACTION)
-  if (text.startsWith('\x01') && text.endsWith('\x01') && !text.startsWith('\x01ACTION ')) {
-    const ctcpContent = text.slice(1, -1)
+  // Handle CTCP requests — see `ctcpKind`, which tells the three apart for
+  // both clients
+  if (ctcpKind('PRIVMSG', text) === 'request') {
+    const ctcpContent = ctcpBody(text)
     const spaceIdx = ctcpContent.indexOf(' ')
     const ctcpCommand = spaceIdx === -1 ? ctcpContent : ctcpContent.slice(0, spaceIdx)
     const ctcpArgs = spaceIdx === -1 ? '' : ctcpContent.slice(spaceIdx + 1)
@@ -92,9 +93,9 @@ registerHandler('PRIVMSG', (client, msg) => {
     return
   }
 
-  // Determine if this is an ACTION (/me)
-  const isAction = text.startsWith('\x01ACTION ') && text.endsWith('\x01')
-  const content = isAction ? text.slice(8, -1) : text
+  // Determine if this is an ACTION (/me) — one rule, shared with the phone
+  const isAction = ctcpKind('PRIVMSG', text) === 'action'
+  const content = isAction ? ctcpBody(text).slice('ACTION '.length) : text
 
   // Determine the "channel" for display purposes
   // If target is our nick, it's a PM — use the sender's nick as the channel key
@@ -146,8 +147,33 @@ registerHandler('NOTICE', (client, msg) => {
   const text = msg.params[1] || ''
   const nick = msg.source?.nick || ''
 
-  // Filter out CTCP replies (wrapped in \x01)
-  if (text.startsWith('\x01') && text.endsWith('\x01')) {
+  /*
+   * An answer to something we asked, in the console.
+   *
+   * Dropped outright until now, which made asking CTCP VERSION of somebody
+   * look like it did nothing at all: the reply arrived, was recognised as a
+   * reply, and was thrown away. It is two clients talking rather than two
+   * people, so it belongs in the console and never in a conversation — which
+   * is the other half of this: the phone filed these as ordinary notices and
+   * opened a direct message with whoever answered.
+   *
+   * Ours are dropped rather than shown. With `echo-message` our own reply to
+   * somebody else's question comes straight back, and this client answering a
+   * question is not news to the person using it.
+   */
+  if (ctcpKind('NOTICE', text) === 'reply') {
+    if (client.state.casemap(nick) === client.state.casemap(client.state.nick)) return
+
+    client.events.emit('notice', {
+      channel: '*',
+      nick: '',
+      content: ctcpAnswerLine(nick, ctcpBody(text)),
+      type: 'system',
+      isPrivate: true,
+      msgid: typeof msg.tags['msgid'] === 'string' ? msg.tags['msgid'] : undefined,
+      time: serverTimeOf(msg.tags['time'] as string | undefined, () => new Date().toISOString()),
+      tags: msg.tags
+    })
     return
   }
 

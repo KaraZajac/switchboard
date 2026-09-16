@@ -1,13 +1,25 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'fs'
 import { join } from 'path'
-import { ctcpReply, CtcpGuard, CTCP_WINDOW_MS, CTCP_PER_ASKER, CTCP_TOTAL } from '@shared/ctcp'
+import {
+  ctcpReply,
+  ctcpKind,
+  ctcpBody,
+  ctcpAnswerLine,
+  CtcpGuard,
+  CTCP_WINDOW_MS,
+  CTCP_PER_ASKER,
+  CTCP_TOTAL,
+  type CtcpKind
+} from '@shared/ctcp'
 
 const corpus = JSON.parse(readFileSync(join(__dirname, '../fixtures/ctcp.json'), 'utf8')) as {
   version: string
   platform: string
   now: string
   replies: { name: string; verb: string; args: string; reply: string | null }[]
+  kinds: { name: string; command: string; text: string; kind: CtcpKind | null }[]
+  answerLines: { name: string; from: string; body: string; line: string }[]
 }
 
 describe('answering a CTCP question', () => {
@@ -20,6 +32,28 @@ describe('answering a CTCP question', () => {
   for (const c of corpus.replies) {
     it(c.name, () => {
       expect(ctcpReply(c.verb, c.args, about)).toBe(c.reply)
+    })
+  }
+})
+
+describe('what a wrapped line actually is', () => {
+  for (const c of corpus.kinds) {
+    it(c.name, () => {
+      expect(ctcpKind(c.command, c.text)).toBe(c.kind)
+    })
+  }
+
+  it('unwraps what is inside', () => {
+    expect(ctcpBody('\x01VERSION HexChat\x01')).toBe('VERSION HexChat')
+    // Nothing to unwrap is not an error; it is an ordinary line
+    expect(ctcpBody('hello')).toBe('hello')
+  })
+})
+
+describe('an answer somebody sent back', () => {
+  for (const c of corpus.answerLines) {
+    it(c.name, () => {
+      expect(ctcpAnswerLine(c.from, c.body)).toBe(c.line)
     })
   }
 })

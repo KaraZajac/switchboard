@@ -23,6 +23,60 @@ import java.time.Instant
 object Ctcp {
 
     /**
+     * What a line wrapped in the control byte actually is.
+     *
+     * Three different things arrive looking alike, and a client that tells
+     * only two of them apart gets the third wrong in a way somebody notices:
+     *
+     * - [Kind.ACTION] is `/me`, and belongs in the conversation.
+     * - [Kind.REQUEST] is a question put to this client. It is answered and
+     *   not shown: displaying it shows a person a line of control characters.
+     * - [Kind.REPLY] is somebody's answer to a question *we* asked. Worth
+     *   seeing — otherwise asking CTCP VERSION appears to do nothing — but it
+     *   is not a conversation. This phone filed them as ordinary notices,
+     *   which opened a direct message with whoever answered; where the reply
+     *   was our own, echoed back, that meant a new conversation with the
+     *   person who had asked *us*, holding our own client's answers.
+     *
+     * Null for everything not wrapped at all, which is nearly every line.
+     */
+    enum class Kind { ACTION, REQUEST, REPLY }
+
+    fun kind(command: String, text: String): Kind? {
+        // Two characters is an empty wrapping, which carries nothing
+        if (text.length < 3 || !text.startsWith(MARK) || !text.endsWith(MARK)) return null
+
+        // The wrapping is what makes it CTCP; the command is what makes it an
+        // answer. A NOTICE is never a question, whatever verb it carries —
+        // answering one would be answering an answer, which is how two clients
+        // talk to each other for ever.
+        if (command.uppercase() == "NOTICE") return Kind.REPLY
+        return if (text.uppercase().startsWith("${MARK}ACTION ")) Kind.ACTION else Kind.REQUEST
+    }
+
+    /** What is inside the wrapping */
+    fun body(text: String): String = text.removePrefix(MARK).removeSuffix(MARK)
+
+    /**
+     * An answer somebody sent back, as a line to read.
+     *
+     * In the console rather than a conversation: this is two clients talking,
+     * not two people, and the console is where the rest of what the client
+     * says about itself already goes.
+     */
+    fun answerLine(from: String, body: String): String {
+        val at = body.indexOf(' ')
+        val verb = (if (at == -1) body else body.substring(0, at)).uppercase()
+        val rest = if (at == -1) "" else body.substring(at + 1).trim()
+
+        if (verb.isEmpty()) return "$from sent an empty CTCP reply"
+        return if (rest.isNotEmpty()) "$from answered $verb: $rest" else "$from answered $verb"
+    }
+
+    /** The byte CTCP is wrapped in */
+    const val MARK = "\u0001"
+
+    /**
      * What we answer, and what we say we answer.
      *
      * One list with the desktop's, so a person who asks the same question of a

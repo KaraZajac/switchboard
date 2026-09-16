@@ -19,7 +19,7 @@
       "selected": false,
       "look": "unread",
       "badge": null,
-      "$comment": "White, and no number. The phone used to put a grey count here, which made 'something was said' and 'you were named' both numbers \u2014 you had to read them to tell which was which."
+      "$comment": "White, and no number. The phone used to put a grey count here, which made 'something was said' and 'you were named' both numbers — you had to read them to tell which was which."
     },
     {
       "name": "somebody said your name",
@@ -165,7 +165,7 @@
       "mentionsMuted": false
     },
     {
-      "$comment": "Still worth knowing somebody named you, even somewhere turned down \u2014 grey rather than red says which of the two is happening.",
+      "$comment": "Still worth knowing somebody named you, even somewhere turned down — grey rather than red says which of the two is happening.",
       "name": "but a mention in it still counts, greyed",
       "conversations": [
         {
@@ -295,6 +295,81 @@
       "count": 0,
       "label": "0",
       "diameter": 18
+    }
+  ],
+  "$counts": "Whether a line that just arrived adds to a badge. A reconnect asks for what was missed and is handed back more than was missed, so direct messages read days ago came back wearing unread badges every time the connection dropped. The notifier already knew to check the read marker; the badges did not.",
+  "counts": [
+    {
+      "name": "something new, somewhere else",
+      "timestamp": "2026-09-15T21:30:00.000Z",
+      "readTo": "2026-09-15T20:00:00.000Z",
+      "onScreen": false,
+      "mine": false,
+      "counts": true
+    },
+    {
+      "name": "the conversation you are looking at",
+      "timestamp": "2026-09-15T21:30:00.000Z",
+      "readTo": "2026-09-15T20:00:00.000Z",
+      "onScreen": true,
+      "mine": false,
+      "counts": false
+    },
+    {
+      "name": "a line you sent yourself",
+      "timestamp": "2026-09-15T21:30:00.000Z",
+      "readTo": "2026-09-15T20:00:00.000Z",
+      "onScreen": false,
+      "mine": true,
+      "counts": false
+    },
+    {
+      "name": "replayed from before the marker",
+      "timestamp": "2026-09-15T19:00:00.000Z",
+      "readTo": "2026-09-15T20:00:00.000Z",
+      "onScreen": false,
+      "mine": false,
+      "counts": false
+    },
+    {
+      "name": "the marker itself is read",
+      "timestamp": "2026-09-15T20:00:00.000Z",
+      "readTo": "2026-09-15T20:00:00.000Z",
+      "onScreen": false,
+      "mine": false,
+      "counts": false
+    },
+    {
+      "name": "a second past the marker is not",
+      "timestamp": "2026-09-15T20:00:01.000Z",
+      "readTo": "2026-09-15T20:00:00.000Z",
+      "onScreen": false,
+      "mine": false,
+      "counts": true
+    },
+    {
+      "name": "nothing has been read here yet",
+      "timestamp": "2026-09-15T21:30:00.000Z",
+      "readTo": null,
+      "onScreen": false,
+      "mine": false,
+      "counts": true
+    },
+    {
+      "name": "a line with no time at all counts",
+      "timestamp": null,
+      "readTo": "2026-09-15T20:00:00.000Z",
+      "onScreen": false,
+      "mine": false,
+      "counts": true
+    },
+    {
+      "name": "an empty time is no time",
+      "timestamp": "",
+      "readTo": "2026-09-15T20:00:00.000Z",
+      "onScreen": false,
+      "mine": false,
+      "counts": true
     }
   ]
 }
