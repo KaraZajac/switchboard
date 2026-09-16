@@ -37,6 +37,25 @@ export function registeredCommands(): string[] {
   return [...handlers.keys()].sort()
 }
 
+/**
+ * Tell whoever is listening that something went wrong.
+ *
+ * Node treats `error` as special: emitting one with nothing listening throws
+ * rather than returning false, and this runs inside the socket's read loop,
+ * where a throw takes the connection — and on the wrong day the process —
+ * with it. `IRCClient` keeps a floor listener for that reason; this is the
+ * same guarantee for anything else that owns an emitter, and for the moment
+ * after `destroy` has removed every listener while a line is still in flight.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function report(client: any, data: { code: string; command: string; message: string }): void {
+  if (typeof client?.events?.emit !== 'function') return
+  if (typeof client.events.listenerCount === 'function' && client.events.listenerCount('error') === 0) {
+    return
+  }
+  client.events.emit('error', data)
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function dispatchMessage(client: any, msg: IRCMessage): void {
   const registered = handlers.get(msg.command.toUpperCase())
@@ -47,11 +66,7 @@ export function dispatchMessage(client: any, msg: IRCMessage): void {
     // up looking like the client simply ignoring them.
     const unclaimed = unclaimedNumeric(msg.command, msg.params)
     if (unclaimed) {
-      client?.events?.emit?.('error', {
-        code: unclaimed.code,
-        command: '',
-        message: unclaimed.message
-      })
+      report(client, { code: unclaimed.code, command: '', message: unclaimed.message })
     }
     return
   }
@@ -62,7 +77,7 @@ export function dispatchMessage(client: any, msg: IRCMessage): void {
     } catch (err) {
       // One handler failing is not a reason to drop the connection or to skip
       // the others that care about this message. The phone does the same.
-      client?.events?.emit?.('error', {
+      report(client, {
         code: 'HANDLER',
         command: msg.command,
         message: err instanceof Error ? err.message : String(err)

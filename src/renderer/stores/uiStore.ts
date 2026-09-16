@@ -203,6 +203,14 @@ document.documentElement.style.setProperty('--chat-font-size', `${savedFontSize}
 /** Auto-dismiss timers by toast id, so a repeat can restart one. */
 const dismissTimers = new Map<string, ReturnType<typeof setTimeout>>()
 
+/**
+ * How many may be on screen at once.
+ *
+ * They stack upwards from the bottom right, so the fifth is where the first
+ * starts leaving the top of the window — dismiss button and all.
+ */
+const MOST_TOASTS = 4
+
 function dismissLater(id: string): void {
   clearTimeout(dismissTimers.get(id))
   dismissTimers.set(
@@ -314,7 +322,21 @@ export const useUIStore = create<UIState>((set, get) => ({
     }
 
     const id = `toast-${Date.now()}-${Math.random().toString(36).slice(2)}`
-    set((state) => ({ toasts: [...state.toasts, { ...toast, id }] }))
+    set((state) => {
+      // Deduplication above handles the same news twice. This handles a
+      // server with a different complaint every second: distinct toasts stack
+      // upwards, and past four of them the oldest are off the top of the
+      // window with their dismiss buttons out of reach. The oldest go.
+      const kept = [...state.toasts, { ...toast, id }]
+      while (kept.length > MOST_TOASTS) {
+        const dropped = kept.shift()
+        if (dropped) {
+          clearTimeout(dismissTimers.get(dropped.id))
+          dismissTimers.delete(dropped.id)
+        }
+      }
+      return { toasts: kept }
+    })
     if (!toast.sticky) dismissLater(id)
   },
   removeToast: (id) => {

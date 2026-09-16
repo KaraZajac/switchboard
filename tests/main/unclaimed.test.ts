@@ -2,6 +2,8 @@ import { describe, it, expect, vi } from 'vitest'
 import { EventEmitter } from 'events'
 import { parseMessage } from '../../src/main/irc/parser'
 import { dispatchMessage, registeredCommands } from '../../src/main/irc/handlers/registry'
+import { IRCClient } from '../../src/main/irc/client'
+import type { ServerConfig } from '@shared/types/server'
 
 // Every handler, so that "nothing claimed this" means it in the real client
 import '../../src/main/irc/handlers/index'
@@ -100,5 +102,53 @@ describe('the handler set itself', () => {
     for (const numeric of ['464', '465', '470', '481', '716']) {
       expect(claimed.has(numeric), `${numeric} now has a handler of its own`).toBe(false)
     }
+  })
+})
+
+/**
+ * And the emitter it all goes out on.
+ *
+ * Node treats `error` as special: emitting one with nothing listening throws
+ * rather than returning false. This runs inside the socket's read loop, so a
+ * throw there takes the connection with it — and `destroy` removes every
+ * listener while lines can still be in flight, which is not a hypothetical
+ * window but the ordinary one when a network is dropped or handed to another
+ * device.
+ *
+ * Found by feeding every numeric a server could send through the dispatcher
+ * with nothing attached to it.
+ */
+describe('a refusal arriving with nobody listening', () => {
+  const config = (): ServerConfig => ({
+    id: 'srv', name: 'Test', host: 'irc.example.org', port: 6667, tls: false,
+    password: null, nick: 'kara', username: 'kara', realname: 'Kara',
+    saslMechanism: null, saslUsername: null, saslPassword: null,
+    autoConnect: false, autoJoin: [], identifyCommand: null, sortOrder: 0,
+    websocketUrl: null, avatarUrl: null, profile: {}, preAwayMessage: null
+  })
+
+  it('does not take the client down on a fresh one', () => {
+    const client = new IRCClient(config())
+    expect(() =>
+      dispatchMessage(client, parseMessage(':s 481 kara :Permission Denied'))
+    ).not.toThrow()
+    client.destroy()
+  })
+
+  it('nor on one that has been destroyed under it', () => {
+    const client = new IRCClient(config())
+    client.events.on('error', () => {})
+    client.destroy()
+
+    expect(() =>
+      dispatchMessage(client, parseMessage(':s 481 kara :Permission Denied'))
+    ).not.toThrow()
+  })
+
+  it('nor on an emitter that was never a client at all', () => {
+    const bare = { events: new EventEmitter() }
+    expect(() =>
+      dispatchMessage(bare as never, parseMessage(':s 481 kara :Permission Denied'))
+    ).not.toThrow()
   })
 })

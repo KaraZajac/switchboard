@@ -20,10 +20,21 @@ export function ToastContainer() {
         >
           <div className="flex-1 min-w-0">
             <div className="text-sm font-semibold text-gray-100">{toast.title}</div>
-            {/* break-words: a certificate fingerprint is one long token, and it wrapped nowhere */}
-            <div className="mt-0.5 text-sm break-words text-gray-400">{toast.body}</div>
+            {/*
+              break-words: a certificate fingerprint is one long token, and it
+              wrapped nowhere.
+
+              max-h/overflow: a server writes this, and a line can be sixteen
+              kilobytes. One of those grew a toast taller than the window —
+              title, dismiss button and every other toast pushed off the top of
+              the screen, with no way to close it but to wait. Bounded and
+              scrollable keeps all of the text and none of that.
+            */}
+            <div className="mt-0.5 max-h-32 overflow-y-auto text-sm break-words text-gray-400">
+              {toast.body}
+            </div>
             {toast.detail && (
-              <div className="mt-1.5 rounded bg-gray-900/70 px-2 py-1 font-mono text-[11px] leading-4 break-all text-gray-300 select-text">
+              <div className="mt-1.5 max-h-24 overflow-y-auto rounded bg-gray-900/70 px-2 py-1 font-mono text-[11px] leading-4 break-all text-gray-300 select-text">
                 {toast.detail}
               </div>
             )}

@@ -162,6 +162,7 @@ export class IRCClient {
     this.connection = new IRCConnection(config)
     this.state = new ConnectionState()
     this.events = new EventEmitter() as TypedEventEmitter
+    this.catchErrors()
 
     this.state.desiredNick = config.nick
     this.state.username = config.username || config.nick
@@ -302,6 +303,27 @@ export class IRCClient {
     this.stopNickRecovery()
     this.connection.destroy()
     this.events.removeAllListeners()
+    this.catchErrors()
+  }
+
+  /**
+   * Make sure something is always listening for `error`.
+   *
+   * Node treats `error` as special: emitting one with no listener does not
+   * return false, it throws — and this emitter is the one every handler
+   * reports a refusal on, from inside the socket's read loop, where a throw
+   * takes the whole main process with it.
+   *
+   * The window is real rather than theoretical. `destroy` removes every
+   * listener, including the manager's, and a line already in flight when a
+   * network is dropped or handed to another device still runs its handlers.
+   * Found by feeding every numeric a server could send through the dispatcher
+   * with nothing attached.
+   *
+   * A floor, not a handler: whatever is actually interested attaches its own.
+   */
+  private catchErrors(): void {
+    this.events.on('error', () => {})
   }
 
   /**

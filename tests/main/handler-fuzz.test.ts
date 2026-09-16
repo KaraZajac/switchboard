@@ -65,3 +65,65 @@ describe('handlers survive malformed input', () => {
     })
   }
 })
+
+/**
+ * And every numeric nobody registered for.
+ *
+ * Since refusals started reaching the screen, an unhandled numeric is no
+ * longer a line that falls off the end of the dispatcher — it runs code. A
+ * thousand of them exist and the client answers about eighty, so this is the
+ * path most of what a strange server says now takes.
+ */
+describe('unclaimed numerics survive malformed input', () => {
+  const claimed = new Set(registeredCommands())
+
+  it('never throws, whatever the shape', () => {
+    for (let numeric = 0; numeric < 1000; numeric++) {
+      const code = String(numeric).padStart(3, '0')
+      if (claimed.has(code)) continue
+
+      for (const raw of shapes(code)) {
+        const { client } = createMockClient()
+        expect(() => dispatchMessage(client, parseMessage(raw)), raw).not.toThrow()
+      }
+    }
+  })
+
+  it('reports the block servers refuse with, and stays quiet elsewhere', () => {
+    const reported = new Set<string>()
+
+    for (let numeric = 0; numeric < 1000; numeric++) {
+      const code = String(numeric).padStart(3, '0')
+      if (claimed.has(code)) continue
+
+      const { client, events } = createMockClient()
+      events.on('error', (e: { code: string }) => reported.add(e.code))
+      dispatchMessage(client, parseMessage(`:s ${code} me #chan :Something went wrong`))
+    }
+
+    for (const code of reported) {
+      const numeric = Number(code)
+      const refusal = numeric >= 400 && numeric <= 599
+      const callerid = numeric >= 716 && numeric <= 718
+      expect(refusal || callerid, `${code} was reported`).toBe(true)
+    }
+    // And the block is covered rather than merely not over-reported
+    expect(reported.has('470')).toBe(true)
+    expect(reported.has('599')).toBe(true)
+    expect(reported.has('716')).toBe(true)
+  })
+
+  it('says nothing at all for a numeric with nothing written on it', () => {
+    const { client, events } = createMockClient()
+    const heard: unknown[] = []
+    events.on('error', (e) => heard.push(e))
+
+    dispatchMessage(client, parseMessage(':s 470'))
+    dispatchMessage(client, parseMessage(':s 470 me'))
+
+    // `470 me` is a nick and no sentence. It is not a message any server
+    // sends, and what it must not do is report the nick back as the news.
+    expect(heard).toHaveLength(1)
+    expect((heard[0] as { message: string }).message).toBe('me')
+  })
+})
