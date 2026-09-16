@@ -49,10 +49,22 @@ export function ServerRail() {
     )
   }, 0)
 
-  // Everything unread that named you, wherever it was said. The rail is where
-  // somebody looks to find out whether anything wants them.
+  /*
+   * Everything unread that named you, wherever it was said.
+   *
+   * Channels only, because that is what the view behind this badge shows: a
+   * direct message counts as a mention everywhere else in the app — it is
+   * addressed to you by existing — and it has the button above this one. A
+   * badge here for something the list does not hold is a badge that sends
+   * somebody looking for a line that is not there.
+   */
   const totalMentions = Object.values(allChannels).reduce((total, chs) => {
-    return total + chs.filter((ch) => !ch.muted).reduce((sum, ch) => sum + ch.mentionCount, 0)
+    return (
+      total +
+      chs
+        .filter((ch) => !ch.muted && isChannelName(ch.name))
+        .reduce((sum, ch) => sum + ch.mentionCount, 0)
+    )
   }, 0)
 
   const handleSwitchboardClick = () => {

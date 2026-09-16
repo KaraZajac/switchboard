@@ -3,6 +3,7 @@ import { AppLayout } from './components/layout/AppLayout'
 import { ToastContainer } from './components/common/ToastContainer'
 import { useIRCEvents } from './hooks/useIRC'
 import { useServerStore } from './stores/serverStore'
+import { useChannelStore } from './stores/channelStore'
 import type { UserMetadata } from '@shared/types/metadata'
 import { initMutePersistence } from './stores/mutePersistence'
 import { useUIStore } from './stores/uiStore'
@@ -64,6 +65,26 @@ function AppInner() {
   const loadServers = useCallback(() => {
     return window.switchboard.invoke('server:list').then((servers) => {
       useServerStore.getState().setServers(servers)
+
+      /*
+       * How far each conversation was read, before anything is connected.
+       *
+       * Also loaded when a network connects, which is late: a bouncer replays
+       * what you missed the moment it welcomes you, and a badge decides
+       * whether a line is new by comparing it against a marker that has to be
+       * there already. On the first connection after a launch it was not.
+       */
+      for (const server of servers) {
+        window.switchboard
+          .invoke('read-marker:get-all', server.id)
+          .then((markers) => {
+            if (markers && Object.keys(markers).length > 0) {
+              useChannelStore.getState().setReadMarkers(server.id, markers)
+            }
+          })
+          .catch(() => {})
+      }
+
       if (servers.length > 0 && !useServerStore.getState().activeServerId) {
         useServerStore.getState().setActiveServer(servers[0].id)
       }
