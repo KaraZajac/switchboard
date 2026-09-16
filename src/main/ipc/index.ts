@@ -32,7 +32,13 @@ import {
   updateServer,
   removeServer
 } from '../storage/models/server'
-import { getMessages, searchMessages, deleteMessage, mentionsOn } from '../storage/models/message'
+import {
+  getMessages,
+  searchMessages,
+  deleteMessage,
+  mentionsOn,
+  messagesAround
+} from '../storage/models/message'
 import { getSetting, setSetting } from '../storage/models/settings'
 import type { ServerConfig } from '@shared/types/server'
 
@@ -1175,6 +1181,7 @@ export function registerIPCHandlers(): void {
         // Your own line naming your own nick is not somebody talking to you
         .filter((message) => foldCase(message.nick) !== foldCase(nick))
         .map((message) => ({
+          id: message.id,
           serverId: server.id,
           serverName: server.name,
           channel: message.channel,
@@ -1228,6 +1235,38 @@ export function registerIPCHandlers(): void {
         reference: `timestamp=${after}`,
         limit: limit || 100
       })
+    }
+  )
+
+  /**
+   * The conversation around one moment in it.
+   *
+   * What somebody jumping to a mention, a search result or a reply quote needs:
+   * the line itself with what was being said either side of it. Answered from
+   * the database, which is instant and works with nothing connected — and, when
+   * this machine never saw that far back, asked of the network too. Those
+   * arrive the way replayed history always does, so the window fills in behind
+   * the answer rather than waiting on it.
+   */
+  handle(
+    'history:around',
+    async (_event, serverId: string, channel: string, at: string, limit?: number) => {
+      const want = Math.min(limit ?? 50, 200)
+      const held = messagesAround(serverId, channel, at, want)
+
+      // Thin on the older side means this machine was not running then. Ask,
+      // where the network keeps history and we are connected to it.
+      const client = ircManager.getClient(serverId)
+      if (client && held.filter((message) => message.timestamp <= at).length < want / 2) {
+        const { requestChathistory } = await import('../irc/features/chathistory')
+        requestChathistory(client, channel, {
+          direction: 'AROUND',
+          reference: `timestamp=${at}`,
+          limit: want
+        })
+      }
+
+      return held
     }
   )
 
@@ -1290,6 +1329,7 @@ export function registerIPCHandlers(): void {
 
     const found = getAllServers().flatMap((server) =>
       searchMessages(server.id, query, { limit: want }).map((message) => ({
+        id: message.id,
         serverId: server.id,
         network: server.name,
         channel: message.channel,

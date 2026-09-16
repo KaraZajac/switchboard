@@ -54,6 +54,7 @@ import org.switchboard.android.irc.avatarUrl
 import org.switchboard.android.irc.Friends
 import org.switchboard.android.irc.History
 import org.switchboard.android.irc.Isupport
+import org.switchboard.android.irc.Jump
 import org.switchboard.android.irc.Links
 import org.switchboard.android.irc.Klipy
 import org.switchboard.android.irc.Events
@@ -2264,6 +2265,40 @@ class SharedCorpusTest {
         assertEquals("#d2d2d2", Formatting.PALETTE[15])
         assertEquals("#ffffff", Formatting.PALETTE[98])
         assertNull("99 means the client's own colour", Formatting.paletteColour(99))
+    }
+
+    // ── going to one message ──────────────────────────────────────────
+
+    @Test
+    fun `decides a jump the same way the desktop does`() {
+        val corpus = load("jump.json")
+        val context = corpus["context"]!!.jsonPrimitive.int
+
+        for (entry in corpus["plans"]!!.jsonArray) {
+            val case = entry.jsonObject
+            val loaded = case["loaded"]!!.jsonArray.map {
+                val row = it.jsonObject
+                Jump.Placed(
+                    row["id"]!!.jsonPrimitive.content,
+                    row["timestamp"]!!.jsonPrimitive.content
+                )
+            }
+            val target = case["target"]!!.jsonObject
+            val plan = Jump.plan(
+                loaded,
+                Jump.Target(
+                    target["id"]!!.jsonPrimitive.contentOrNull,
+                    target["timestamp"]!!.jsonPrimitive.content
+                ),
+                context
+            )
+
+            assertEquals(
+                case["name"]!!.jsonPrimitive.content,
+                case["plan"]!!.jsonPrimitive.content,
+                plan.name.lowercase()
+            )
+        }
     }
 
     // ── searching every network at once ───────────────────────────────

@@ -1,0 +1,646 @@
+{
+  "$comment": "Going to one message rather than to the room it was said in. Mentions, search results and reply quotes all name a line, and all three used to answer with the conversation scrolled to the bottom. This is only the first decision: scroll, or fetch around it first. Shared by tests/shared/jump.test.ts and the Android SharedCorpusTest.",
+  "$context": "How many lines have to sit above the target before a scroll shows it in company.",
+  "context": 5,
+  "plans": [
+    {
+      "name": "well inside what is loaded",
+      "loaded": [
+        {
+          "id": "m0",
+          "timestamp": "2026-09-15T10:00:00.000Z"
+        },
+        {
+          "id": "m1",
+          "timestamp": "2026-09-15T10:01:00.000Z"
+        },
+        {
+          "id": "m2",
+          "timestamp": "2026-09-15T10:02:00.000Z"
+        },
+        {
+          "id": "m3",
+          "timestamp": "2026-09-15T10:03:00.000Z"
+        },
+        {
+          "id": "m4",
+          "timestamp": "2026-09-15T10:04:00.000Z"
+        },
+        {
+          "id": "m5",
+          "timestamp": "2026-09-15T10:05:00.000Z"
+        },
+        {
+          "id": "m6",
+          "timestamp": "2026-09-15T10:06:00.000Z"
+        },
+        {
+          "id": "m7",
+          "timestamp": "2026-09-15T10:07:00.000Z"
+        },
+        {
+          "id": "m8",
+          "timestamp": "2026-09-15T10:08:00.000Z"
+        },
+        {
+          "id": "m9",
+          "timestamp": "2026-09-15T10:09:00.000Z"
+        },
+        {
+          "id": "m10",
+          "timestamp": "2026-09-15T10:10:00.000Z"
+        },
+        {
+          "id": "m11",
+          "timestamp": "2026-09-15T10:11:00.000Z"
+        },
+        {
+          "id": "m12",
+          "timestamp": "2026-09-15T10:12:00.000Z"
+        },
+        {
+          "id": "m13",
+          "timestamp": "2026-09-15T10:13:00.000Z"
+        },
+        {
+          "id": "m14",
+          "timestamp": "2026-09-15T10:14:00.000Z"
+        },
+        {
+          "id": "m15",
+          "timestamp": "2026-09-15T10:15:00.000Z"
+        },
+        {
+          "id": "m16",
+          "timestamp": "2026-09-15T10:16:00.000Z"
+        },
+        {
+          "id": "m17",
+          "timestamp": "2026-09-15T10:17:00.000Z"
+        },
+        {
+          "id": "m18",
+          "timestamp": "2026-09-15T10:18:00.000Z"
+        },
+        {
+          "id": "m19",
+          "timestamp": "2026-09-15T10:19:00.000Z"
+        }
+      ],
+      "target": {
+        "id": "m12",
+        "timestamp": "2026-09-15T10:12:00.000Z"
+      },
+      "plan": "scroll"
+    },
+    {
+      "name": "exactly as far down as the context asks for",
+      "loaded": [
+        {
+          "id": "m0",
+          "timestamp": "2026-09-15T10:00:00.000Z"
+        },
+        {
+          "id": "m1",
+          "timestamp": "2026-09-15T10:01:00.000Z"
+        },
+        {
+          "id": "m2",
+          "timestamp": "2026-09-15T10:02:00.000Z"
+        },
+        {
+          "id": "m3",
+          "timestamp": "2026-09-15T10:03:00.000Z"
+        },
+        {
+          "id": "m4",
+          "timestamp": "2026-09-15T10:04:00.000Z"
+        },
+        {
+          "id": "m5",
+          "timestamp": "2026-09-15T10:05:00.000Z"
+        },
+        {
+          "id": "m6",
+          "timestamp": "2026-09-15T10:06:00.000Z"
+        },
+        {
+          "id": "m7",
+          "timestamp": "2026-09-15T10:07:00.000Z"
+        },
+        {
+          "id": "m8",
+          "timestamp": "2026-09-15T10:08:00.000Z"
+        },
+        {
+          "id": "m9",
+          "timestamp": "2026-09-15T10:09:00.000Z"
+        },
+        {
+          "id": "m10",
+          "timestamp": "2026-09-15T10:10:00.000Z"
+        },
+        {
+          "id": "m11",
+          "timestamp": "2026-09-15T10:11:00.000Z"
+        },
+        {
+          "id": "m12",
+          "timestamp": "2026-09-15T10:12:00.000Z"
+        },
+        {
+          "id": "m13",
+          "timestamp": "2026-09-15T10:13:00.000Z"
+        },
+        {
+          "id": "m14",
+          "timestamp": "2026-09-15T10:14:00.000Z"
+        },
+        {
+          "id": "m15",
+          "timestamp": "2026-09-15T10:15:00.000Z"
+        },
+        {
+          "id": "m16",
+          "timestamp": "2026-09-15T10:16:00.000Z"
+        },
+        {
+          "id": "m17",
+          "timestamp": "2026-09-15T10:17:00.000Z"
+        },
+        {
+          "id": "m18",
+          "timestamp": "2026-09-15T10:18:00.000Z"
+        },
+        {
+          "id": "m19",
+          "timestamp": "2026-09-15T10:19:00.000Z"
+        }
+      ],
+      "target": {
+        "id": "m5",
+        "timestamp": "2026-09-15T10:05:00.000Z"
+      },
+      "plan": "scroll"
+    },
+    {
+      "name": "one line short of it",
+      "loaded": [
+        {
+          "id": "m0",
+          "timestamp": "2026-09-15T10:00:00.000Z"
+        },
+        {
+          "id": "m1",
+          "timestamp": "2026-09-15T10:01:00.000Z"
+        },
+        {
+          "id": "m2",
+          "timestamp": "2026-09-15T10:02:00.000Z"
+        },
+        {
+          "id": "m3",
+          "timestamp": "2026-09-15T10:03:00.000Z"
+        },
+        {
+          "id": "m4",
+          "timestamp": "2026-09-15T10:04:00.000Z"
+        },
+        {
+          "id": "m5",
+          "timestamp": "2026-09-15T10:05:00.000Z"
+        },
+        {
+          "id": "m6",
+          "timestamp": "2026-09-15T10:06:00.000Z"
+        },
+        {
+          "id": "m7",
+          "timestamp": "2026-09-15T10:07:00.000Z"
+        },
+        {
+          "id": "m8",
+          "timestamp": "2026-09-15T10:08:00.000Z"
+        },
+        {
+          "id": "m9",
+          "timestamp": "2026-09-15T10:09:00.000Z"
+        },
+        {
+          "id": "m10",
+          "timestamp": "2026-09-15T10:10:00.000Z"
+        },
+        {
+          "id": "m11",
+          "timestamp": "2026-09-15T10:11:00.000Z"
+        },
+        {
+          "id": "m12",
+          "timestamp": "2026-09-15T10:12:00.000Z"
+        },
+        {
+          "id": "m13",
+          "timestamp": "2026-09-15T10:13:00.000Z"
+        },
+        {
+          "id": "m14",
+          "timestamp": "2026-09-15T10:14:00.000Z"
+        },
+        {
+          "id": "m15",
+          "timestamp": "2026-09-15T10:15:00.000Z"
+        },
+        {
+          "id": "m16",
+          "timestamp": "2026-09-15T10:16:00.000Z"
+        },
+        {
+          "id": "m17",
+          "timestamp": "2026-09-15T10:17:00.000Z"
+        },
+        {
+          "id": "m18",
+          "timestamp": "2026-09-15T10:18:00.000Z"
+        },
+        {
+          "id": "m19",
+          "timestamp": "2026-09-15T10:19:00.000Z"
+        }
+      ],
+      "target": {
+        "id": "m4",
+        "timestamp": "2026-09-15T10:04:00.000Z"
+      },
+      "plan": "load"
+    },
+    {
+      "name": "the oldest thing loaded has nothing above it",
+      "loaded": [
+        {
+          "id": "m0",
+          "timestamp": "2026-09-15T10:00:00.000Z"
+        },
+        {
+          "id": "m1",
+          "timestamp": "2026-09-15T10:01:00.000Z"
+        },
+        {
+          "id": "m2",
+          "timestamp": "2026-09-15T10:02:00.000Z"
+        },
+        {
+          "id": "m3",
+          "timestamp": "2026-09-15T10:03:00.000Z"
+        },
+        {
+          "id": "m4",
+          "timestamp": "2026-09-15T10:04:00.000Z"
+        },
+        {
+          "id": "m5",
+          "timestamp": "2026-09-15T10:05:00.000Z"
+        },
+        {
+          "id": "m6",
+          "timestamp": "2026-09-15T10:06:00.000Z"
+        },
+        {
+          "id": "m7",
+          "timestamp": "2026-09-15T10:07:00.000Z"
+        },
+        {
+          "id": "m8",
+          "timestamp": "2026-09-15T10:08:00.000Z"
+        },
+        {
+          "id": "m9",
+          "timestamp": "2026-09-15T10:09:00.000Z"
+        },
+        {
+          "id": "m10",
+          "timestamp": "2026-09-15T10:10:00.000Z"
+        },
+        {
+          "id": "m11",
+          "timestamp": "2026-09-15T10:11:00.000Z"
+        },
+        {
+          "id": "m12",
+          "timestamp": "2026-09-15T10:12:00.000Z"
+        },
+        {
+          "id": "m13",
+          "timestamp": "2026-09-15T10:13:00.000Z"
+        },
+        {
+          "id": "m14",
+          "timestamp": "2026-09-15T10:14:00.000Z"
+        },
+        {
+          "id": "m15",
+          "timestamp": "2026-09-15T10:15:00.000Z"
+        },
+        {
+          "id": "m16",
+          "timestamp": "2026-09-15T10:16:00.000Z"
+        },
+        {
+          "id": "m17",
+          "timestamp": "2026-09-15T10:17:00.000Z"
+        },
+        {
+          "id": "m18",
+          "timestamp": "2026-09-15T10:18:00.000Z"
+        },
+        {
+          "id": "m19",
+          "timestamp": "2026-09-15T10:19:00.000Z"
+        }
+      ],
+      "target": {
+        "id": "m0",
+        "timestamp": "2026-09-15T10:00:00.000Z"
+      },
+      "plan": "load"
+    },
+    {
+      "name": "not loaded at all",
+      "loaded": [
+        {
+          "id": "m0",
+          "timestamp": "2026-09-15T10:00:00.000Z"
+        },
+        {
+          "id": "m1",
+          "timestamp": "2026-09-15T10:01:00.000Z"
+        },
+        {
+          "id": "m2",
+          "timestamp": "2026-09-15T10:02:00.000Z"
+        },
+        {
+          "id": "m3",
+          "timestamp": "2026-09-15T10:03:00.000Z"
+        },
+        {
+          "id": "m4",
+          "timestamp": "2026-09-15T10:04:00.000Z"
+        },
+        {
+          "id": "m5",
+          "timestamp": "2026-09-15T10:05:00.000Z"
+        },
+        {
+          "id": "m6",
+          "timestamp": "2026-09-15T10:06:00.000Z"
+        },
+        {
+          "id": "m7",
+          "timestamp": "2026-09-15T10:07:00.000Z"
+        },
+        {
+          "id": "m8",
+          "timestamp": "2026-09-15T10:08:00.000Z"
+        },
+        {
+          "id": "m9",
+          "timestamp": "2026-09-15T10:09:00.000Z"
+        },
+        {
+          "id": "m10",
+          "timestamp": "2026-09-15T10:10:00.000Z"
+        },
+        {
+          "id": "m11",
+          "timestamp": "2026-09-15T10:11:00.000Z"
+        },
+        {
+          "id": "m12",
+          "timestamp": "2026-09-15T10:12:00.000Z"
+        },
+        {
+          "id": "m13",
+          "timestamp": "2026-09-15T10:13:00.000Z"
+        },
+        {
+          "id": "m14",
+          "timestamp": "2026-09-15T10:14:00.000Z"
+        },
+        {
+          "id": "m15",
+          "timestamp": "2026-09-15T10:15:00.000Z"
+        },
+        {
+          "id": "m16",
+          "timestamp": "2026-09-15T10:16:00.000Z"
+        },
+        {
+          "id": "m17",
+          "timestamp": "2026-09-15T10:17:00.000Z"
+        },
+        {
+          "id": "m18",
+          "timestamp": "2026-09-15T10:18:00.000Z"
+        },
+        {
+          "id": "m19",
+          "timestamp": "2026-09-15T10:19:00.000Z"
+        }
+      ],
+      "target": {
+        "id": "m99",
+        "timestamp": "2026-09-15T12:00:00.000Z"
+      },
+      "plan": "load"
+    },
+    {
+      "name": "nothing is loaded yet",
+      "loaded": [],
+      "target": {
+        "id": "m1",
+        "timestamp": "2026-09-15T10:01:00.000Z"
+      },
+      "plan": "load"
+    },
+    {
+      "name": "found by time when there is no id",
+      "loaded": [
+        {
+          "id": "m0",
+          "timestamp": "2026-09-15T10:00:00.000Z"
+        },
+        {
+          "id": "m1",
+          "timestamp": "2026-09-15T10:01:00.000Z"
+        },
+        {
+          "id": "m2",
+          "timestamp": "2026-09-15T10:02:00.000Z"
+        },
+        {
+          "id": "m3",
+          "timestamp": "2026-09-15T10:03:00.000Z"
+        },
+        {
+          "id": "m4",
+          "timestamp": "2026-09-15T10:04:00.000Z"
+        },
+        {
+          "id": "m5",
+          "timestamp": "2026-09-15T10:05:00.000Z"
+        },
+        {
+          "id": "m6",
+          "timestamp": "2026-09-15T10:06:00.000Z"
+        },
+        {
+          "id": "m7",
+          "timestamp": "2026-09-15T10:07:00.000Z"
+        },
+        {
+          "id": "m8",
+          "timestamp": "2026-09-15T10:08:00.000Z"
+        },
+        {
+          "id": "m9",
+          "timestamp": "2026-09-15T10:09:00.000Z"
+        },
+        {
+          "id": "m10",
+          "timestamp": "2026-09-15T10:10:00.000Z"
+        },
+        {
+          "id": "m11",
+          "timestamp": "2026-09-15T10:11:00.000Z"
+        },
+        {
+          "id": "m12",
+          "timestamp": "2026-09-15T10:12:00.000Z"
+        },
+        {
+          "id": "m13",
+          "timestamp": "2026-09-15T10:13:00.000Z"
+        },
+        {
+          "id": "m14",
+          "timestamp": "2026-09-15T10:14:00.000Z"
+        },
+        {
+          "id": "m15",
+          "timestamp": "2026-09-15T10:15:00.000Z"
+        },
+        {
+          "id": "m16",
+          "timestamp": "2026-09-15T10:16:00.000Z"
+        },
+        {
+          "id": "m17",
+          "timestamp": "2026-09-15T10:17:00.000Z"
+        },
+        {
+          "id": "m18",
+          "timestamp": "2026-09-15T10:18:00.000Z"
+        },
+        {
+          "id": "m19",
+          "timestamp": "2026-09-15T10:19:00.000Z"
+        }
+      ],
+      "target": {
+        "id": null,
+        "timestamp": "2026-09-15T10:11:00.000Z"
+      },
+      "plan": "scroll"
+    },
+    {
+      "name": "a time nothing matches",
+      "loaded": [
+        {
+          "id": "m0",
+          "timestamp": "2026-09-15T10:00:00.000Z"
+        },
+        {
+          "id": "m1",
+          "timestamp": "2026-09-15T10:01:00.000Z"
+        },
+        {
+          "id": "m2",
+          "timestamp": "2026-09-15T10:02:00.000Z"
+        },
+        {
+          "id": "m3",
+          "timestamp": "2026-09-15T10:03:00.000Z"
+        },
+        {
+          "id": "m4",
+          "timestamp": "2026-09-15T10:04:00.000Z"
+        },
+        {
+          "id": "m5",
+          "timestamp": "2026-09-15T10:05:00.000Z"
+        },
+        {
+          "id": "m6",
+          "timestamp": "2026-09-15T10:06:00.000Z"
+        },
+        {
+          "id": "m7",
+          "timestamp": "2026-09-15T10:07:00.000Z"
+        },
+        {
+          "id": "m8",
+          "timestamp": "2026-09-15T10:08:00.000Z"
+        },
+        {
+          "id": "m9",
+          "timestamp": "2026-09-15T10:09:00.000Z"
+        },
+        {
+          "id": "m10",
+          "timestamp": "2026-09-15T10:10:00.000Z"
+        },
+        {
+          "id": "m11",
+          "timestamp": "2026-09-15T10:11:00.000Z"
+        },
+        {
+          "id": "m12",
+          "timestamp": "2026-09-15T10:12:00.000Z"
+        },
+        {
+          "id": "m13",
+          "timestamp": "2026-09-15T10:13:00.000Z"
+        },
+        {
+          "id": "m14",
+          "timestamp": "2026-09-15T10:14:00.000Z"
+        },
+        {
+          "id": "m15",
+          "timestamp": "2026-09-15T10:15:00.000Z"
+        },
+        {
+          "id": "m16",
+          "timestamp": "2026-09-15T10:16:00.000Z"
+        },
+        {
+          "id": "m17",
+          "timestamp": "2026-09-15T10:17:00.000Z"
+        },
+        {
+          "id": "m18",
+          "timestamp": "2026-09-15T10:18:00.000Z"
+        },
+        {
+          "id": "m19",
+          "timestamp": "2026-09-15T10:19:00.000Z"
+        }
+      ],
+      "target": {
+        "id": null,
+        "timestamp": "2026-09-15T10:11:30.000Z"
+      },
+      "plan": "load"
+    }
+  ]
+}

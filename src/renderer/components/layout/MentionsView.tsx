@@ -55,6 +55,15 @@ export function MentionsView() {
     useUIStore.getState().setMentionsMode(false)
     useServerStore.getState().setActiveServer(mention.serverId)
     useChannelStore.getState().setActiveChannel(mention.serverId, mention.channel)
+    // To the line, not to the room it was said in. Landing at the bottom of a
+    // busy channel and being left to find the mention yourself is most of the
+    // work this list was supposed to save.
+    useUIStore.getState().setJumpTo({
+      serverId: mention.serverId,
+      channel: mention.channel,
+      msgid: mention.id ?? null,
+      timestamp: mention.timestamp
+    })
   }
 
   if (mentions === null) return <div className="flex-1" />
@@ -78,7 +87,7 @@ export function MentionsView() {
     <div className="flex-1 overflow-y-auto">
       {mentions.map((mention) => (
         <button
-          key={`${mention.serverId}:${mention.channel}:${mention.timestamp}:${mention.nick}`}
+          key={mention.id}
           onClick={() => go(mention)}
           className="block w-full border-b border-gray-800 px-4 py-3 text-left hover:bg-gray-700/25"
         >

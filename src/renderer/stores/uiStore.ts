@@ -127,6 +127,15 @@ interface UIState {
    */
   friendsOpen: boolean
   /**
+   * A line to go to, rather than a room to open.
+   *
+   * Set by anything that names a particular message — a mention, a search
+   * result, a reply quote — and cleared by the conversation once it has got
+   * there. Carries a time as well as an id because that is what a jump is
+   * aimed by: the id says which line, the time says where to fetch around.
+   */
+  jumpTo: { serverId: string; channel: string; msgid: string | null; timestamp: string } | null
+  /**
    * The conversation Messages was last left on.
    *
    * Switching to a network already reopens where you were on it — the active
@@ -158,6 +167,9 @@ interface UIState {
   setDmMode: (dm: boolean) => void
   setMentionsMode: (on: boolean) => void
   setFriendsOpen: (on: boolean) => void
+  setJumpTo: (
+    to: { serverId: string; channel: string; msgid: string | null; timestamp: string } | null
+  ) => void
   rememberDm: (serverId: string, nick: string) => void
   setCompactMode: (compact: boolean) => void
   setFontSize: (size: number) => void
@@ -217,6 +229,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   dmMode: false,
   mentionsMode: false,
   friendsOpen: false,
+  jumpTo: null,
   lastDm: null,
   popupWhoisNick: null,
   popupWhoisData: null,
@@ -281,6 +294,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   // Only ever true inside Messages, so it turns that on with it
   setFriendsOpen: (on) =>
     set(on ? { friendsOpen: true, dmMode: true, mentionsMode: false } : { friendsOpen: false }),
+  setJumpTo: (to) => set({ jumpTo: to }),
   rememberDm: (serverId, nick) => set({ lastDm: { serverId, nick } }),
   setPopupWhoisNick: (nick) =>
     set(nick ? { popupWhoisNick: nick, popupWhoisData: null } : { popupWhoisNick: null }),

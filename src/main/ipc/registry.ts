@@ -66,6 +66,8 @@ export const REMOTE_ALLOWED = new Set([
   // servers, their channels, members and our nick
   'app:renderer-ready',
   'history:fetch',
+  // the conversation around one moment in it, for a jump — see `@shared/jump`
+  'history:around',
   // every line that named you, across every network — a phone following a
   // desktop or a headless instance is asking the thing with the deep history,
   // which is the whole reason it is worth asking rather than answering from

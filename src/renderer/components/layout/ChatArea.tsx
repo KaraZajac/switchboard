@@ -7,6 +7,7 @@ import { useMessageStore } from '../../stores/messageStore'
 import { useUserStore } from '../../stores/userStore'
 import { useUIStore } from '../../stores/uiStore'
 import { MentionsView } from './MentionsView'
+import { jumpPlan } from '@shared/jump'
 import { FriendsView } from './FriendsView'
 import type { ChannelUser } from '@shared/types/channel'
 import { SwitchboardIcon } from '../common/SwitchboardIcon'
@@ -29,6 +30,8 @@ export function ChatArea() {
   const dmMode = useUIStore((s) => s.dmMode)
   const mentionsMode = useUIStore((s) => s.mentionsMode)
   const friendsOpen = useUIStore((s) => s.friendsOpen)
+  const jumpTo = useUIStore((s) => s.jumpTo)
+  const [flashing, setFlashing] = useState<string | null>(null)
   const activeChannel = useChannelStore((s) =>
     activeServerId ? s.activeChannel[activeServerId] ?? null : null
   )
@@ -135,6 +138,60 @@ export function ChatArea() {
 
     isRestoringScroll.current = false
   }, [key, messages.length])
+
+  /*
+   * Going to one line, rather than to the room it was said in.
+   *
+   * Two steps because they can be two: the messages around it may already be
+   * loaded, in which case this is a scroll — and if they are not, they are
+   * fetched and the scroll happens on the next pass, once they are on screen.
+   * `jumpPlan` is what decides which, and it is shared with the phone.
+   *
+   * Cleared as soon as it is acted on. A target that stays set would fight
+   * every later scroll in the conversation for as long as somebody stayed in
+   * it.
+   */
+  useEffect(() => {
+    if (!jumpTo || !activeServerId || !activeChannel) return
+    if (jumpTo.serverId !== activeServerId) return
+    if (jumpTo.channel.toLowerCase() !== activeChannel.toLowerCase()) return
+
+    const land = (): void => {
+      const found = jumpTo.msgid
+        ? scrollRef.current?.querySelector(`[data-msgid="${CSS.escape(jumpTo.msgid)}"]`)
+        : null
+
+      if (found) {
+        found.scrollIntoView({ block: 'center' })
+        setAutoScroll(false)
+        // Marked for a moment. Arriving in the middle of a conversation with
+        // nothing to say which line you came for is arriving nowhere.
+        setFlashing(jumpTo.msgid)
+        window.setTimeout(() => setFlashing(null), 2500)
+      }
+
+      useUIStore.getState().setJumpTo(null)
+    }
+
+    if (jumpPlan(messages, { id: jumpTo.msgid, timestamp: jumpTo.timestamp }) === 'scroll') {
+      // The DOM has the line already; wait for this render to land on screen
+      window.requestAnimationFrame(land)
+      return
+    }
+
+    void window.switchboard
+      .invoke('history:around', activeServerId, activeChannel, jumpTo.timestamp, 80)
+      .then((around) => {
+        if (around && around.length > 0) {
+          useMessageStore.getState().setMessages(activeServerId, activeChannel, around)
+        }
+        // Whatever came back is what there is — scroll to it rather than
+        // asking again, or a channel with nothing older is fetched for ever
+        window.requestAnimationFrame(() => window.requestAnimationFrame(land))
+      })
+      .catch(() => useUIStore.getState().setJumpTo(null))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jumpTo, activeServerId, activeChannel, messages.length])
 
   // Mark channel as read when at bottom (on channel switch or new messages)
   useEffect(() => {
@@ -408,7 +465,17 @@ export function ChatArea() {
           const startsNewDay = !prev || !isSameDay(prev.timestamp, msg.timestamp)
 
           return (
-            <div key={msg.id}>
+            /* `data-msgid` is how a jump finds the line it came for — see
+               `@shared/jump` and the effect above */
+            <div
+              key={msg.id}
+              data-msgid={msg.id}
+              className={
+                flashing === msg.id
+                  ? 'rounded bg-indigo-500/20 ring-1 ring-indigo-500/40 transition-colors duration-700'
+                  : 'transition-colors duration-700'
+              }
+            >
               {startsNewDay && <DateDivider timestamp={msg.timestamp} />}
               {showDivider && (
                 <div ref={newMessagesDividerRef} className="my-2 flex items-center gap-2">

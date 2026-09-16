@@ -22,6 +22,8 @@ import type { Found } from '../search'
  * it belongs to.
  */
 export interface Mention {
+  /** The message's own id, so a jump can find the line rather than the room */
+  id: string
   serverId: string
   serverName: string
   channel: string
@@ -501,6 +503,13 @@ export interface RendererToMainInvocations {
     serverId: string,
     channel: string,
     before?: string,
+    limit?: number
+  ) => Promise<ChatMessage[]>
+  /** The conversation around one moment in it — see `@shared/jump` */
+  'history:around': (
+    serverId: string,
+    channel: string,
+    at: string,
     limit?: number
   ) => Promise<ChatMessage[]>
   /** Everything that named you, across every network, newest first */

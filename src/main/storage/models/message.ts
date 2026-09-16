@@ -245,6 +245,44 @@ function hasFtsIndex(db: ReturnType<typeof getDb>): boolean {
  * be for something said before this client was running.
  */
 /**
+ * A conversation around one moment in it, oldest first.
+ *
+ * What a jump needs. Going to a line from March and being shown it with
+ * nothing above it is being shown a sentence with no paragraph — half the
+ * point of arriving there is what was being said at the time, so the window is
+ * centred rather than ending at the target.
+ *
+ * Inclusive of the moment itself on the older side, because that is where the
+ * line being jumped to lives; a message sharing its timestamp exactly comes
+ * with it rather than being cut in half.
+ */
+export function messagesAround(
+  serverId: string,
+  channel: string,
+  at: string,
+  limit = 50
+): ChatMessage[] {
+  const db = getDb()
+  const half = Math.max(1, Math.floor(limit / 2))
+
+  const older = db.exec(
+    `SELECT * FROM messages WHERE server_id = ? AND channel = ? AND timestamp <= ?
+     ORDER BY timestamp DESC LIMIT ?`,
+    [serverId, channel, at, half] as unknown as number[]
+  )
+  const newer = db.exec(
+    `SELECT * FROM messages WHERE server_id = ? AND channel = ? AND timestamp > ?
+     ORDER BY timestamp ASC LIMIT ?`,
+    [serverId, channel, at, half] as unknown as number[]
+  )
+
+  const before = older.length === 0 ? [] : older[0].values.map(rowToMessage).reverse()
+  const after = newer.length === 0 ? [] : newer[0].values.map(rowToMessage)
+
+  return withReactions(serverId, channel, [...before, ...after])
+}
+
+/**
  * Everything on one network that named you, newest first.
  *
  * The badge on a channel counts these as they arrive and then forgets which

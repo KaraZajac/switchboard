@@ -198,6 +198,7 @@ export function MessageItem({ message, prevMessage, onReply }: MessageItemProps)
               serverId={message.serverId}
               channel={message.channel}
               msgid={message.replyTo}
+              at={message.timestamp}
             />
           )}
           <span>
@@ -248,6 +249,7 @@ export function MessageItem({ message, prevMessage, onReply }: MessageItemProps)
             serverId={message.serverId}
             channel={message.channel}
             msgid={message.replyTo}
+            at={message.timestamp}
           />
         )}
 
@@ -364,16 +366,42 @@ function EditInput({
 function ReplyPreview({
   serverId,
   channel,
-  msgid
+  msgid,
+  at
 }: {
   serverId: string
   channel: string
   msgid: string
+  /** When the reply was said, as somewhere to fetch around when the original is not here */
+  at?: string
 }) {
   const originalMsg = useMessageStore((s) => s.getMessageById(serverId, channel, msgid))
 
+  /*
+   * Clickable, and clickable even when the original is not loaded.
+   *
+   * "Original message not loaded" used to be the end of it: a line saying the
+   * thing you wanted is elsewhere, with no way to go there. The id is enough
+   * to ask for the conversation around it — the time comes back with it — so
+   * the only case that cannot be answered is one where the message has no id
+   * at all, which is a network without `message-tags`.
+   */
+  const go = (): void => {
+    if (!msgid) return
+    useUIStore.getState().setJumpTo({
+      serverId,
+      channel,
+      msgid,
+      timestamp: originalMsg?.timestamp ?? at ?? new Date().toISOString()
+    })
+  }
+
   return (
-    <div className="mb-1 flex items-center gap-1.5 text-xs">
+    <button
+      onClick={go}
+      className="mb-1 flex w-full items-center gap-1.5 text-left text-xs hover:underline"
+      title="Go to the message this replies to"
+    >
       <CornerUpLeft size={ICON.sm} strokeWidth={2} className="shrink-0 text-gray-500" aria-hidden="true" />
       {originalMsg ? (
         <>
@@ -381,9 +409,9 @@ function ReplyPreview({
           <span className="truncate text-gray-500">{originalMsg.content.slice(0, 100)}</span>
         </>
       ) : (
-        <span className="italic text-gray-600">Original message not loaded</span>
+        <span className="italic text-gray-600">Go to the message this replies to</span>
       )}
-    </div>
+    </button>
   )
 }
 

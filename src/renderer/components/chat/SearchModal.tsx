@@ -17,6 +17,7 @@ import { whereSaid, type Found } from '@shared/search'
  */
 function found(message: ChatMessage, network: string): Found {
   return {
+    id: message.id,
     serverId: message.serverId,
     network,
     channel: message.channel,
@@ -132,6 +133,14 @@ export function SearchModal() {
       useServerStore.getState().setActiveServer(serverId)
       useChannelStore.getState().addChannel(serverId, msg.channel)
       useChannelStore.getState().setActiveChannel(serverId, msg.channel)
+      // To the line. A result from March opens a conversation that does not
+      // hold it yet, so the jump fetches around it — see `@shared/jump`.
+      useUIStore.getState().setJumpTo({
+        serverId,
+        channel: msg.channel,
+        msgid: msg.id || null,
+        timestamp: msg.timestamp
+      })
       closeModal()
     },
     [activeServerId, closeModal]

@@ -15,6 +15,8 @@
 
 /** One line somebody said, and enough about where to go back to it */
 export interface Found {
+  /** The message's own id, so a jump can find the line rather than the room */
+  id: string
   serverId: string
   /** What the network is called here, for reading */
   network: string
