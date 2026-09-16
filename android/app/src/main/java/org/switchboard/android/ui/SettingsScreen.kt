@@ -448,7 +448,18 @@ private fun VaultCard(engine: SwitchboardEngine) {
                     placeholder = { Text("Choose a passphrase", color = Overlay, fontSize = 14.sp) },
                     singleLine = true,
                     visualTransformation = PasswordVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
+                    // A password keyboard, not dots over an ordinary one.
+                    // Hiding the characters does nothing about the keyboard's
+                    // own helpfulness: autocorrect rewrote what was typed and
+                    // the first letter came back capitalised, so a passphrase
+                    // that was entered right was wrong by the time it arrived —
+                    // and everything after it is dots, so there is no way to see
+                    // that happen.
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Password,
+                        autoCorrect = false,
+                        imeAction = ImeAction.Go
+                    ),
                     keyboardActions = KeyboardActions(onGo = { setPassphrase() }),
                     enabled = !working,
                     shape = RoundedCornerShape(8.dp),
@@ -535,7 +546,12 @@ private fun VaultCard(engine: SwitchboardEngine) {
                     placeholder = { Text("Passphrase", color = Overlay, fontSize = 14.sp) },
                     singleLine = true,
                     visualTransformation = PasswordVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
+                    // See above: dots are not a password keyboard
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Password,
+                        autoCorrect = false,
+                        imeAction = ImeAction.Go
+                    ),
                     keyboardActions = KeyboardActions(onGo = { unlock() }),
                     enabled = !working,
                     shape = RoundedCornerShape(8.dp),
@@ -1221,8 +1237,15 @@ private fun SettingField(
         placeholder = { Text(hint, color = Overlay, fontSize = 13.sp) },
         textStyle = androidx.compose.ui.text.TextStyle(color = Text0, fontSize = 14.sp),
         visualTransformation = if (secret) PasswordVisualTransformation() else VisualTransformation.None,
+        // `secret` decides the keyboard as well as the dots. It used to decide
+        // only the dots, which left autocorrect rewriting passwords behind them
         keyboardOptions = KeyboardOptions(
-            keyboardType = if (numeric) KeyboardType.Number else KeyboardType.Text
+            keyboardType = when {
+                secret -> KeyboardType.Password
+                numeric -> KeyboardType.Number
+                else -> KeyboardType.Text
+            },
+            autoCorrect = !secret
         ),
         shape = RoundedCornerShape(8.dp),
         colors = OutlinedTextFieldDefaults.colors(

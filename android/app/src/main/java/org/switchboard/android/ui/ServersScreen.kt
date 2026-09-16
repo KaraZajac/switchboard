@@ -460,7 +460,14 @@ private fun Field(
         singleLine = true,
         shape = RoundedCornerShape(10.dp),
         visualTransformation = if (secret) PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
-        keyboardOptions = KeyboardOptions(keyboardType = keyboard, imeAction = ImeAction.Next),
+        // `secret` decides the keyboard as well as the dots: a text keyboard
+        // autocorrects and capitalises what it is given, and a password that
+        // came out wrong is invisible behind them
+        keyboardOptions = KeyboardOptions(
+            keyboardType = if (secret) KeyboardType.Password else keyboard,
+            autoCorrect = !secret,
+            imeAction = ImeAction.Next
+        ),
         colors = TextFieldDefaults.colors(
             focusedContainerColor = Surface0,
             unfocusedContainerColor = Surface0,
