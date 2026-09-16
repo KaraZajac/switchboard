@@ -854,6 +854,22 @@ class SharedCorpusTest {
         }
     }
 
+    /** Which group a member belongs in, and what the desktop calls it */
+    @Test
+    fun `groups members the way the desktop groups them`() {
+        for (case in load("powers.json")["roles"]!!.jsonArray) {
+            val c = case.jsonObject
+            val role = Powers.roleOf(
+                c["prefixes"]!!.jsonArray.map { it.jsonPrimitive.content },
+                (c["prefix"] as? JsonPrimitive)?.contentOrNull
+            )
+            val name = c["name"]!!.jsonPrimitive.content
+
+            assertEquals(name, c["rank"]!!.jsonPrimitive.int, role.rank)
+            assertEquals(name, c["label"]!!.jsonPrimitive.content, role.label)
+        }
+    }
+
     /** The mask a ban names, which is the host wherever the network gave one */
     @Test
     fun `bans what the desktop bans`() {

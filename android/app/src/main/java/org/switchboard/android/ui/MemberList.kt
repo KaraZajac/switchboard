@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.switchboard.android.Member
 import org.switchboard.android.SwitchboardStore
+import org.switchboard.android.irc.Powers
 
 /**
  * Who is in the channel.
@@ -48,11 +49,27 @@ fun MemberList(
         emptyList()
     }
 
-    val ranked = members.sortedWith(
-        compareByDescending<Member> { rank(it) }.thenBy { it.nick.lowercase() }
-    )
-    val staff = ranked.filter { rank(it) > 0 }
-    val rest = ranked.filter { rank(it) == 0 }
+    /*
+     * Grouped by the ladder this network says it has.
+     *
+     * Two things were wrong here. The ranks and names were the five prefixes
+     * of the 1990s written out by hand, so rIRCd's `^` for founders was worth
+     * nothing and landed among the people wearing nothing. And everyone with
+     * any prefix at all shared one heading, named after whoever stood highest
+     * — so a channel with a founder and four voiced people said
+     * "Founders — 5". One heading per rung now, as the desktop has always had.
+     */
+    val prefixValue = serverId?.let { store.isupport[it]?.get("PREFIX") }
+    val roles = members.associate { it.nick to Powers.roleOf(it.prefixes, prefixValue) }
+    fun roleFor(member: Member) = roles[member.nick] ?: Powers.NO_ROLE
+
+    val sections = members
+        .sortedWith(
+            compareByDescending<Member> { roleFor(it).rank }.thenBy { it.nick.lowercase() }
+        )
+        .groupBy { roleFor(it).label }
+        .toList()
+        .sortedByDescending { (_, people) -> people.firstOrNull()?.let { roleFor(it).rank } ?: 0 }
 
     Column(modifier = modifier.fillMaxSize().background(Mantle)) {
         Row(
@@ -74,13 +91,9 @@ fun MemberList(
         Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Crust))
 
         LazyColumn(modifier = Modifier.fillMaxSize()) {
-            if (staff.isNotEmpty()) {
-                item { SectionLabel("${roleName(staff.first())} — ${staff.size}") }
-                items(staff.size) { MemberRow(store, serverId, staff[it], onSelect) }
-            }
-            if (rest.isNotEmpty()) {
-                item { SectionLabel("Online — ${rest.size}") }
-                items(rest.size) { MemberRow(store, serverId, rest[it], onSelect) }
+            for ((label, people) in sections) {
+                item { SectionLabel("$label — ${people.size}") }
+                items(people.size) { MemberRow(store, serverId, people[it], onSelect) }
             }
             if (members.isEmpty()) {
                 item {
@@ -137,7 +150,7 @@ private fun MemberRow(
                     name,
                     color = if (member.away) Overlay else Text0,
                     fontSize = 14.sp,
-                    fontWeight = if (rank(member) > 0) FontWeight.SemiBold else FontWeight.Normal,
+                    fontWeight = if (member.prefixes.isNotEmpty()) FontWeight.SemiBold else FontWeight.Normal,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f, fill = false)
@@ -154,21 +167,4 @@ private fun MemberRow(
     }
 }
 
-/** Channel modes, most privileged first: ~ & @ % + */
-private fun rank(member: Member): Int = when (member.prefixes.firstOrNull()) {
-    "~" -> 5
-    "&" -> 4
-    "@" -> 3
-    "%" -> 2
-    "+" -> 1
-    else -> 0
-}
 
-private fun roleName(member: Member): String = when (member.prefixes.firstOrNull()) {
-    "~" -> "Founders"
-    "&" -> "Admins"
-    "@" -> "Operators"
-    "%" -> "Half-ops"
-    "+" -> "Voiced"
-    else -> "Online"
-}

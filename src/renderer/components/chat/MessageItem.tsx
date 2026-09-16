@@ -18,6 +18,7 @@ import { useUIStore } from '../../stores/uiStore'
 import { useServerStore } from '../../stores/serverStore'
 import { useChannelStore } from '../../stores/channelStore'
 import { useUserStore, type MonitoredNick } from '../../stores/userStore'
+import { canModerate } from '@shared/powers'
 import { nickColor } from '../../utils/nickColor'
 import { displayNameFor, metadataColor } from '@shared/types/metadata'
 import { mentionsYou } from '@shared/mentions'
@@ -442,10 +443,19 @@ function MessageActions({
   const channelUsers = useUserStore(
     (s) => s.users[`${message.serverId}:${message.channel.toLowerCase()}`]
   )
+  /*
+   * Whether you may take down somebody else's message here.
+   *
+   * Asked of the network's own ladder rather than of three symbols written out
+   * by hand. `@ ~ &` covers most servers and misses rIRCd, where a founder
+   * wears `^` — so the one person in the channel who certainly may moderate it
+   * was the one person not offered the option.
+   */
+  const prefixValue = useServerStore((s) => s.isupport[message.serverId]?.['PREFIX'])
   const holdsOps = (channelUsers ?? []).some(
     (user) =>
       user.nick.toLowerCase() === currentNick.toLowerCase() &&
-      user.prefixes.some((prefix) => prefix === '@' || prefix === '~' || prefix === '&')
+      canModerate(prefixValue, user.prefixes.join(''))
   )
   const canRedact = Boolean(isOwn) || holdsOps
 

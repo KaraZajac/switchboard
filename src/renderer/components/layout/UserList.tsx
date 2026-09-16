@@ -16,7 +16,7 @@ import {
   type MemberAction
 } from '@shared/powers'
 import type { ChannelUser } from '@shared/types/channel'
-import { PREFIX_RANKS } from '@shared/types/channel'
+import { roleOf, type Role } from '@shared/powers'
 import { avatarUrl as safeAvatarUrl } from '@shared/avatar'
 import { ignoresFor, DEFAULT_SCOPE, type IgnoreEntry } from '@shared/ignore'
 
@@ -50,8 +50,12 @@ export function UserList() {
   const wanted = filter.trim().toLowerCase()
   const shown = wanted ? users.filter((u) => u.nick.toLowerCase().includes(wanted)) : users
 
-  // Group users by highest prefix
-  const groups = groupUsersByPrefix(shown)
+  // Grouped by the ladder this network says it has, not by the five prefixes
+  // that were common in 1998 — see `@shared/prefixes`
+  const groups = groupUsersByPrefix(
+    shown,
+    activeServerId ? isupport[activeServerId]?.['PREFIX'] : undefined
+  )
   const [contextMenu, setContextMenu] = useState<UserContextState | null>(null)
 
   const handleContextMenu = useCallback((e: React.MouseEvent, user: ChannelUser) => {
@@ -321,37 +325,29 @@ interface UserGroup {
   users: ChannelUser[]
 }
 
-function groupUsersByPrefix(users: ChannelUser[]): UserGroup[] {
-  const groupMap = new Map<string, ChannelUser[]>()
+/**
+ * The member list, in the groups this network actually has.
+ *
+ * Keyed by role rather than by symbol. Keying by symbol meant that anything
+ * outside the hardcoded five landed in a group of its own that was *also*
+ * labelled "Members", so a channel with a founder in it showed two Members
+ * headings and neither said why. See `@shared/prefixes`.
+ */
+function groupUsersByPrefix(users: ChannelUser[], isupportPrefix?: string): UserGroup[] {
+  const groupMap = new Map<string, { role: Role; users: ChannelUser[] }>()
 
   for (const user of users) {
-    const highestPrefix = user.prefixes.length > 0 ? user.prefixes[0] : ''
-    const key = highestPrefix || 'none'
-    if (!groupMap.has(key)) {
-      groupMap.set(key, [])
-    }
-    groupMap.get(key)!.push(user)
-  }
-
-  const labels: Record<string, string> = {
-    '~': 'Owners',
-    '&': 'Admins',
-    '@': 'Ops',
-    '%': 'Half-Ops',
-    '+': 'Voiced',
-    none: 'Members'
+    const role = roleOf(user.prefixes, isupportPrefix)
+    const held = groupMap.get(role.label)
+    if (held) held.users.push(user)
+    else groupMap.set(role.label, { role, users: [user] })
   }
 
   const groups: UserGroup[] = []
-  for (const [prefix, groupUsers] of groupMap) {
+  for (const { role, users: groupUsers } of groupMap.values()) {
     // Sort users alphabetically within group
     groupUsers.sort((a, b) => a.nick.localeCompare(b.nick, undefined, { sensitivity: 'base' }))
-
-    groups.push({
-      label: labels[prefix] || 'Members',
-      rank: PREFIX_RANKS[prefix] || 0,
-      users: groupUsers
-    })
+    groups.push({ label: role.label, rank: role.rank, users: groupUsers })
   }
 
   // Sort groups by rank (highest first)

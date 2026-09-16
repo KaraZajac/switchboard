@@ -99,6 +99,66 @@ export function canModerate(
   return rankOf(mine, scheme) <= (halfopRank ?? opRank)
 }
 
+/**
+ * What to call the people standing on one rung.
+ *
+ * By mode letter rather than by symbol, because the letters are the portable
+ * half: every network that has an admin calls the mode `a` and they disagree
+ * about whether it shows as `&` or `!`. `q` and `x` are both the top — `q` on
+ * the servers that have it, `x` on rIRCd, which keeps `q` for its quiet list
+ * and says so in ISUPPORT rather than expecting anyone to guess.
+ *
+ * A letter with no name is named after itself. `Mode +z` says something true
+ * about a group nobody has a word for, where "Members" would say something
+ * false — which is what both clients did with rIRCd's `^`: a founder fell to
+ * the bottom of the list and into the heading meant for people wearing
+ * nothing, and on the desktop that produced two headings both reading
+ * "Members".
+ */
+export function roleName(mode: string): string {
+  switch (mode) {
+    case 'q':
+    case 'x':
+      return 'Founders'
+    case 'a':
+      return 'Admins'
+    case 'o':
+      return 'Operators'
+    case 'h':
+      return 'Half-ops'
+    case 'v':
+      return 'Voiced'
+    default:
+      return `Mode +${mode}`
+  }
+}
+
+export interface Role {
+  /** Higher is more privileged; 0 is somebody wearing nothing */
+  rank: number
+  /** What a group of them is called */
+  label: string
+}
+
+/** Somebody with no prefix at all, which is most people */
+export const NO_ROLE: Role = { rank: 0, label: 'Members' }
+
+/**
+ * The group a member belongs in, and how high it sits.
+ *
+ * Only the strongest prefix counts: somebody who is both an operator and
+ * voiced is an operator, and belongs in one group rather than two. Ranked the
+ * other way up from [rankOf] on purpose — a list is drawn from the top down,
+ * and "higher number is higher up" is the arithmetic a caller wants.
+ */
+export function roleOf(prefixes: readonly string[], prefixValue?: string | null): Role {
+  const scheme = parsePrefix(prefixValue)
+  const at = rankOf(prefixes.join(''), scheme)
+  if (at >= scheme.symbols.length) return NO_ROLE
+
+  return { rank: scheme.symbols.length - at, label: roleName(scheme.modes[at]) }
+}
+
 /** The rank a given mode letter confers, or null where the network has no such role */
 function rankOfMode(mode: string, scheme: PrefixScheme): number | null {
   const at = scheme.modes.indexOf(mode)

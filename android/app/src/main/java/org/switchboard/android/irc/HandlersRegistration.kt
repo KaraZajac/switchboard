@@ -403,16 +403,28 @@ internal fun registerRegistrationHandlers() {
                 })
             }
 
-            when (key) {
-                "PREFIX" -> {
-                    // PREFIX=(ohv)@%+ — modes in brackets, symbols after
-                    val modes = value.substringAfter("(", "").substringBefore(")", "")
-                    val symbols = value.substringAfter(")", "")
-                    if (modes.isNotEmpty() && modes.length == symbols.length) {
-                        state.prefixModes = modes
-                        state.prefixSymbols = symbols
-                    }
+            /*
+             * PREFIX=(ohv)@%+ — modes in brackets, symbols after.
+             *
+             * Outside the `when` below, and deliberately. It used to be the
+             * first branch of it, and `when` takes the first branch that
+             * matches — so the later `"PREFIX", "CHANMODES" ->` that tells the
+             * UI never ran for PREFIX, and the store has never held it for any
+             * network. Everything downstream quietly used the fallback ladder
+             * of `(ov)@+`: on a server whose founder wears `^` the member list
+             * filed them with everybody else, and the menu offered the one
+             * person who could certainly kick somebody no way of doing it.
+             */
+            if (key == "PREFIX") {
+                val modes = value.substringAfter("(", "").substringBefore(")", "")
+                val symbols = value.substringAfter(")", "")
+                if (modes.isNotEmpty() && modes.length == symbols.length) {
+                    state.prefixModes = modes
+                    state.prefixSymbols = symbols
                 }
+            }
+
+            when (key) {
                 "NETWORK" -> session.emit("irc:network", buildJsonObject {
                     put("serverId", state.serverId)
                     put("network", value)

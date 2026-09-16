@@ -9,6 +9,7 @@ import {
   banMask,
   maskIsWeak,
   canModerate,
+  roleOf,
   type MemberAction
 } from '@shared/powers'
 
@@ -198,4 +199,18 @@ describe('who may change a channel', () => {
       }
     }
   })
+})
+
+describe('which group a member belongs in', () => {
+  const corpus = JSON.parse(
+    readFileSync(join(__dirname, '../fixtures/powers.json'), 'utf8')
+  ) as {
+    roles: { name: string; prefix: string | null; prefixes: string[]; rank: number; label: string }[]
+  }
+
+  for (const c of corpus.roles) {
+    it(c.name, () => {
+      expect(roleOf(c.prefixes, c.prefix)).toEqual({ rank: c.rank, label: c.label })
+    })
+  }
 })

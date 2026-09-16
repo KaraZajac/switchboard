@@ -275,5 +275,134 @@
       "mask": "robin!*@*",
       "weak": true
     }
+  ],
+  "$roles": "Which group a member belongs in and what it is called, read off ISUPPORT rather than assumed. Both clients had the five prefixes of the 1990s written in with nothing for anything else, so rIRCd's ^ for founders fell to rank 0 and into the heading meant for people wearing nothing — and on the desktop that drew two headings both reading \"Members\".",
+  "roles": [
+    {
+      "name": "a founder on rIRCd is a founder, not a member",
+      "prefix": "(xaohv)^&@%+",
+      "prefixes": [
+        "^"
+      ],
+      "rank": 5,
+      "label": "Founders"
+    },
+    {
+      "name": "an admin on rIRCd",
+      "prefix": "(xaohv)^&@%+",
+      "prefixes": [
+        "&"
+      ],
+      "rank": 4,
+      "label": "Admins"
+    },
+    {
+      "name": "an operator, which every server agrees about",
+      "prefix": "(xaohv)^&@%+",
+      "prefixes": [
+        "@"
+      ],
+      "rank": 3,
+      "label": "Operators"
+    },
+    {
+      "name": "a half-op",
+      "prefix": "(xaohv)^&@%+",
+      "prefixes": [
+        "%"
+      ],
+      "rank": 2,
+      "label": "Half-ops"
+    },
+    {
+      "name": "voice is the bottom rung, not no rung",
+      "prefix": "(xaohv)^&@%+",
+      "prefixes": [
+        "+"
+      ],
+      "rank": 1,
+      "label": "Voiced"
+    },
+    {
+      "name": "the classic ladder calls its top mode q, and it is still founders",
+      "prefix": "(qaohv)~&@%+",
+      "prefixes": [
+        "~"
+      ],
+      "rank": 5,
+      "label": "Founders"
+    },
+    {
+      "name": "an admin is an admin whichever symbol it wears",
+      "prefix": "(qaohv)~&@%+",
+      "prefixes": [
+        "&"
+      ],
+      "rank": 4,
+      "label": "Admins"
+    },
+    {
+      "name": "ops and voice together are ops",
+      "prefix": "(xaohv)^&@%+",
+      "prefixes": [
+        "@",
+        "+"
+      ],
+      "rank": 3,
+      "label": "Operators"
+    },
+    {
+      "name": "and in whatever order they arrived",
+      "prefix": "(xaohv)^&@%+",
+      "prefixes": [
+        "+",
+        "@"
+      ],
+      "rank": 3,
+      "label": "Operators"
+    },
+    {
+      "name": "nobody",
+      "prefix": "(xaohv)^&@%+",
+      "prefixes": [],
+      "rank": 0,
+      "label": "Members"
+    },
+    {
+      "name": "a symbol this network does not use is nobody",
+      "prefix": "(ov)@+",
+      "prefixes": [
+        "~"
+      ],
+      "rank": 0,
+      "label": "Members"
+    },
+    {
+      "name": "a mode with no name is named after itself",
+      "prefix": "(zov)!@+",
+      "prefixes": [
+        "!"
+      ],
+      "rank": 3,
+      "label": "Mode +z"
+    },
+    {
+      "name": "a server that says nothing has ops and voice",
+      "prefix": null,
+      "prefixes": [
+        "@"
+      ],
+      "rank": 2,
+      "label": "Operators"
+    },
+    {
+      "name": "and on such a server a tilde means nothing",
+      "prefix": null,
+      "prefixes": [
+        "~"
+      ],
+      "rank": 0,
+      "label": "Members"
+    }
   ]
 }

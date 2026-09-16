@@ -53,6 +53,49 @@ object Powers {
         return best
     }
 
+    /**
+     * What to call the people standing on one rung.
+     *
+     * By mode letter rather than by symbol, because the letters are the
+     * portable half: every network that has an admin calls the mode `a` and
+     * they disagree about whether it shows as `&` or `!`. `q` and `x` are both
+     * the top — `q` on the servers that have it, `x` on rIRCd, which keeps `q`
+     * for its quiet list and says so in ISUPPORT rather than expecting anyone
+     * to guess.
+     *
+     * A letter with no name is named after itself. `Mode +z` says something
+     * true about a group nobody has a word for, where "Online" would say
+     * something false — which is what this client did with rIRCd's `^`.
+     */
+    fun roleName(mode: Char): String = when (mode) {
+        'q', 'x' -> "Founders"
+        'a' -> "Admins"
+        'o' -> "Operators"
+        'h' -> "Half-ops"
+        'v' -> "Voiced"
+        else -> "Mode +$mode"
+    }
+
+    /** Higher is more privileged; 0 is somebody wearing nothing */
+    data class Role(val rank: Int, val label: String)
+
+    val NO_ROLE = Role(0, "Members")
+
+    /**
+     * The group a member belongs in, and how high it sits.
+     *
+     * Only the strongest prefix counts: somebody who is both an operator and
+     * voiced is an operator, in one group rather than two. Ranked the other way
+     * up from [rankOf] on purpose — a list is drawn from the top down.
+     */
+    fun roleOf(prefixes: List<String>, prefixValue: String?): Role {
+        val scheme = parsePrefix(prefixValue)
+        val at = rankOf(prefixes.joinToString(""), scheme)
+        if (at >= scheme.symbols.length) return NO_ROLE
+
+        return Role(scheme.symbols.length - at, roleName(scheme.modes[at]))
+    }
+
     private fun rankOfMode(mode: Char, scheme: Scheme): Int? =
         scheme.modes.indexOf(mode).takeIf { it != -1 }
 
