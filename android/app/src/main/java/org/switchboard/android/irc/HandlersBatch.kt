@@ -196,18 +196,41 @@ private fun processBatch(session: IrcSession, batch: BatchState) {
         "netsplit", "netjoin" -> {
             // Fifty quits at once is one event, and rendering it as fifty is
             // how a channel disappears behind a wall of noise.
+            //
+            // The quits and joins themselves were never dispatched — that is
+            // what deferring the batch means — so the roster has to be told
+            // here. Both halves: a split that takes people out and a join that
+            // never puts them back leaves the member list only ever shrinking,
+            // short until the channel is rejoined.
             val nicks = batch.messages.mapNotNull { it.nick }
-            for (nick in nicks) {
-                if (batch.type == "netsplit") {
-                    for (channel in state.channels.values) channel.removeUser(nick)
+            val touched = mutableSetOf<ChannelState>()
+
+            if (batch.type == "netsplit") {
+                for (nick in nicks) {
+                    for (channel in state.channels.values) {
+                        if (channel.user(nick) != null) {
+                            channel.removeUser(nick)
+                            touched.add(channel)
+                        }
+                    }
+                }
+            } else {
+                for (message in batch.messages) {
+                    val nick = message.nick ?: continue
+                    val channel = state.findChannel(message.param(0) ?: continue) ?: continue
+                    channel.setUser(nick) { it }
+                    touched.add(channel)
                 }
             }
+
             session.emit("irc:netsplit", buildJsonObject {
                 put("serverId", state.serverId)
                 put("type", batch.type)
                 put("count", nicks.size)
                 put("servers", batch.params.joinToString(" "))
             })
+            // The member list is drawn from `irc:names` and nothing else
+            for (channel in touched) emitNames(session, channel)
         }
     }
 }

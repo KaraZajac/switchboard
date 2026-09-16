@@ -162,13 +162,39 @@ export function combineMultiline(
   return text
 }
 
+/** What `processBatch` needs of a client: an emitter and the rosters */
+interface BatchClient {
+  events: { emit: (event: string, ...args: unknown[]) => boolean }
+  state?: {
+    channels: Map<
+      string,
+      {
+        name: string
+        users: Map<string, unknown>
+        setUser: (nick: string, data: { nick: string }) => unknown
+        removeUser: (nick: string) => void
+      }
+    >
+    casemap(name: string): string
+  }
+}
+
+/**
+ * Say the roster changed, so the window redraws it.
+ *
+ * The member list is drawn from `names` and nothing else — the same reason the
+ * `MODE` handler emits one.
+ */
+function redraw(client: BatchClient, channels: Iterable<{ name: string; users: Map<string, unknown> }>): void {
+  for (const channel of channels) {
+    client.events.emit('names', { channel: channel.name, users: [...channel.users.values()] })
+  }
+}
+
 /**
  * Process a completed batch based on its type.
  */
-function processBatch(
-  client: { events: { emit: (event: string, ...args: unknown[]) => boolean } },
-  batch: IRCBatch
-): void {
+function processBatch(client: BatchClient, batch: IRCBatch): void {
   switch (batch.type) {
     case 'chathistory':
       // History replay — emit messages in order
@@ -178,29 +204,66 @@ function processBatch(
       })
       break
 
-    case 'netsplit':
-      // Collapse QUIT messages into a single event
+    case 'netsplit': {
+      // Collapse QUIT messages into a single event.
+      //
+      // The quits themselves were never dispatched — that is the point of
+      // deferring the batch — so the roster has to be told here or the fifty
+      // people who just left go on standing in the member list. The phone has
+      // always done this half.
+      const quits = batch.messages.map((m) => ({
+        nick: m.source?.nick || '',
+        reason: m.params[0] || ''
+      }))
+
+      const emptied = new Set<{ name: string; users: Map<string, unknown> }>()
+      for (const channel of client.state?.channels.values() ?? []) {
+        for (const { nick } of quits) {
+          if (!nick) continue
+          const before = channel.users.size
+          channel.removeUser(nick)
+          if (channel.users.size !== before) emptied.add(channel)
+        }
+      }
+
       client.events.emit('netsplit', {
         server1: batch.params[0] || '',
         server2: batch.params[1] || '',
-        quits: batch.messages.map((m) => ({
-          nick: m.source?.nick || '',
-          reason: m.params[0] || ''
-        }))
+        quits
       })
+      redraw(client, emptied)
       break
+    }
 
-    case 'netjoin':
-      // Collapse JOIN messages into a single event
+    case 'netjoin': {
+      // Collapse JOIN messages into a single event.
+      //
+      // And put them back, for the same reason: the split took them out of the
+      // roster and nothing else is going to say they returned. Without this the
+      // member list only ever shrinks across a split, and stays short until the
+      // channel is rejoined.
+      const joins = batch.messages.map((m) => ({
+        nick: m.source?.nick || '',
+        channel: m.params[0] || ''
+      }))
+
+      const filled = new Set<{ name: string; users: Map<string, unknown> }>()
+      for (const { nick, channel } of joins) {
+        if (!nick || !channel) continue
+        const ch = client.state?.channels.get(client.state.casemap(channel))
+        if (!ch) continue
+        ch.setUser(nick, { nick })
+        filled.add(ch)
+      }
+
       client.events.emit('netjoin', {
         server1: batch.params[0] || '',
         server2: batch.params[1] || '',
-        joins: batch.messages.map((m) => ({
-          nick: m.source?.nick || '',
-          channel: m.params[0] || ''
-        }))
+        joins
       })
+      redraw(client, filled)
       break
+    }
 
     case 'draft/multiline':
     case 'multiline': {

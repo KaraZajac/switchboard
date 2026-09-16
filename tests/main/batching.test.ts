@@ -238,3 +238,93 @@ describe('a multiline message', () => {
     expect(seen[0]).toMatchObject({ msgid: 'whole', replyTo: 'earlier' })
   })
 })
+
+/**
+ * A netsplit is one event, and the roster still has to hear about it.
+ *
+ * Deferring the batch is what stops fifty quits being drawn as fifty lines —
+ * and it also stops them reaching the QUIT handler, which is what takes people
+ * out of the member list. So the people who left went on standing in it, and
+ * on the phone, which did remove them, the people who came back never
+ * reappeared. Both halves belong to whoever collapses the batch.
+ */
+describe('a netsplit and the roster', () => {
+  const inChannel = (harness: ReturnType<typeof client>) => {
+    feed(harness, ':kara!u@h JOIN #chan')
+    feed(harness, ':server 353 kara = #chan :kara alice bob carol')
+    feed(harness, ':server 366 kara #chan :End of /NAMES')
+    return harness.state.channels.get('#chan')!
+  }
+
+  it('takes the people who left out of the member list', () => {
+    const harness = client()
+    const ch = inChannel(harness)
+
+    feed(harness, ':server BATCH +sp netsplit irc.a.example irc.b.example')
+    feed(harness, '@batch=sp :alice!u@h QUIT :*.net *.split')
+    feed(harness, '@batch=sp :bob!u@h QUIT :*.net *.split')
+    feed(harness, ':server BATCH -sp')
+
+    expect([...ch.users.keys()].sort()).toEqual(['carol', 'kara'])
+  })
+
+  it('and says the roster changed, because that is what the window listens to', () => {
+    const harness = client()
+    inChannel(harness)
+    const names = vi.fn()
+    harness.events.on('names', names)
+
+    feed(harness, ':server BATCH +sp netsplit irc.a.example irc.b.example')
+    feed(harness, '@batch=sp :alice!u@h QUIT :*.net *.split')
+    feed(harness, ':server BATCH -sp')
+
+    expect(names).toHaveBeenCalledWith({
+      channel: '#chan',
+      users: expect.arrayContaining([expect.objectContaining({ nick: 'carol' })])
+    })
+    expect(names.mock.calls.at(-1)?.[0].users.map((u: { nick: string }) => u.nick)).not.toContain(
+      'alice'
+    )
+  })
+
+  it('puts them back when the split heals', () => {
+    const harness = client()
+    const ch = inChannel(harness)
+
+    feed(harness, ':server BATCH +sp netsplit irc.a.example irc.b.example')
+    feed(harness, '@batch=sp :alice!u@h QUIT :*.net *.split')
+    feed(harness, '@batch=sp :bob!u@h QUIT :*.net *.split')
+    feed(harness, ':server BATCH -sp')
+
+    feed(harness, ':server BATCH +jn netjoin irc.a.example irc.b.example')
+    feed(harness, '@batch=jn :alice!u@h JOIN #chan')
+    feed(harness, '@batch=jn :bob!u@h JOIN #chan')
+    feed(harness, ':server BATCH -jn')
+
+    expect([...ch.users.keys()].sort()).toEqual(['alice', 'bob', 'carol', 'kara'])
+  })
+
+  it('still collapses the whole thing into one event either way', () => {
+    const harness = client()
+    inChannel(harness)
+    const split = vi.fn()
+    const quit = vi.fn()
+    harness.events.on('netsplit', split)
+    harness.events.on('quit', quit)
+
+    feed(harness, ':server BATCH +sp netsplit irc.a.example irc.b.example')
+    feed(harness, '@batch=sp :alice!u@h QUIT :*.net *.split')
+    feed(harness, '@batch=sp :bob!u@h QUIT :*.net *.split')
+    feed(harness, ':server BATCH -sp')
+
+    expect(quit).not.toHaveBeenCalled()
+    expect(split).toHaveBeenCalledWith({
+      server1: 'irc.a.example',
+      server2: 'irc.b.example',
+      quits: [
+        { nick: 'alice', reason: '*.net *.split' },
+        { nick: 'bob', reason: '*.net *.split' }
+      ]
+    })
+  })
+})

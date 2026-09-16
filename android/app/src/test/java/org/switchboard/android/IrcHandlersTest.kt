@@ -793,6 +793,51 @@ class IrcHandlersTest {
         assertEquals(1, session.eventsOn("irc:names").size)
     }
 
+    @Test
+    fun `a netsplit takes people out of the roster and a netjoin puts them back`() {
+        register("batch")
+        feed(":kara!u@h JOIN #chan")
+        feed(":irc.example.org 353 kara = #chan :kara alice bob carol")
+        feed(":irc.example.org 366 kara #chan :End of /NAMES list")
+
+        feed(":irc.example.org BATCH +sp netsplit irc.a.example irc.b.example")
+        feed("@batch=sp :alice!u@h QUIT :*.net *.split")
+        feed("@batch=sp :bob!u@h QUIT :*.net *.split")
+        feed(":irc.example.org BATCH -sp")
+
+        val channel = session.state.findChannel("#chan")!!
+        assertNull(channel.user("alice"))
+        assertNotNull(channel.user("carol"))
+
+        // Without the second half the member list only ever shrinks across a
+        // split, and stays short until the channel is rejoined
+        feed(":irc.example.org BATCH +jn netjoin irc.a.example irc.b.example")
+        feed("@batch=jn :alice!u@h JOIN #chan")
+        feed("@batch=jn :bob!u@h JOIN #chan")
+        feed(":irc.example.org BATCH -jn")
+
+        assertNotNull(channel.user("alice"))
+        assertNotNull(channel.user("bob"))
+    }
+
+    @Test
+    fun `and says the roster changed, which is what the member list listens to`() {
+        register("batch")
+        feed(":kara!u@h JOIN #chan")
+        feed(":irc.example.org 353 kara = #chan :kara alice")
+        feed(":irc.example.org 366 kara #chan :End of /NAMES list")
+        session.events.clear()
+
+        feed(":irc.example.org BATCH +sp netsplit irc.a.example irc.b.example")
+        feed("@batch=sp :alice!u@h QUIT :*.net *.split")
+        feed(":irc.example.org BATCH -sp")
+
+        val names = session.eventsOn("irc:names").single()
+        assertEquals("#chan", names.str("channel"))
+        val nicks = names["users"]!!.jsonArray.map { it.jsonObject.str("nick") }
+        assertEquals(listOf("kara"), nicks)
+    }
+
     // ── Metadata ─────────────────────────────────────────────────────
 
     @Test
