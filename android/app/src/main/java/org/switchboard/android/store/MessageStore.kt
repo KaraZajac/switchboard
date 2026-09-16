@@ -5,6 +5,7 @@ import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import org.switchboard.android.Message
+import org.switchboard.android.irc.ReadMarker
 
 /**
  * The phone's own record of what was said.
@@ -326,14 +327,13 @@ class MessageStore(context: Context) {
     /**
      * Note where it was read up to.
      *
-     * Forward only. Markers arrive from three directions — this phone reading,
-     * the desktop's stored copy, and the server echoing `MARKREAD` — and one
-     * of them turning up late must not drag the line back up the conversation.
+     * Forward only — see [ReadMarker] and `src/shared/readmarker.ts`. Markers
+     * arrive from three directions — this phone reading, the desktop's stored
+     * copy, and the server echoing `MARKREAD` — and one of them turning up
+     * late must not drag the line back up the conversation.
      */
     fun rememberReadMarker(serverId: String, channel: String, timestamp: String) {
-        if (timestamp.isBlank()) return
-        val known = readMarker(serverId, channel)
-        if (known != null && known >= timestamp) return
+        if (!ReadMarker.movesForward(readMarker(serverId, channel), timestamp)) return
 
         db.insertWithOnConflict(
             "read_markers",
@@ -341,7 +341,7 @@ class MessageStore(context: Context) {
             ContentValues().apply {
                 put("server_id", serverId)
                 put("conversation", folded(channel))
-                put("timestamp", timestamp)
+                put("timestamp", timestamp.trim())
             },
             SQLiteDatabase.CONFLICT_REPLACE
         )

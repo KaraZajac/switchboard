@@ -56,6 +56,7 @@ import org.switchboard.android.irc.History
 import org.switchboard.android.irc.Isupport
 import org.switchboard.android.irc.Jump
 import org.switchboard.android.irc.Numerics
+import org.switchboard.android.irc.ReadMarker
 import org.switchboard.android.irc.Links
 import org.switchboard.android.irc.Klipy
 import org.switchboard.android.irc.Events
@@ -2344,6 +2345,21 @@ class SharedCorpusTest {
                 case["name"]!!.jsonPrimitive.content,
                 Numerics.unclaimed(case["command"]!!.jsonPrimitive.content, params)
             )
+        }
+    }
+
+    // ── where a conversation was read up to ───────────────────────────
+
+    @Test
+    fun `moves a read marker forward the same way the desktop does`() {
+        for (entry in load("readmarker.json")["cases"]!!.jsonArray) {
+            val case = entry.jsonObject
+            val known = case["known"]!!.jsonPrimitive.contentOrNull
+            val arriving = case["arriving"]!!.jsonPrimitive.contentOrNull
+            val name = case["name"]!!.jsonPrimitive.content
+
+            assertEquals(name, case["furthest"]!!.jsonPrimitive.contentOrNull, ReadMarker.furthest(known, arriving))
+            assertEquals(name, case["forward"]!!.jsonPrimitive.boolean, ReadMarker.movesForward(known, arriving))
         }
     }
 

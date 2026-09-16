@@ -589,3 +589,76 @@ describe('a client certificate', () => {
   })
 })
 
+
+/**
+ * Where a conversation was read up to, as it is kept.
+ *
+ * The rule itself is `@shared/readmarker` and pinned by the shared corpus.
+ * What is here is that the table obeys it: this wrote whatever it was given,
+ * so a marker arriving late and stale dragged the line back up and the
+ * messages already read were unread again — the "same messages popping up as
+ * unread" that could never be reproduced on purpose, because reproducing it
+ * means losing a race.
+ */
+describe('a read marker on disk', () => {
+  async function markers() {
+    const db = await freshDatabase()
+    // The table is keyed on a network that exists
+    for (const id of ['s1', 's2']) {
+      db.getDb().run(
+        "INSERT INTO servers (id, name, host, port, nick) VALUES (?, 'tiny', 'localhost', 6667, 'kara')",
+        [id]
+      )
+    }
+    return import('../../src/main/storage/models/readmarker')
+  }
+
+  it('moves forward', async () => {
+    const { setReadMarker, getReadMarker } = await markers()
+
+    setReadMarker('s1', '#chan', '2026-09-16T09:00:00.000Z')
+    setReadMarker('s1', '#chan', '2026-09-16T11:30:00.000Z')
+
+    expect(getReadMarker('s1', '#chan')).toBe('2026-09-16T11:30:00.000Z')
+  })
+
+  it('and not back', async () => {
+    const { setReadMarker, getReadMarker } = await markers()
+
+    setReadMarker('s1', '#chan', '2026-09-16T11:30:00.000Z')
+    expect(setReadMarker('s1', '#chan', '2026-09-15T23:04:00.000Z')).toBe(null)
+
+    expect(getReadMarker('s1', '#chan')).toBe('2026-09-16T11:30:00.000Z')
+  })
+
+  it('says whether it moved, so nothing tells the server about a marker it already has', async () => {
+    const { setReadMarker } = await markers()
+
+    expect(setReadMarker('s1', '#chan', '2026-09-16T11:30:00.000Z')).toBe(
+      '2026-09-16T11:30:00.000Z'
+    )
+    expect(setReadMarker('s1', '#chan', '2026-09-16T11:30:00.000Z')).toBe(null)
+  })
+
+  it('ignores the star a server sends for a conversation nobody has marked', async () => {
+    const { setReadMarker, getReadMarker } = await markers()
+
+    setReadMarker('s1', '#chan', '2026-09-16T11:30:00.000Z')
+    setReadMarker('s1', '#chan', '*')
+
+    expect(getReadMarker('s1', '#chan')).toBe('2026-09-16T11:30:00.000Z')
+  })
+
+  it('keeps one per conversation and per network', async () => {
+    const { setReadMarker, getAllReadMarkers } = await markers()
+
+    setReadMarker('s1', '#one', '2026-09-16T09:00:00.000Z')
+    setReadMarker('s1', '#two', '2026-09-16T10:00:00.000Z')
+    setReadMarker('s2', '#one', '2026-09-16T11:00:00.000Z')
+
+    expect(getAllReadMarkers('s1')).toEqual({
+      '#one': '2026-09-16T09:00:00.000Z',
+      '#two': '2026-09-16T10:00:00.000Z'
+    })
+  })
+})

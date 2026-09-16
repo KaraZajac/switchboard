@@ -1409,8 +1409,10 @@ export function registerIPCHandlers(): void {
   handle(
     'read-marker:set',
     async (_event, serverId: string, channel: string, timestamp: string) => {
-      // Persist locally
-      setReadMarker(serverId, channel, timestamp)
+      // Persist locally, forward only. Nothing to tell anybody where the line
+      // did not move: the spec says not to send a marker older than the one
+      // the server holds, and a server that was told one ignores it.
+      if (setReadMarker(serverId, channel, timestamp) === null) return
 
       // Sync with server if supported
       const client = ircManager.getClient(serverId)

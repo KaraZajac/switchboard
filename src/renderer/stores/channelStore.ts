@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { furthestRead } from '@shared/readmarker'
 
 interface ChannelInfo {
   name: string
@@ -188,16 +189,25 @@ export const useChannelStore = create<ChannelState>((set, get) => ({
       }
     }),
 
+  // Forward only, both of these — see `@shared/readmarker`. A marker turns up
+  // from this device reading, from the stored copy read back at startup and
+  // from the server echoing the phone, in whatever order they happen to
+  // arrive, and the one that landed last used to win.
   setReadMarker: (serverId, channel, timestamp) =>
-    set((state) => ({
-      readMarkers: { ...state.readMarkers, [`${serverId}:${channel.toLowerCase()}`]: timestamp }
-    })),
+    set((state) => {
+      const key = `${serverId}:${channel.toLowerCase()}`
+      const furthest = furthestRead(state.readMarkers[key], timestamp)
+      if (furthest === null || furthest === state.readMarkers[key]) return state
+      return { readMarkers: { ...state.readMarkers, [key]: furthest } }
+    }),
 
   setReadMarkers: (serverId, markers) =>
     set((state) => {
       const updated = { ...state.readMarkers }
       for (const [channel, timestamp] of Object.entries(markers)) {
-        updated[`${serverId}:${channel.toLowerCase()}`] = timestamp
+        const key = `${serverId}:${channel.toLowerCase()}`
+        const furthest = furthestRead(updated[key], timestamp)
+        if (furthest !== null) updated[key] = furthest
       }
       return { readMarkers: updated }
     }),

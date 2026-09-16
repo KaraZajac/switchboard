@@ -1,0 +1,97 @@
+{
+  "$comment": "Where a conversation has been read up to. The position belongs to the network rather than to one device, and it only ever moves forward: markers arrive from this device reading, from its own stored copy read back at startup, and from the server echoing another device's MARKREAD, and they do not arrive in order. Shared by tests/shared/readmarker.test.ts and the Android SharedCorpusTest.",
+  "$furthest": "`known` is what we had, `arriving` is what turned up. The answer is where the line should sit, and `forward` whether that is a change worth writing down.",
+  "cases": [
+    {
+      "name": "a newer position moves the line down",
+      "known": "2026-09-16T09:00:00.000Z",
+      "arriving": "2026-09-16T11:30:00.000Z",
+      "furthest": "2026-09-16T11:30:00.000Z",
+      "forward": true
+    },
+    {
+      "name": "an older one does not drag it back up",
+      "known": "2026-09-16T11:30:00.000Z",
+      "arriving": "2026-09-16T09:00:00.000Z",
+      "furthest": "2026-09-16T11:30:00.000Z",
+      "forward": false
+    },
+    {
+      "name": "the same position is not news",
+      "known": "2026-09-16T11:30:00.000Z",
+      "arriving": "2026-09-16T11:30:00.000Z",
+      "furthest": "2026-09-16T11:30:00.000Z",
+      "forward": false
+    },
+    {
+      "name": "nothing known yet takes whatever arrived",
+      "known": null,
+      "arriving": "2026-09-16T09:00:00.000Z",
+      "furthest": "2026-09-16T09:00:00.000Z",
+      "forward": true
+    },
+    {
+      "name": "nothing arriving leaves it where it was",
+      "known": "2026-09-16T11:30:00.000Z",
+      "arriving": null,
+      "furthest": "2026-09-16T11:30:00.000Z",
+      "forward": false
+    },
+    {
+      "name": "neither is nowhere",
+      "known": null,
+      "arriving": null,
+      "furthest": null,
+      "forward": false
+    },
+    {
+      "name": "a server saying it holds none is not a position",
+      "known": "2026-09-16T09:00:00.000Z",
+      "arriving": "*",
+      "furthest": "2026-09-16T09:00:00.000Z",
+      "forward": false
+    },
+    {
+      "name": "and is not one when we hold none either",
+      "known": null,
+      "arriving": "*",
+      "furthest": null,
+      "forward": false
+    },
+    {
+      "name": "an empty string is not one",
+      "known": "2026-09-16T11:30:00.000Z",
+      "arriving": "",
+      "furthest": "2026-09-16T11:30:00.000Z",
+      "forward": false
+    },
+    {
+      "name": "nor is whitespace",
+      "known": "2026-09-16T11:30:00.000Z",
+      "arriving": "   ",
+      "furthest": "2026-09-16T11:30:00.000Z",
+      "forward": false
+    },
+    {
+      "name": "a stored value with whitespace around it is still the position",
+      "known": "2026-09-16T09:00:00.000Z",
+      "arriving": "  2026-09-16T11:30:00.000Z  ",
+      "furthest": "2026-09-16T11:30:00.000Z",
+      "forward": true
+    },
+    {
+      "name": "a whole second later still counts",
+      "known": "2026-09-16T09:00:00.000Z",
+      "arriving": "2026-09-16T09:00:01.000Z",
+      "furthest": "2026-09-16T09:00:01.000Z",
+      "forward": true
+    },
+    {
+      "name": "and a millisecond",
+      "known": "2026-09-16T09:00:00.000Z",
+      "arriving": "2026-09-16T09:00:00.001Z",
+      "furthest": "2026-09-16T09:00:00.001Z",
+      "forward": true
+    }
+  ]
+}
