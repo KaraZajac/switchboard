@@ -13,6 +13,7 @@ import { setReaction } from '../storage/models/reaction'
 import { getMonitorList } from '../storage/models/monitor'
 import { getAllServers, getServer, updateServer } from '../storage/models/server'
 import { markChannelJoined, markChannelParted } from '../storage/models/channel'
+import { setReadMarker } from '../storage/models/readmarker'
 import { subscribeToMetadata, metadataValueFits } from './features/metadata'
 import { serversChanged } from '../ipc/notify'
 import { resealVault } from '../vault/vault'
@@ -1152,6 +1153,16 @@ export class IRCManager {
     })
 
     client.events.on('readMarker', (data: { channel: string; timestamp: string }) => {
+      // Write it down. The position belongs to the network rather than to this
+      // device, and a marker that only ever lived in the window was forgotten
+      // at every restart: the next start loaded whatever *this* machine had
+      // last set, which is older by definition, and then offered it back to
+      // the server as where the conversation had been read to.
+      //
+      // Forward only, so a marker arriving after this device has read past it
+      // changes nothing — see `@shared/readmarker`.
+      setReadMarker(serverId, data.channel, data.timestamp)
+
       this.send('irc:read-marker', {
         serverId,
         channel: data.channel,
