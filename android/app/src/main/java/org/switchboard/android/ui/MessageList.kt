@@ -93,7 +93,9 @@ fun MessageList(
     onPreview: suspend (String) -> LinkPreview? = { null },
     onLoadOlder: suspend () -> Int = { 0 },
     /** Fetch the conversation around a moment, for a jump that cannot scroll yet */
-    onLoadAround: suspend (serverId: String, channel: String, at: String) -> Unit = { _, _, _ -> }
+    onLoadAround: suspend (serverId: String, channel: String, at: String) -> Unit = { _, _, _ -> },
+    /** Somebody's name or avatar was tapped: open their card */
+    onProfile: (String) -> Unit = {}
 ) {
     val serverId = store.activeServerId
     val channel = store.activeChannel
@@ -273,7 +275,7 @@ fun MessageList(
             if (newDay) DayDivider(message.timestamp)
             MessageRow(
                 store, serverId, message, grouped, messages, myNick,
-                onAction, onReaction, onPreview,
+                onAction, onReaction, onPreview, onProfile,
                 marked = flashing == message.id
             )
         }
@@ -528,6 +530,8 @@ private fun MessageRow(
     onAction: (Message, MessageAction) -> Unit,
     onReaction: (Message, String, Boolean) -> Unit,
     onPreview: suspend (String) -> LinkPreview?,
+    /** Somebody's name or avatar was tapped: open their card */
+    onProfile: (String) -> Unit = {},
     /** Whether this is the line somebody jumped to, for as long as that lasts */
     marked: Boolean = false
 ) {
@@ -610,7 +614,13 @@ private fun MessageRow(
         if (grouped) {
             Spacer(Modifier.width(GUTTER))
         } else {
-            Avatar(message.nick, 40.dp, color, avatar = profile.avatar)
+            Avatar(
+                message.nick,
+                40.dp,
+                color,
+                modifier = Modifier.clickable { onProfile(message.nick) },
+                avatar = profile.avatar
+            )
             Spacer(Modifier.width(16.dp))
         }
 
@@ -620,7 +630,17 @@ private fun MessageRow(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Text(name, color = color, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                    // Tapping somebody's name opens their card, the way the
+                    // member list has always done and the desktop now does.
+                    // It was reachable from the member list alone, which is
+                    // the one place you are not when somebody says something.
+                    Text(
+                        name,
+                        color = color,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 15.sp,
+                        modifier = Modifier.clickable { onProfile(message.nick) }
+                    )
                     // draft/oper-tag — the server naming the sender as one of
                     // its operators, which is not something a nick can claim.
                     message.oper?.let { Pill("OPERATOR", Yellow) }

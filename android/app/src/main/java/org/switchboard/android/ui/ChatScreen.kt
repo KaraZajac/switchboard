@@ -323,7 +323,8 @@ fun ChatScreen(
                         onOpenSettings = onOpenSettings,
                         onOpenSearch = onOpenSearch,
                         onOpenServers = onOpenServers,
-                        onOpenAccount = onOpenAccount
+                        onOpenAccount = onOpenAccount,
+                        onProfile = { nick -> viewingProfile = nick }
                     )
                 }
             }
@@ -376,7 +377,9 @@ private fun Conversation(
     onOpenSettings: () -> Unit,
     onOpenSearch: () -> Unit,
     onOpenServers: () -> Unit,
-    onOpenAccount: (serverId: String) -> Unit
+    onOpenAccount: (serverId: String) -> Unit,
+    /** Somebody's name or avatar was tapped in a message: open their card */
+    onProfile: (String) -> Unit
 ) {
     val store = engine.store
     var viewingChannelSettings by remember { mutableStateOf(false) }
@@ -606,7 +609,8 @@ private fun Conversation(
                 val channel = store.activeChannel
                 if (serverId == null || channel == null) 0 else engine.loadOlder(serverId, channel)
             },
-            onLoadAround = { serverId, channel, at -> engine.loadAround(serverId, channel, at) }
+            onLoadAround = { serverId, channel, at -> engine.loadAround(serverId, channel, at) },
+            onProfile = onProfile
         )
 
         TypingLine(store)
