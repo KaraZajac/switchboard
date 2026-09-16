@@ -200,29 +200,9 @@ export function isServiceNick(name: string): boolean {
   return IRC_SERVICES.has(name.toLowerCase())
 }
 
-/**
- * Slash commands the client understands.
- *
- * The parser in main/irc/commands.ts and the composer's completion both read
- * this, so the two cannot drift apart — offering a command that then gets sent
- * to the channel as plain text is worse than not offering it at all.
+/*
+ * The slash command list used to live here, and the comment above it said the
+ * parser and the composer both read it. Only the composer ever did: the parser
+ * has a switch of its own with sixty-odd cases, and this had seventeen. It is
+ * `@shared/commandlist` now, with a test holding the catalogue to the switch.
  */
-export const IRC_COMMANDS = [
-  'me',
-  'join',
-  'part',
-  'nick',
-  'msg',
-  'query',
-  'notice',
-  'whois',
-  'topic',
-  'mode',
-  'kick',
-  'invite',
-  'away',
-  'back',
-  'quit',
-  'oper',
-  'raw'
-] as const

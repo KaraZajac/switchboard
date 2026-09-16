@@ -2,6 +2,7 @@ import type { IRCClient } from './client'
 import { isupportNumber, fitsLimit } from '@shared/isupport'
 import { parsePrefix, quietMode, banMask, modeForRole, roleName, type Rung } from '@shared/powers'
 import { maskToSet } from '@shared/masklists'
+import { helpLines } from '@shared/commandlist'
 
 /**
  * Slash commands typed into the composer.
@@ -22,7 +23,11 @@ import { maskToSet } from '@shared/masklists'
  */
 export type CommandEffect =
   /** Empty what is on screen for this conversation. Not the stored history. */
-  { kind: 'clear' } | { kind: 'ignore'; mask: string } | { kind: 'unignore'; mask: string }
+  | { kind: 'clear' }
+  | { kind: 'ignore'; mask: string }
+  | { kind: 'unignore'; mask: string }
+  /** Print these into the conversation, from us rather than from the network */
+  | { kind: 'notice'; lines: string[] }
 
 export interface CommandResult {
   /** False when the text is an ordinary message and should be sent as one */
@@ -111,6 +116,18 @@ export function runCommand(client: IRCClient, target: string, text: string): Com
      * and none of them delete anything — somebody clearing a busy channel to
      * see what happens next does not mean "forget the morning".
      */
+    /*
+     * What you can type here.
+     *
+     * The client answered sixty-odd commands and offered seventeen of them in
+     * the composer's completion list, so most of them were findable only by
+     * already knowing they were there. Both read from `@shared/commandlist`
+     * now, and a test holds that list to this switch.
+     */
+    case 'help': {
+      return { handled: true, effect: { kind: 'notice', lines: helpLines(rest) } }
+    }
+
     case 'clear':
       return { handled: true, effect: { kind: 'clear' } }
 

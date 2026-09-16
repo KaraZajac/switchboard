@@ -65,6 +65,9 @@ object Commands {
         data object Clear : Effect
         data class Ignore(val mask: String) : Effect
         data class Unignore(val mask: String) : Effect
+
+        /** Print these into the conversation, from us rather than the network */
+        data class Notice(val lines: List<String>) : Effect
     }
 
     data class Result(
@@ -139,6 +142,15 @@ object Commands {
              * busy channel to see what happens next does not mean "forget the
              * morning".
              */
+            /*
+             * What you can type here.
+             *
+             * The catalogue is `src/shared/commandlist.ts` and a desktop test
+             * holds it to the switch that runs them, so this answers with the
+             * same list the desktop does.
+             */
+            "help" -> Result(true, effect = Effect.Notice(CommandList.help(rest)))
+
             "clear" -> Result(true, effect = Effect.Clear)
 
             /*

@@ -776,6 +776,15 @@ export function useIRCEvents(): void {
       })
     )
 
+    // Lines from the client rather than from the network — `/help` and its
+    // kind. They go in the conversation you typed the command in, where they
+    // can be scrolled and read.
+    cleanups.push(
+      api.on('chat:notice', ({ serverId, channel, lines }) => {
+        for (const line of lines) note(serverId, channel, line)
+      })
+    )
+
     // Monitor online/offline events
     cleanups.push(
       api.on('irc:monitor-online', ({ serverId, nick }) => {

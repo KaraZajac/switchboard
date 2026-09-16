@@ -199,6 +199,7 @@ export interface MainToRendererEvents {
    * that a command typed on the phone empties this window too.
    */
   'chat:clear': { serverId: string; channel: string }
+  'chat:notice': { serverId: string; channel: string; lines: string[] }
   /** The ignore list changed from somewhere other than the settings panel */
   'ignore:changed': IgnoreEntry[]
   /**

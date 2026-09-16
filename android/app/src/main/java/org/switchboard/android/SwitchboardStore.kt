@@ -782,6 +782,16 @@ class SwitchboardStore {
      */
     var showJoinsParts by mutableStateOf(false)
 
+    /**
+     * Lines from the client rather than from the network.
+     *
+     * `/help` is the first of these: the answer belongs in the conversation you
+     * typed it in, where it can be scrolled and read.
+     */
+    fun noteLocally(serverId: String, channel: String, lines: List<String>) {
+        for (line in lines) note(serverId, channel, line, null)
+    }
+
     /** A line about the room rather than from anyone in it — a join, a kick, a topic change */
     private fun note(serverId: String, channel: String, text: String, time: String?) {
         val conversation = key(serverId, channel)

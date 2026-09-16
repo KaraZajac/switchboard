@@ -106,6 +106,8 @@ private fun SwitchboardEngine.applyCommandEffect(
         is Commands.Effect.Unignore ->
             Ignore.toMask(effect.mask).takeIf { it.isNotEmpty() }
                 ?.let { removeIgnore(it, Ignore.EVERYWHERE) }
+
+        is Commands.Effect.Notice -> store.noteLocally(serverId, target, effect.lines)
     }
 }
 

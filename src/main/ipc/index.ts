@@ -74,6 +74,7 @@ import {
   settingChanged,
   readMarkerChanged,
   conversationCleared,
+  conversationNoticed,
   ignoresChanged,
   historyChanged,
   uploadProgress
@@ -537,6 +538,11 @@ export function registerIPCHandlers(): void {
   ): Promise<void> {
     if (effect.kind === 'clear') {
       conversationCleared(serverId, channel)
+      return
+    }
+
+    if (effect.kind === 'notice') {
+      conversationNoticed(serverId, channel, effect.lines)
       return
     }
 

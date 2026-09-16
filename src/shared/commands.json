@@ -1,0 +1,336 @@
+{
+  "$comment": "Every slash command, with what it takes and what it does. The client answered sixty-odd and the composer offered seventeen of them, so most were findable only by already knowing they existed. Read by src/shared/commandlist.ts, carried to Kotlin by scripts/commands.py, and held to the switch in src/main/irc/commands.ts by tests/main/commandlist.test.ts.",
+  "commands": [
+    {
+      "name": "me",
+      "usage": "<action>",
+      "summary": "Say what you are doing, in the third person"
+    },
+    {
+      "name": "say",
+      "usage": "<message>",
+      "summary": "Send a message that begins with a slash"
+    },
+    {
+      "name": "msg",
+      "aliases": [
+        "query"
+      ],
+      "usage": "<nick|#channel> <message>",
+      "summary": "Message somebody without opening a conversation"
+    },
+    {
+      "name": "notice",
+      "usage": "<target> <message>",
+      "summary": "Send a notice, which clients are not meant to answer"
+    },
+    {
+      "name": "ctcp",
+      "usage": "<nick> <VERSION|PING|TIME|…>",
+      "summary": "Ask a client about itself"
+    },
+    {
+      "name": "dcc",
+      "usage": "send <nick>",
+      "summary": "Offer somebody a file directly"
+    },
+    {
+      "name": "join",
+      "aliases": [
+        "j"
+      ],
+      "usage": "#channel [key]",
+      "summary": "Go into a channel"
+    },
+    {
+      "name": "part",
+      "aliases": [
+        "leave"
+      ],
+      "usage": "[#channel] [reason]",
+      "summary": "Leave a channel"
+    },
+    {
+      "name": "cycle",
+      "aliases": [
+        "hop"
+      ],
+      "usage": "[#channel]",
+      "summary": "Leave a channel and come straight back"
+    },
+    {
+      "name": "knock",
+      "usage": "<#channel> [reason]",
+      "summary": "Ask to be let into an invite-only channel"
+    },
+    {
+      "name": "topic",
+      "usage": "[#channel] [new topic]",
+      "summary": "Read or set a channel's topic",
+      "channel": true
+    },
+    {
+      "name": "invite",
+      "usage": "<nick> [#channel]",
+      "summary": "Invite somebody in",
+      "channel": true
+    },
+    {
+      "name": "names",
+      "usage": "[#channel]",
+      "summary": "Ask who is in a channel",
+      "channel": true
+    },
+    {
+      "name": "list",
+      "usage": "[pattern]",
+      "summary": "Browse the channels on this network"
+    },
+    {
+      "name": "mode",
+      "usage": "<target> <modes>",
+      "summary": "Set modes by hand"
+    },
+    {
+      "name": "voice",
+      "usage": "[nick…]",
+      "summary": "Let somebody speak in a moderated channel",
+      "channel": true
+    },
+    {
+      "name": "devoice",
+      "usage": "[nick…]",
+      "summary": "Take somebody’s voice away",
+      "channel": true
+    },
+    {
+      "name": "halfop",
+      "usage": "[nick…]",
+      "summary": "Make somebody a half-operator",
+      "channel": true
+    },
+    {
+      "name": "dehalfop",
+      "usage": "[nick…]",
+      "summary": "Remove somebody’s half-operator",
+      "channel": true
+    },
+    {
+      "name": "op",
+      "usage": "[nick…]",
+      "summary": "Make somebody a channel operator",
+      "channel": true
+    },
+    {
+      "name": "deop",
+      "usage": "[nick…]",
+      "summary": "Remove somebody’s operator",
+      "channel": true
+    },
+    {
+      "name": "admin",
+      "usage": "[nick…]",
+      "summary": "Make somebody a channel admin, where the network has them",
+      "channel": true
+    },
+    {
+      "name": "deadmin",
+      "usage": "[nick…]",
+      "summary": "Remove somebody’s admin",
+      "channel": true
+    },
+    {
+      "name": "founder",
+      "aliases": [
+        "owner"
+      ],
+      "usage": "[nick…]",
+      "summary": "Hand somebody the channel, where the network has founders",
+      "channel": true
+    },
+    {
+      "name": "defounder",
+      "aliases": [
+        "deowner"
+      ],
+      "usage": "[nick…]",
+      "summary": "Take the founder rank back",
+      "channel": true
+    },
+    {
+      "name": "kick",
+      "usage": "<nick> [reason]",
+      "summary": "Put somebody out of the channel",
+      "channel": true
+    },
+    {
+      "name": "ban",
+      "usage": "<nick or mask>",
+      "summary": "Keep somebody out",
+      "channel": true
+    },
+    {
+      "name": "unban",
+      "usage": "<nick or mask>",
+      "summary": "Let them back in",
+      "channel": true
+    },
+    {
+      "name": "kickban",
+      "usage": "<nick> [reason]",
+      "summary": "Ban and then kick, in that order",
+      "channel": true
+    },
+    {
+      "name": "quiet",
+      "usage": "<nick or mask>",
+      "summary": "Let somebody stay but not speak, where the network allows it",
+      "channel": true
+    },
+    {
+      "name": "unquiet",
+      "usage": "<nick or mask>",
+      "summary": "Let them speak again",
+      "channel": true
+    },
+    {
+      "name": "banlist",
+      "aliases": [
+        "bans"
+      ],
+      "usage": "[#channel]",
+      "summary": "Show who is banned",
+      "channel": true
+    },
+    {
+      "name": "whois",
+      "usage": "<nick>",
+      "summary": "Ask the network about somebody"
+    },
+    {
+      "name": "whowas",
+      "usage": "<nick> [count]",
+      "summary": "Ask about somebody who has left"
+    },
+    {
+      "name": "who",
+      "usage": "<nick, #channel or mask>",
+      "summary": "Ask about everybody matching"
+    },
+    {
+      "name": "ignore",
+      "usage": "<nick or mask>",
+      "summary": "Stop hearing from somebody, on this client"
+    },
+    {
+      "name": "unignore",
+      "usage": "<nick or mask>",
+      "summary": "Hear from them again"
+    },
+    {
+      "name": "nick",
+      "usage": "<nickname>",
+      "summary": "Change your nick"
+    },
+    {
+      "name": "setname",
+      "usage": "<real name>",
+      "summary": "Change your real name without reconnecting"
+    },
+    {
+      "name": "away",
+      "usage": "[reason]",
+      "summary": "Say you have stepped away"
+    },
+    {
+      "name": "back",
+      "summary": "Say you are back"
+    },
+    {
+      "name": "oper",
+      "usage": "<name> <password>",
+      "summary": "Become a network operator"
+    },
+    {
+      "name": "quit",
+      "usage": "[reason]",
+      "summary": "Leave the network"
+    },
+    {
+      "name": "nickserv",
+      "aliases": [
+        "ns"
+      ],
+      "usage": "<command> [arguments]",
+      "summary": "Talk to NickServ"
+    },
+    {
+      "name": "chanserv",
+      "aliases": [
+        "cs"
+      ],
+      "usage": "<command> [arguments]",
+      "summary": "Talk to ChanServ"
+    },
+    {
+      "name": "motd",
+      "summary": "Read the message of the day"
+    },
+    {
+      "name": "lusers",
+      "summary": "How many people are on this network"
+    },
+    {
+      "name": "time",
+      "summary": "Ask the server what time it is"
+    },
+    {
+      "name": "version",
+      "summary": "Ask what the server is running"
+    },
+    {
+      "name": "links",
+      "summary": "List the servers on this network"
+    },
+    {
+      "name": "stats",
+      "usage": "[letter]",
+      "summary": "Ask the server for a statistic"
+    },
+    {
+      "name": "info",
+      "summary": "Ask the server about itself"
+    },
+    {
+      "name": "admininfo",
+      "summary": "Who runs this server"
+    },
+    {
+      "name": "wallops",
+      "usage": "<message>",
+      "summary": "Message every operator, if you are one"
+    },
+    {
+      "name": "ping",
+      "usage": "[target]",
+      "summary": "Measure the round trip"
+    },
+    {
+      "name": "help",
+      "usage": "[command]",
+      "summary": "List what you can type, or explain one command"
+    },
+    {
+      "name": "clear",
+      "summary": "Empty this conversation from the screen"
+    },
+    {
+      "name": "raw",
+      "aliases": [
+        "quote"
+      ],
+      "usage": "<IRC line>",
+      "summary": "Send a line to the server exactly as typed"
+    }
+  ]
+}

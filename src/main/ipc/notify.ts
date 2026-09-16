@@ -97,6 +97,21 @@ export function conversationCleared(serverId: string, channel: string): void {
 }
 
 /**
+ * Lines from the client rather than from the network.
+ *
+ * `/help` is the first of these: the answer belongs in the conversation you
+ * typed it in, where it can be scrolled and read, rather than in a toast that
+ * holds four lines and leaves after six seconds.
+ */
+export function conversationNoticed(
+  serverId: string,
+  channel: string,
+  lines: string[]
+): void {
+  sink?.('chat:notice', { serverId, channel, lines })
+}
+
+/**
  * Rows arrived for a conversation the window may be showing.
  *
  * A phone handing over what it heard writes straight into the database, which

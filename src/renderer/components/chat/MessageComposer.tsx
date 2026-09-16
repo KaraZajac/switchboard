@@ -24,7 +24,7 @@ import {
   textOf,
   type History
 } from '@shared/history'
-import { IRC_COMMANDS } from '@shared/constants'
+import { commandNames } from '@shared/commandlist'
 import { typingToSend, type TypingEvent } from '@shared/typing'
 import { GifPicker } from './GifPicker'
 import { EmojiPicker } from './EmojiPicker'
@@ -49,7 +49,15 @@ import { wording } from '../../utils/speak'
 /** Composer grows with its content up to this height, then scrolls */
 const MAX_COMPOSER_HEIGHT = 320
 
-const COMPLETION_COMMANDS = IRC_COMMANDS.map((name) => `/${name}`)
+/*
+ * Everything the client answers, not a hand-written seventeen of it.
+ *
+ * `runCommand` has cases for sixty-odd and this list had `/me`, `/join` and
+ * fifteen others — so `/ban`, `/kickban`, `/cycle`, `/knock` and `/founder`
+ * worked perfectly and were findable only by already knowing they existed.
+ * `@shared/commandlist` is the catalogue and a test holds it to the switch.
+ */
+const COMPLETION_COMMANDS = commandNames().map((name) => `/${name}`)
 
 /**
  * What has been sent where, kept outside the component.
