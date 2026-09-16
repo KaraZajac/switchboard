@@ -6,6 +6,7 @@ import type { ChannelUser } from '@shared/types/channel'
 import { sendWHOX } from '../features/whox'
 import { syncMetadata } from '../features/metadata'
 import { advertises } from '@shared/isupport'
+import { requestReadMarker } from '../features/readmarker'
 import { hasCapability, CAP_NAMES } from '@shared/capnames'
 
 /**
@@ -45,6 +46,11 @@ registerHandler('JOIN', (client, msg) => {
     if (hasCapability(client.state.capabilities, CAP_NAMES.noImplicitNames)) {
       client.connection.send('NAMES', channel)
     }
+
+    // And where this channel was read up to. Servers are told to volunteer it
+    // on join and not all of them do, and a device that was closed when the
+    // channel was read elsewhere has nothing of its own to fall back on.
+    requestReadMarker(client, channel)
   }
 
   // Someone else arriving: the server pushed everyone's metadata when *we*

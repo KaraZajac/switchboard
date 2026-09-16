@@ -116,6 +116,14 @@ internal fun registerChannelHandlers() {
             }
             Metadata.sync(session, channel.name)
             ChatHistory.requestLatest(session, channel.name)
+
+            // And where this channel was read up to. Servers are told to
+            // volunteer it on join and not all of them do, and a device that
+            // was closed when the channel was read elsewhere has nothing of
+            // its own to fall back on.
+            if (state.capabilities.contains("draft/read-marker")) {
+                session.send("MARKREAD", channel.name)
+            }
         } else {
             // The server pushed everyone's metadata when *we* joined, but not
             // for people who turn up afterwards.

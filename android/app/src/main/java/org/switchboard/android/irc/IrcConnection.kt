@@ -905,6 +905,22 @@ class IrcConnection(
     }
 
     /**
+     * And ask where it was read up to, which is a different question.
+     *
+     * A device only hears a marker it was present for. Open the phone after a
+     * week and it learns from `CHATHISTORY TARGETS` about every conversation
+     * that had traffic — and about where any of them was read up to, nothing
+     * at all, so a DM answered on the desktop on Tuesday arrives here on
+     * Friday with its badge lit. Nobody volunteers a marker for a conversation
+     * you have not opened; asking is what the specification provides for.
+     */
+    fun askReadMarker(target: String) {
+        if (target.isEmpty()) return
+        if (!state.capabilities.contains("draft/read-marker")) return
+        send("MARKREAD", target)
+    }
+
+    /**
      * Watch these nicks, in whichever command this network takes.
      *
      * Nothing goes out on a network that offers neither: the names stay saved,

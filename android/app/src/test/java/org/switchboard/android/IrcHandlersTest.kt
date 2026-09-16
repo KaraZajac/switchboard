@@ -838,6 +838,45 @@ class IrcHandlersTest {
         assertEquals(listOf("kara"), nicks)
     }
 
+    @Test
+    fun `asks where a conversation was read up to`() {
+        register("batch", "draft/chathistory", "draft/read-marker")
+        session.sent.clear()
+
+        // A DM answered on the desktop on Tuesday, found here on Friday. This
+        // device heard no marker for it, because it was not running.
+        feed(":irc.example.org BATCH +t draft/chathistory-targets")
+        feed("@batch=t :irc.example.org CHATHISTORY TARGETS alice 2026-09-16T09:00:00.000Z")
+        feed(":irc.example.org BATCH -t")
+
+        assertTrue(session.sent.toString(), session.sent.contains("MARKREAD alice"))
+    }
+
+    @Test
+    fun `and asks for a channel it joins, since not every server volunteers one`() {
+        register("draft/read-marker")
+        session.sent.clear()
+
+        feed(":kara!u@h JOIN #chan")
+        assertTrue(session.sent.toString(), session.sent.contains("MARKREAD #chan"))
+
+        // Somebody else arriving is not a reason to ask again
+        session.sent.clear()
+        feed(":alice!u@h JOIN #chan")
+        assertFalse(session.sent.toString(), session.sent.contains("MARKREAD #chan"))
+    }
+
+    @Test
+    fun `and asks nothing of a network that does not keep the answer`() {
+        register("draft/chathistory")
+        session.sent.clear()
+
+        feed(":kara!u@h JOIN #chan")
+        feed(":irc.example.org CHATHISTORY TARGETS alice 2026-09-16T09:00:00.000Z")
+
+        assertTrue(session.sent.toString(), session.sent.none { it.startsWith("MARKREAD") })
+    }
+
     // ── Metadata ─────────────────────────────────────────────────────
 
     @Test

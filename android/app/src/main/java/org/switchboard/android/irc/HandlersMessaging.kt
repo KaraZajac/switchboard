@@ -473,6 +473,14 @@ internal fun registerChatHistoryTargetHandler() {
         val target = message.param(1) ?: return@on
         val timestamp = message.param(2) ?: return@on
 
+        // And where it was read up to, which this device has no way of
+        // knowing: it was not here when somebody answered on the desktop.
+        // Without asking, every conversation found this way arrives with its
+        // badge lit.
+        if (session.state.capabilities.contains("draft/read-marker")) {
+            session.send("MARKREAD", target)
+        }
+
         session.emit("irc:chathistory-target", buildJsonObject {
             put("serverId", session.state.serverId)
             put("target", target)

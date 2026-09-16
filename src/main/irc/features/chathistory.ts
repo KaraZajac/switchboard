@@ -1,5 +1,6 @@
 import { isupportNumber } from '@shared/isupport'
 import { registerHandler } from '../handlers/registry'
+import { requestReadMarker } from './readmarker'
 
 /**
  * draft/chathistory — Server-side message history.
@@ -124,6 +125,11 @@ registerHandler('CHATHISTORY', (client, msg) => {
   const target = msg.params[1]
   const timestamp = msg.params[2]
   if (!target || !timestamp) return
+
+  // And where it was read up to, which this device has no way of knowing: it
+  // was not here when somebody answered on the phone. Without asking, every
+  // conversation found this way arrives with its badge lit.
+  requestReadMarker(client, target)
 
   client.events.emit('chathistoryTarget', { target, timestamp })
 })
