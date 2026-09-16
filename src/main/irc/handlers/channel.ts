@@ -298,8 +298,21 @@ registerHandler('MODE', (client, msg) => {
 
     const ch = client.state.channels.get(client.state.casemap(target))
     if (ch) {
-      applyChannelModes(ch, modeStr, modeParams, client)
+      const movedSomebody = applyChannelModes(ch, modeStr, modeParams, client)
       trackMaskListChange(client, ch, target, modeStr, modeParams)
+
+      // Somebody was given or lost a prefix, so the roster the window is
+      // drawing is out of date. Nothing listens to `mode` for that — the
+      // member list is drawn from `names` and nothing else — so a `+o` while
+      // you sat in the channel moved nobody until the next rejoin, and the
+      // person opped went on being offered no way to kick anyone. The phone
+      // has always redrawn here; this is the desktop catching up.
+      if (movedSomebody) {
+        client.events.emit('names', {
+          channel: ch.name,
+          users: Array.from(ch.users.values())
+        })
+      }
     }
 
     client.events.emit('mode', {
@@ -382,17 +395,21 @@ function parsePrefixIsupport(prefix?: string): Record<string, string> {
  * Apply mode changes to a channel.
  * Handles +/- mode parsing with parameters for prefix modes.
  */
+/**
+ * @returns whether any of them changed somebody's prefix, and so the roster
+ */
 function applyChannelModes(
   ch: ReturnType<typeof import('../state').ConnectionState.prototype.getChannel>,
   modeStr: string,
   params: string[],
   client: { state: { isupport: Record<string, string | true>; casemap(name: string): string } }
-): void {
+): boolean {
   const prefixMap = parsePrefixIsupport(client.state.isupport['PREFIX'] as string | undefined)
   const prefixModes = new Set(Object.keys(prefixMap))
 
   let adding = true
   let paramIdx = 0
+  let moved = false
 
   for (const char of modeStr) {
     if (char === '+') {
@@ -415,9 +432,11 @@ function applyChannelModes(
         if (adding) {
           if (!user.prefixes.includes(prefix)) {
             user.prefixes.push(prefix)
+            moved = true
           }
-        } else {
+        } else if (user.prefixes.includes(prefix)) {
           user.prefixes = user.prefixes.filter((p) => p !== prefix)
+          moved = true
         }
       }
     } else {
@@ -450,6 +469,8 @@ function applyChannelModes(
       }
     }
   }
+
+  return moved
 }
 
 // ── The lists a channel keeps ────────────────────────────────────────

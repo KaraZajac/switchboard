@@ -510,6 +510,58 @@ describe('Channel Handlers', () => {
     expect(alice.prefixes).toContain('@')
   })
 
+  it('redraws the roster when a mode moves somebody', () => {
+    // The member list is drawn from `names` and nothing else — nothing
+    // listens to `mode` for it — so without this a `+o` moved nobody until
+    // the next rejoin, and the person opped went on being offered no way to
+    // kick anyone. The phone has always done this.
+    const { client, state, events } = createMockClient()
+    const ch = state.getChannel('#test')
+    ch.setUser('Alice', { nick: 'Alice', prefixes: [] })
+    const handler = vi.fn()
+    events.on('names', handler)
+
+    dispatchMessage(client, parseMessage(':Op!op@host MODE #test +o Alice'))
+
+    expect(handler).toHaveBeenCalledWith({
+      channel: '#test',
+      users: [expect.objectContaining({ nick: 'Alice', prefixes: ['@'] })]
+    })
+  })
+
+  it('and when somebody loses one', () => {
+    const { client, state, events } = createMockClient()
+    const ch = state.getChannel('#test')
+    ch.setUser('Alice', { nick: 'Alice', prefixes: ['@', '+'] })
+    const handler = vi.fn()
+    events.on('names', handler)
+
+    dispatchMessage(client, parseMessage(':Op!op@host MODE #test -o Alice'))
+
+    expect(handler).toHaveBeenCalledWith({
+      channel: '#test',
+      users: [expect.objectContaining({ nick: 'Alice', prefixes: ['+'] })]
+    })
+  })
+
+  it('but not for a mode that moves nobody', () => {
+    // A ban, a topic lock, a key: every one of those arrives as a MODE too,
+    // and redrawing the roster for each is a render for nothing
+    const { client, state, events } = createMockClient()
+    const ch = state.getChannel('#test')
+    ch.setUser('Alice', { nick: 'Alice', prefixes: [] })
+    const handler = vi.fn()
+    events.on('names', handler)
+
+    dispatchMessage(client, parseMessage(':Op!op@host MODE #test +tn'))
+    dispatchMessage(client, parseMessage(':Op!op@host MODE #test +b *!*@spam.example'))
+    // And one that asks for a prefix somebody already has
+    dispatchMessage(client, parseMessage(':Op!op@host MODE #test +o Alice'))
+    dispatchMessage(client, parseMessage(':Op!op@host MODE #test +o Alice'))
+
+    expect(handler).toHaveBeenCalledTimes(1)
+  })
+
   it('handles INVITE', () => {
     const { client, events } = createMockClient()
     const handler = vi.fn()
