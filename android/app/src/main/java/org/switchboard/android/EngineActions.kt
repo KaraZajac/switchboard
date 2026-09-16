@@ -1342,6 +1342,14 @@ private const val HISTORY_PAGE = 50
  */
 internal fun SwitchboardEngine.rememberJoin(serverId: String, channel: String) {
     if (!vault.isUnlocked) return
+    // Only the device holding the connection writes the config for it.
+    //
+    // A following phone is relayed every join the desktop makes, including the
+    // ones that are only its dial carrying out a list it has — so without this
+    // the desktop's stale reconnect came back through the link and the phone
+    // wrote the channels it had just left back into the shared config itself.
+    // The holder records; everybody else reads.
+    if (!holds(serverId)) return
     val servers = vault.servers()
     val server = servers.find { it.id == serverId } ?: return
     if (server.autoJoin.any { it.equals(channel, ignoreCase = true) }) return
@@ -1354,6 +1362,9 @@ internal fun SwitchboardEngine.rememberJoin(serverId: String, channel: String) {
 /** And that we are not, so the next connection does not walk back in */
 internal fun SwitchboardEngine.forgetJoin(serverId: String, channel: String) {
     if (!vault.isUnlocked) return
+    // The holder records; see [rememberJoin]. A part made here while following
+    // is relayed, and the desktop writes it.
+    if (!holds(serverId)) return
     val servers = vault.servers()
     val server = servers.find { it.id == serverId } ?: return
     if (server.autoJoin.none { it.equals(channel, ignoreCase = true) }) return

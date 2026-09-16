@@ -60,6 +60,27 @@ export class IRCManager {
   private released: string[] = []
 
   /**
+   * Channels this device asked for because its config said so, per server.
+   *
+   * A `JOIN` we see is one of two things: the server acknowledging a dial we
+   * made, or somebody deciding to go somewhere. They look identical on the
+   * wire, and only one of them is news worth writing into the shared config.
+   *
+   * Telling them apart matters because the dial and the config can disagree
+   * for a moment. The desktop connects with the auto-join list it has, which
+   * may be a week old; the link then comes up, the phone's newer config
+   * arrives and is applied, and the auto-join list is now empty. *Then* the
+   * acks land. Without this, `rememberJoin` reads a config that no longer
+   * lists them, concludes somebody has just joined two new channels, writes
+   * them back and reseals — at a version that beats the phone's. The channels
+   * the user left came back, and only ever after the desktop was opened.
+   *
+   * Emptied as each one lands, so joining the same channel again later is a
+   * decision and is recorded as one.
+   */
+  private dialled = new Map<string, Set<string>>()
+
+  /**
    * Connect to a server with the given config.
    */
   connect(config: ServerConfig): void {
@@ -101,10 +122,27 @@ export class IRCManager {
    * Skipped when it is already listed, so reconnecting to a server with twelve
    * auto-join channels does not write the config twelve times.
    */
+  /** What this connection is about to walk into, recorded at registration */
+  private noteDial(serverId: string, channels: readonly string[]): void {
+    this.dialled.set(serverId, new Set(channels))
+  }
+
   private rememberJoin(serverId: string, channel: string): void {
     const config = getServer(serverId)
     if (!config) return
     if (config.autoJoin.some((name) => foldCase(name) === foldCase(channel))) return
+
+    // The server acknowledging a dial we made, not somebody deciding to go
+    // somewhere — see [dialled]
+    const pending = this.dialled.get(serverId)
+    if (pending) {
+      const folded = foldCase(channel)
+      for (const name of pending) {
+        if (foldCase(name) !== folded) continue
+        pending.delete(name)
+        return
+      }
+    }
 
     updateServer(serverId, { autoJoin: [...config.autoJoin, channel] })
     serversChanged()
@@ -621,6 +659,17 @@ export class IRCManager {
   private bindClientEvents(serverId: string, client: IRCClient): void {
     // Connection events
     client.events.on('registered', (data) => {
+      /*
+       * What this connection is about to walk into, taken now.
+       *
+       * On registration rather than on connect, because a client reconnects on
+       * its own — a ping timeout, a netsplit, a server restart — and each of
+       * those dials the list it was built with. Read from the client's own
+       * config for the same reason: that is the list it will actually join,
+       * whatever the database has been told since.
+       */
+      this.noteDial(serverId, client.config.autoJoin ?? [])
+
       // The account too. SASL finishes before registration does, so by now we
       // know it — and a phone following this desktop reads its own account
       // from here. Leaving it out meant the 900 that had just told it who it
