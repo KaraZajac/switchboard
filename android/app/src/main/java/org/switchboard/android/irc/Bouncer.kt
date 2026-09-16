@@ -137,11 +137,17 @@ object Bouncer {
      * Three signals, any one sufficient, each checked against a bouncer
      * actually running rather than against a document: `BOUNCER` in ISUPPORT,
      * which soju and Switchboard advertise; `soju.im/bouncer-networks`; and
-     * any capability under `znc.in/`. ZNC relays its upstream's ISUPPORT
-     * untouched, so there is no token to find — but it always offers
-     * `znc.in/batch`, `znc.in/self-message` and `znc.in/server-time-iso`, and
-     * nothing else does. It is the most widely run bouncer there is and it was
-     * invisible here.
+     * `znc.in/batch` or `znc.in/server-time-iso`. ZNC relays its upstream's
+     * ISUPPORT untouched, so there is no token to find. It is the most widely
+     * run bouncer there is and it was invisible here.
+     *
+     * Those last two are named one at a time rather than by their prefix,
+     * which is what this did first. `znc.in/` is not a bouncer marker: it is
+     * where ZNC put the capabilities it invented, and the good ones were
+     * adopted. Ergo offers `znc.in/self-message` and `znc.in/playback` and is
+     * an ordinary server, so the prefix test called every Ergo connection a
+     * bouncer — which is not a wrong word on a pill but a decision to let two
+     * devices onto one network under one nick.
      *
      * `capabilities` is what the server offered, not what we asked for.
      * Whether this is a bouncer is a fact about the far end.
@@ -152,7 +158,17 @@ object Bouncer {
      */
     fun isBouncer(isupport: Map<String, String>, capabilities: Collection<String>): Boolean =
         isupport.containsKey("BOUNCER") ||
-            capabilities.any { it == "soju.im/bouncer-networks" || it.startsWith("znc.in/") }
+            capabilities.any { it == "soju.im/bouncer-networks" || it in ZNC_ONLY }
+
+    /**
+     * The capabilities only ZNC offers, read off ZNC 1.10.3 and Ergo 2.7.0.
+     *
+     * Both were connected to for this: ZNC answers `CAP LS` with
+     * `znc.in/batch znc.in/self-message znc.in/server-time-iso`, Ergo with
+     * `znc.in/playback znc.in/self-message`. What they share is what other
+     * servers have adopted; what is left is ZNC.
+     */
+    private val ZNC_ONLY = setOf("znc.in/batch", "znc.in/server-time-iso")
 
     /** The capability that says a server holds networks on your behalf */
     const val NETWORKS_CAP = "soju.im/bouncer-networks"

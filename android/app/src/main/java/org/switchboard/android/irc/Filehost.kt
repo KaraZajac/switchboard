@@ -25,11 +25,12 @@ object Filehost {
     /**
      * Where this network takes uploads, or null if it takes none.
      *
-     * Both spellings, because the token was renamed when the draft moved and
-     * servers are on both sides of that.
+     * Either spelling, because the token keeps its `draft/` prefix until the
+     * specification is ratified and servers sit on both sides of that — see
+     * [Isupport.value].
      */
     fun url(isupport: Map<String, String>, overTls: Boolean = true): String? {
-        val value = isupport["FILEHOST"] ?: isupport["draft/FILEHOST"] ?: return null
+        val value = Isupport.value(isupport, "FILEHOST") ?: return null
         if (value.isEmpty()) return null
 
         val uri = runCatching { URI(value) }.getOrNull() ?: return null

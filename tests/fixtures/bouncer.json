@@ -227,7 +227,7 @@
       "bouncer": true
     },
     {
-      "name": "ZNC, which relays its upstream ISUPPORT and adds no token of its own",
+      "name": "ZNC 1.10.3, which relays its upstream ISUPPORT and adds no token of its own",
       "isupport": {
         "CHANTYPES": "#",
         "NICKLEN": "32",
@@ -251,12 +251,71 @@
       "bouncer": true
     },
     {
-      "name": "one znc capability is enough on its own",
+      "name": "znc.in/self-message is not enough: Ergo offers it and is a server",
       "isupport": {
         "CHANTYPES": "#"
       },
       "caps": [
         "znc.in/self-message"
+      ],
+      "bouncer": false
+    },
+    {
+      "name": "Ergo 2.7.0, as one actually answers CAP LS",
+      "isupport": {
+        "CHANTYPES": "#",
+        "NETWORK": "ErgoTest",
+        "PREFIX": "(qaohv)~&@%+",
+        "draft/CHATHISTORY": "100"
+      },
+      "caps": [
+        "account-notify",
+        "account-tag",
+        "away-notify",
+        "batch",
+        "cap-notify",
+        "chghost",
+        "draft/channel-rename",
+        "draft/chathistory",
+        "draft/event-playback",
+        "draft/multiline",
+        "draft/register",
+        "draft/relaymsg",
+        "echo-message",
+        "extended-join",
+        "invite-notify",
+        "labeled-response",
+        "message-tags",
+        "multi-prefix",
+        "oragono.io/nope",
+        "sasl",
+        "server-time",
+        "setname",
+        "userhost-in-names",
+        "znc.in/playback",
+        "znc.in/self-message"
+      ],
+      "bouncer": false
+    },
+    {
+      "name": "znc.in/batch is, because a server with the ratified name has no use for it",
+      "isupport": {
+        "CHANTYPES": "#"
+      },
+      "caps": [
+        "batch",
+        "znc.in/batch"
+      ],
+      "bouncer": true
+    },
+    {
+      "name": "and so is znc.in/server-time-iso, for the same reason",
+      "isupport": {
+        "CHANTYPES": "#"
+      },
+      "caps": [
+        "server-time",
+        "znc.in/server-time-iso"
       ],
       "bouncer": true
     },
@@ -301,7 +360,7 @@
       "bouncer": false
     }
   ],
-  "$recognised": "Whether the far end is a bouncer, which decides whether two devices may both be on it. The soju and ZNC rows are what those two actually answered CAP LS with, read off the wire on 2026-09-15.",
+  "$recognised": "Whether the far end is a bouncer, which decides whether two devices may both be on it. The soju, ZNC and Ergo rows are what those three actually answered CAP LS with, read off the wire — soju and ZNC on 2026-09-15, ZNC 1.10.3 and Ergo 2.7.0 again on 2026-09-16, when it turned out they share znc.in/self-message and Ergo was being called a bouncer for it.",
   "$bind": "What goes before CAP END to land on one of a bouncer's networks. The desktop has sent this since bouncer support landed and the phone never did, so a bound network row opened on whichever network the bouncer picked.",
   "bind": [
     {

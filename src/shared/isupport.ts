@@ -12,12 +12,32 @@
  *   the user simply finds later that half their sentence is missing.
  */
 
+/**
+ * A token's value, under either of the names it can arrive as.
+ *
+ * A feature keeps its `draft/` prefix until the specification is ratified, and
+ * networks move at their own pace: rIRCd states `CHATHISTORY=200`, Ergo and
+ * soju state `draft/CHATHISTORY=100`, and they mean the same thing. A client
+ * that asks for only one spelling finds the feature on some networks and not
+ * on others, which looks like the feature being broken rather than the token
+ * being spelled differently.
+ *
+ * The plain name wins where a server states both, because that is the one it
+ * has committed to.
+ */
+export function isupportValue(
+  isupport: Record<string, string | true | null | undefined>,
+  token: string
+): string | true | null | undefined {
+  return isupport[token] ?? isupport[`draft/${token}`]
+}
+
 /** A positive integer from an ISUPPORT token, or null when it said nothing usable */
 export function isupportNumber(
   isupport: Record<string, string | true>,
   token: string
 ): number | null {
-  const value = isupport[token]
+  const value = isupportValue(isupport, token)
   if (typeof value !== 'string') return null
   const count = Number(value.trim())
   return Number.isInteger(count) && count > 0 ? count : null
@@ -97,7 +117,7 @@ export function advertises(
   isupport: Record<string, string | true | null | undefined>,
   token: string
 ): boolean {
-  const value = isupport[token]
+  const value = isupportValue(isupport, token)
   return value !== undefined && value !== null
 }
 

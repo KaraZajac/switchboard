@@ -11,13 +11,16 @@
  * a photograph is on the phone and sharing one is most of what a phone is for.
  */
 
+import { isupportValue } from './isupport'
+
 type Isupport = Record<string, string | true | null | undefined>
 
 /**
  * Where this network takes uploads, or null if it takes none.
  *
- * Both spellings, because the token was renamed when the draft moved and
- * servers are on both sides of that.
+ * Either spelling, because the token keeps its `draft/` prefix until the
+ * specification is ratified and servers sit on both sides of that — see
+ * `isupportValue`.
  *
  * `overTls` says whether the IRC connection itself is encrypted, and it is not
  * optional in spirit: the spec says a client MUST refuse a plaintext upload
@@ -35,7 +38,7 @@ export function filehostUrl(
   isupport: Isupport,
   options: { overTls?: boolean } = {}
 ): string | null {
-  const value = isupport['FILEHOST'] ?? isupport['draft/FILEHOST']
+  const value = isupportValue(isupport, 'FILEHOST')
   if (typeof value !== 'string' || value.length === 0) return null
 
   let parsed: URL

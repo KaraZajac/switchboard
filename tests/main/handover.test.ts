@@ -259,14 +259,38 @@ describe('a bouncer takes every device, whichever bouncer it is', () => {
     const { manager, clients } = managerWithFakeClients([])
     servers.list = [{ id: 'a', autoConnect: true }]
 
-    // What ZNC actually answers CAP LS with. It relays its upstream's ISUPPORT
-    // untouched, so there is no token to find — these are the only sign.
-    clients.set('a', asBouncer(['batch', 'server-time', 'znc.in/self-message']))
+    // What ZNC 1.10.3 actually answers CAP LS with. It relays its upstream's
+    // ISUPPORT untouched, so there is no token to find — these are the only
+    // sign, and only the legacy two are a sign at all.
+    clients.set(
+      'a',
+      asBouncer([
+        'batch',
+        'server-time',
+        'znc.in/batch',
+        'znc.in/self-message',
+        'znc.in/server-time-iso'
+      ])
+    )
 
     manager.releaseConnections()
 
     // Handing it over gives up the whole reason somebody runs a bouncer
     expect([...clients.keys()]).toEqual(['a'])
+  })
+
+  it('hands over an Ergo, which offers two of the same capabilities and is a server', () => {
+    const { manager, clients } = managerWithFakeClients([])
+    servers.list = [{ id: 'a', autoConnect: true }]
+
+    // Ergo 2.7.0 implements the two znc.in capabilities worth having. Reading
+    // the prefix as the marker made every Ergo connection a bouncer, which is
+    // a decision to put two devices on one network under one nick.
+    clients.set('a', asBouncer(['batch', 'server-time', 'znc.in/playback', 'znc.in/self-message']))
+
+    manager.releaseConnections()
+
+    expect([...clients.keys()]).toEqual([])
   })
 
   it('keeps one behind soju too', () => {

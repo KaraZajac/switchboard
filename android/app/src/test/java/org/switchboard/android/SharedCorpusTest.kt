@@ -2480,6 +2480,18 @@ class SharedCorpusTest {
                 Isupport.advertises(isupport, case["token"]!!.jsonPrimitive.content)
             )
         }
+
+        for (entry in load("advertises.json")["numbers"]!!.jsonArray) {
+            val case = entry.jsonObject
+            val isupport = case["isupport"]!!.jsonObject.mapValues { (_, v) ->
+                v.jsonPrimitive.contentOrNull ?: ""
+            }
+            assertEquals(
+                case["name"]!!.jsonPrimitive.content,
+                case["number"]!!.jsonPrimitive.intOrNull,
+                Isupport.number(isupport, case["token"]!!.jsonPrimitive.content)
+            )
+        }
     }
 
     // ── avatars ───────────────────────────────────────────────────────

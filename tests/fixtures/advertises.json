@@ -1,5 +1,5 @@
 {
-  "$comment": "Whether the network advertised a token at all, shared by tests/shared/advertises.test.ts and the Android SharedCorpusTest. A token arrives three ways \u2014 on its own, with a value, or with an equals sign and nothing after it \u2014 and all three mean the server has it. The third stores an empty string, which is falsy. The two clients asked the question differently, the phone by presence and the desktop by truth; this is the one answer.",
+  "$comment": "Whether the network advertised a token at all, shared by tests/shared/advertises.test.ts and the Android SharedCorpusTest. A token arrives three ways — on its own, with a value, or with an equals sign and nothing after it — and all three mean the server has it. The third stores an empty string, which is falsy. The two clients asked the question differently, the phone by presence and the desktop by truth; this is the one answer. It also covers the two names one token can arrive under: a feature keeps its `draft/` prefix until the specification is ratified, and networks sit on both sides of that — rIRCd states CHATHISTORY, Ergo and soju state draft/CHATHISTORY, and they mean the same thing.",
   "$cases": "`isupport` is what the network said; `token` is what we are asking about.",
   "cases": [
     {
@@ -39,6 +39,66 @@
       "isupport": {},
       "token": "WHOX",
       "advertised": false
+    },
+    {
+      "name": "a token still wearing its draft prefix is still the token",
+      "isupport": {
+        "draft/CHATHISTORY": "100"
+      },
+      "token": "CHATHISTORY",
+      "advertised": true
+    },
+    {
+      "name": "and bare under the draft name",
+      "isupport": {
+        "draft/FILEHOST": true
+      },
+      "token": "FILEHOST",
+      "advertised": true
+    },
+    {
+      "name": "asking for the draft name itself still works",
+      "isupport": {
+        "draft/CHATHISTORY": "100"
+      },
+      "token": "draft/CHATHISTORY",
+      "advertised": true
+    }
+  ],
+  "$numbers": "The same for a number: the limit a server states under either name is the same limit, and the plain one wins where a server states both, because that is the one it has committed to.",
+  "numbers": [
+    {
+      "name": "rIRCd states the plain name",
+      "isupport": {
+        "CHATHISTORY": "200"
+      },
+      "token": "CHATHISTORY",
+      "number": 200
+    },
+    {
+      "name": "Ergo and soju state the draft one",
+      "isupport": {
+        "draft/CHATHISTORY": "100"
+      },
+      "token": "CHATHISTORY",
+      "number": 100
+    },
+    {
+      "name": "both, and the ratified name is the one it meant",
+      "isupport": {
+        "CHATHISTORY": "200",
+        "draft/CHATHISTORY": "50"
+      },
+      "token": "CHATHISTORY",
+      "number": 200
+    },
+    {
+      "name": "a server that keeps no history at all",
+      "isupport": {
+        "MONITOR": "100"
+      },
+      "token": "CHATHISTORY",
+      "number": null
     }
   ]
 }

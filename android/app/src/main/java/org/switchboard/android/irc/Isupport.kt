@@ -17,9 +17,25 @@ package org.switchboard.android.irc
  */
 object Isupport {
 
+    /**
+     * A token's value, under either of the names it can arrive as.
+     *
+     * A feature keeps its `draft/` prefix until the specification is ratified,
+     * and networks move at their own pace: rIRCd states `CHATHISTORY=200`, Ergo
+     * and soju state `draft/CHATHISTORY=100`, and they mean the same thing. A
+     * client that asks for only one spelling finds the feature on some networks
+     * and not on others, which looks like the feature being broken rather than
+     * the token being spelled differently.
+     *
+     * The plain name wins where a server states both, because that is the one
+     * it has committed to.
+     */
+    fun value(isupport: Map<String, String>, token: String): String? =
+        isupport[token] ?: isupport["draft/$token"]
+
     /** A positive integer from a token, or null when it said nothing usable */
     fun number(isupport: Map<String, String>, token: String): Int? =
-        isupport[token]?.trim()?.toIntOrNull()?.takeIf { it > 0 }
+        value(isupport, token)?.trim()?.toIntOrNull()?.takeIf { it > 0 }
 
     /**
      * How many targets one command may carry.
@@ -96,5 +112,5 @@ object Isupport {
      * than a test for truth, on both sides.
      */
     fun advertises(isupport: Map<String, String>, token: String): Boolean =
-        isupport.containsKey(token)
+        isupport.containsKey(token) || isupport.containsKey("draft/$token")
 }

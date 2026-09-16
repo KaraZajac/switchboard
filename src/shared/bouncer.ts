@@ -148,12 +148,20 @@ export function formatAttributes(attributes: Record<string, string | undefined>)
  *  - `BOUNCER` in ISUPPORT, which soju and Switchboard both advertise.
  *  - `soju.im/bouncer-networks`, offered by anything that can hand out more
  *    than one network.
- *  - Any capability under `znc.in/`. ZNC relays its upstream's ISUPPORT
- *    untouched — so there is no token to find, and `NETWORK=` names the
- *    network rather than the bouncer — but it always offers `znc.in/batch`,
- *    `znc.in/self-message` and `znc.in/server-time-iso`, and nothing else
- *    does. It is the most widely run bouncer there is and it was invisible
- *    here.
+ *  - `znc.in/batch` or `znc.in/server-time-iso`. ZNC relays its upstream's
+ *    ISUPPORT untouched — so there is no token to find, and `NETWORK=` names
+ *    the network rather than the bouncer. It is the most widely run bouncer
+ *    there is and it was invisible here.
+ *
+ * Those last two are named one at a time rather than by their prefix, which is
+ * what this did first. `znc.in/` is not a bouncer marker: it is where ZNC put
+ * the capabilities it invented, and the good ones were adopted. Ergo offers
+ * `znc.in/self-message` and `znc.in/playback` and is an ordinary server, so
+ * the prefix test called every Ergo connection a bouncer — which is not a
+ * wrong word on a pill but a decision to let two devices onto one network
+ * under one nick. `znc.in/batch` and `znc.in/server-time-iso` are ZNC's own
+ * spellings of two capabilities that were later ratified under other names,
+ * and a server that has the ratified ones has no reason to offer these.
  *
  * `capabilities` is what the server *offered*, not what we asked for. Whether
  * this is a bouncer is a fact about the far end; a client that happened not to
@@ -171,10 +179,20 @@ export function isBouncer(
 
   for (const capability of capabilities) {
     if (capability === BOUNCER_NETWORKS_CAP) return true
-    if (capability.startsWith('znc.in/')) return true
+    if (ZNC_ONLY.has(capability)) return true
   }
   return false
 }
+
+/**
+ * The capabilities only ZNC offers, read off ZNC 1.10.3 and Ergo 2.7.0.
+ *
+ * Both were connected to for this: ZNC answers `CAP LS` with `znc.in/batch
+ * znc.in/self-message znc.in/server-time-iso`, Ergo with `znc.in/playback
+ * znc.in/self-message`. What they share is what other servers have adopted;
+ * what is left is ZNC.
+ */
+const ZNC_ONLY = new Set(['znc.in/batch', 'znc.in/server-time-iso'])
 
 /** The capability a client negotiates to speak this extension at all */
 export const BOUNCER_NETWORKS_CAP = 'soju.im/bouncer-networks'
