@@ -1,0 +1,145 @@
+{
+  "$comment": "Which thing is holding the connections, in one word. Both clients show it and both had their own idea of it — a phone said SERVER for what a desktop called nothing at all. `peerHolding` and `everPaired` are deliberately two facts: somebody else holding this right now, and being part of a pair at all, have different answers most of the time. Shared by tests/shared/holding.test.ts and the Android SharedCorpusTest.",
+  "cases": [
+    {
+      "name": "this device, straight to the networks",
+      "now": {
+        "holding": true,
+        "connecting": false,
+        "peerHolding": false,
+        "followingAlwaysOn": false,
+        "everPaired": false,
+        "allThroughBouncer": false
+      },
+      "holder": "live"
+    },
+    {
+      "name": "this device, but everything it holds is behind a bouncer",
+      "now": {
+        "holding": true,
+        "connecting": false,
+        "peerHolding": false,
+        "followingAlwaysOn": false,
+        "everPaired": false,
+        "allThroughBouncer": true
+      },
+      "holder": "bouncer"
+    },
+    {
+      "name": "one through a bouncer and others not is still live",
+      "now": {
+        "holding": true,
+        "connecting": false,
+        "peerHolding": false,
+        "followingAlwaysOn": false,
+        "everPaired": true,
+        "allThroughBouncer": false
+      },
+      "holder": "live"
+    },
+    {
+      "name": "following an always-on Switchboard",
+      "now": {
+        "holding": false,
+        "connecting": false,
+        "peerHolding": true,
+        "followingAlwaysOn": true,
+        "everPaired": true,
+        "allThroughBouncer": false
+      },
+      "holder": "bouncer"
+    },
+    {
+      "name": "following a desktop",
+      "now": {
+        "holding": false,
+        "connecting": false,
+        "peerHolding": true,
+        "followingAlwaysOn": false,
+        "everPaired": true,
+        "allThroughBouncer": false
+      },
+      "holder": "desktop"
+    },
+    {
+      "name": "dialling, with a device to take over from",
+      "now": {
+        "holding": false,
+        "connecting": true,
+        "peerHolding": false,
+        "followingAlwaysOn": false,
+        "everPaired": true,
+        "allThroughBouncer": false
+      },
+      "holder": "taking-over"
+    },
+    {
+      "name": "dialling, on its own",
+      "now": {
+        "holding": false,
+        "connecting": true,
+        "peerHolding": false,
+        "followingAlwaysOn": false,
+        "everPaired": false,
+        "allThroughBouncer": false
+      },
+      "holder": "connecting"
+    },
+    {
+      "name": "nothing at all",
+      "now": {
+        "holding": false,
+        "connecting": false,
+        "peerHolding": false,
+        "followingAlwaysOn": false,
+        "everPaired": false,
+        "allThroughBouncer": false
+      },
+      "holder": "offline"
+    },
+    {
+      "name": "holding beats connecting, because it already arrived",
+      "now": {
+        "holding": true,
+        "connecting": true,
+        "peerHolding": false,
+        "followingAlwaysOn": false,
+        "everPaired": false,
+        "allThroughBouncer": false
+      },
+      "holder": "live"
+    },
+    {
+      "name": "paired with a desktop that is switched off, and not dialling",
+      "now": {
+        "holding": false,
+        "connecting": false,
+        "peerHolding": false,
+        "followingAlwaysOn": false,
+        "everPaired": true,
+        "allThroughBouncer": false
+      },
+      "holder": "offline"
+    },
+    {
+      "name": "claiming the session from the device that has it",
+      "now": {
+        "holding": false,
+        "connecting": true,
+        "peerHolding": true,
+        "followingAlwaysOn": false,
+        "everPaired": true,
+        "allThroughBouncer": false
+      },
+      "holder": "taking-over"
+    }
+  ],
+  "labels": {
+    "live": "LIVE",
+    "bouncer": "BOUNCER",
+    "desktop": "DESKTOP",
+    "connecting": "CONNECTING",
+    "taking-over": "TAKING OVER",
+    "offline": "OFFLINE"
+  }
+}

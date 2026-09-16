@@ -27,7 +27,7 @@ import {
 } from './protocol'
 import { SessionCoordinator, type SessionFrame, type SessionState } from '../session/coordinator'
 import { exportVault, importVault, onVaultChanged, vaultStatus } from '../vault/vault'
-import { setDeviceNotifier } from '../ipc/notify'
+import { setDeviceNotifier, sessionChanged } from '../ipc/notify'
 import { shouldAdoptVault } from '@shared/vaultorder'
 import type { VaultEnvelope } from '../vault/crypto'
 
@@ -301,6 +301,10 @@ export async function startRemoteLink(): Promise<RemoteStatus> {
       client.send({ t: 'vault-offer', version, updatedAt })
     }
   })
+
+  // The window shows which device is holding the connections; tell it when
+  // that changes rather than making it ask on a timer
+  session.onChange(() => sessionChanged())
 
   acceptLoop = runAcceptLoop()
   session.start()

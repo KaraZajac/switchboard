@@ -7,6 +7,7 @@ import { isChannelName, isServiceNick } from '@shared/constants'
 import { FormattedText } from '../chat/MessageContent'
 import { stripFormatting } from '@shared/formatting'
 import { maskListsFor } from '@shared/masklists'
+import { HoldingPill } from '../common/HoldingPill'
 
 const EMPTY_CHANNELS: { name: string; topic: string | null }[] = []
 
@@ -89,6 +90,12 @@ export function TitleBar() {
           </>
         )}
       </div>
+
+      {/* Which thing is holding the connections — see `@shared/holding`.
+          Outside the drag region, or the hover explanation never appears. */}
+      <span style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
+        <HoldingPill />
+      </span>
 
       <div
         className="flex items-center gap-1"

@@ -46,6 +46,7 @@ import org.switchboard.android.irc.CapNames
 import org.switchboard.android.irc.Ctcp
 import org.switchboard.android.irc.CtcpGuard
 import org.switchboard.android.irc.NotOnChannel
+import org.switchboard.android.irc.Holding
 import org.switchboard.android.irc.Filehost
 import org.switchboard.android.irc.dialChanged
 import org.switchboard.android.irc.Formatting
@@ -2455,6 +2456,44 @@ class SharedCorpusTest {
                 NotOnChannel.action(case["numeric"]!!.jsonPrimitive.content, channel) {
                     Casemap.fold(it) in have
                 }
+            )
+        }
+    }
+
+    // ── which thing is holding the connections ────────────────────────
+
+    @Test
+    fun `names the holder the same way the desktop does`() {
+        val corpus = load("holding.json")
+
+        for (entry in corpus["cases"]!!.jsonArray) {
+            val case = entry.jsonObject
+            val now = case["now"]!!.jsonObject
+            val flag = { key: String -> now[key]!!.jsonPrimitive.boolean }
+
+            val holder = Holding.who(
+                holding = flag("holding"),
+                connecting = flag("connecting"),
+                peerHolding = flag("peerHolding"),
+                followingAlwaysOn = flag("followingAlwaysOn"),
+                everPaired = flag("everPaired"),
+                allThroughBouncer = flag("allThroughBouncer")
+            )
+
+            assertEquals(
+                case["name"]!!.jsonPrimitive.content,
+                case["holder"]!!.jsonPrimitive.content,
+                holder.name.lowercase().replace('_', '-')
+            )
+        }
+
+        // The words themselves, because two clients showing the same holder
+        // under different names is the thing this file exists to stop.
+        for ((holder, word) in corpus["labels"]!!.jsonObject) {
+            assertEquals(
+                holder,
+                word.jsonPrimitive.content,
+                Holding.label(Holding.Holder.valueOf(holder.uppercase().replace('-', '_')))
             )
         }
     }

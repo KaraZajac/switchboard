@@ -126,3 +126,16 @@ export function ignoresChanged(list: unknown): void {
 export function uploadProgress(serverId: string, sent: number, total: number): void {
   sink?.('file:upload-progress', { serverId, sent, total })
 }
+
+/**
+ * Which device is holding the connections has changed.
+ *
+ * Carries nothing: the window asks, the same way it re-reads the server list
+ * rather than being handed a diff, so there is one description of the session
+ * and it is the one the main process computes. Pushed rather than polled
+ * because it changes rarely and matters immediately — the word in the header
+ * is wrong for as long as nobody asks.
+ */
+export function sessionChanged(): void {
+  sink?.('session:changed', undefined)
+}

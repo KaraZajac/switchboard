@@ -232,6 +232,7 @@ fun ChatScreen(
                                 takingOver = engine.isTakingOver,
                                 pairedWithDesktop = engine.pairedWithDesktop,
                                 followingAlwaysOn = engine.followingAlwaysOn,
+                                allThroughBouncer = engine.allThroughBouncer,
                                 vaultUnlocked = engine.isVaultUnlocked,
                                 onSelect = { serverId, channel ->
                                     store.select(serverId, channel)
@@ -424,10 +425,11 @@ private fun Conversation(
             // and then miss when it stops being true.
             engine.sharingWithDesktop -> {}
 
-            pairedWithDesktop && engine.mode == EngineMode.HOLDING -> Banner(
-                text = "This phone is holding the connections",
-                color = Green
-            )
+            // Deliberately nothing for "this phone is holding the
+            // connections". The pill in the header says it in one word, and a
+            // banner repeating it pushed the conversation down the screen for
+            // news that is not news — which is the reasoning written above for
+            // every other ordinary state.
         }
 
         // NickServ has asked us to log in. This is the moment the offer is
@@ -842,7 +844,8 @@ private fun ChannelHeader(
                     engine.mode,
                     engine.isTakingOver,
                     engine.pairedWithDesktop,
-                    engine.followingAlwaysOn
+                    engine.followingAlwaysOn,
+                    engine.allThroughBouncer
                 )
             }
             Text(

@@ -11,6 +11,7 @@ import type { UserMetadata } from './metadata'
 import type { MaskEntry } from '../masklists'
 import type { IgnoreEntry, IgnoreScope } from '../ignore'
 import type { DccTransfer } from '../dcc'
+import type { Holder } from '../holding'
 
 /**
  * Live state of one connected server, handed to the renderer when it attaches.
@@ -164,6 +165,8 @@ export interface MainToRendererEvents {
    * window re-reads, so there is one description of the servers.
    */
   'servers:changed': undefined
+  /** Which device is holding the connections changed; the window re-asks */
+  'session:changed': undefined
   /** The watched-nicks list for one network changed somewhere other than here */
   'monitor:changed': { serverId: string }
   /** A stored setting changed somewhere other than here — the theme, most visibly */
@@ -338,6 +341,8 @@ export interface RendererToMainInvocations {
   /** Remote link (paired phones and tablets) */
   'remote:status': () => Promise<RemoteLinkStatus>
   'session:state': () => Promise<SessionSnapshot>
+  /** Which thing is holding the connections, in one word — see `@shared/holding` */
+  'session:holding': () => Promise<{ holder: Holder }>
   'vault:status': () => Promise<VaultStatusInfo>
   'vault:create': (passphrase: string, keepOpen?: boolean) => Promise<VaultStatusInfo>
   'vault:unlock': (passphrase: string, keepOpen?: boolean) => Promise<VaultStatusInfo>

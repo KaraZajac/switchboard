@@ -545,6 +545,10 @@ class SwitchboardEngine(
     var followingAlwaysOn by mutableStateOf(false)
         private set
 
+    /** Whether every network this phone holds is reached through a bouncer */
+    var allThroughBouncer by mutableStateOf(false)
+        private set
+
     /**
      * Whether the desktop is on these networks too, right now.
      *
@@ -2040,6 +2044,18 @@ class SwitchboardEngine(
          */
         followingAlwaysOn = coordinator.state().peers.values.any { it.priority >= SERVER_PRIORITY }
 
+        /*
+         * Whether everything this phone holds is reached through a bouncer.
+         *
+         * All rather than any, because the word on the pill has to be true of
+         * the whole picture: with one network through a soju and two straight
+         * to the server, this phone is the one on those two and `LIVE` is the
+         * honest word.
+         */
+        val held = connections.values.filter { it.isConnected }
+        allThroughBouncer = held.isNotEmpty() &&
+            held.all { Bouncer.isBouncer(it.state.isupport, it.state.available.keys) }
+
         // Sitting out a backoff is not dialling. The two look identical from
         // here and read completely differently to somebody watching: a client
         // that has been told to slow down and is doing so says so, rather than
@@ -2068,6 +2084,8 @@ class SwitchboardEngine(
         modeDetail = when {
             state.claiming -> "Asking the desktop to hand over…"
             sharingWithDesktop -> "On the same networks as your desktop"
+            // Says which thing, so it cannot contradict the word on the pill
+            live && allThroughBouncer -> "A bouncer is holding the connections"
             live && pairedWithDesktop -> "This phone is holding the connections"
             live -> "Connected"
             dialling && pairedWithDesktop ->

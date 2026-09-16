@@ -8,6 +8,9 @@ import { formatFingerprint } from '@shared/certificate'
 import { isPrivateAddress } from '@shared/privateaddress'
 import type { BrowserWindow, IpcMainInvokeEvent } from 'electron'
 import { hasMetadata } from '@shared/metadata'
+import { whoIsHolding } from '@shared/holding'
+import { isBouncer } from '@shared/bouncer'
+import { SERVER_PRIORITY } from '../session/coordinator'
 import { transcript, transcriptFilename } from '@shared/transcript'
 import { listTransfers, acceptTransfer, declineTransfer, offerFile } from '../irc/features/dcc'
 import { handle } from './registry'
@@ -152,6 +155,47 @@ export function registerIPCHandlers(): void {
 
   handle('remote:status', async () => remoteStatus())
   handle('session:state', async () => sessionState())
+
+  /*
+   * Which thing is holding the connections, in one word.
+   *
+   * Decided here rather than in the window, because the facts are here: the
+   * session role, the peers and their rank, and whether each live connection
+   * is actually a bouncer. Handing the window three of those to combine is
+   * handing it a rule to get subtly different from the phone's.
+   */
+  handle('session:holding', async () => {
+    const session = sessionState()
+    const all = [...ircManager.connections()]
+    const live = all.filter(([, client]) => client.connection.connected)
+    const remote = remoteStatus()
+
+    return {
+      holder: whoIsHolding({
+        holding: session.role === 'primary' && live.length > 0,
+        // A client the manager still knows about but which is not connected is
+        // dialling or waiting to redial; `disconnect` deletes it, so "none at
+        // all" is somebody having switched every network off, not a slow start.
+        connecting: session.role === 'primary' && live.length === 0 && all.length > 0,
+        // Following, and somebody is actually on the other end. A device that
+        // is paired but turned off is not holding anything, and naming it
+        // would be a lie told in one word.
+        peerHolding:
+          session.role !== 'primary' &&
+          (Object.keys(session.peers).length > 0 || remote.connected.length > 0),
+        followingAlwaysOn: Object.values(session.peers).some(
+          (peer) => peer.priority >= SERVER_PRIORITY
+        ),
+        // Paired at all, which is a different question — see `@shared/holding`
+        everPaired: Object.keys(session.peers).length > 0 || remote.devices.length > 0,
+        allThroughBouncer:
+          live.length > 0 &&
+          live.every(([, client]) =>
+            isBouncer(client.state.isupport, client.state.availableCapabilities.keys())
+          )
+      })
+    }
+  })
 
   handle('vault:status', async () => vaultStatus())
   handle('vault:create', async (_event, passphrase: string, keepOpen?: boolean) =>
