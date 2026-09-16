@@ -228,9 +228,13 @@ private fun AddFriend(
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
+                        // A rounded rectangle, like every other control here.
+                        // At this height a 20dp radius is a lozenge, and one
+                        // lozenge among rectangles reads as a different kind of
+                        // thing than the buttons beside it.
                         modifier = Modifier
                             .padding(end = 8.dp)
-                            .clip(RoundedCornerShape(20.dp))
+                            .clip(RoundedCornerShape(8.dp))
                             .background(if (id == target) Blue else Surface0)
                             .clickable { onTarget(id) }
                             .padding(horizontal = 14.dp, vertical = 7.dp)
@@ -328,7 +332,7 @@ private fun FriendRow(
             fontSize = 12.sp,
             fontWeight = FontWeight.Bold,
             modifier = Modifier
-                .clip(RoundedCornerShape(12.dp))
+                .clip(RoundedCornerShape(8.dp))
                 .clickable { engine.unwatchNicks(friend.serverId, listOf(friend.nick)) }
                 .padding(horizontal = 10.dp, vertical = 6.dp)
         )

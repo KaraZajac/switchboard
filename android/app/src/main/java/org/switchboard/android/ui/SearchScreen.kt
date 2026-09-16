@@ -216,8 +216,11 @@ private fun Toggle(label: String, on: Boolean, onClick: () -> Unit) {
         fontWeight = FontWeight.SemiBold,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
+        // A rounded rectangle, like every other control in the app. At this
+        // height a 20dp radius is a lozenge — half the height is a pill, and
+        // nothing else here is one.
         modifier = Modifier
-            .clip(RoundedCornerShape(20.dp))
+            .clip(RoundedCornerShape(8.dp))
             .background(if (on) Blue else Surface0)
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 7.dp)
