@@ -123,6 +123,7 @@ fun ChatScreen(
     engine: SwitchboardEngine,
     onOpenSettings: () -> Unit,
     onOpenSearch: () -> Unit,
+    onOpenMentions: () -> Unit,
     onOpenBrowse: () -> Unit,
     onOpenServers: () -> Unit,
     onEditServer: (serverId: String) -> Unit,
@@ -296,6 +297,10 @@ fun ChatScreen(
                                 onBrowse = {
                                     scope.launch { channelDrawer.close() }
                                     onOpenBrowse()
+                                },
+                                onOpenMentions = {
+                                    scope.launch { channelDrawer.close() }
+                                    onOpenMentions()
                                 },
                                 onManageServers = {
                                     scope.launch { channelDrawer.close() }

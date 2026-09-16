@@ -283,6 +283,16 @@ class SwitchboardStore {
     var pendingShare by mutableStateOf<PendingShare?>(null)
 
     /**
+     * How many messages this store has filed since it started.
+     *
+     * Not a count of anything anybody wants to see — it is a thing to watch.
+     * A screen that shows lines from every conversation at once has nothing
+     * else to recompose on, and polling for it would be worse.
+     */
+    var messagesSeen by mutableStateOf(0)
+        private set
+
+    /**
      * Networks a bouncer holds that are not here yet, until they are added or
      * the offer is waved away — see [BouncerOffer].
      */
@@ -940,6 +950,10 @@ class SwitchboardStore {
             }
 
             "irc:message" -> {
+                // Anything watching for "something was said, anywhere" reads
+                // this rather than trying to watch every conversation at once
+                // — see MentionsScreen, which is about all of them.
+                messagesSeen++
                 val channel = data["channel"]?.str() ?: return
                 val arrived = data["message"]?.jsonObject?.toMessage() ?: return
                 // A line of ours to services is kept with its password gone —

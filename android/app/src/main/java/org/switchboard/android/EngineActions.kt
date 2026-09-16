@@ -802,6 +802,82 @@ suspend fun SwitchboardEngine.loadOlder(serverId: String, channel: String): Int 
     return store.prependHistory(serverId, channel, answer)
 }
 
+/** One line that named you, with the network on it because it crosses them */
+data class Mention(
+    val serverId: String,
+    val network: String,
+    val channel: String,
+    val nick: String,
+    val content: String,
+    val type: String,
+    val timestamp: String
+)
+
+/**
+ * Everything that named you, everywhere, newest first.
+ *
+ * The badge on a channel counts these as they arrive and then forgets which
+ * lines they were, which leaves the question it raises — what did they say? —
+ * with no answer but going network by network looking for your own nick.
+ *
+ * Following a desktop or a headless Switchboard, that device is asked: it has
+ * the whole history, where a phone keeps a rolling window of each conversation
+ * and would answer thinly for the same question. Holding the connections there
+ * is nobody to ask, so the window is the answer — the same split the search
+ * screen makes, for the same reason.
+ *
+ * Channels only. A direct message is addressed to you by existing and has a
+ * list of its own; every one of them here would bury the line in a busy channel
+ * that nobody was watching, which is what this is for.
+ */
+suspend fun SwitchboardEngine.recentMentions(limit: Int = 100): List<Mention> {
+    if (remote.isLinked && !isHolding) {
+        val answer = ask("mentions:recent", JsonPrimitive(limit)) as? JsonArray
+        if (answer != null) {
+            return answer.mapNotNull { entry ->
+                val row = entry as? JsonObject ?: return@mapNotNull null
+                Mention(
+                    serverId = row["serverId"].text() ?: return@mapNotNull null,
+                    network = row["serverName"].text().orEmpty(),
+                    channel = row["channel"].text() ?: return@mapNotNull null,
+                    nick = row["nick"].text().orEmpty(),
+                    content = row["content"].text().orEmpty(),
+                    type = row["type"].text().orEmpty(),
+                    timestamp = row["timestamp"].text().orEmpty()
+                )
+            }
+        }
+    }
+
+    val words = store.highlightWords
+    val found = store.servers.values.flatMap { server ->
+        // The nick as it is now, not the one you had when the line arrived —
+        // the same approximation the badge makes, and the only one available
+        // without having stored the answer
+        val nick = server.nick
+        if (nick.isBlank()) return@flatMap emptyList()
+
+        history.containing(server.id, listOf(nick) + words, limit * 4)
+            .filter { isChannel(it.channel) }
+            .filter { mentionsYou(it.content, nick, words) }
+            // Your own line naming your own nick is not somebody talking to you
+            .filter { !it.nick.equals(nick, ignoreCase = true) }
+            .map {
+                Mention(
+                    serverId = it.serverId,
+                    network = server.name,
+                    channel = it.channel,
+                    nick = it.nick,
+                    content = it.content,
+                    type = it.type,
+                    timestamp = it.timestamp
+                )
+            }
+    }
+
+    return found.sortedByDescending { it.timestamp }.take(limit)
+}
+
 /** [loadOlder] could not ask yet; ask again rather than concluding anything */
 const val NOT_YET = -1
 

@@ -66,6 +66,10 @@ export const REMOTE_ALLOWED = new Set([
   // servers, their channels, members and our nick
   'app:renderer-ready',
   'history:fetch',
+  // every line that named you, across every network — a phone following a
+  // desktop or a headless instance is asking the thing with the deep history,
+  // which is the whole reason it is worth asking rather than answering from
+  // the rolling window a phone keeps
   'mentions:recent',
   // catching a returning device up on everything it missed
   'history:since',

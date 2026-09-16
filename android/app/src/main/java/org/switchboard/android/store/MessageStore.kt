@@ -154,6 +154,58 @@ class MessageStore(context: Context) {
         return rows.reversed()
     }
 
+    /**
+     * Lines on one network with any of [terms] somewhere in them, newest first.
+     *
+     * Deliberately only half the question. SQL can narrow a lot of history down
+     * to the lines worth reading, and it cannot tell "kara" from "karaoke" —
+     * [mentionsYou] decides that, the same rule the badge and the notification
+     * use. So this takes more rows than the caller wants, knowing some of them
+     * will fall at the second pass.
+     */
+    fun containing(serverId: String, terms: List<String>, limit: Int): List<Said> {
+        val wanted = terms.map { it.trim() }.filter { it.isNotEmpty() }
+        if (wanted.isEmpty()) return emptyList()
+
+        val clause = wanted.joinToString(" OR ") { "content LIKE ? ESCAPE '\\'" }
+        val args = wanted.map { "%" + it.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%" }
+
+        val found = mutableListOf<Said>()
+        db.rawQuery(
+            """
+            SELECT display_name, nick, content, type, timestamp
+            FROM messages
+            WHERE server_id = ? AND type IN ('privmsg', 'action', 'notice') AND ($clause)
+            ORDER BY timestamp DESC, rowid DESC LIMIT ?
+            """.trimIndent(),
+            (listOf(serverId) + args + listOf(limit.toString())).toTypedArray()
+        ).use { cursor ->
+            while (cursor.moveToNext()) {
+                found.add(
+                    Said(
+                        serverId = serverId,
+                        channel = cursor.getString(0),
+                        nick = cursor.getString(1),
+                        content = cursor.getString(2),
+                        type = cursor.getString(3),
+                        timestamp = cursor.getString(4)
+                    )
+                )
+            }
+        }
+        return found
+    }
+
+    /** One stored line, with the conversation it was in — see [containing] */
+    data class Said(
+        val serverId: String,
+        val channel: String,
+        val nick: String,
+        val content: String,
+        val type: String,
+        val timestamp: String
+    )
+
     /** Every conversation there is anything for, so a launch can put them back */
     fun conversations(): List<Conversation> {
         val found = mutableListOf<Conversation>()

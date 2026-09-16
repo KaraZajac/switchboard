@@ -106,6 +106,7 @@ fun Navigator(
     onEditProfile: () -> Unit,
     onToggleAway: (serverId: String, away: Boolean) -> Unit,
     onBrowse: () -> Unit,
+    onOpenMentions: () -> Unit,
     onManageServers: () -> Unit
 ) {
     Row(modifier = Modifier.fillMaxSize().background(Mantle)) {
@@ -120,6 +121,7 @@ fun Navigator(
                 // selected and its history loaded exactly as a tap would.
                 store.lastDmToOpen()?.let { (id, nick) -> onSelect(id, nick) }
             },
+            onOpenMentions = onOpenMentions,
             onManageServers = onManageServers,
             onEditServer = onEditServer,
             onOpenAccount = onOpenAccount,
@@ -170,6 +172,7 @@ private fun ServerRail(
     store: SwitchboardStore,
     onSelect: (String) -> Unit,
     onOpenMessages: () -> Unit,
+    onOpenMentions: () -> Unit,
     onManageServers: () -> Unit,
     onEditServer: (String) -> Unit,
     onOpenAccount: (String) -> Unit,
@@ -237,6 +240,33 @@ private fun ServerRail(
                         modifier = Modifier.align(Alignment.TopEnd).offset(x = 7.dp, y = (-7).dp)
                     )
                 }
+            }
+        }
+
+        // Mentions next: what named you, wherever it was said. Same place the
+        // desktop puts it, for the same reason — the badge on a channel counts
+        // them and then cannot say what any of them were.
+        Box(
+            modifier = Modifier.fillMaxWidth().height(52.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(Surface0)
+                    .clickable { onOpenMentions() },
+                contentAlignment = Alignment.Center
+            ) {
+                // The letter itself rather than an icon: the extended icon set
+                // is not a dependency here, and the rail is already a column
+                // of characters — the networks below wear their initials.
+                Text(
+                    "@",
+                    color = Text0,
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Bold
+                )
             }
         }
 
