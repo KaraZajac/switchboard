@@ -3,6 +3,7 @@ import type { ChatMessage } from '@shared/types/message'
 import { v4 as uuid } from 'uuid'
 import { reactionsFor, clearReactions } from './reaction'
 import { operFrom } from '@shared/tags'
+import { mentionsYou } from '@shared/mentions'
 
 /**
  * Message storage operations.
@@ -243,6 +244,55 @@ function hasFtsIndex(db: ReturnType<typeof getDb>): boolean {
  * Returns false when we never had the original, which is ordinary: the edit may
  * be for something said before this client was running.
  */
+/**
+ * Everything on one network that named you, newest first.
+ *
+ * The badge on a channel counts these as they arrive and then forgets which
+ * lines they were, so the one question it raises — *what did they say?* — had
+ * no answer anywhere: you went network by network, channel by channel, looking
+ * for your own nick in red.
+ *
+ * Two passes on purpose. SQL narrows it to lines containing the text somewhere,
+ * which an index can do over a lot of history; `mentionsYou` then decides,
+ * because that is the rule the badge and the notification already use and
+ * "kara" appearing inside "karaoke" is not somebody talking to you. The first
+ * pass takes more rows than asked for, since some of them will fall at the
+ * second.
+ *
+ * Whose nick to look for is the caller's business: it is the one you have now,
+ * not the one you had when the line arrived, which is the same approximation
+ * the badge makes and the only one available without storing the answer.
+ */
+export function mentionsOn(
+  serverId: string,
+  nick: string,
+  words: readonly string[],
+  limit = 100
+): ChatMessage[] {
+  const db = getDb()
+
+  const terms = [nick, ...words].map((term) => term.trim()).filter(Boolean)
+  if (terms.length === 0) return []
+
+  const clause = terms.map(() => "content LIKE ? ESCAPE '\\'").join(' OR ')
+  const likes = terms.map((term) => `%${term.replace(/[\\%_]/g, '\\$&')}%`)
+
+  // Notices too: a bot answering you is still somebody talking to you, and
+  // plenty of networks do all their talking that way.
+  const rows = db.exec(
+    `SELECT * FROM messages
+     WHERE server_id = ? AND type IN ('privmsg', 'action', 'notice') AND (${clause})
+     ORDER BY timestamp DESC LIMIT ?`,
+    [serverId, ...likes, limit * 4] as unknown as number[]
+  )
+  if (rows.length === 0) return []
+
+  return rows[0].values
+    .map(rowToMessage)
+    .filter((message) => mentionsYou(message.content, nick, words))
+    .slice(0, limit)
+}
+
 export function editStoredMessage(msgid: string, content: string, editedAt: string): boolean {
   const db = getDb()
   db.run('UPDATE messages SET content = ?, edited_at = ? WHERE id = ?', [content, editedAt, msgid])

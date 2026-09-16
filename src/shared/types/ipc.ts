@@ -14,6 +14,23 @@ import type { DccTransfer } from '../dcc'
 import type { Holder } from '../holding'
 
 /**
+ * One line that named you, with enough around it to show and to go to.
+ *
+ * Not a `ChatMessage`: this crosses networks, so it carries which one it was
+ * on — the field a message never needs while it sits in the one conversation
+ * it belongs to.
+ */
+export interface Mention {
+  serverId: string
+  serverName: string
+  channel: string
+  nick: string
+  content: string
+  type: MessageType
+  timestamp: string
+}
+
+/**
  * Live state of one connected server, handed to the renderer when it attaches.
  *
  * Connection events are fire-and-forget: anything the main process emits before
@@ -485,6 +502,8 @@ export interface RendererToMainInvocations {
     before?: string,
     limit?: number
   ) => Promise<ChatMessage[]>
+  /** Everything that named you, across every network, newest first */
+  'mentions:recent': (limit?: number) => Promise<Mention[]>
   'chathistory:request': (
     serverId: string,
     channel: string,

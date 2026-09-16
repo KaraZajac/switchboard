@@ -24,6 +24,7 @@ export function AppLayout() {
   const activeServerId = useServerStore((s) => s.activeServerId)
   const servers = useServerStore((s) => s.servers)
   const dmMode = useUIStore((s) => s.dmMode)
+  const mentionsMode = useUIStore((s) => s.mentionsMode)
 
   const isFirstRun = servers.length === 0
 
@@ -48,8 +49,11 @@ export function AppLayout() {
           {/* Server Rail */}
           <ServerRail />
 
-          {/* Sidebar — DMs or Channels */}
-          {dmMode ? <DMSidebar /> : activeServerId && <ChannelSidebar />}
+          {/* Sidebar — DMs or Channels. Mentions has none: it is already a
+              list of one thing from everywhere, and a second list beside it
+              would be asking which network, which is the question this view
+              exists to stop having to answer. */}
+          {dmMode ? <DMSidebar /> : !mentionsMode && activeServerId && <ChannelSidebar />}
 
           {/* Chat Area */}
           <div className="flex min-w-0 flex-1 flex-col">
@@ -58,7 +62,7 @@ export function AppLayout() {
           </div>
 
           {/* User List — hide for DMs */}
-          {activeServerId && showUserList && !dmMode && <UserList />}
+          {activeServerId && showUserList && !dmMode && !mentionsMode && <UserList />}
         </div>
       )}
 

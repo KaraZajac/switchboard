@@ -110,6 +110,15 @@ interface UIState {
   serverLogId: string | null
   dmMode: boolean
   /**
+   * Whether the window is showing every line that named you, across networks.
+   *
+   * A mode beside [dmMode] rather than a modal or a panel, because it is the
+   * same kind of thing: a view of one sort of conversation that belongs to no
+   * single network, and the rail is where you go to change which of those you
+   * are looking at.
+   */
+  mentionsMode: boolean
+  /**
    * The conversation Messages was last left on.
    *
    * Switching to a network already reopens where you were on it — the active
@@ -139,6 +148,7 @@ interface UIState {
   closeModal: () => void
   toggleUserList: () => void
   setDmMode: (dm: boolean) => void
+  setMentionsMode: (on: boolean) => void
   rememberDm: (serverId: string, nick: string) => void
   setCompactMode: (compact: boolean) => void
   setFontSize: (size: number) => void
@@ -196,6 +206,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   editServerId: null,
   serverLogId: null,
   dmMode: false,
+  mentionsMode: false,
   lastDm: null,
   popupWhoisNick: null,
   popupWhoisData: null,
@@ -245,7 +256,18 @@ export const useUIStore = create<UIState>((set, get) => ({
   showWhois: (data) => set({ activeModal: 'whois', whoisData: data }),
   setEditServerId: (id) => set({ editServerId: id, activeModal: id ? 'edit-server' : null }),
   openServerLog: (id) => set({ serverLogId: id, activeModal: 'server-log' }),
-  setDmMode: (dm) => set({ dmMode: dm }),
+  /*
+   * The two cross-network views are one choice, so each setter answers for
+   * both: turning either on turns the other off, and turning either off means
+   * "show me a network", which is neither of them.
+   *
+   * Six places already call `setDmMode(false)` to mean exactly that. Leaving
+   * them to clear the second mode as well is the sort of line that gets
+   * missed once and leaves a view showing over a channel somebody just
+   * clicked.
+   */
+  setDmMode: (dm) => set({ dmMode: dm, mentionsMode: false }),
+  setMentionsMode: (on) => set({ mentionsMode: on, dmMode: false }),
   rememberDm: (serverId, nick) => set({ lastDm: { serverId, nick } }),
   setPopupWhoisNick: (nick) =>
     set(nick ? { popupWhoisNick: nick, popupWhoisData: null } : { popupWhoisNick: null }),

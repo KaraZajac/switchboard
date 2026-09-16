@@ -1,4 +1,4 @@
-import { Plus } from 'lucide-react'
+import { AtSign, Plus } from 'lucide-react'
 import { useState } from 'react'
 import { useServerStore } from '../../stores/serverStore'
 import { useChannelStore } from '../../stores/channelStore'
@@ -31,6 +31,7 @@ export function ServerRail() {
   const connectionStatus = useServerStore((s) => s.connectionStatus)
   const openModal = useUIStore((s) => s.openModal)
   const dmMode = useUIStore((s) => s.dmMode)
+  const mentionsMode = useUIStore((s) => s.mentionsMode)
   const allChannels = useChannelStore((s) => s.channels)
   const mutedServers = useServerStore((s) => s.mutedServers)
   const networkIcons = useServerStore((s) => s.networkIcons)
@@ -46,6 +47,12 @@ export function ServerRail() {
         .filter((ch) => !isChannelName(ch.name) && ch.name !== '*' && !ch.muted)
         .reduce((sum, ch) => sum + ch.unreadCount, 0)
     )
+  }, 0)
+
+  // Everything unread that named you, wherever it was said. The rail is where
+  // somebody looks to find out whether anything wants them.
+  const totalMentions = Object.values(allChannels).reduce((total, chs) => {
+    return total + chs.filter((ch) => !ch.muted).reduce((sum, ch) => sum + ch.mentionCount, 0)
   }, 0)
 
   const handleSwitchboardClick = () => {
@@ -85,6 +92,25 @@ export function ServerRail() {
           }`}
         >
           <SwitchboardIcon size={30} bg="transparent" fg="currentColor" />
+        </span>
+      </RailItem>
+
+      {/* Mentions, everywhere at once */}
+      <RailItem
+        active={mentionsMode}
+        unread={totalMentions > 0}
+        badge={mentionsMode ? 0 : totalMentions}
+        label="Mentions"
+        onClick={() => useUIStore.getState().setMentionsMode(true)}
+      >
+        <span
+          className={`flex h-full w-full items-center justify-center transition-colors ${
+            mentionsMode
+              ? 'bg-indigo-500 text-white'
+              : 'bg-gray-600 text-gray-200 group-hover:bg-indigo-500 group-hover:text-white'
+          }`}
+        >
+          <AtSign size={24} strokeWidth={2.5} aria-hidden="true" />
         </span>
       </RailItem>
 

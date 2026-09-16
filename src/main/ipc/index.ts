@@ -31,7 +31,7 @@ import {
   updateServer,
   removeServer
 } from '../storage/models/server'
-import { getMessages, searchMessages, deleteMessage } from '../storage/models/message'
+import { getMessages, searchMessages, deleteMessage, mentionsOn } from '../storage/models/message'
 import { getSetting, setSetting } from '../storage/models/settings'
 import type { ServerConfig } from '@shared/types/server'
 
@@ -90,7 +90,8 @@ import {
   dialPeer,
   forgetDialledPeer
 } from '../remote/link'
-import { DEFAULT_NICK } from '@shared/constants'
+import { DEFAULT_NICK, isChannelName } from '@shared/constants'
+import { foldCase } from '@shared/casemap'
 import { getReadMarker, setReadMarker, getAllReadMarkers } from '../storage/models/readmarker'
 import { expectCleared, metadataValueFits, metadataLimitsOf } from '../irc/features/metadata'
 import { friendListKind, friendListLines, friendListStatusLine } from '@shared/friends'
@@ -1137,6 +1138,47 @@ export function registerIPCHandlers(): void {
       return getMessages(serverId, channel, { before, limit })
     }
   )
+
+  /**
+   * Everything that named you, everywhere, newest first.
+   *
+   * Gathered here rather than in the window because it is one question about
+   * every network at once, and the window holds one network's messages at a
+   * time — what is on screen is whatever you have opened, which is exactly the
+   * set that does not need looking through.
+   *
+   * Channels only. A direct message is addressed to you by existing and has a
+   * place of its own already; listing every one of them here would bury the
+   * thing this is for, which is the line in a busy channel you were not
+   * watching.
+   */
+  handle('mentions:recent', async (_event, limit?: number) => {
+    const words = getSetting<string[]>('highlights') ?? []
+    const want = Math.min(limit ?? 100, 200)
+
+    const found = getAllServers().flatMap((server) => {
+      // The nick as it is now: connected, that is what the network calls you;
+      // otherwise what you have asked to be called when you get there.
+      const nick = ircManager.getClient(server.id)?.state.nick || server.nick
+      if (!nick) return []
+
+      return mentionsOn(server.id, nick, words, want)
+        .filter((message) => isChannelName(message.channel))
+        // Your own line naming your own nick is not somebody talking to you
+        .filter((message) => foldCase(message.nick) !== foldCase(nick))
+        .map((message) => ({
+          serverId: server.id,
+          serverName: server.name,
+          channel: message.channel,
+          nick: message.nick,
+          content: message.content,
+          type: message.type,
+          timestamp: message.timestamp
+        }))
+    })
+
+    return found.sort((a, b) => b.timestamp.localeCompare(a.timestamp)).slice(0, want)
+  })
 
   /**
    * What was said after the newest thing we have.

@@ -6,6 +6,7 @@ import { useChannelStore } from '../../stores/channelStore'
 import { useMessageStore } from '../../stores/messageStore'
 import { useUserStore } from '../../stores/userStore'
 import { useUIStore } from '../../stores/uiStore'
+import { MentionsView } from './MentionsView'
 import type { ChannelUser } from '@shared/types/channel'
 import { SwitchboardIcon } from '../common/SwitchboardIcon'
 import { isChannelName } from '@shared/constants'
@@ -25,6 +26,7 @@ const EMPTY_NICKS: string[] = []
 export function ChatArea() {
   const activeServerId = useServerStore((s) => s.activeServerId)
   const dmMode = useUIStore((s) => s.dmMode)
+  const mentionsMode = useUIStore((s) => s.mentionsMode)
   const activeChannel = useChannelStore((s) =>
     activeServerId ? s.activeChannel[activeServerId] ?? null : null
   )
@@ -279,6 +281,14 @@ export function ChatArea() {
     if (!activeServerId || !activeChannel) return
     useMessageStore.getState().setReplyTarget(activeServerId, activeChannel, null)
   }, [activeServerId, activeChannel])
+
+  /*
+   * Mentions, before anything about which network is selected — because that
+   * is the question this view does not have. It stands in for the whole
+   * conversation pane, composer included: there is nothing here to say
+   * something *to* until you have gone to one of them.
+   */
+  if (mentionsMode) return <MentionsView />
 
   // No server selected
   if (!activeServerId) {

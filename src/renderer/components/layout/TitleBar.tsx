@@ -1,4 +1,4 @@
-import { Download, Hash, Search, Server, Settings, Shield, Users } from 'lucide-react'
+import { AtSign, Download, Hash, Search, Server, Settings, Shield, Users } from 'lucide-react'
 import { ICON, IconButton } from '../common/IconButton'
 import { useServerStore } from '../../stores/serverStore'
 import { useChannelStore } from '../../stores/channelStore'
@@ -21,6 +21,7 @@ export function TitleBar() {
   )
   const showUserList = useUIStore((s) => s.showUserList)
   const dmMode = useUIStore((s) => s.dmMode)
+  const mentionsMode = useUIStore((s) => s.mentionsMode)
 
   const channelInfo = channels.find(
     (ch) => ch.name.toLowerCase() === activeChannel?.toLowerCase()
@@ -48,22 +49,28 @@ export function TitleBar() {
       style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
     >
       <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
-        {inDmList && (
+        {mentionsMode && (
+          <>
+            <AtSign size={ICON.md} strokeWidth={2} className="shrink-0 text-gray-400" aria-hidden="true" />
+            <span className="shrink-0 font-semibold text-gray-100">Mentions</span>
+          </>
+        )}
+        {!mentionsMode && inDmList && (
           <span className="shrink-0 font-semibold text-gray-100">Direct Messages</span>
         )}
-        {!inDmList && activeChannel && isServer && (
+        {!mentionsMode && !inDmList && activeChannel && isServer && (
           <>
             <Server size={ICON.md} strokeWidth={2} className="shrink-0 text-gray-400" aria-hidden="true" />
             <span className="shrink-0 font-semibold text-gray-100">Server</span>
           </>
         )}
-        {!inDmList && activeChannel && isService && (
+        {!mentionsMode && !inDmList && activeChannel && isService && (
           <>
             <Shield size={ICON.md} strokeWidth={2} className="shrink-0 text-gray-400" aria-hidden="true" />
             <span className="shrink-0 font-semibold text-gray-100">{activeChannel}</span>
           </>
         )}
-        {!inDmList && activeChannel && isDM && (
+        {!mentionsMode && !inDmList && activeChannel && isDM && (
           <>
             <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gray-600 text-xs font-bold text-gray-200">
               {activeChannel.charAt(0).toUpperCase()}
@@ -73,7 +80,7 @@ export function TitleBar() {
             </span>
           </>
         )}
-        {!inDmList && activeChannel && !isDM && !isServer && !isService && (
+        {!mentionsMode && !inDmList && activeChannel && !isDM && !isServer && !isService && (
           <>
             <Hash size={ICON.md} strokeWidth={2} className="shrink-0 text-gray-500" aria-hidden="true" />
             <span className="shrink-0 font-semibold text-gray-100">
@@ -106,7 +113,7 @@ export function TitleBar() {
           channel on a network that keeps any: a shield that opens an empty
           box is worse than no shield.
         */}
-        {!inDmList && activeChannel && !isDM && !isServer && !isService && keepsLists && (
+        {!mentionsMode && !inDmList && activeChannel && !isDM && !isServer && !isService && keepsLists && (
           <IconButton
             icon={Shield}
             label="Bans and other channel lists"
@@ -118,7 +125,7 @@ export function TitleBar() {
           history you cannot export is a history you cannot keep when you stop
           using the app.
         */}
-        {!inDmList && activeChannel && !isServer && (
+        {!mentionsMode && !inDmList && activeChannel && !isServer && (
           <IconButton
             icon={Download}
             label="Save this conversation to a file"
@@ -143,8 +150,9 @@ export function TitleBar() {
           label="Search messages (Ctrl+F)"
           onClick={() => useUIStore.getState().openModal('search')}
         />
-        {/* Toggle user list — channels only; a DM has no roster */}
-        {!dmMode && (
+        {/* Toggle user list — channels only; a DM has no roster, and neither
+            does a list of mentions from everywhere */}
+        {!dmMode && !mentionsMode && (
           <IconButton
             icon={Users}
             label="Toggle member list"
