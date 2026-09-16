@@ -86,6 +86,7 @@ import org.switchboard.android.connectServer
 import org.switchboard.android.disconnectServer
 import org.switchboard.android.editMessage
 import org.switchboard.android.join
+import org.switchboard.android.loadAround
 import org.switchboard.android.loadOlder
 import org.switchboard.android.part
 import org.switchboard.android.previewLink
@@ -604,7 +605,8 @@ private fun Conversation(
                 val serverId = store.activeServerId
                 val channel = store.activeChannel
                 if (serverId == null || channel == null) 0 else engine.loadOlder(serverId, channel)
-            }
+            },
+            onLoadAround = { serverId, channel, at -> engine.loadAround(serverId, channel, at) }
         )
 
         TypingLine(store)

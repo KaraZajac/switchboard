@@ -30,6 +30,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import org.switchboard.android.JumpTarget
 import org.switchboard.android.Mention
 import org.switchboard.android.SwitchboardEngine
 import org.switchboard.android.recentMentions
@@ -92,7 +93,18 @@ fun MentionsScreen(
             else -> LazyColumn(modifier = Modifier.fillMaxSize().navigationBarsPadding()) {
                 items(found.size) { index ->
                     val mention = found[index]
-                    MentionRow(engine, mention) { onOpen(mention.serverId, mention.channel) }
+                    MentionRow(engine, mention) {
+                        // To the line, not to the room it was said in — see
+                        // [Jump]. The list is most of the way to useless if
+                        // arriving means going looking.
+                        engine.store.jumpTo = JumpTarget(
+                            serverId = mention.serverId,
+                            channel = mention.channel,
+                            msgid = mention.id.takeIf { it.isNotEmpty() },
+                            timestamp = mention.timestamp
+                        )
+                        onOpen(mention.serverId, mention.channel)
+                    }
                 }
             }
         }

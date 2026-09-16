@@ -47,6 +47,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.switchboard.android.EngineMode
+import org.switchboard.android.JumpTarget
 import org.switchboard.android.SearchHit
 import org.switchboard.android.irc.Search
 import org.switchboard.android.searchEverywhere
@@ -186,7 +187,16 @@ fun SearchScreen(engine: SwitchboardEngine, onOpen: (String, String) -> Unit, on
                             content = found.content,
                             timestamp = found.timestamp,
                             term = query.trim()
-                        ) { onOpen(found.serverId, found.channel) }
+                        ) {
+                            // To the line — see [Jump]
+                            store.jumpTo = JumpTarget(
+                                serverId = found.serverId,
+                                channel = found.channel,
+                                msgid = found.id.takeIf { it.isNotEmpty() },
+                                timestamp = found.timestamp
+                            )
+                            onOpen(found.serverId, found.channel)
+                        }
                     }
                 }
             else -> LazyColumn(modifier = Modifier.fillMaxSize().navigationBarsPadding()) {
@@ -200,7 +210,12 @@ fun SearchScreen(engine: SwitchboardEngine, onOpen: (String, String) -> Unit, on
                         content = hit.content,
                         timestamp = hit.timestamp,
                         term = query.trim()
-                    ) { serverId?.let { onOpen(it, hit.channel) } }
+                    ) {
+                        serverId?.let {
+                            store.jumpTo = JumpTarget(it, hit.channel, hit.id, hit.timestamp)
+                            onOpen(it, hit.channel)
+                        }
+                    }
                 }
             }
         }

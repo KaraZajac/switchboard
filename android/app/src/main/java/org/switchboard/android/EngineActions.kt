@@ -805,6 +805,8 @@ suspend fun SwitchboardEngine.loadOlder(serverId: String, channel: String): Int 
 
 /** One line that named you, with the network on it because it crosses them */
 data class Mention(
+    /** The line's own id, so a jump can find it rather than its room */
+    val id: String,
     val serverId: String,
     val network: String,
     val channel: String,
@@ -838,6 +840,7 @@ suspend fun SwitchboardEngine.recentMentions(limit: Int = 100): List<Mention> {
             return answer.mapNotNull { entry ->
                 val row = entry as? JsonObject ?: return@mapNotNull null
                 Mention(
+                    id = row["id"].text().orEmpty(),
                     serverId = row["serverId"].text() ?: return@mapNotNull null,
                     network = row["serverName"].text().orEmpty(),
                     channel = row["channel"].text() ?: return@mapNotNull null,
@@ -865,6 +868,7 @@ suspend fun SwitchboardEngine.recentMentions(limit: Int = 100): List<Mention> {
             .filter { !it.nick.equals(nick, ignoreCase = true) }
             .map {
                 Mention(
+                    id = it.id,
                     serverId = it.serverId,
                     network = server.name,
                     channel = it.channel,
@@ -877,6 +881,34 @@ suspend fun SwitchboardEngine.recentMentions(limit: Int = 100): List<Mention> {
     }
 
     return found.sortedByDescending { it.timestamp }.take(limit)
+}
+
+/**
+ * The conversation around one moment in it.
+ *
+ * What a jump needs when the line it is aimed at is not loaded — a mention or a
+ * search result from far enough back that this phone's window does not reach.
+ * Following a desktop, its database answers and its network request fills in
+ * behind; holding, the network is asked directly, and what comes back arrives
+ * as a batch the way replayed history always does.
+ *
+ * Returns whether anything was added, so the caller knows whether to wait for
+ * it or scroll to what is already there.
+ */
+suspend fun SwitchboardEngine.loadAround(serverId: String, channel: String, at: String): Boolean {
+    if (holds(serverId)) {
+        val connection = connections[serverId] ?: return false
+        connection.requestHistoryAround(channel, at)
+        return false
+    }
+
+    val answer = ask(
+        "history:around",
+        JsonPrimitive(serverId), JsonPrimitive(channel),
+        JsonPrimitive(at), JsonPrimitive(HISTORY_PAGE)
+    ) as? JsonArray ?: return false
+
+    return store.prependHistory(serverId, channel, answer) > 0
 }
 
 /** [loadOlder] could not ask yet; ask again rather than concluding anything */
@@ -908,6 +940,7 @@ suspend fun SwitchboardEngine.searchEverywhere(query: String, limit: Int = 100):
             return answer.mapNotNull { entry ->
                 val row = entry as? JsonObject ?: return@mapNotNull null
                 Search.Found(
+                    id = row["id"].text().orEmpty(),
                     serverId = row["serverId"].text() ?: return@mapNotNull null,
                     network = row["network"].text().orEmpty(),
                     channel = row["channel"].text() ?: return@mapNotNull null,
@@ -922,6 +955,7 @@ suspend fun SwitchboardEngine.searchEverywhere(query: String, limit: Int = 100):
     val found = store.servers.values.flatMap { server ->
         history.containing(server.id, listOf(term), limit).map {
             Search.Found(
+                id = it.id,
                 serverId = it.serverId,
                 network = server.name.ifBlank { server.host },
                 channel = it.channel,

@@ -856,6 +856,10 @@ class IrcConnection(
 
     fun requestHistoryLatest(target: String) = ChatHistory.requestLatest(this, target)
 
+    /** The conversation around one moment in it, for a jump — see [Jump] */
+    fun requestHistoryAround(target: String, timestamp: String) =
+        ChatHistory.requestAround(this, target, timestamp)
+
     /** Change a message already sent, with the edit client tag */
     fun edit(target: String, messageId: String, text: String) {
         if (!state.capabilities.contains("message-tags")) return

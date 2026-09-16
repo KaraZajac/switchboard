@@ -2325,6 +2325,9 @@ class SharedCorpusTest {
                 val row = it.jsonObject
                 fun text(key: String) = row[key]!!.jsonPrimitive.content
                 Search.Found(
+                    // Not in the corpus: the id is for going back to the line,
+                    // and the order this checks does not depend on it
+                    id = "",
                     serverId = text("serverId"),
                     network = text("network"),
                     channel = text("channel"),

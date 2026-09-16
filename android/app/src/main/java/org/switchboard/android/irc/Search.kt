@@ -16,6 +16,8 @@ object Search {
 
     /** One line somebody said, and enough about where to go back to it */
     data class Found(
+        /** The line's own id, so a jump can find it rather than its room */
+        val id: String,
         val serverId: String,
         /** What the network is called here, for reading */
         val network: String,

@@ -173,7 +173,7 @@ class MessageStore(context: Context) {
         val found = mutableListOf<Said>()
         db.rawQuery(
             """
-            SELECT display_name, nick, content, type, timestamp
+            SELECT display_name, nick, content, type, timestamp, id
             FROM messages
             WHERE server_id = ? AND type IN ('privmsg', 'action', 'notice') AND ($clause)
             ORDER BY timestamp DESC, rowid DESC LIMIT ?
@@ -188,7 +188,8 @@ class MessageStore(context: Context) {
                         nick = cursor.getString(1),
                         content = cursor.getString(2),
                         type = cursor.getString(3),
-                        timestamp = cursor.getString(4)
+                        timestamp = cursor.getString(4),
+                        id = cursor.getString(5)
                     )
                 )
             }
@@ -203,7 +204,9 @@ class MessageStore(context: Context) {
         val nick: String,
         val content: String,
         val type: String,
-        val timestamp: String
+        val timestamp: String,
+        /** The line's own id, so a jump can find it rather than its room */
+        val id: String
     )
 
     /** Every conversation there is anything for, so a launch can put them back */

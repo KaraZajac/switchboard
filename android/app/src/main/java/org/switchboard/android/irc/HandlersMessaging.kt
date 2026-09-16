@@ -291,6 +291,23 @@ internal object ChatHistory {
         session.send("CHATHISTORY", "LATEST", target, "*", allowed(session, limit).toString())
     }
 
+    /**
+     * The conversation around one moment in it.
+     *
+     * What a jump asks for when the line it is aimed at is older than anything
+     * this phone holds. `AROUND` is the one direction of `CHATHISTORY` neither
+     * client had ever sent, and it is the only one that answers "show me this
+     * with what was being said either side of it".
+     */
+    fun requestAround(session: IrcSession, target: String, timestamp: String, limit: Int = 50) {
+        if (!session.state.capabilities.contains("draft/chathistory")) return
+        session.send(
+            "CHATHISTORY", "AROUND", target,
+            "timestamp=$timestamp",
+            allowed(session, limit).toString()
+        )
+    }
+
     fun requestBefore(session: IrcSession, target: String, timestamp: String, limit: Int = 50) {
         if (!session.state.capabilities.contains("draft/chathistory")) return
         session.send(

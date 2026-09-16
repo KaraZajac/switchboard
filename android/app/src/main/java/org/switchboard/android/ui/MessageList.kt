@@ -60,7 +60,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.switchboard.android.Message
+import org.switchboard.android.JumpTarget
 import org.switchboard.android.SwitchboardStore
+import org.switchboard.android.irc.Jump
 import org.switchboard.android.LinkPreview
 import org.switchboard.android.UserMetadata
 import org.switchboard.android.isChannel
@@ -89,7 +91,9 @@ fun MessageList(
     onReaction: (Message, String, Boolean) -> Unit = { _, _, _ -> },
     /** What a link points at, fetched through whichever client is connected */
     onPreview: suspend (String) -> LinkPreview? = { null },
-    onLoadOlder: suspend () -> Int = { 0 }
+    onLoadOlder: suspend () -> Int = { 0 },
+    /** Fetch the conversation around a moment, for a jump that cannot scroll yet */
+    onLoadAround: suspend (serverId: String, channel: String, at: String) -> Unit = { _, _, _ -> }
 ) {
     val serverId = store.activeServerId
     val channel = store.activeChannel
@@ -100,6 +104,8 @@ fun MessageList(
     }
 
     val listState = rememberLazyListState()
+    // One fetch per jump: asking again on the answer is a loop
+    var jumpFetched by remember(channel) { mutableStateOf(false) }
     val myNick = serverId?.let { store.servers[it]?.nick }.orEmpty()
     val entryPoint = if (serverId != null && channel != null) {
         store.entryPoint(serverId, channel)
@@ -188,6 +194,49 @@ fun MessageList(
             }
     }
 
+    /*
+     * Going to one line, rather than to the room it was said in.
+     *
+     * Two steps because it can be two: [Jump.plan] says whether the loaded
+     * conversation can simply be scrolled — present is not enough, a line at
+     * the very top has nothing above it to explain it — and when it cannot,
+     * the conversation around it is fetched and the scroll happens on the next
+     * pass. Whatever comes back is what there is: a channel with genuinely
+     * nothing older must not be fetched for ever.
+     *
+     * Cleared as soon as it is acted on, or it would fight every later scroll.
+     */
+    var flashing by remember(channel) { mutableStateOf<String?>(null) }
+    val jump = store.jumpTo
+
+    LaunchedEffect(jump, messages.size) {
+        val target = jump ?: return@LaunchedEffect
+        if (target.serverId != serverId || !target.channel.equals(channel, true)) return@LaunchedEffect
+
+        val placed = messages.map { Jump.Placed(it.id, it.timestamp) }
+        val plan = Jump.plan(placed, Jump.Target(target.msgid, target.timestamp))
+
+        if (plan == Jump.Plan.LOAD && !jumpFetched) {
+            jumpFetched = true
+            if (serverId != null) onLoadAround(serverId, target.channel, target.timestamp)
+            return@LaunchedEffect
+        }
+
+        val at = messages.indexOfFirst {
+            if (target.msgid != null) it.id == target.msgid else it.timestamp == target.timestamp
+        }
+        if (at >= 0) {
+            listState.animateScrollToItem(at)
+            // Marked for a moment. Arriving in the middle of a conversation
+            // with nothing to say which line you came for is arriving nowhere.
+            flashing = messages[at].id
+        }
+        store.jumpTo = null
+        jumpFetched = false
+        kotlinx.coroutines.delay(2500)
+        flashing = null
+    }
+
     if (messages.isEmpty()) {
         EmptyConversation(channel, modifier)
         return
@@ -224,7 +273,8 @@ fun MessageList(
             if (newDay) DayDivider(message.timestamp)
             MessageRow(
                 store, serverId, message, grouped, messages, myNick,
-                onAction, onReaction, onPreview
+                onAction, onReaction, onPreview,
+                marked = flashing == message.id
             )
         }
     }
@@ -477,7 +527,9 @@ private fun MessageRow(
     myNick: String,
     onAction: (Message, MessageAction) -> Unit,
     onReaction: (Message, String, Boolean) -> Unit,
-    onPreview: suspend (String) -> LinkPreview?
+    onPreview: suspend (String) -> LinkPreview?,
+    /** Whether this is the line somebody jumped to, for as long as that lasts */
+    marked: Boolean = false
 ) {
     var showActions by remember(message.id) { mutableStateOf(false) }
 
@@ -517,7 +569,14 @@ private fun MessageRow(
         mentionsYou(body, myNick, store.highlightWords)
     val mentionWash = Yellow.copy(alpha = 0.07f)
 
-    Column(modifier = Modifier.fillMaxWidth()) {
+    // The line somebody came for, said so for a couple of seconds
+    val markWash = Blue.copy(alpha = 0.16f)
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(if (marked) Modifier.background(markWash) else Modifier)
+    ) {
 
     // The line being answered, quoted above so the reply makes sense on its own
     message.replyTo?.let { parentId ->
@@ -655,6 +714,14 @@ private fun ReplyPreview(store: SwitchboardStore, serverId: String?, parent: Mes
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            // Tapping the quote goes to the line it quotes — see [Jump]. The
+            // quote is here so the reply makes sense on its own; going there is
+            // for when it does not.
+            .clickable {
+                if (serverId != null) {
+                    store.jumpTo = JumpTarget(serverId, store.activeChannel.orEmpty(), parent.id, parent.timestamp)
+                }
+            }
             .padding(start = (GUTTER + Sizes.gutter), end = 16.dp, top = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {

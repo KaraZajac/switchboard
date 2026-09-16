@@ -138,6 +138,14 @@ data class PendingShare(val text: String?, val image: android.net.Uri?)
 /** A server's certificate was refused; the fingerprint is the thing to check — see [TrustedCertificate] */
 data class CertificatePrompt(val serverId: String, val fingerprint: String, val text: String, val detail: String)
 
+/** A line somebody asked to be taken to — see [SwitchboardStore.jumpTo] */
+data class JumpTarget(
+    val serverId: String,
+    val channel: String,
+    val msgid: String?,
+    val timestamp: String
+)
+
 /** One of the networks a bouncer holds, as it described itself */
 data class OfferedNetwork(
     val id: String,
@@ -308,6 +316,16 @@ class SwitchboardStore {
      * the offer is waved away — see [BouncerOffer].
      */
     var bouncerOffer by mutableStateOf<BouncerOffer?>(null)
+
+    /**
+     * A line to go to, rather than a room to open.
+     *
+     * Set by anything that names a particular message — a mention, a search
+     * result, a reply quote — and cleared by the list once it has got there.
+     * Carries a time as well as an id because that is what a jump is aimed by:
+     * the id says which line, the time says where to fetch around.
+     */
+    var jumpTo by mutableStateOf<JumpTarget?>(null)
 
     fun clearIdentifyPrompt() { identifyPrompt = null }
 
