@@ -1903,6 +1903,28 @@ class SharedCorpusTest {
         }
     }
 
+    @Test
+    fun `binds to a bouncer network the same way the desktop does`() {
+        for (case in load("bouncer.json")["bind"]!!.jsonArray) {
+            val c = case.jsonObject
+            val netId = c["netId"].let {
+                if (it == null || it is kotlinx.serialization.json.JsonNull) null
+                else it.jsonPrimitive.content
+            }
+            val negotiated = c["negotiated"]!!.jsonArray.map { it.jsonPrimitive.content }
+            val expected = c["line"].let {
+                if (it == null || it is kotlinx.serialization.json.JsonNull) null
+                else it.jsonPrimitive.content
+            }
+
+            assertEquals(
+                c["name"]!!.jsonPrimitive.content,
+                expected,
+                Bouncer.bindBeforeRegistration(netId, negotiated)
+            )
+        }
+    }
+
     // ── the addresses a network answers on ───────────────────────────
 
     @Test

@@ -153,4 +153,33 @@ object Bouncer {
     fun isBouncer(isupport: Map<String, String>, capabilities: Collection<String>): Boolean =
         isupport.containsKey("BOUNCER") ||
             capabilities.any { it == "soju.im/bouncer-networks" || it.startsWith("znc.in/") }
+
+    /** The capability that says a server holds networks on your behalf */
+    const val NETWORKS_CAP = "soju.im/bouncer-networks"
+
+    /**
+     * What to send before `CAP END` to land on one of a bouncer's networks.
+     *
+     * `BOUNCER BIND` is a registration-time command: it has to arrive while
+     * negotiation is still open, because the welcome that follows describes
+     * the network it bound to — its name, its nick, its limits — and a client
+     * reads those once. soju refuses it afterwards with
+     * `REGISTRATION_IS_COMPLETED`, and so does Switchboard's own bouncer.
+     *
+     * Null when there is nothing to bind or nobody to bind with. A network id
+     * configured against a server that does not speak the extension is not an
+     * error worth failing the connection over — it is an ordinary server, the
+     * connection works, it just lands wherever that server puts it.
+     *
+     * The twin of `bindBeforeRegistration` in `src/shared/bouncer.ts`. The
+     * desktop has sent this since bouncer support landed; this phone carried
+     * the network id through its config, its vault and its connection and then
+     * never said it, so every one of a bouncer's networks opened on whichever
+     * one the bouncer picked.
+     */
+    fun bindBeforeRegistration(netId: String?, negotiated: Collection<String>): String? {
+        val id = netId?.trim().orEmpty()
+        if (id.isEmpty()) return null
+        return if (negotiated.any { it == NETWORKS_CAP }) "BOUNCER BIND $id" else null
+    }
 }

@@ -222,6 +222,10 @@ class SwitchboardEngine(
             val about = (data as? JsonObject)?.get("serverId")?.jsonPrimitive?.contentOrNull()
 
             if ((about == null || !connections.containsKey(about)) && !silenced(channel, data)) {
+                // Relayed from whatever is holding it. Worth acting on here
+                // because a headless Switchboard has no screen of its own to
+                // make the offer on.
+                if (channel == "irc:bouncer-networks") noteBouncerNetworks(data)
                 store.handleEvent(channel, data)
                 if (channel == "irc:message") notifyIfWorthIt(data)
                 // Relayed from the desktop, which wrote it down as it sent it
@@ -1545,6 +1549,74 @@ class SwitchboardEngine(
         })
     }
 
+    /**
+     * A bouncer, offering the networks it holds.
+     *
+     * Only from the connection bound to none of them — that one is talking to
+     * the bouncer itself, and its list is news. A connection already bound to
+     * a network is describing its siblings, which somebody has dealt with.
+     *
+     * The desktop has offered this since bouncer support landed and the phone
+     * emitted the same event to nobody, so a phone reaching a soju with three
+     * networks behind it got one network and no way to find the others. The
+     * phone is now the only thing that will offer at all when what it follows
+     * is a headless Switchboard, which has no screen to show a toast on.
+     */
+    private fun noteBouncerNetworks(data: JsonElement) {
+        val row = data as? JsonObject ?: return
+        val serverId = (row["serverId"] as? JsonPrimitive)?.content ?: return
+        // `contentOrNull`, not a type test: `JsonNull` *is* a `JsonPrimitive`,
+        // so asking whether this is one is asking nothing at all — and the
+        // unbound connection, the only one worth listening to, is exactly the
+        // one that sends null here.
+        if ((row["boundTo"] as? JsonPrimitive)?.contentOrNull() != null) return
+
+        val offered = (row["networks"] as? JsonArray).orEmpty().mapNotNull { it as? JsonObject }
+        if (offered.isEmpty()) return
+
+        /*
+         * Which ones are already here has to come from the config, because a
+         * network id is the only thing that tells two of a bouncer's networks
+         * apart. With the vault locked there is no config to read, and
+         * offering to add what may already be there is worse than waiting
+         * until it opens — the lines come again on the next connection.
+         */
+        if (!vault.isUnlocked) return
+        val servers = vault.servers()
+        val parent = servers.firstOrNull { it.id == serverId } ?: return
+        val known = servers
+            .filter { it.host == parent.host && it.port == parent.port }
+            .mapNotNull { it.bouncerNetId }
+            .toSet()
+
+        val missing = offered.filter { network ->
+            ((network["id"] as? JsonPrimitive)?.content ?: "") !in known
+        }
+        if (missing.isEmpty()) {
+            // It was taken, or the desktop took it — either way there is
+            // nothing left to ask about
+            store.bouncerOffer = null
+            return
+        }
+
+        store.bouncerOffer = BouncerOffer(
+            serverId = serverId,
+            bouncer = parent.name.ifBlank { parent.host },
+            networks = missing.map { network ->
+                fun text(key: String) = (network[key] as? JsonPrimitive)?.content.orEmpty()
+                val host = text("host")
+                OfferedNetwork(
+                    id = text("id"),
+                    name = text("name").ifBlank { host },
+                    host = host,
+                    port = text("port").toIntOrNull() ?: parent.port,
+                    tls = (network["tls"] as? JsonPrimitive)?.content?.toBoolean() ?: parent.tls,
+                    nickname = text("nickname")
+                )
+            }
+        )
+    }
+
     /** Stop hearing from whoever matches this mask */
     fun addIgnore(mask: String, network: String, scope: Ignore.Scope = Ignore.Scope()) {
         val wanted = Ignore.toMask(mask)
@@ -1733,6 +1805,10 @@ class SwitchboardEngine(
             if (silenced(channel, data)) return@IrcConnection
             if (channel == "dcc:offer") {
                 noteDccOffer(data)
+                return@IrcConnection
+            }
+            if (channel == "irc:bouncer-networks") {
+                noteBouncerNetworks(data)
                 return@IrcConnection
             }
             store.handleEvent(channel, data)

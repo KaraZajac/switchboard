@@ -79,6 +79,7 @@ import org.switchboard.android.isChannel
 import org.switchboard.android.isConsole
 import org.switchboard.android.SwitchboardEngine
 import org.switchboard.android.trustCertificate
+import org.switchboard.android.adoptBouncerNetworks
 import org.switchboard.android.attach
 import org.switchboard.android.canAttach
 import org.switchboard.android.connectServer
@@ -462,6 +463,26 @@ private fun Conversation(
                     trusting.launch { engine.trustCertificate(prompt.serverId, prompt.fingerprint) }
                 },
                 onDismiss = { store.certificatePrompt = null }
+            )
+        }
+
+        // A bouncer holding networks this phone has no row for. Worth asking
+        // about the moment it is known rather than burying it in a settings
+        // screen: until it is answered, most of somebody's IRC is missing and
+        // nothing on screen says why.
+        store.bouncerOffer?.let { offer ->
+            val adopting = rememberCoroutineScope()
+            Banner(
+                text = "${offer.bouncer} holds ${offer.networks.size} network" +
+                    (if (offer.networks.size == 1) "" else "s") + " that are not here yet",
+                detail = offer.networks.joinToString(", ") { it.name },
+                color = Blue,
+                action = "Add them",
+                onClick = {
+                    adopting.launch { engine.adoptBouncerNetworks(offer) }
+                    store.bouncerOffer = null
+                },
+                onDismiss = { store.bouncerOffer = null }
             )
         }
 

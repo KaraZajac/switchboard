@@ -137,6 +137,32 @@ data class PendingShare(val text: String?, val image: android.net.Uri?)
 /** A server's certificate was refused; the fingerprint is the thing to check — see [TrustedCertificate] */
 data class CertificatePrompt(val serverId: String, val fingerprint: String, val text: String, val detail: String)
 
+/** One of the networks a bouncer holds, as it described itself */
+data class OfferedNetwork(
+    val id: String,
+    val name: String,
+    val host: String,
+    val port: Int,
+    val tls: Boolean,
+    val nickname: String
+)
+
+/**
+ * A bouncer holding networks this phone has no row for.
+ *
+ * Offered rather than done: it adds networks to somebody's list, and the only
+ * person who knows whether they want all of them is them.
+ *
+ * The networks are carried rather than looked up again when the offer is
+ * taken, because a phone following a desktop or a headless Switchboard heard
+ * about them over the link and has no connection of its own to ask.
+ */
+data class BouncerOffer(
+    val serverId: String,
+    val bouncer: String,
+    val networks: List<OfferedNetwork>
+)
+
 /**
  * The network's answer to REGISTER or VERIFY.
  *
@@ -255,6 +281,12 @@ class SwitchboardStore {
 
     /** Something shared from another app, until it is sent somewhere or let go */
     var pendingShare by mutableStateOf<PendingShare?>(null)
+
+    /**
+     * Networks a bouncer holds that are not here yet, until they are added or
+     * the offer is waved away — see [BouncerOffer].
+     */
+    var bouncerOffer by mutableStateOf<BouncerOffer?>(null)
 
     fun clearIdentifyPrompt() { identifyPrompt = null }
 

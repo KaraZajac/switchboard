@@ -88,6 +88,9 @@ class IrcConnection(
     private var stopping = false
     private var attempt = 0
 
+    /** Whether this connection has already said which of a bouncer's networks it wants */
+    private var bound = false
+
     /**
      * Woken when the phone gets a network back.
      *
@@ -148,6 +151,23 @@ class IrcConnection(
     }
 
     override fun sendRaw(line: String) {
+        /*
+         * `BOUNCER BIND` goes immediately before `CAP END`, while registration
+         * is still open — see [Bouncer.bindBeforeRegistration] for why it
+         * cannot go afterwards.
+         *
+         * Here rather than at the five places that end negotiation, for the
+         * same reason the desktop puts it in its write path: a sixth added
+         * later would silently skip the bind, and the connection would quietly
+         * land on the wrong network — not a failure anybody traces back to a
+         * missing line.
+         */
+        if (!bound && line.trim().equals("CAP END", ignoreCase = true)) {
+            bound = true
+            Bouncer.bindBeforeRegistration(config.bouncerNetId, state.capabilities)
+                ?.let { outbound.trySend(it) }
+        }
+
         outbound.trySend(line)
     }
 
@@ -306,6 +326,8 @@ class IrcConnection(
 
     private suspend fun connectOnce() = withContext(Dispatchers.IO) {
         state.reset(config.nick)
+        // Every dial negotiates again, so every dial has to bind again
+        bound = false
         while (outbound.tryReceive().isSuccess) { /* nothing from last time */ }
 
         // A server that has told us it is TLS-only gets reached over TLS,

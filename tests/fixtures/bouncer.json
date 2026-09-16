@@ -301,5 +301,59 @@
       "bouncer": false
     }
   ],
-  "$recognised": "Whether the far end is a bouncer, which decides whether two devices may both be on it. The soju and ZNC rows are what those two actually answered CAP LS with, read off the wire on 2026-09-15."
+  "$recognised": "Whether the far end is a bouncer, which decides whether two devices may both be on it. The soju and ZNC rows are what those two actually answered CAP LS with, read off the wire on 2026-09-15.",
+  "$bind": "What goes before CAP END to land on one of a bouncer's networks. The desktop has sent this since bouncer support landed and the phone never did, so a bound network row opened on whichever network the bouncer picked.",
+  "bind": [
+    {
+      "name": "a network id, with the capability, binds",
+      "netId": "1",
+      "negotiated": [
+        "sasl",
+        "batch",
+        "soju.im/bouncer-networks"
+      ],
+      "line": "BOUNCER BIND 1"
+    },
+    {
+      "name": "a soju id is a number, ours is a uuid, both are just text",
+      "netId": "0789eb39-e883-4b0e",
+      "negotiated": [
+        "soju.im/bouncer-networks"
+      ],
+      "line": "BOUNCER BIND 0789eb39-e883-4b0e"
+    },
+    {
+      "name": "no capability, so nothing to say it to",
+      "netId": "1",
+      "negotiated": [
+        "sasl",
+        "batch"
+      ],
+      "line": null
+    },
+    {
+      "name": "no network id, so an ordinary connection",
+      "netId": null,
+      "negotiated": [
+        "soju.im/bouncer-networks"
+      ],
+      "line": null
+    },
+    {
+      "name": "a blank id is no id",
+      "netId": "   ",
+      "negotiated": [
+        "soju.im/bouncer-networks"
+      ],
+      "line": null
+    },
+    {
+      "name": "the notify capability alone does not bind",
+      "netId": "1",
+      "negotiated": [
+        "soju.im/bouncer-networks-notify"
+      ],
+      "line": null
+    }
+  ]
 }

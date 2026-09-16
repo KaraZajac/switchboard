@@ -998,6 +998,49 @@ suspend fun SwitchboardEngine.addServer(config: ServerConfig): String? {
     return ask("server:add", config.toJson())?.text()
 }
 
+/**
+ * Take the networks a bouncer holds and make them networks here.
+ *
+ * One row per bouncer network, each bound by id, all sharing the bouncer's
+ * address and credentials — the shape the rest of the app already understands,
+ * so a soju with three networks behaves like three networks rather than one
+ * thing with a mode. The same as the desktop's `bouncer:adopt`, which is the
+ * point: whichever device you happen to be holding when the offer arrives, the
+ * result is the same config.
+ *
+ * The row that found them is left alone. It is the connection to the bouncer
+ * itself, which is what hears about changes, and somebody may well want it.
+ *
+ * Which ones are missing is worked out again here rather than trusted from the
+ * offer: the desktop may have taken the same offer in between.
+ */
+suspend fun SwitchboardEngine.adoptBouncerNetworks(offer: BouncerOffer): Int {
+    val servers = listServers()
+    val parent = servers.firstOrNull { it.id == offer.serverId } ?: return 0
+    val known = servers
+        .filter { it.host == parent.host && it.port == parent.port }
+        .mapNotNull { it.bouncerNetId }
+        .toSet()
+
+    var added = 0
+    for (network in offer.networks) {
+        if (network.id.isBlank() || network.id in known) continue
+        val id = addServer(
+            parent.copy(
+                id = "",
+                // Its own name, and its own nick where the bouncer told us one
+                name = network.name.ifBlank { network.host.ifBlank { "network ${network.id}" } },
+                nick = network.nickname.ifBlank { parent.nick },
+                autoJoin = emptyList(),
+                autoConnect = true,
+                bouncerNetId = network.id
+            )
+        )
+        if (id != null) added++
+    }
+    return added
+}
+
 suspend fun SwitchboardEngine.updateServer(serverId: String, changes: ServerConfig) {
     if (isHolding || !remote.isLinked) {
         if (!vault.isUnlocked) return
