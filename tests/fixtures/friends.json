@@ -1,5 +1,5 @@
 {
-  "$comment": "Which 'tell me when they turn up' command a network takes, shared by tests/shared/friends.test.ts and the Android SharedCorpusTest. Switchboard only ever spoke MONITOR, so on every bahamut and plexus network \u2014 DALnet and Rizon among them \u2014 the friend list was a screen you could add names to that would never tell you anything.",
+  "$comment": "Which 'tell me when they turn up' command a network takes, shared by tests/shared/friends.test.ts and the Android SharedCorpusTest. Switchboard only ever spoke MONITOR, so on every bahamut and plexus network — DALnet and Rizon among them — the friend list was a screen you could add names to that would never tell you anything.",
   "$kinds": "`isupport` is what the network advertised; `kind` is what we should send, and `limit` how many names it will hold.",
   "kinds": [
     {
@@ -223,6 +223,119 @@
       "kind": "WATCH",
       "here": "WATCH L",
       "list": "WATCH S"
+    }
+  ],
+  "$roster": "Every watched nick on every network as one list. Friends used to be a section under whichever network you were looking at, so a person watched on a network you had not opened today was simply not on screen. Online first because the list answers \"is anyone around?\", then by name, then by network — and never merged, because rowan on one network is not rowan on another.",
+  "roster": [
+    {
+      "name": "online first, then by name",
+      "watched": [
+        {
+          "serverId": "s1",
+          "network": "netslum",
+          "nick": "sam",
+          "online": false
+        },
+        {
+          "serverId": "s2",
+          "network": "libera",
+          "nick": "rowan",
+          "online": true
+        },
+        {
+          "serverId": "s1",
+          "network": "netslum",
+          "nick": "jo",
+          "online": true
+        }
+      ],
+      "labels": [
+        "jo@netslum",
+        "rowan@libera",
+        "sam@netslum"
+      ]
+    },
+    {
+      "name": "the same nick on two networks is two people",
+      "watched": [
+        {
+          "serverId": "s2",
+          "network": "libera",
+          "nick": "rowan",
+          "online": false
+        },
+        {
+          "serverId": "s1",
+          "network": "netslum",
+          "nick": "rowan",
+          "online": false
+        }
+      ],
+      "labels": [
+        "rowan@libera",
+        "rowan@netslum"
+      ]
+    },
+    {
+      "name": "and stays two even when one of them is around",
+      "watched": [
+        {
+          "serverId": "s1",
+          "network": "netslum",
+          "nick": "rowan",
+          "online": false
+        },
+        {
+          "serverId": "s2",
+          "network": "libera",
+          "nick": "rowan",
+          "online": true
+        }
+      ],
+      "labels": [
+        "rowan@libera",
+        "rowan@netslum"
+      ]
+    },
+    {
+      "name": "case is not a difference in names",
+      "watched": [
+        {
+          "serverId": "s1",
+          "network": "netslum",
+          "nick": "Zoe",
+          "online": false
+        },
+        {
+          "serverId": "s1",
+          "network": "netslum",
+          "nick": "adam",
+          "online": false
+        }
+      ],
+      "labels": [
+        "adam@netslum",
+        "Zoe@netslum"
+      ]
+    },
+    {
+      "name": "a network with no name leaves the nick alone",
+      "watched": [
+        {
+          "serverId": "s1",
+          "network": "",
+          "nick": "rowan",
+          "online": true
+        }
+      ],
+      "labels": [
+        "rowan"
+      ]
+    },
+    {
+      "name": "nobody watched anywhere",
+      "watched": [],
+      "labels": []
     }
   ]
 }

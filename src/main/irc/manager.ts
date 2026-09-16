@@ -601,6 +601,15 @@ export class IRCManager {
     }
   }
 
+  /**
+   * Networks whose friend list has been sent on this connection.
+   *
+   * ISUPPORT can arrive over several lines and the list must go exactly once
+   * per connection — it is dropped when a connection is made, not when one
+   * ends, because that is the moment there is nothing on the far side again.
+   */
+  private readonly friendListArmed = new Set<string>()
+
   private bindClientEvents(serverId: string, client: IRCClient): void {
     // Connection events
     client.events.on('registered', (data) => {
@@ -616,17 +625,9 @@ export class IRCManager {
       // for exactly the users who have an account.
       this.publishProfile(client)
 
-      // Re-send the friend list on connect, in whichever of the two commands
-      // this network takes. It lives on the connection and dies with it.
-      const monitorNicks = getMonitorList(serverId)
-      const kind = friendListKind(client.state.isupport)
-      if (monitorNicks.length > 0 && kind) {
-        for (const line of friendListLines(kind, monitorNicks, 'add')) {
-          client.connection.sendRaw(line)
-        }
-        // Request current status
-        client.connection.sendRaw(friendListStatusLine(kind))
-      }
+      // The friend list is re-sent when ISUPPORT says which command to use,
+      // which is after this — see the `isupport` listener below
+      this.friendListArmed.delete(serverId)
 
       this.runPerform(client, serverId)
     })
@@ -1175,6 +1176,31 @@ export class IRCManager {
       // The whole set, because what a member menu may offer is decided from
       // PREFIX and CHANMODES and the renderer had no way to see either.
       this.send('irc:isupport', { serverId, tokens })
+
+      /*
+       * The friend list, re-sent now rather than on 001.
+       *
+       * It lives on the connection and dies with it, so every connect has to
+       * say it again — and which command to say it in is in ISUPPORT, which
+       * arrives in 005, *after* the 001 this used to be done on. So the list
+       * was asked about (`MONITOR S`) and never actually sent: the server was
+       * asked the status of a list it had nothing on, and every friend sat
+       * there reading offline for ever.
+       *
+       * Once per connection: a server may send several 005 lines, and sending
+       * the list once per line is a flood on a long friend list.
+       */
+      if (!this.friendListArmed.has(serverId)) {
+        const kind = friendListKind(client.state.isupport)
+        const nicks = kind ? getMonitorList(serverId) : []
+        if (kind && nicks.length > 0) {
+          this.friendListArmed.add(serverId)
+          for (const line of friendListLines(kind, nicks, 'add')) {
+            client.connection.sendRaw(line)
+          }
+          client.connection.sendRaw(friendListStatusLine(kind))
+        }
+      }
 
       // Held to the same rule as a user's avatar, because it is the same
       // thing: a URL a server handed us that this client is about to fetch.

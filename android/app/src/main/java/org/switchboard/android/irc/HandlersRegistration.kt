@@ -390,6 +390,19 @@ internal fun registerRegistrationHandlers() {
             val value = token.substringAfter("=", "")
             state.isupport[key] = value
 
+            /*
+             * The friend list can only go out once we know which command this
+             * network takes, and that is this line — 005 arrives *after* the
+             * 001 the list used to be re-sent on, so [Friends.kind] was null
+             * every time and nothing was ever actually sent. The list was
+             * saved, shown, and never once put on the wire.
+             */
+            if (key == "MONITOR" || key == "WATCH") {
+                session.emit("irc:friendlist-ready", buildJsonObject {
+                    put("serverId", state.serverId)
+                })
+            }
+
             when (key) {
                 "PREFIX" -> {
                     // PREFIX=(ohv)@%+ — modes in brackets, symbols after

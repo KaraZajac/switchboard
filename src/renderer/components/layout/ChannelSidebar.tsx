@@ -8,7 +8,6 @@ import { ContextMenu } from '../common/ContextMenu'
 import { ServerMenu } from '../server/ServerMenu'
 import { ChannelBrowser } from '../channel/ChannelBrowser'
 import { UserProfilePanel } from '../user/UserProfilePanel'
-import { FriendList } from './FriendList'
 import { isChannelName, isServiceNick } from '@shared/constants'
 import { rowLook, rowBadge, badgeLabel, badgeDiameter } from '@shared/unread'
 
@@ -227,8 +226,14 @@ export function ChannelSidebar() {
           </div>
         )}
 
-        {/* Friend list (MONITOR) */}
-        <FriendList />
+        {/*
+          No friend list here any more. It was a section under whichever
+          network you had open, which made "is anybody about?" a question you
+          answered by clicking through the networks one at a time — and left
+          somebody watched on a network you had not opened today off the screen
+          entirely. It is one list across all of them now, in Messages beside
+          the conversations: see `FriendsView`.
+        */}
       </div>
 
       {/* User profile */}

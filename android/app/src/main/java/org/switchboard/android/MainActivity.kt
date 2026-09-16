@@ -41,6 +41,7 @@ import org.switchboard.android.ui.Blue
 import org.switchboard.android.ui.BrowseScreen
 import org.switchboard.android.ui.AccountScreen
 import org.switchboard.android.ui.ChatScreen
+import org.switchboard.android.ui.FriendsScreen
 import org.switchboard.android.ui.MentionsScreen
 import org.switchboard.android.ui.SearchScreen
 import org.switchboard.android.ui.ServersScreen
@@ -180,7 +181,7 @@ class MainActivity : ComponentActivity() {
     // the connection with it. The service decides when the engine stops.
 }
 
-private enum class Screen { PAIRING, SCANNING, CHAT, SETTINGS, SEARCH, MENTIONS, BROWSE, SERVERS, ACCOUNT }
+private enum class Screen { PAIRING, SCANNING, CHAT, SETTINGS, SEARCH, MENTIONS, FRIENDS, BROWSE, SERVERS, ACCOUNT }
 
 /** One conversation on one network, as a notification names it */
 data class Conversation(val serverId: String, val channel: String)
@@ -480,6 +481,7 @@ fun App(
                     onOpenSettings = { screen = Screen.SETTINGS },
                     onOpenSearch = { screen = Screen.SEARCH },
                     onOpenMentions = { screen = Screen.MENTIONS },
+                    onOpenFriends = { screen = Screen.FRIENDS },
                     onOpenBrowse = { screen = Screen.BROWSE },
                     onOpenServers = {
                         editingServer = null
@@ -513,6 +515,17 @@ fun App(
                     onOpen = { serverId, channel ->
                         store.select(serverId, channel)
                         scope.launch { loadHistory(engine, serverId, channel) }
+                        screen = Screen.CHAT
+                    },
+                    onClose = { screen = Screen.CHAT }
+                )
+
+                Screen.FRIENDS -> FriendsScreen(
+                    engine = engine,
+                    onOpen = { serverId, nick ->
+                        store.openConversation(serverId, nick)
+                        store.select(serverId, nick)
+                        scope.launch { loadHistory(engine, serverId, nick) }
                         screen = Screen.CHAT
                     },
                     onClose = { screen = Screen.CHAT }

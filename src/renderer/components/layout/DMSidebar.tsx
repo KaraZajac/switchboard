@@ -1,5 +1,6 @@
-import { Plus, X } from 'lucide-react'
-import { IconButton } from '../common/IconButton'
+import { Plus, Users, X } from 'lucide-react'
+import { ICON, IconButton } from '../common/IconButton'
+import { useUserStore } from '../../stores/userStore'
 import { useState, useRef, useEffect } from 'react'
 import { useServerStore } from '../../stores/serverStore'
 import { useChannelStore } from '../../stores/channelStore'
@@ -17,6 +18,13 @@ interface DMEntry {
 
 export function DMSidebar() {
   const servers = useServerStore((s) => s.servers)
+  const friendsOpen = useUIStore((s) => s.friendsOpen)
+  const monitoredNicks = useUserStore((s) => s.monitoredNicks)
+  // The one number worth carrying here: whether anybody is about
+  const friendsOnline = Object.values(monitoredNicks).reduce(
+    (total, list) => total + list.filter((one) => one.online).length,
+    0
+  )
   const allChannels = useChannelStore((s) => s.channels)
   const activeServerId = useServerStore((s) => s.activeServerId)
   const activeChannel = useChannelStore((s) =>
@@ -60,6 +68,8 @@ export function DMSidebar() {
   })
 
   const handleDMClick = (serverId: string, nick: string) => {
+    // Going to a conversation is what closes the friend list
+    useUIStore.getState().setFriendsOpen(false)
     useServerStore.getState().setActiveServer(serverId)
     useChannelStore.getState().setActiveChannel(serverId, nick)
     useChannelStore.getState().clearUnread(serverId, nick)
@@ -106,6 +116,28 @@ export function DMSidebar() {
           />
         </div>
       )}
+
+      {/*
+        Friends, above the conversations and outside them.
+
+        Where Discord keeps it, and for the same reason: a friend is somebody
+        you might talk to, a conversation is somebody you have. The list itself
+        crosses networks — see `FriendsView`.
+      */}
+      <button
+        onClick={() => useUIStore.getState().setFriendsOpen(true)}
+        className={`mx-2 mt-2 flex items-center gap-2 rounded px-2 py-1.5 text-left transition-colors ${
+          friendsOpen
+            ? 'bg-gray-700 text-white'
+            : 'text-gray-400 hover:bg-gray-700/50 hover:text-gray-200'
+        }`}
+      >
+        <Users size={ICON.md} strokeWidth={2} className="shrink-0" aria-hidden="true" />
+        <span className="flex-1 text-sm font-medium">Friends</span>
+        {friendsOnline > 0 && (
+          <span className="text-xs text-gray-500">{friendsOnline} online</span>
+        )}
+      </button>
 
       {/* DM list */}
       <div className="flex-1 overflow-y-auto px-2 py-2">

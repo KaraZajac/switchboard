@@ -7,6 +7,7 @@ import { useMessageStore } from '../../stores/messageStore'
 import { useUserStore } from '../../stores/userStore'
 import { useUIStore } from '../../stores/uiStore'
 import { MentionsView } from './MentionsView'
+import { FriendsView } from './FriendsView'
 import type { ChannelUser } from '@shared/types/channel'
 import { SwitchboardIcon } from '../common/SwitchboardIcon'
 import { isChannelName } from '@shared/constants'
@@ -27,6 +28,7 @@ export function ChatArea() {
   const activeServerId = useServerStore((s) => s.activeServerId)
   const dmMode = useUIStore((s) => s.dmMode)
   const mentionsMode = useUIStore((s) => s.mentionsMode)
+  const friendsOpen = useUIStore((s) => s.friendsOpen)
   const activeChannel = useChannelStore((s) =>
     activeServerId ? s.activeChannel[activeServerId] ?? null : null
   )
@@ -289,6 +291,10 @@ export function ChatArea() {
    * something *to* until you have gone to one of them.
    */
   if (mentionsMode) return <MentionsView />
+
+  // Friends, in the pane a conversation would be in — it is the same question
+  // asked one step earlier, and it crosses networks the same way
+  if (dmMode && friendsOpen) return <FriendsView />
 
   // No server selected
   if (!activeServerId) {

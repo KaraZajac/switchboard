@@ -936,6 +936,12 @@ class IrcConnection(
         sendRaw(Friends.listLine(kind))
     }
 
+    /** Ask who on the list is here right now — see [Friends.statusLine] */
+    fun monitorStatus() {
+        val kind = Friends.kind(state.isupport) ?: return
+        sendRaw(Friends.statusLine(kind))
+    }
+
     private var multilineCounter = 0
 
     companion object {

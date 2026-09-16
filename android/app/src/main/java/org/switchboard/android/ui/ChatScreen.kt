@@ -124,6 +124,7 @@ fun ChatScreen(
     onOpenSettings: () -> Unit,
     onOpenSearch: () -> Unit,
     onOpenMentions: () -> Unit,
+    onOpenFriends: () -> Unit,
     onOpenBrowse: () -> Unit,
     onOpenServers: () -> Unit,
     onEditServer: (serverId: String) -> Unit,
@@ -301,6 +302,10 @@ fun ChatScreen(
                                 onOpenMentions = {
                                     scope.launch { channelDrawer.close() }
                                     onOpenMentions()
+                                },
+                                onOpenFriends = {
+                                    scope.launch { channelDrawer.close() }
+                                    onOpenFriends()
                                 },
                                 onManageServers = {
                                     scope.launch { channelDrawer.close() }

@@ -95,4 +95,55 @@ object Friends {
      * is `S`.
      */
     fun listLine(kind: Kind): String = if (kind == Kind.MONITOR) "MONITOR L" else "WATCH S"
+
+    /**
+     * One friend, on the one network they are a friend on.
+     *
+     * A nick means nothing without a network — `rowan` on one is not `rowan`
+     * on another, and on IRC that is not a technicality: the name is first
+     * come first served on each network separately. So the pair travels
+     * together and is written the way people write it.
+     */
+    data class Watched(
+        val serverId: String,
+        /** What the network is called here, for reading */
+        val network: String,
+        val nick: String,
+        val online: Boolean
+    )
+
+    /** One friend as the list shows them, `nick@network` and all */
+    data class Friend(
+        val serverId: String,
+        val network: String,
+        val nick: String,
+        val online: Boolean,
+        val label: String
+    )
+
+    /** `nick@network`, which is the whole of who somebody is */
+    fun label(nick: String, network: String): String =
+        if (network.isNotEmpty()) "$nick@$network" else nick
+
+    /**
+     * Every watched nick on every network, as one list.
+     *
+     * Friends used to be a section per network, so finding out whether anybody
+     * was about meant going through them one at a time — and a person watched
+     * on a network not opened today was simply not on screen. Direct messages
+     * had already stopped being per-network for the same reason.
+     *
+     * Online first, because the list is read to answer "is anyone around?".
+     * Then by name, then by network, so two people with the same nick on two
+     * networks sit together and are still two rows — never merged, since there
+     * is no reason to think they are one person.
+     */
+    fun roster(watched: List<Watched>): List<Friend> =
+        watched
+            .map { Friend(it.serverId, it.network, it.nick, it.online, label(it.nick, it.network)) }
+            .sortedWith(
+                compareByDescending<Friend> { it.online }
+                    .thenBy { it.nick.lowercase() }
+                    .thenBy { it.network.lowercase() }
+            )
 }

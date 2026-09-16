@@ -120,3 +120,56 @@ export function friendListStatusLine(kind: FriendListKind): string {
 export function friendListListLine(kind: FriendListKind): string {
   return kind === 'MONITOR' ? 'MONITOR L' : 'WATCH S'
 }
+
+/**
+ * One friend, on the one network they are a friend on.
+ *
+ * A nick means nothing without a network — `rowan` on one is not `rowan` on
+ * another, and on IRC that is not a technicality: the name is first come first
+ * served on each network separately. So the pair travels together and is
+ * written the way people write it.
+ */
+export interface Watched {
+  serverId: string
+  /** What the network is called here, for reading */
+  network: string
+  nick: string
+  online: boolean
+}
+
+export interface Friend extends Watched {
+  /** `nick@network`, which is the whole of who somebody is */
+  label: string
+}
+
+export function friendLabel(nick: string, network: string): string {
+  return network ? `${nick}@${network}` : nick
+}
+
+/**
+ * Every watched nick on every network, as one list.
+ *
+ * Friends used to be a section under whichever network you were looking at, so
+ * finding out whether anybody was about meant clicking through the networks one
+ * at a time — and a person you watch on a network you have not opened today was
+ * simply not on screen. Direct messages had already stopped being per-network
+ * for the same reason.
+ *
+ * Online first, because the list is read to answer "is anyone around?", and
+ * that question is answered by the top of it. Then by name, then by network, so
+ * two people with the same nick on two networks sit together and are still two
+ * rows — never merged, since there is no reason to think they are one person.
+ */
+export function friendRoster(watched: readonly Watched[]): Friend[] {
+  return watched
+    .map((one) => ({ ...one, label: friendLabel(one.nick, one.network) }))
+    .sort((a, b) => {
+      const around = Number(b.online) - Number(a.online)
+      if (around !== 0) return around
+
+      const byNick = a.nick.toLowerCase().localeCompare(b.nick.toLowerCase())
+      if (byNick !== 0) return byNick
+
+      return a.network.toLowerCase().localeCompare(b.network.toLowerCase())
+    })
+}

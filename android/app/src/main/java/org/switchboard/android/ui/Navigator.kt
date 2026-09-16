@@ -28,6 +28,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.foundation.text.KeyboardActions
@@ -107,6 +108,7 @@ fun Navigator(
     onToggleAway: (serverId: String, away: Boolean) -> Unit,
     onBrowse: () -> Unit,
     onOpenMentions: () -> Unit,
+    onOpenFriends: () -> Unit,
     onManageServers: () -> Unit
 ) {
     Row(modifier = Modifier.fillMaxSize().background(Mantle)) {
@@ -136,6 +138,7 @@ fun Navigator(
                 DirectMessageList(
                     store = store,
                     onSelect = onSelect,
+                    onOpenFriends = onOpenFriends,
                     modifier = Modifier.weight(1f)
                 )
             } else {
@@ -827,6 +830,7 @@ private fun ChannelList(
 private fun DirectMessageList(
     store: SwitchboardStore,
     onSelect: (serverId: String, channel: String) -> Unit,
+    onOpenFriends: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val conversations = store.allDirectMessages()
@@ -905,6 +909,42 @@ private fun DirectMessageList(
             }
             Spacer(Modifier.height(8.dp))
         }
+
+        /*
+         * Friends, above the conversations and outside them.
+         *
+         * Where the desktop keeps it and where Discord keeps it, for the same
+         * reason: a friend is somebody you might talk to, a conversation is
+         * somebody you have. The list itself crosses networks — see
+         * [FriendsScreen].
+         */
+        val friendsOnline = store.servers.values.sumOf { server ->
+            store.watchedFor(server.id).count { store.isOnline(server.id, it) }
+        }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp)
+                .clip(RoundedCornerShape(4.dp))
+                .clickable { onOpenFriends() }
+                .padding(horizontal = 8.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                Icons.Filled.Person,
+                contentDescription = null,
+                tint = Subtext,
+                modifier = Modifier.size(20.dp)
+            )
+            Spacer(Modifier.width(10.dp))
+            Text("Friends", color = Text0, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+            Spacer(Modifier.weight(1f))
+            if (friendsOnline > 0) {
+                Text("$friendsOnline online", color = Overlay, fontSize = 12.sp)
+            }
+        }
+
+        Spacer(Modifier.height(6.dp))
 
         if (conversations.isEmpty()) {
             Text(

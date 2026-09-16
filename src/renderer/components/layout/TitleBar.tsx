@@ -22,6 +22,7 @@ export function TitleBar() {
   const showUserList = useUIStore((s) => s.showUserList)
   const dmMode = useUIStore((s) => s.dmMode)
   const mentionsMode = useUIStore((s) => s.mentionsMode)
+  const friendsOpen = useUIStore((s) => s.friendsOpen)
 
   const channelInfo = channels.find(
     (ch) => ch.name.toLowerCase() === activeChannel?.toLowerCase()
@@ -55,22 +56,28 @@ export function TitleBar() {
             <span className="shrink-0 font-semibold text-gray-100">Mentions</span>
           </>
         )}
-        {!mentionsMode && inDmList && (
+        {!mentionsMode && dmMode && friendsOpen && (
+          <>
+            <Users size={ICON.md} strokeWidth={2} className="shrink-0 text-gray-400" aria-hidden="true" />
+            <span className="shrink-0 font-semibold text-gray-100">Friends</span>
+          </>
+        )}
+        {!mentionsMode && !friendsOpen && inDmList && (
           <span className="shrink-0 font-semibold text-gray-100">Direct Messages</span>
         )}
-        {!mentionsMode && !inDmList && activeChannel && isServer && (
+        {!mentionsMode && !friendsOpen && !inDmList && activeChannel && isServer && (
           <>
             <Server size={ICON.md} strokeWidth={2} className="shrink-0 text-gray-400" aria-hidden="true" />
             <span className="shrink-0 font-semibold text-gray-100">Server</span>
           </>
         )}
-        {!mentionsMode && !inDmList && activeChannel && isService && (
+        {!mentionsMode && !friendsOpen && !inDmList && activeChannel && isService && (
           <>
             <Shield size={ICON.md} strokeWidth={2} className="shrink-0 text-gray-400" aria-hidden="true" />
             <span className="shrink-0 font-semibold text-gray-100">{activeChannel}</span>
           </>
         )}
-        {!mentionsMode && !inDmList && activeChannel && isDM && (
+        {!mentionsMode && !friendsOpen && !inDmList && activeChannel && isDM && (
           <>
             <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gray-600 text-xs font-bold text-gray-200">
               {activeChannel.charAt(0).toUpperCase()}
@@ -80,7 +87,7 @@ export function TitleBar() {
             </span>
           </>
         )}
-        {!mentionsMode && !inDmList && activeChannel && !isDM && !isServer && !isService && (
+        {!mentionsMode && !friendsOpen && !inDmList && activeChannel && !isDM && !isServer && !isService && (
           <>
             <Hash size={ICON.md} strokeWidth={2} className="shrink-0 text-gray-500" aria-hidden="true" />
             <span className="shrink-0 font-semibold text-gray-100">
@@ -113,7 +120,7 @@ export function TitleBar() {
           channel on a network that keeps any: a shield that opens an empty
           box is worse than no shield.
         */}
-        {!mentionsMode && !inDmList && activeChannel && !isDM && !isServer && !isService && keepsLists && (
+        {!mentionsMode && !friendsOpen && !inDmList && activeChannel && !isDM && !isServer && !isService && keepsLists && (
           <IconButton
             icon={Shield}
             label="Bans and other channel lists"
@@ -125,7 +132,7 @@ export function TitleBar() {
           history you cannot export is a history you cannot keep when you stop
           using the app.
         */}
-        {!mentionsMode && !inDmList && activeChannel && !isServer && (
+        {!mentionsMode && !friendsOpen && !inDmList && activeChannel && !isServer && (
           <IconButton
             icon={Download}
             label="Save this conversation to a file"

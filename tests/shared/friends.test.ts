@@ -7,7 +7,10 @@ import {
   friendListLines,
   friendListStatusLine,
   friendListListLine,
-  type FriendListKind
+  friendRoster,
+  friendLabel,
+  type FriendListKind,
+  type Watched
 } from '../../src/shared/friends'
 
 const corpus = JSON.parse(
@@ -16,6 +19,7 @@ const corpus = JSON.parse(
   kinds: { name: string; isupport: Record<string, string | true>; kind: FriendListKind | null; limit: number | null }[]
   lines: { name: string; kind: FriendListKind; action: 'add' | 'remove'; nicks: string[]; lines: string[] }[]
   status: { kind: FriendListKind; here: string; list: string }[]
+  roster: { name: string; watched: Watched[]; labels: string[] }[]
 }
 
 describe('shared friend-list corpus', () => {
@@ -54,5 +58,26 @@ describe('shared friend-list corpus', () => {
       .flatMap((line) => line.slice('WATCH '.length).split(' '))
       .map((token) => token.slice(1))
     expect(sent).toEqual(many)
+  })
+})
+
+describe('one friend list out of every network', () => {
+  for (const c of corpus.roster) {
+    it(c.name, () => {
+      expect(friendRoster(c.watched).map((f) => f.label)).toEqual(c.labels)
+    })
+  }
+
+  it('keeps hold of which network each one is on', () => {
+    // The label is for reading; opening a conversation needs the id
+    const [first] = friendRoster([
+      { serverId: 's1', network: 'netslum', nick: 'rowan', online: true }
+    ])
+    expect(first.serverId).toBe('s1')
+    expect(first.nick).toBe('rowan')
+  })
+
+  it('writes a name the way people write it', () => {
+    expect(friendLabel('rowan', 'netslum')).toBe('rowan@netslum')
   })
 })

@@ -472,8 +472,31 @@ class SwitchboardEngine(
         if (watched.isEmpty()) return
 
         store.setWatched(serverId, watched)
+
+        // Once per connection. A network announces itself over several 005
+        // lines and this is called from that, so without the guard a long
+        // friend list goes out once per line — which is a flood, and a flood
+        // is what a server disconnects you for.
+        if (!friendListArmed.add(serverId)) return
         connections[serverId]?.monitorAdd(watched)
+        connections[serverId]?.monitorStatus()
     }
+
+    /**
+     * Put the friend list on screen, whether or not it can go on the wire.
+     *
+     * A network that offers neither MONITOR nor WATCH never reaches
+     * [rearmMonitor] — nothing can be sent to it — and the people you watch
+     * there would then be missing from a list that is supposed to hold all of
+     * them. Showing them offline is honest; not showing them is not.
+     */
+    private fun loadWatched(serverId: String) {
+        val watched = vault.watched(serverId)
+        if (watched.isNotEmpty()) store.setWatched(serverId, watched)
+    }
+
+    /** Networks whose friend list has gone out on this connection */
+    private val friendListArmed = mutableSetOf<String>()
 
     /**
      * Keep the shared config's join-on-connect list matching where we actually
@@ -1802,6 +1825,9 @@ class SwitchboardEngine(
     internal fun openConnection(config: ServerConfig) {
         if (connections.containsKey(config.id)) return
         Log.i(TAG, "connecting to ${config.host}:${config.port} as ${config.nick}")
+        // A new connection knows nothing about who we watch, so the list has
+        // to go out again once it says which command it takes
+        friendListArmed.remove(config.id)
         seedServer(config)
         val connection = IrcConnection(config, scope, { vault.defaultProfile() }, { savedProxy() }) { channel, data ->
             // Somebody on the ignore list said nothing, as far as this client
@@ -1832,6 +1858,18 @@ class SwitchboardEngine(
 
             rememberMembership(channel, data)
 
+            /*
+             * The network has just said which watch command it takes, which is
+             * the first moment the friend list can go out at all — see the 005
+             * handler. Doing it on `irc:connected` looked right and sent
+             * nothing: that fires on 001, before any of this is known.
+             */
+            if (channel == "irc:friendlist-ready") {
+                (data as? JsonObject)?.get("serverId")?.jsonPrimitive?.contentOrNull()
+                    ?.let { rearmMonitor(it) }
+                return@IrcConnection
+            }
+
             // Registering is the moment this phone stops dialling and starts
             // being the connection, and nothing else was watching for it: the
             // mode was worked out when the socket opened and never again, so a
@@ -1839,7 +1877,9 @@ class SwitchboardEngine(
             // saying "Connecting…" until something unrelated recomputed it.
             if (channel == "irc:connected") {
                 lastConnectionError = null
-                rearmMonitor(config.id)
+                // On screen now; on the wire when 005 says which command to
+                // use, which is after this — see `irc:friendlist-ready`
+                loadWatched(config.id)
                 if (!keptOurNameAlongside(config.id)) return@IrcConnection
                 askWhatWeMissed(config.id)
                 recomputeMode()

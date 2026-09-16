@@ -119,6 +119,14 @@ interface UIState {
    */
   mentionsMode: boolean
   /**
+   * Whether Messages is showing the friend list rather than a conversation.
+   *
+   * Inside Messages rather than beside it on the rail, the way Discord keeps
+   * Friends behind its home button: both are lists of people rather than
+   * lists of places, and they are read one after the other.
+   */
+  friendsOpen: boolean
+  /**
    * The conversation Messages was last left on.
    *
    * Switching to a network already reopens where you were on it — the active
@@ -149,6 +157,7 @@ interface UIState {
   toggleUserList: () => void
   setDmMode: (dm: boolean) => void
   setMentionsMode: (on: boolean) => void
+  setFriendsOpen: (on: boolean) => void
   rememberDm: (serverId: string, nick: string) => void
   setCompactMode: (compact: boolean) => void
   setFontSize: (size: number) => void
@@ -207,6 +216,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   serverLogId: null,
   dmMode: false,
   mentionsMode: false,
+  friendsOpen: false,
   lastDm: null,
   popupWhoisNick: null,
   popupWhoisData: null,
@@ -266,8 +276,11 @@ export const useUIStore = create<UIState>((set, get) => ({
    * missed once and leaves a view showing over a channel somebody just
    * clicked.
    */
-  setDmMode: (dm) => set({ dmMode: dm, mentionsMode: false }),
-  setMentionsMode: (on) => set({ mentionsMode: on, dmMode: false }),
+  setDmMode: (dm) => set({ dmMode: dm, mentionsMode: false, friendsOpen: false }),
+  setMentionsMode: (on) => set({ mentionsMode: on, dmMode: false, friendsOpen: false }),
+  // Only ever true inside Messages, so it turns that on with it
+  setFriendsOpen: (on) =>
+    set(on ? { friendsOpen: true, dmMode: true, mentionsMode: false } : { friendsOpen: false }),
   rememberDm: (serverId, nick) => set({ lastDm: { serverId, nick } }),
   setPopupWhoisNick: (nick) =>
     set(nick ? { popupWhoisNick: nick, popupWhoisData: null } : { popupWhoisNick: null }),

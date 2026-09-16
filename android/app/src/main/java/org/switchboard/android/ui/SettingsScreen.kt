@@ -129,7 +129,6 @@ fun SettingsScreen(
             }
         }
 
-        FriendsCard(engine)
         HighlightsCard(engine)
         AwayCard(engine)
         RejoinCard(engine)
@@ -617,88 +616,6 @@ private fun VaultCard(engine: SwitchboardEngine) {
                             modifier = Modifier.size(Sizes.spinner)
                         )
                     }
-                }
-            }
-        }
-    }
-}
-
-/**
- * Who you are waiting for.
- *
- * MONITOR is the one IRC feature that answers "tell me when they turn up", and
- * the phone could ask for it — from a person's profile — but never show what it
- * had asked for. So a watch was something you could turn on and never off, and
- * a list you could add to and never read. This is the other half.
- *
- * Per network, because MONITOR is: the same nick on two networks is two people
- * until proven otherwise, and the server only knows about its own.
- */
-@Composable
-private fun FriendsCard(engine: SwitchboardEngine) {
-    val store = engine.store
-    val servers = store.servers.values.sortedBy { it.name.lowercase() }
-    val scope = rememberCoroutineScope()
-
-    Spacer(Modifier.height(8.dp))
-    SectionLabel("Friends")
-    Card {
-        val anyone = servers.any { store.watchedFor(it.id).isNotEmpty() }
-        if (!anyone) {
-            Text(
-                "Nobody yet. Open somebody's name in a channel and choose " +
-                    "\"Tell me when they are online\".",
-                color = Subtext,
-                fontSize = 13.sp,
-                lineHeight = 18.sp
-            )
-            return@Card
-        }
-
-        for (server in servers) {
-            val nicks = store.watchedFor(server.id).sortedBy { it.lowercase() }
-            if (nicks.isEmpty()) continue
-
-            if (servers.count { store.watchedFor(it.id).isNotEmpty() } > 1) {
-                Text(
-                    server.name.ifBlank { server.host },
-                    color = Overlay,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(Modifier.height(6.dp))
-            }
-
-            for (nick in nicks) {
-                val online = store.isOnline(server.id, nick)
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(9.dp)
-                            .background(if (online) Green else Overlay, CircleShape)
-                    )
-                    Spacer(Modifier.width(10.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(nick, color = Text0, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-                        Text(
-                            if (online) "Online now" else "Not on this network",
-                            color = if (online) Green else Overlay,
-                            fontSize = 11.sp
-                        )
-                    }
-                    Text(
-                        "Stop watching",
-                        color = Red,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(12.dp))
-                            .clickable { engine.unwatchNicks(server.id, listOf(nick)) }
-                            .padding(horizontal = 10.dp, vertical = 6.dp)
-                    )
                 }
             }
         }

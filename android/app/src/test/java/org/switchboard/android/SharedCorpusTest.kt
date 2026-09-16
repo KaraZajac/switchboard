@@ -2268,6 +2268,28 @@ class SharedCorpusTest {
     // ── the friend list ───────────────────────────────────────────────
 
     @Test
+    fun `builds one friend list out of every network the way the desktop does`() {
+        for (entry in load("friends.json")["roster"]!!.jsonArray) {
+            val case = entry.jsonObject
+            val watched = case["watched"]!!.jsonArray.map {
+                val row = it.jsonObject
+                Friends.Watched(
+                    serverId = row["serverId"]!!.jsonPrimitive.content,
+                    network = row["network"]!!.jsonPrimitive.content,
+                    nick = row["nick"]!!.jsonPrimitive.content,
+                    online = row["online"]!!.jsonPrimitive.boolean
+                )
+            }
+
+            assertEquals(
+                case["name"]!!.jsonPrimitive.content,
+                case["labels"]!!.jsonArray.map { it.jsonPrimitive.content },
+                Friends.roster(watched).map { it.label }
+            )
+        }
+    }
+
+    @Test
     fun `speaks whichever watch command the network takes`() {
         val corpus = load("friends.json")
 
