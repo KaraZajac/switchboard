@@ -135,6 +135,12 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
+
+    // UnifiedPush: the phone gets an endpoint from whichever distributor the
+    // user has (ntfy, Conversations, a self-hosted one) and the IRC server
+    // pushes to it. No Play Services, no Google account, and the body is
+    // encrypted to keys only this device holds — see push/WebPush.kt.
+    implementation("org.unifiedpush.android:connector:3.0.9")
     debugImplementation("androidx.compose.ui:ui-tooling")
 
     // Camera preview plus a pure-Java QR decoder. ZXing's core is ~500 KB and

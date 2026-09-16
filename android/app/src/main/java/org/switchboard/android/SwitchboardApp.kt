@@ -15,6 +15,8 @@ import kotlinx.coroutines.SupervisorJob
 import org.switchboard.android.irc.Sts
 import org.switchboard.android.irc.setAppVersion
 import org.switchboard.android.irc.StsStore
+import org.switchboard.android.push.offerPushEndpoint
+import org.switchboard.android.push.showPushed
 
 /**
  * The engine, held for as long as the process lives.
@@ -50,6 +52,24 @@ class SwitchboardApp : Application(), ImageLoaderFactory {
 
         // What a CTCP VERSION gets told, before anything can be asked
         setAppVersion(BuildConfig.VERSION_NAME, "Android")
+    }
+
+    /**
+     * A push arrived for one network.
+     *
+     * Reached from [org.switchboard.android.push.PushReceiver], which runs in
+     * this process whether or not a screen is up — that being the point of the
+     * whole arrangement. Touching `engine` here makes it where the process was
+     * cold, which is the right answer: something has just said there is a
+     * reason to be connected.
+     */
+    fun pushArrived(serverId: String, line: String) {
+        engine.showPushed(serverId, line)
+    }
+
+    /** The distributor gave us an endpoint, or took one away */
+    fun pushEndpointChanged(serverId: String) {
+        engine.offerPushEndpoint(serverId)
     }
 
     /**

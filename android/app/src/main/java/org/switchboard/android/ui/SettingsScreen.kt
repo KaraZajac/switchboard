@@ -64,6 +64,9 @@ import androidx.compose.foundation.layout.FlowRow
 import org.switchboard.android.irc.AutoAway
 import org.switchboard.android.irc.Aliases
 import org.switchboard.android.irc.Ignore
+import org.switchboard.android.push.withdrawAllPushEndpoints
+import org.switchboard.android.push.offerPushEverywhere
+import org.switchboard.android.push.Push
 
 /**
  * Settings: the shared config, and what this phone is currently doing.
@@ -104,6 +107,7 @@ fun SettingsScreen(
         val locked = !engine.isVaultUnlocked
         if (locked) VaultCard(engine)
         AppearanceCard(engine)
+        PushCard(engine)
         BatteryCard(engine)
         if (!locked) VaultCard(engine)
 
@@ -315,6 +319,110 @@ private fun BatteryCard(engine: SwitchboardEngine) {
             fontSize = 12.sp,
             lineHeight = 17.sp
         )
+    }
+}
+
+/**
+ * Being told about messages while the app is asleep.
+ *
+ * Android will not let an IRC client hold a socket open indefinitely, and the
+ * usual answer is a push service that reads your messages on the way past.
+ * This is the other answer: the server encrypts to keys only this device holds
+ * and hands the ciphertext to a distributor that cannot read it.
+ *
+ * The distributor is a separate app the user chooses. That is the part worth
+ * explaining here, because "install another app first" is a strange thing to
+ * be told by a settings screen and makes no sense without the reason.
+ */
+@Composable
+private fun PushCard(engine: SwitchboardEngine) {
+    val context = LocalContext.current
+    var wanted by remember { mutableStateOf(Push.wanted(context)) }
+    val distributors = remember(wanted) { runCatching { Push.distributors(context) }.getOrDefault(emptyList()) }
+    val chosen = remember(wanted, distributors) { runCatching { Push.distributor(context) }.getOrNull() }
+
+    SectionLabel("Push", modifier = Modifier.padding(top = 20.dp))
+
+    Card {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "Wake me for messages",
+                color = Text0,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.weight(1f)
+            )
+            Switch(
+                checked = wanted,
+                onCheckedChange = { on ->
+                    Push.setWanted(context, on)
+                    wanted = on
+                    if (!on) engine.withdrawAllPushEndpoints()
+                    else engine.offerPushEverywhere()
+                },
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = Crust,
+                    checkedTrackColor = Green,
+                    uncheckedThumbColor = Overlay,
+                    uncheckedTrackColor = Surface0
+                )
+            )
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "Your network sends a notification through a push service when somebody " +
+                "messages you and this app is not connected. The message is encrypted to " +
+                "this device — the service forwards it without being able to read it.",
+            color = Subtext,
+            fontSize = 13.sp,
+            lineHeight = 18.sp
+        )
+
+        if (wanted) {
+            Spacer(Modifier.height(12.dp))
+            if (distributors.isEmpty()) {
+                Text(
+                    "No push distributor installed. UnifiedPush needs one — ntfy is the " +
+                        "usual choice, and one distributor serves every app that uses it. " +
+                        "Without one there is nothing to deliver the wake-up.",
+                    color = Yellow,
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp
+                )
+            } else {
+                Text(
+                    "Delivered by",
+                    color = Overlay,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(Modifier.height(6.dp))
+                for (candidate in distributors) {
+                    val inUse = candidate == chosen
+                    Text(
+                        if (inUse) "$candidate — in use" else candidate,
+                        color = if (inUse) Green else Blue,
+                        fontSize = 14.sp,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                Push.useDistributor(context, candidate)
+                                engine.offerPushEverywhere()
+                            }
+                            .padding(vertical = 8.dp)
+                    )
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "Only networks that offer it and that you have an account on can push: " +
+                    "an endpoint outlives the connection that made it, so it belongs to a " +
+                    "login rather than to whoever currently holds a nick.",
+                color = Overlay,
+                fontSize = 12.sp,
+                lineHeight = 17.sp
+            )
+        }
     }
 }
 

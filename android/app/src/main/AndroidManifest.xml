@@ -80,5 +80,29 @@
             android:name=".SwitchboardService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+
+        <!-- Web Push, over UnifiedPush.
+
+             Where the message arrives when Android has stopped letting the
+             client hold a socket, which on a phone is most of the day. The
+             distributor is a separate app of the user's choosing — ntfy,
+             Conversations, a self-hosted one — and it broadcasts to this.
+
+             Exported because a distributor is another app and has to be able
+             to reach it; the body it carries is encrypted to keys only this
+             device holds, so what is exposed is a wake-up, not the message.
+             The connector registers a fallback receiver of its own at priority
+             -500, which this one takes precedence over. -->
+        <receiver
+            android:name=".push.PushReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="org.unifiedpush.android.connector.MESSAGE" />
+                <action android:name="org.unifiedpush.android.connector.NEW_ENDPOINT" />
+                <action android:name="org.unifiedpush.android.connector.UNREGISTERED" />
+                <action android:name="org.unifiedpush.android.connector.REGISTRATION_FAILED" />
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>

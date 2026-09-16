@@ -58,6 +58,7 @@ import org.switchboard.android.irc.Ignore
 import org.switchboard.android.store.MessageStore
 import kotlinx.serialization.json.JsonArray
 import org.switchboard.android.vault.VaultStore
+import org.switchboard.android.push.offerPushEndpoint
 
 /**
  * What the phone is doing right now.
@@ -74,7 +75,7 @@ import org.switchboard.android.vault.VaultStore
 enum class EngineMode { FOLLOWING, HOLDING, OFFLINE }
 
 class SwitchboardEngine(
-    private val context: Context,
+    internal val context: Context,
     internal val scope: CoroutineScope,
     val store: SwitchboardStore
 ) {
@@ -408,6 +409,36 @@ class SwitchboardEngine(
     }
 
     /**
+     * Draw a notification for something that did not come down a socket.
+     *
+     * A Web Push arrives when the client is not connected, which is the whole
+     * point of it — so the checks an ordinary message goes through do not all
+     * apply. What still does: a conversation already read somewhere else, and
+     * one the user is looking at.
+     */
+    internal fun notifyPushed(
+        serverId: String,
+        conversation: String,
+        nick: String,
+        text: String,
+        mentioned: Boolean
+    ) {
+        val conversationKey = "$serverId:${conversation.lowercase()}"
+        if (isForeground && conversationKey == store.conversationKey()) return
+        if (isMuted(serverId, conversation)) return
+
+        notifier.show(
+            conversationKey = conversationKey,
+            conversation = conversation,
+            nick = nick,
+            displayName = store.displayName(serverId, nick),
+            text = text,
+            colour = notificationColour(serverId, nick),
+            mentioned = mentioned
+        )
+    }
+
+    /**
      * Ask which conversations had traffic while we were shut.
      *
      * A fortnight is long enough to cover a weekend away and short enough that
@@ -497,6 +528,17 @@ class SwitchboardEngine(
 
     /** Networks whose friend list has gone out on this connection */
     private val friendListArmed = mutableSetOf<String>()
+
+    /**
+     * Networks already told where to push, this connection.
+     *
+     * Told at `irc:isupport` rather than at `irc:connected`, because that is
+     * the first moment both halves are known: SASL finishes before 001 so the
+     * account is in hand, and `VAPID` arrives with 005 like every other token.
+     * Once per connection, because a registration is an upsert and repeating
+     * it every time a token lands is a line per 005.
+     */
+    private val pushOffered = mutableSetOf<String>()
 
     /**
      * Keep the shared config's join-on-connect list matching where we actually
@@ -1828,6 +1870,7 @@ class SwitchboardEngine(
         // A new connection knows nothing about who we watch, so the list has
         // to go out again once it says which command it takes
         friendListArmed.remove(config.id)
+        pushOffered.remove(config.id)
         seedServer(config)
         val connection = IrcConnection(config, scope, { vault.defaultProfile() }, { savedProxy() }) { channel, data ->
             // Somebody on the ignore list said nothing, as far as this client
@@ -1864,6 +1907,12 @@ class SwitchboardEngine(
              * handler. Doing it on `irc:connected` looked right and sent
              * nothing: that fires on 001, before any of this is known.
              */
+            // Where to push, once this network has said enough for us to know
+            // whether it can be asked — see [pushOffered].
+            if (channel == "irc:isupport" && pushOffered.add(config.id)) {
+                offerPushEndpoint(config.id)
+            }
+
             if (channel == "irc:friendlist-ready") {
                 (data as? JsonObject)?.get("serverId")?.jsonPrimitive?.contentOrNull()
                     ?.let { rearmMonitor(it) }
