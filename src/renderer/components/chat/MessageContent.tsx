@@ -50,12 +50,23 @@ export function MessageContent({ text, highlightNick }: MessageContentProps) {
     segment.type === 'link' ? [<Embed key={i} url={segment.url} />] : []
   )
 
-  // A line that is nothing but a GIF from the picker, or an upload, shows
-  // the thing and not its address. A link with words around it keeps its
-  // place in the sentence.
+  /*
+   * A line that is nothing but a picture shows the picture, not its address.
+   *
+   * It was already so for a GIF from the picker and for an upload, where the
+   * address is a long opaque thing nobody wants to read. It is just as true of
+   * any image or video somebody links: what was meant was "look at this", and
+   * the address is the plumbing.
+   *
+   * Only when the link is the whole message. A link with words around it keeps
+   * its place in the sentence — taking it out would leave a hole where a word
+   * used to be, which is worse than a visible address.
+   */
   const said = segments.filter((segment) => !(segment.type === 'text' && segment.content.trim() === ''))
   const only = said.length === 1 && said[0].type === 'link' ? said[0].url : null
-  const addressless = only !== null && (isKlipyMediaUrl(only) || isFilehostUrl(only))
+  const addressless =
+    only !== null &&
+    (isKlipyMediaUrl(only) || isFilehostUrl(only) || isImageUrl(only) || isVideoUrl(only))
 
   return (
     <>
@@ -442,10 +453,37 @@ function FilehostMedia({ url }: { url: string }) {
 /** Clickable image thumbnail that opens a lightbox */
 function ClickableImage({ url, alt, referrerPolicy }: { url: string; alt?: string; referrerPolicy?: React.HTMLAttributeReferrerPolicy }) {
   const [showLightbox, setShowLightbox] = useState(false)
+  const [broken, setBroken] = useState(false)
+
+  /*
+   * A picture that will not load must not take the message with it.
+   *
+   * The image used to hide itself on error, which was harmless while the
+   * address was printed above it. Now that the picture stands in for the
+   * address, hiding it would leave an empty line where somebody had said
+   * something — so the address comes back instead, and is at least something
+   * to click.
+   */
+  if (broken) {
+    return (
+      <a
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-blue-400 underline hover:text-blue-300"
+        title={url}
+      >
+        {url}
+      </a>
+    )
+  }
 
   return (
     <>
       <div className="mt-1">
+        {/* Right-click is answered by the main process, which can offer to
+            save the picture itself rather than its address — see
+            `imageContextMenu` in `src/main/index.ts` */}
         <img
           src={url}
           alt={alt || ''}
@@ -453,7 +491,7 @@ function ClickableImage({ url, alt, referrerPolicy }: { url: string; alt?: strin
           loading="lazy"
           referrerPolicy={referrerPolicy}
           onClick={() => setShowLightbox(true)}
-          onError={(e) => { ;(e.target as HTMLImageElement).style.display = 'none' }}
+          onError={() => setBroken(true)}
         />
       </div>
       {showLightbox && <ImageLightbox url={url} onClose={() => setShowLightbox(false)} />}

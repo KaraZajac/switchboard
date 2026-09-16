@@ -6,6 +6,7 @@ import {
   session,
   shell,
   nativeImage,
+  clipboard,
   ipcMain,
   type IpcMainInvokeEvent
 } from 'electron'
@@ -29,6 +30,7 @@ import { setAppVersion } from './irc/handlers/message'
 import { useNetworkSettings } from './irc/connection'
 import type { ProxySettings } from '@shared/socks'
 import { safeExternalUrl } from '@shared/links'
+import { imageMenuTemplate } from './menus/image'
 import { setNotifier } from './ipc/notify'
 import { join } from 'path'
 import { autoUpdater } from 'electron-updater'
@@ -107,6 +109,34 @@ function createWindow(): void {
   } else {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
+}
+
+/**
+ * Answer a right-click.
+ *
+ * The template — and the decision whether there is one at all — lives in
+ * `menus/image`, where it can be tested; this is the part that needs a window
+ * and a clipboard. Saving and copying go through the page's own `webContents`,
+ * which already has the bytes it drew, so nothing here reaches the network
+ * again. The address is handed to `safeExternalUrl` before the operating
+ * system is allowed near it, for the reasons written above
+ * `web-contents-created`: an address in a message is a stranger's text.
+ */
+function showContextMenu(
+  contents: Electron.WebContents,
+  params: Electron.ContextMenuParams
+): void {
+  const template = imageMenuTemplate(params, {
+    save: () => contents.downloadURL(params.srcURL),
+    copy: () => contents.copyImageAt(params.x, params.y),
+    copyLink: () => clipboard.writeText(params.srcURL),
+    open: () => {
+      const safe = safeExternalUrl(params.srcURL)
+      if (safe) void shell.openExternal(safe)
+    }
+  })
+
+  if (template) Menu.buildFromTemplate(template).popup()
 }
 
 function createAppMenu(): void {
@@ -465,6 +495,19 @@ app
     // running, not only after somebody visits Settings.
     void resumeRemoteLink()
 
+    /*
+     * Where a saved picture goes is the person's decision.
+     *
+     * Electron puts a download wherever it likes unless somebody says
+     * otherwise, and "it downloaded, somewhere" is not an answer. Asking is
+     * what every browser does with Save image as…, and the name the server
+     * gave is the right thing to offer.
+     */
+    session.defaultSession.on('will-download', (_event, item) => {
+      item.setSaveDialogOptions({ defaultPath: item.getFilename() })
+      console.info('Saving %s', item.getFilename())
+    })
+
     // Set CSP for production
     if (app.isPackaged) {
       session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
@@ -514,6 +557,9 @@ app
       })
 
       contents.on('will-attach-webview', (event) => event.preventDefault())
+
+      // And a right-click gets a menu, which an Electron app has to build
+      contents.on('context-menu', (_event, params) => showContextMenu(contents, params))
     })
 
     // Create app menu
