@@ -19,7 +19,7 @@ import { useServerStore } from '../../stores/serverStore'
 import { useChannelStore } from '../../stores/channelStore'
 import { useUserStore, type MonitoredNick } from '../../stores/userStore'
 import { canModerate } from '@shared/powers'
-import { nickColor } from '../../utils/nickColor'
+import { nickStyle } from '../../utils/nickColor'
 import { displayNameFor, metadataColor } from '@shared/types/metadata'
 import { mentionsYou } from '@shared/mentions'
 import { speak } from '../../utils/speak'
@@ -880,7 +880,8 @@ function WhoisAvatar({ nick, avatarUrl }: { nick: string; avatarUrl: string | nu
   }
   return (
     <div
-      className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${nickColor(nick)} text-sm font-bold text-white`}
+      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold"
+      style={nickStyle(nick)}
     >
       {nick.charAt(0).toUpperCase()}
     </div>
@@ -909,7 +910,8 @@ function MessageAvatar({ nick, avatarUrl }: { nick: string; avatarUrl: string | 
 
   return (
     <div
-      className={`mr-4 mt-0.5 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full ${nickColor(nick)} text-sm font-bold text-white`}
+      className="mr-4 mt-0.5 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full text-sm font-bold"
+      style={nickStyle(nick)}
     >
       {nick.charAt(0).toUpperCase()}
     </div>

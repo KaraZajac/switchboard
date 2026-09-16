@@ -56,6 +56,7 @@ import org.switchboard.android.irc.History
 import org.switchboard.android.irc.Isupport
 import org.switchboard.android.irc.Jump
 import org.switchboard.android.irc.Numerics
+import org.switchboard.android.irc.NickColour
 import org.switchboard.android.irc.ReadMarker
 import org.switchboard.android.irc.Links
 import org.switchboard.android.irc.Klipy
@@ -442,11 +443,6 @@ class SharedCorpusTest {
                 assertEquals("$id $role", roles[role]!!.jsonPrimitive.content, hex(colour))
             }
 
-            val avatars = expected["avatars"]!!.jsonArray
-            assertEquals("$id avatar count", avatars.size, palette.avatars.size)
-            for ((slot, colour) in palette.avatars.withIndex()) {
-                assertEquals("$id avatar $slot", avatars[slot].jsonPrimitive.content, hex(colour))
-            }
         }
     }
 
@@ -2360,6 +2356,38 @@ class SharedCorpusTest {
 
             assertEquals(name, case["furthest"]!!.jsonPrimitive.contentOrNull, ReadMarker.furthest(known, arriving))
             assertEquals(name, case["forward"]!!.jsonPrimitive.boolean, ReadMarker.movesForward(known, arriving))
+        }
+    }
+
+    // ── the colour a person is ────────────────────────────────────────
+
+    @Test
+    fun `gives a nick the same colour and ink the desktop does`() {
+        val corpus = load("nickcolour.json")
+
+        fun hex(argb: Long) = "#%06x".format(argb and 0xFFFFFF)
+
+        val colours = corpus["colours"]!!.jsonArray.map { it.jsonPrimitive.content }
+        assertEquals("seventeen, in order", colours, NickColour.COLOURS.map { hex(it) })
+
+        for (entry in corpus["ink"]!!.jsonArray) {
+            val case = entry.jsonObject
+            val colour = case["colour"]!!.jsonPrimitive.content
+            val argb = 0xFF000000L or colour.removePrefix("#").toLong(16)
+            assertEquals(
+                "ink on ${case["name"]!!.jsonPrimitive.content}",
+                case["ink"]!!.jsonPrimitive.content,
+                hex(NickColour.ink(argb))
+            )
+        }
+
+        // The half of all nicks the two clients used to disagree about: the
+        // desktop takes the absolute value of a signed 32-bit hash and this
+        // was doing it unsigned
+        for (entry in corpus["nicks"]!!.jsonArray) {
+            val case = entry.jsonObject
+            val nick = case["nick"]!!.jsonPrimitive.content
+            assertEquals(nick, case["colour"]!!.jsonPrimitive.content, hex(NickColour.of(nick)))
         }
     }
 

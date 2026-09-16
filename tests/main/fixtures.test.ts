@@ -93,7 +93,7 @@ describe('themes', () => {
   const css = readFileSync(join(__dirname, '../../src/renderer/styles/globals.css'), 'utf8')
   const fixture = read('themes.json') as {
     default: string
-    themes: { id: string; label: string; roles: Record<string, string>; avatars: string[] }[]
+    themes: { id: string; label: string; roles: Record<string, string>; avatars?: string[] }[]
   }
 
   /** The custom properties a [data-theme] block (or the bare :root) declares */
@@ -147,10 +147,16 @@ describe('themes', () => {
       for (const [role, token] of Object.entries(ROLES)) {
         expect(theme.roles[role], `${theme.id} ${role} (--color-${token})`).toBe(declared[token])
       }
-      // Two of the avatar colours are themed on the desktop, so they move
-      expect(theme.avatars[5], `${theme.id} avatar green`).toBe(declared['green-600'])
-      expect(theme.avatars[11], `${theme.id} avatar indigo`).toBe(declared['indigo-600'])
-      expect(theme.avatars.length).toBe(17)
+    }
+  })
+
+  it('does not carry avatar colours, which do not belong to a theme', () => {
+    // They used to, and two of the seventeen were shades every palette
+    // redefines — so two people in seventeen changed colour when you changed
+    // theme, and the phone copied the accident to stay in step. They are
+    // written once in `@shared/nickcolour` now, the same list for everybody.
+    for (const theme of fixture.themes) {
+      expect(theme.avatars, `${theme.id} still lists avatars`).toBeUndefined()
     }
   })
 

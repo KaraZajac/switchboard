@@ -4,7 +4,7 @@ import { useServerStore } from '../../stores/serverStore'
 import { useChannelStore } from '../../stores/channelStore'
 import { useUserStore } from '../../stores/userStore'
 import { useUIStore } from '../../stores/uiStore'
-import { nickColor } from '../../utils/nickColor'
+import { nickStyle } from '../../utils/nickColor'
 import { displayNameFor, metadataColor, type UserMetadata } from '@shared/types/metadata'
 import { ContextMenu, type ContextMenuItem } from '../common/ContextMenu'
 import {
@@ -359,18 +359,15 @@ function UserAvatar({ nick, avatarUrl, away }: { nick: string; avatarUrl: string
   const [failed, setFailed] = useState(false)
   useEffect(() => { setFailed(false) }, [avatarUrl])
 
-  // The colour and the white initial belong to each other: `nickColor` is one
-  // of Tailwind's own shades and is the same under every theme, which is the
-  // only reason white is safe on it. The placeholder circle behind a picture
-  // that is still loading is a palette grey, and nothing is written on it.
+  // The circle and its lettering belong to each other and neither follows the
+  // theme — see `@shared/nickcolour`. The placeholder behind a picture that is
+  // still loading is a palette grey, and nothing is written on it.
   const showing = avatarUrl && !failed
-  const circle = showing
-    ? 'bg-gray-600'
-    : `${nickColor(nick)} text-xs font-bold text-white`
 
   return (
     <div
-      className={`relative flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full ${circle}`}
+      className={`relative flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-xs font-bold ${showing ? 'bg-gray-600' : ''}`}
+      style={showing ? undefined : nickStyle(nick)}
     >
       {showing ? (
         <img

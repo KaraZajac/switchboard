@@ -21,6 +21,7 @@ import androidx.compose.material3.LocalTextStyle
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.unit.dp
+import org.switchboard.android.irc.NickColour
 import org.switchboard.android.irc.Unread
 import androidx.compose.ui.unit.sp
 import java.time.Instant
@@ -71,19 +72,20 @@ val Mauve: Color get() = activePalette.accentSoft
 /**
  * Stable per nick, and the same on both clients.
  *
- * FNV-1a over the nick, indexing the theme's avatar colours — the same hash and
- * the same list the desktop uses, so a person is the same colour on the phone
- * as on the machine next to it.
+ * The comment here used to say that and it was half true: the list was the
+ * theme's, two of its seventeen followed the palette, and the hash was done in
+ * unsigned arithmetic where the desktop takes the absolute value of a signed
+ * one — so about half of all nicks came out a different colour on the two
+ * screens. See [NickColour], which both clients now share.
  */
-fun nickColor(nick: String): Color {
-    var hash = 2166136261u
-    for (char in nick) {
-        hash = hash xor char.code.toUInt()
-        hash *= 16777619u
-    }
-    val avatars = activePalette.avatars
-    return avatars[(hash % avatars.size.toUInt()).toInt()]
-}
+fun nickColor(nick: String): Color = Color(NickColour.of(nick).toULong() shl 32)
+
+/** Black or white, whichever reads on that circle */
+fun nickInk(colour: Color): Color =
+    Color(NickColour.ink(argbOf(colour)).toULong() shl 32)
+
+private fun argbOf(colour: Color): Long =
+    (colour.value shr 32).toLong() and 0xFFFFFFFFL
 
 /** The `color` metadata key, when it is something we can actually draw */
 fun metadataColor(value: String?): Color? {
@@ -155,7 +157,10 @@ fun Avatar(
     ) {
         Text(
             nick.firstOrNull { it.isLetterOrDigit() }?.uppercase() ?: "?",
-            color = Crust,
+            // Read off the circle, not off the theme: the circle does not
+            // change with the theme, and this used to be Crust — dark on
+            // twelve palettes and light on the thirteenth
+            color = nickInk(color),
             fontSize = (size.value * 0.42f).sp,
             fontWeight = FontWeight.Bold
         )

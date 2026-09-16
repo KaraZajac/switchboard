@@ -4,7 +4,6 @@ import { useServerStore } from '../../stores/serverStore'
 import { useChannelStore } from '../../stores/channelStore'
 import { useUIStore } from '../../stores/uiStore'
 import { FormattedText } from '../chat/MessageContent'
-import { nickColor } from '../../utils/nickColor'
 import type { Mention } from '@shared/types/ipc'
 
 /**
@@ -104,12 +103,14 @@ export function MentionsView() {
           </div>
 
           <div className="flex items-baseline gap-2">
-            <span
-              className="shrink-0 text-sm font-medium"
-              style={{ color: nickColor(mention.nick) }}
-            >
-              {mention.nick}
-            </span>
+            {/*
+              The same colour a nick is everywhere else in the window, which is
+              the palette's own. This asked `nickColor` for one and was handed a
+              Tailwind class name, which is not a colour a style attribute can
+              use — so it has always rendered in the inherited colour, and that
+              turned out to be the right answer.
+            */}
+            <span className="shrink-0 text-sm font-medium text-gray-100">{mention.nick}</span>
             <span className="min-w-0 break-words text-sm text-gray-200">
               <FormattedText text={mention.content} />
             </span>

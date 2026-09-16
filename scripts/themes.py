@@ -61,19 +61,11 @@ ROLES = {
     'bad': 'red-400',
 }
 
-# Avatar colours: Tailwind's own -600 shades, which no theme overrides — except
-# green and indigo, which every theme does, so those two follow the theme on the
-# desktop and have to here as well.
-FIXED_AVATARS = {
-    'red': '#e7000b', 'orange': '#f54900', 'amber': '#e17100', 'yellow': '#d08700',
-    'lime': '#5ea500', 'emerald': '#009966', 'teal': '#009689', 'cyan': '#0092b8',
-    'sky': '#0084d1', 'blue': '#155dfc', 'violet': '#7f22fe', 'purple': '#9810fa',
-    'fuchsia': '#c800de', 'pink': '#e60076', 'rose': '#ec003f',
-}
-AVATAR_ORDER = [
-    'red', 'orange', 'amber', 'yellow', 'lime', 'green', 'emerald', 'teal',
-    'cyan', 'sky', 'blue', 'indigo', 'violet', 'purple', 'fuchsia', 'pink', 'rose',
-]
+# Avatar colours no longer live here: they are fixed rather than themed, so they
+# are written once in src/shared/nickcolour.ts and read from there by both
+# clients. Two of the seventeen used to be named as Tailwind classes that every
+# palette redefines, which meant two people in seventeen changed colour when you
+# changed theme — and the phone had to copy the accident to stay in step.
 
 DEFAULT = 'catppuccin-mocha'
 
@@ -115,14 +107,7 @@ def build() -> dict:
                 sys.exit(f"theme '{name}' is missing --color-{token}")
             roles[role] = tokens[token].strip().lower()
 
-        avatars = []
-        for colour in AVATAR_ORDER:
-            if colour in ('green', 'indigo'):
-                avatars.append(tokens[f'{colour}-600'].strip().lower())
-            else:
-                avatars.append(FIXED_AVATARS[colour])
-
-        themes.append({'id': name, 'label': label, 'roles': roles, 'avatars': avatars})
+        themes.append({'id': name, 'label': label, 'roles': roles})
 
     return {
         'note': (
@@ -170,8 +155,6 @@ def kotlin(data: dict) -> str:
         '    val good: Color,',
         '    val warn: Color,',
         '    val bad: Color,',
-        '    /** Avatar colours, in the order the nick hash indexes them */',
-        '    val avatars: List<Color>',
         ')',
         '',
         '/** Every theme the desktop offers, in the order it offers them */',
@@ -185,11 +168,6 @@ def kotlin(data: dict) -> str:
         lines.append(f'        label = "{theme["label"]}",')
         for role in ROLES:
             lines.append(f'        {role} = Color({argb(r[role])}),')
-        lines.append('        avatars = listOf(')
-        for row in range(0, len(theme['avatars']), 4):
-            chunk = theme['avatars'][row:row + 4]
-            lines.append('            ' + ' '.join(f'Color({argb(c)}),' for c in chunk))
-        lines.append('        )')
         lines.append('    ),')
 
     lines += [

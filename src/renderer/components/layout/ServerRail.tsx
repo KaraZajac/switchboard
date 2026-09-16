@@ -7,7 +7,7 @@ import { SwitchboardIcon } from '../common/SwitchboardIcon'
 import { ServerMenu } from '../server/ServerMenu'
 import { isChannelName } from '@shared/constants'
 import { railLook, badgeLabel, badgeDiameter } from '@shared/unread'
-import { nickColor } from '../../utils/nickColor'
+import { nickStyle } from '../../utils/nickColor'
 
 type ConnectionStatus = 'connected' | 'connecting' | 'reconnecting' | 'disconnected'
 
@@ -175,9 +175,10 @@ export function ServerRail() {
               }}
             >
               <span
-                className={`flex h-full w-full items-center justify-center overflow-hidden text-sm font-bold tracking-wide text-white transition-opacity ${
-                  iconUrl ? 'bg-gray-700' : nickColor(server.name)
+                className={`flex h-full w-full items-center justify-center overflow-hidden text-sm font-bold tracking-wide transition-opacity ${
+                  iconUrl ? 'bg-gray-700 text-gray-100' : ''
                 } ${status === 'connected' ? '' : 'opacity-50 grayscale'}`}
+                style={iconUrl ? undefined : nickStyle(server.name)}
               >
                 {iconUrl ? (
                   <img

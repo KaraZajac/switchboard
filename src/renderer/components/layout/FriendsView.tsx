@@ -5,7 +5,7 @@ import { useUserStore } from '../../stores/userStore'
 import { useServerStore } from '../../stores/serverStore'
 import { useChannelStore } from '../../stores/channelStore'
 import { useUIStore } from '../../stores/uiStore'
-import { nickColor } from '../../utils/nickColor'
+import { nickStyle } from '../../utils/nickColor'
 import { friendRoster, type Friend, type Watched } from '@shared/friends'
 
 /**
@@ -182,9 +182,10 @@ function Row({
       >
         <div className="relative shrink-0">
           <div
-            className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold text-white ${nickColor(
-              friend.nick
-            )} ${friend.online ? '' : 'opacity-40'}`}
+            className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold ${
+              friend.online ? '' : 'opacity-40'
+            }`}
+            style={nickStyle(friend.nick)}
           >
             {friend.nick.charAt(0).toUpperCase()}
           </div>

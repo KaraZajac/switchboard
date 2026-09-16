@@ -28,8 +28,6 @@ data class Palette(
     val good: Color,
     val warn: Color,
     val bad: Color,
-    /** Avatar colours, in the order the nick hash indexes them */
-    val avatars: List<Color>
 )
 
 /** Every theme the desktop offers, in the order it offers them */
@@ -51,13 +49,6 @@ val PALETTES: List<Palette> = listOf(
         good = Color(0xFFA6E3A1),
         warn = Color(0xFFF9E2AF),
         bad = Color(0xFFF38BA8),
-        avatars = listOf(
-            Color(0xFFE7000B), Color(0xFFF54900), Color(0xFFE17100), Color(0xFFD08700),
-            Color(0xFF5EA500), Color(0xFF74C7A4), Color(0xFF009966), Color(0xFF009689),
-            Color(0xFF0092B8), Color(0xFF0084D1), Color(0xFF155DFC), Color(0xFF7BA3E8),
-            Color(0xFF7F22FE), Color(0xFF9810FA), Color(0xFFC800DE), Color(0xFFE60076),
-            Color(0xFFEC003F),
-        )
     ),
     Palette(
         id = "catppuccin-latte",
@@ -76,13 +67,6 @@ val PALETTES: List<Palette> = listOf(
         good = Color(0xFF40A02B),
         warn = Color(0xFFDF8E1D),
         bad = Color(0xFFD20F39),
-        avatars = listOf(
-            Color(0xFFE7000B), Color(0xFFF54900), Color(0xFFE17100), Color(0xFFD08700),
-            Color(0xFF5EA500), Color(0xFF368A24), Color(0xFF009966), Color(0xFF009689),
-            Color(0xFF0092B8), Color(0xFF0084D1), Color(0xFF155DFC), Color(0xFF1A5AD4),
-            Color(0xFF7F22FE), Color(0xFF9810FA), Color(0xFFC800DE), Color(0xFFE60076),
-            Color(0xFFEC003F),
-        )
     ),
     Palette(
         id = "catppuccin-frappe",
@@ -101,13 +85,6 @@ val PALETTES: List<Palette> = listOf(
         good = Color(0xFFA6D189),
         warn = Color(0xFFE5C890),
         bad = Color(0xFFE78284),
-        avatars = listOf(
-            Color(0xFFE7000B), Color(0xFFF54900), Color(0xFFE17100), Color(0xFFD08700),
-            Color(0xFF5EA500), Color(0xFF8AB870), Color(0xFF009966), Color(0xFF009689),
-            Color(0xFF0092B8), Color(0xFF0084D1), Color(0xFF155DFC), Color(0xFF7A98D4),
-            Color(0xFF7F22FE), Color(0xFF9810FA), Color(0xFFC800DE), Color(0xFFE60076),
-            Color(0xFFEC003F),
-        )
     ),
     Palette(
         id = "catppuccin-macchiato",
@@ -126,13 +103,6 @@ val PALETTES: List<Palette> = listOf(
         good = Color(0xFFA6DA95),
         warn = Color(0xFFEED49F),
         bad = Color(0xFFED8796),
-        avatars = listOf(
-            Color(0xFFE7000B), Color(0xFFF54900), Color(0xFFE17100), Color(0xFFD08700),
-            Color(0xFF5EA500), Color(0xFF8DC17C), Color(0xFF009966), Color(0xFF009689),
-            Color(0xFF0092B8), Color(0xFF0084D1), Color(0xFF155DFC), Color(0xFF7899DA),
-            Color(0xFF7F22FE), Color(0xFF9810FA), Color(0xFFC800DE), Color(0xFFE60076),
-            Color(0xFFEC003F),
-        )
     ),
     Palette(
         id = "dracula",
@@ -151,13 +121,6 @@ val PALETTES: List<Palette> = listOf(
         good = Color(0xFF69FF94),
         warn = Color(0xFFF1FA8C),
         bad = Color(0xFFFF6E6E),
-        avatars = listOf(
-            Color(0xFFE7000B), Color(0xFFF54900), Color(0xFFE17100), Color(0xFFD08700),
-            Color(0xFF5EA500), Color(0xFF40C462), Color(0xFF009966), Color(0xFF009689),
-            Color(0xFF0092B8), Color(0xFF0084D1), Color(0xFF155DFC), Color(0xFFA87BDB),
-            Color(0xFF7F22FE), Color(0xFF9810FA), Color(0xFFC800DE), Color(0xFFE60076),
-            Color(0xFFEC003F),
-        )
     ),
     Palette(
         id = "nord",
@@ -176,13 +139,6 @@ val PALETTES: List<Palette> = listOf(
         good = Color(0xFFA3BE8C),
         warn = Color(0xFFEBCB8B),
         bad = Color(0xFFD08770),
-        avatars = listOf(
-            Color(0xFFE7000B), Color(0xFFF54900), Color(0xFFE17100), Color(0xFFD08700),
-            Color(0xFF5EA500), Color(0xFF8FAA78), Color(0xFF009966), Color(0xFF009689),
-            Color(0xFF0092B8), Color(0xFF0084D1), Color(0xFF155DFC), Color(0xFF5E81AC),
-            Color(0xFF7F22FE), Color(0xFF9810FA), Color(0xFFC800DE), Color(0xFFE60076),
-            Color(0xFFEC003F),
-        )
     ),
     Palette(
         id = "gruvbox",
@@ -201,13 +157,6 @@ val PALETTES: List<Palette> = listOf(
         good = Color(0xFFB8BB26),
         warn = Color(0xFFFABD2F),
         bad = Color(0xFFFB4934),
-        avatars = listOf(
-            Color(0xFFE7000B), Color(0xFFF54900), Color(0xFFE17100), Color(0xFFD08700),
-            Color(0xFF5EA500), Color(0xFF84831A), Color(0xFF009966), Color(0xFF009689),
-            Color(0xFF0092B8), Color(0xFF0084D1), Color(0xFF155DFC), Color(0xFF9D5276),
-            Color(0xFF7F22FE), Color(0xFF9810FA), Color(0xFFC800DE), Color(0xFFE60076),
-            Color(0xFFEC003F),
-        )
     ),
     Palette(
         id = "one-dark",
@@ -226,13 +175,6 @@ val PALETTES: List<Palette> = listOf(
         good = Color(0xFF98C379),
         warn = Color(0xFFE5C07B),
         bad = Color(0xFFF07178),
-        avatars = listOf(
-            Color(0xFFE7000B), Color(0xFFF54900), Color(0xFFE17100), Color(0xFFD08700),
-            Color(0xFF5EA500), Color(0xFF7FAA60), Color(0xFF009966), Color(0xFF009689),
-            Color(0xFF0092B8), Color(0xFF0084D1), Color(0xFF155DFC), Color(0xFF528BCC),
-            Color(0xFF7F22FE), Color(0xFF9810FA), Color(0xFFC800DE), Color(0xFFE60076),
-            Color(0xFFEC003F),
-        )
     ),
     Palette(
         id = "rose-pine",
@@ -251,13 +193,6 @@ val PALETTES: List<Palette> = listOf(
         good = Color(0xFF9CCFD8),
         warn = Color(0xFFF6C177),
         bad = Color(0xFFF07093),
-        avatars = listOf(
-            Color(0xFFE7000B), Color(0xFFF54900), Color(0xFFE17100), Color(0xFFD08700),
-            Color(0xFF5EA500), Color(0xFF82B5BC), Color(0xFF009966), Color(0xFF009689),
-            Color(0xFF0092B8), Color(0xFF0084D1), Color(0xFF155DFC), Color(0xFFA68BD1),
-            Color(0xFF7F22FE), Color(0xFF9810FA), Color(0xFFC800DE), Color(0xFFE60076),
-            Color(0xFFEC003F),
-        )
     ),
     Palette(
         id = "solarized-dark",
@@ -276,13 +211,6 @@ val PALETTES: List<Palette> = listOf(
         good = Color(0xFF859900),
         warn = Color(0xFFB58900),
         bad = Color(0xFFEF5350),
-        avatars = listOf(
-            Color(0xFFE7000B), Color(0xFFF54900), Color(0xFFE17100), Color(0xFFD08700),
-            Color(0xFF5EA500), Color(0xFF718300), Color(0xFF009966), Color(0xFF009689),
-            Color(0xFF0092B8), Color(0xFF0084D1), Color(0xFF155DFC), Color(0xFF5A5EB0),
-            Color(0xFF7F22FE), Color(0xFF9810FA), Color(0xFFC800DE), Color(0xFFE60076),
-            Color(0xFFEC003F),
-        )
     ),
     Palette(
         id = "tokyo-night",
@@ -301,13 +229,6 @@ val PALETTES: List<Palette> = listOf(
         good = Color(0xFF9ECE6A),
         warn = Color(0xFFE0AF68),
         bad = Color(0xFFFF9A9E),
-        avatars = listOf(
-            Color(0xFFE7000B), Color(0xFFF54900), Color(0xFFE17100), Color(0xFFD08700),
-            Color(0xFF5EA500), Color(0xFF85B555), Color(0xFF009966), Color(0xFF009689),
-            Color(0xFF0092B8), Color(0xFF0084D1), Color(0xFF155DFC), Color(0xFF6183D5),
-            Color(0xFF7F22FE), Color(0xFF9810FA), Color(0xFFC800DE), Color(0xFFE60076),
-            Color(0xFFEC003F),
-        )
     ),
     Palette(
         id = "kanagawa",
@@ -326,13 +247,6 @@ val PALETTES: List<Palette> = listOf(
         good = Color(0xFF98BB6C),
         warn = Color(0xFFE6C384),
         bad = Color(0xFFF07070),
-        avatars = listOf(
-            Color(0xFFE7000B), Color(0xFFF54900), Color(0xFFE17100), Color(0xFFD08700),
-            Color(0xFF5EA500), Color(0xFF80A356), Color(0xFF009966), Color(0xFF009689),
-            Color(0xFF0092B8), Color(0xFF0084D1), Color(0xFF155DFC), Color(0xFF7E6BA3),
-            Color(0xFF7F22FE), Color(0xFF9810FA), Color(0xFFC800DE), Color(0xFFE60076),
-            Color(0xFFEC003F),
-        )
     ),
     Palette(
         id = "discord",
@@ -351,13 +265,6 @@ val PALETTES: List<Palette> = listOf(
         good = Color(0xFF6BF096),
         warn = Color(0xFFFEE75C),
         bad = Color(0xFFF58B8F),
-        avatars = listOf(
-            Color(0xFFE7000B), Color(0xFFF54900), Color(0xFFE17100), Color(0xFFD08700),
-            Color(0xFF5EA500), Color(0xFF45C46A), Color(0xFF009966), Color(0xFF009689),
-            Color(0xFF0092B8), Color(0xFF0084D1), Color(0xFF155DFC), Color(0xFF4752C4),
-            Color(0xFF7F22FE), Color(0xFF9810FA), Color(0xFFC800DE), Color(0xFFE60076),
-            Color(0xFFEC003F),
-        )
     ),
 )
 

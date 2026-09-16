@@ -1,0 +1,187 @@
+{
+  "$comment": "The colour a person is and the colour their initial is written in. Deterministic from the nick so the same person is the same colour everywhere — which was not quite true: two of the seventeen were Tailwind shades every palette redefines, so two people in seventeen changed colour with the theme. The ink is chosen from the circle rather than from the theme, because the circle does not change with it. Shared by tests/shared/nickcolour.test.ts and the Android SharedCorpusTest.",
+  "$colours": "The seventeen, in the order the hash indexes them. Changing either repaints everybody.",
+  "colours": [
+    "#e7000b",
+    "#f54900",
+    "#e17100",
+    "#d08700",
+    "#5ea500",
+    "#00a63e",
+    "#009966",
+    "#009689",
+    "#0092b8",
+    "#0084d1",
+    "#155dfc",
+    "#4f39f6",
+    "#7f22fe",
+    "#9810fa",
+    "#c800de",
+    "#e60076",
+    "#ec003f"
+  ],
+  "$ink": "Whichever of black and white stands out more against the circle. Always-white was 2.01:1 on the green; this is 4.63:1 at worst.",
+  "ink": [
+    {
+      "name": "red",
+      "colour": "#e7000b",
+      "ink": "#ffffff",
+      "contrast": 4.77
+    },
+    {
+      "name": "orange",
+      "colour": "#f54900",
+      "ink": "#000000",
+      "contrast": 5.84
+    },
+    {
+      "name": "amber",
+      "colour": "#e17100",
+      "ink": "#000000",
+      "contrast": 6.56
+    },
+    {
+      "name": "yellow",
+      "colour": "#d08700",
+      "ink": "#000000",
+      "contrast": 7.15
+    },
+    {
+      "name": "lime",
+      "colour": "#5ea500",
+      "ink": "#000000",
+      "contrast": 6.86
+    },
+    {
+      "name": "green",
+      "colour": "#00a63e",
+      "ink": "#000000",
+      "contrast": 6.52
+    },
+    {
+      "name": "emerald",
+      "colour": "#009966",
+      "ink": "#000000",
+      "contrast": 5.75
+    },
+    {
+      "name": "teal",
+      "colour": "#009689",
+      "ink": "#000000",
+      "contrast": 5.72
+    },
+    {
+      "name": "cyan",
+      "colour": "#0092b8",
+      "ink": "#000000",
+      "contrast": 5.8
+    },
+    {
+      "name": "sky",
+      "colour": "#0084d1",
+      "ink": "#000000",
+      "contrast": 5.22
+    },
+    {
+      "name": "blue",
+      "colour": "#155dfc",
+      "ink": "#ffffff",
+      "contrast": 5.25
+    },
+    {
+      "name": "indigo",
+      "colour": "#4f39f6",
+      "ink": "#ffffff",
+      "contrast": 6.46
+    },
+    {
+      "name": "violet",
+      "colour": "#7f22fe",
+      "ink": "#ffffff",
+      "contrast": 5.89
+    },
+    {
+      "name": "purple",
+      "colour": "#9810fa",
+      "ink": "#ffffff",
+      "contrast": 5.54
+    },
+    {
+      "name": "fuchsia",
+      "colour": "#c800de",
+      "ink": "#ffffff",
+      "contrast": 4.66
+    },
+    {
+      "name": "pink",
+      "colour": "#e60076",
+      "ink": "#000000",
+      "contrast": 4.63
+    },
+    {
+      "name": "rose",
+      "colour": "#ec003f",
+      "ink": "#000000",
+      "contrast": 4.64
+    }
+  ],
+  "$nicks": "The hash, which both clients have to agree on letter for letter.",
+  "nicks": [
+    {
+      "nick": "kara",
+      "colour": "#e7000b"
+    },
+    {
+      "nick": "alice",
+      "colour": "#009689"
+    },
+    {
+      "nick": "bob",
+      "colour": "#4f39f6"
+    },
+    {
+      "nick": "dave",
+      "colour": "#9810fa"
+    },
+    {
+      "nick": "dave_",
+      "colour": "#009966"
+    },
+    {
+      "nick": "dave__",
+      "colour": "#5ea500"
+    },
+    {
+      "nick": "Kara",
+      "colour": "#d08700"
+    },
+    {
+      "nick": "KARA",
+      "colour": "#7f22fe"
+    },
+    {
+      "nick": "",
+      "colour": "#f54900"
+    },
+    {
+      "nick": "a",
+      "colour": "#ec003f"
+    },
+    {
+      "nick": "somebody-with-a-much-longer-name",
+      "colour": "#e60076"
+    },
+    {
+      "nick": "ünïcödé",
+      "colour": "#9810fa"
+    },
+    {
+      "nick": "[bracket]",
+      "colour": "#0092b8"
+    },
+    {
+      "nick": "nick|away",
+      "colour": "#009689"
+    }
+  ]
+}

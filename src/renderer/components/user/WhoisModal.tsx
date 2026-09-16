@@ -4,7 +4,8 @@ import { useServerStore } from '../../stores/serverStore'
 import { displayNameFor, metadataColor } from '@shared/types/metadata'
 import { avatarUrl as safeAvatarUrl } from '@shared/avatar'
 import { safeExternalUrl } from '@shared/links'
-import { nickColor } from '../../utils/nickColor'
+import { nickStyle } from '../../utils/nickColor'
+import { avatarInk } from '@shared/nickcolour'
 
 export function WhoisModal() {
   const closeModal = useUIStore((s) => s.closeModal)
@@ -70,8 +71,14 @@ export function WhoisModal() {
         {/* Avatar and badges */}
         <div className="flex items-center gap-3">
           <div
-            className={`flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full text-2xl font-bold text-gray-900 ${chosenColour ? '' : nickColor(data.nick)}`}
-            style={chosenColour ? { backgroundColor: chosenColour } : undefined}
+            className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full text-2xl font-bold"
+            // A colour they chose themselves gets the same treatment as the one
+            // we picked for them: the ink is read off the circle either way
+            style={
+              chosenColour
+                ? { backgroundColor: chosenColour, color: avatarInk(chosenColour) }
+                : nickStyle(data.nick)
+            }
           >
             {avatar ? (
               <img src={avatar} alt="" className="h-full w-full object-cover" />

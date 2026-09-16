@@ -1,18 +1,14 @@
-/** Deterministic color for a nick — same nick always gets the same color */
-const AVATAR_COLORS = [
-  'bg-red-600', 'bg-orange-600', 'bg-amber-600', 'bg-yellow-600',
-  'bg-lime-600', 'bg-green-600', 'bg-emerald-600', 'bg-teal-600',
-  'bg-cyan-600', 'bg-sky-600', 'bg-blue-600', 'bg-indigo-600',
-  'bg-violet-600', 'bg-purple-600', 'bg-fuchsia-600', 'bg-pink-600',
-  'bg-rose-600',
-]
+import { avatarColour, avatarInk } from '@shared/nickcolour'
 
-export function nickColor(nick: string): string {
-  // FNV-1a hash for better distribution across short strings
-  let hash = 2166136261
-  for (let i = 0; i < nick.length; i++) {
-    hash ^= nick.charCodeAt(i)
-    hash = Math.imul(hash, 16777619)
-  }
-  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length]
+/**
+ * The circle a person's initial sits in, and the ink that reads on it.
+ *
+ * Inline style rather than a class: the seventeen colours are fixed on purpose
+ * — the same person is the same colour on every theme and on the phone — and
+ * naming them as Tailwind classes meant two of the seventeen were shades every
+ * palette redefines. See `@shared/nickcolour`, which both clients share.
+ */
+export function nickStyle(nick: string): { backgroundColor: string; color: string } {
+  const backgroundColor = avatarColour(nick)
+  return { backgroundColor, color: avatarInk(backgroundColor) }
 }
