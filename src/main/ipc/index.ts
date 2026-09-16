@@ -184,6 +184,13 @@ export function registerIPCHandlers(): void {
         peerHolding:
           session.role !== 'primary' &&
           (Object.keys(session.peers).length > 0 || remote.connected.length > 0),
+        /*
+         * Always true here whenever we are following at all, and that is not a
+         * mistake: the coordinator yields only to a *higher* priority, and two
+         * desktops rank equally, so a desktop never follows a desktop. The one
+         * thing that outranks it is an always-on instance. `desktop` is a word
+         * only the phone ever shows, which ranks below both.
+         */
         followingAlwaysOn: Object.values(session.peers).some(
           (peer) => peer.priority >= SERVER_PRIORITY
         ),
