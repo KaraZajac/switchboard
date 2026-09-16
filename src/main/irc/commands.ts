@@ -1,6 +1,6 @@
 import type { IRCClient } from './client'
 import { isupportNumber, fitsLimit } from '@shared/isupport'
-import { parsePrefix, quietMode, banMask } from '@shared/powers'
+import { parsePrefix, quietMode, banMask, modeForRole, roleName, type Rung } from '@shared/powers'
 import { maskToSet } from '@shared/masklists'
 
 /**
@@ -293,17 +293,43 @@ export function runCommand(client: IRCClient, target: string, text: string): Com
     case 'dehalfop':
     case 'owner':
     case 'deowner':
+    case 'founder':
+    case 'defounder':
     case 'admin':
     case 'deadmin': {
-      const letters: Record<string, string> = {
-        op: 'o',
-        voice: 'v',
-        halfop: 'h',
-        owner: 'q',
-        admin: 'a'
+      /*
+       * The letter comes off `PREFIX`, not out of a table here.
+       *
+       * It used to be a table, with `owner: 'q'` in it. rIRCd spells the top
+       * rung `x` and keeps `q` for its quiet list — so on rIRCd `/owner nick`
+       * sent `MODE #chan +q nick` and silenced the person it was meant to hand
+       * the channel to. The opposite of the command, on the network this
+       * client is developed against.
+       *
+       * `/founder` is the same thing under the name the servers that have it
+       * actually use; `/owner` stays because thirty years of clients have had
+       * it.
+       */
+      const rungs: Record<string, Rung> = {
+        op: 'op',
+        voice: 'voice',
+        halfop: 'halfop',
+        owner: 'founder',
+        founder: 'founder',
+        admin: 'admin'
       }
       const adding = !name.startsWith('de')
-      const letter = letters[adding ? name : name.slice(2)]
+      const rung = rungs[adding ? name : name.slice(2)]
+      const letter = modeForRole(client.state.isupport.PREFIX as string, rung)
+      if (!letter) {
+        const { modes } = parsePrefix(client.state.isupport.PREFIX as string)
+        const has = modes.length > 0 ? `It has ${modes.split('').map(roleName).join(', ')}.` : ''
+        return {
+          handled: true,
+          error: `This network has no ${rung === 'founder' ? 'founder' : rung} role. ${has}`.trim()
+        }
+      }
+
       const channel = isChannel(args[0]) ? args.shift()! : target
       if (!isChannel(channel)) return { handled: true, error: `/${name} only works in a channel` }
 

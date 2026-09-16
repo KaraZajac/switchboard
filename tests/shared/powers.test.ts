@@ -10,7 +10,9 @@ import {
   maskIsWeak,
   canModerate,
   roleOf,
-  type MemberAction
+  modeForRole,
+  type MemberAction,
+  type Rung
 } from '@shared/powers'
 
 interface Case {
@@ -27,6 +29,7 @@ interface Case {
 const corpus = JSON.parse(
   readFileSync(join(__dirname, '../fixtures/powers.json'), 'utf8')
 ) as {
+  modes: { name: string; prefix: string | null; rung: Rung; mode: string | null }[]
   cases: Case[]
   masks: { name: string; nick: string; user: string | null; host: string | null; mask: string; weak: boolean }[]
 }
@@ -213,4 +216,26 @@ describe('which group a member belongs in', () => {
       expect(roleOf(c.prefixes, c.prefix)).toEqual({ rank: c.rank, label: c.label })
     })
   }
+})
+
+/**
+ * Which letter a network spends on a rung.
+ *
+ * The top one is the trap: `q` on the servers that have it, `x` on rIRCd,
+ * which keeps `q` for its quiet list. `/owner` assumed `q` and so, on rIRCd,
+ * the command for handing somebody the channel silenced them instead.
+ */
+describe('the mode letter for a rung', () => {
+  for (const c of corpus.modes) {
+    it(c.name, () => {
+      expect(modeForRole(c.prefix, c.rung)).toBe(c.mode)
+    })
+  }
+
+  it('never answers with a letter the network does not have', () => {
+    for (const rung of ['founder', 'admin', 'op', 'halfop', 'voice'] as Rung[]) {
+      const letter = modeForRole('(ov)@+', rung)
+      if (letter !== null) expect('ov').toContain(letter)
+    }
+  })
 })

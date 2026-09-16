@@ -156,10 +156,12 @@
         "voice",
         "halfop",
         "deop",
+        "admin",
+        "founder",
         "kick",
         "ban"
       ],
-      "$comment": "No mute here: on UnrealIRCd `q` is the owner prefix, not a quiet mode, so offering one would be offering to make somebody the owner."
+      "$comment": "No mute here: on UnrealIRCd `q` is the owner prefix, not a quiet mode, so offering one would be offering to make somebody the owner. The owner rungs used to be missing altogether — an owner's menu stopped at Make operator, so the one person who could hand the channel on had no way to."
     },
     {
       "name": "a network with only ops and voice has no halfop to give",
@@ -237,6 +239,171 @@
         "whois",
         "devoice",
         "deop"
+      ]
+    },
+    {
+      "name": "a founder on rIRCd can hand the channel to somebody else",
+      "prefix": "(xaohv)^&@%+",
+      "chanmodes": "beIq,k,fjlL,imnstpRcCMZNOTz",
+      "mine": "^",
+      "theirs": "",
+      "isSelf": false,
+      "actions": [
+        "whois",
+        "message",
+        "ignore",
+        "voice",
+        "halfop",
+        "op",
+        "admin",
+        "founder",
+        "kick",
+        "mute",
+        "ban"
+      ],
+      "$comment": "The whole point of this pass. The menu used to stop at Make operator, so the one person who could pass the channel on had no way to — and /owner sent +q, which on rIRCd is the quiet list, so the command for it silenced them instead."
+    },
+    {
+      "name": "and take it back from somebody who has it",
+      "prefix": "(xaohv)^&@%+",
+      "chanmodes": "beIq,k,fjlL,imnstpRcCMZNOTz",
+      "mine": "^",
+      "theirs": "^",
+      "isSelf": false,
+      "actions": [
+        "whois",
+        "message",
+        "ignore",
+        "voice",
+        "halfop",
+        "op",
+        "admin",
+        "defounder",
+        "kick",
+        "mute",
+        "ban"
+      ]
+    },
+    {
+      "name": "an admin may make another admin but not a founder",
+      "prefix": "(xaohv)^&@%+",
+      "chanmodes": "beIq,k,fjlL,imnstpRcCMZNOTz",
+      "mine": "&",
+      "theirs": "",
+      "isSelf": false,
+      "actions": [
+        "whois",
+        "message",
+        "ignore",
+        "voice",
+        "halfop",
+        "op",
+        "admin",
+        "kick",
+        "mute",
+        "ban"
+      ]
+    },
+    {
+      "name": "and may not touch the founder standing above them",
+      "prefix": "(xaohv)^&@%+",
+      "chanmodes": "beIq,k,fjlL,imnstpRcCMZNOTz",
+      "mine": "&",
+      "theirs": "^",
+      "isSelf": false,
+      "actions": [
+        "whois",
+        "message",
+        "ignore"
+      ]
+    },
+    {
+      "name": "an operator may not hand out admin or founder",
+      "prefix": "(xaohv)^&@%+",
+      "chanmodes": "beIq,k,fjlL,imnstpRcCMZNOTz",
+      "mine": "@",
+      "theirs": "",
+      "isSelf": false,
+      "actions": [
+        "whois",
+        "message",
+        "ignore",
+        "voice",
+        "halfop",
+        "op",
+        "kick",
+        "mute",
+        "ban"
+      ]
+    },
+    {
+      "name": "a founder standing down is offered only that",
+      "prefix": "(xaohv)^&@%+",
+      "chanmodes": "beIq,k,fjlL,imnstpRcCMZNOTz",
+      "mine": "^",
+      "theirs": "^",
+      "isSelf": true,
+      "actions": [
+        "whois",
+        "defounder"
+      ],
+      "$comment": "On yourself the only sensible half is giving something up — and only what you are actually wearing. A founder holds `^` and nothing else, so there is one thing to lay down rather than five."
+    },
+    {
+      "name": "the classic ladder spells founder q and it works the same",
+      "prefix": "(qaohv)~&@%+",
+      "chanmodes": "beI,k,l,imnstpRcC",
+      "mine": "~",
+      "theirs": "",
+      "isSelf": false,
+      "actions": [
+        "whois",
+        "message",
+        "ignore",
+        "voice",
+        "halfop",
+        "op",
+        "admin",
+        "founder",
+        "kick",
+        "ban"
+      ],
+      "$comment": "No mute: this ladder spends `q` on the owner prefix, so there is no quiet mode left for it to mean."
+    },
+    {
+      "name": "a network with no rungs above operator offers none",
+      "prefix": "(ohv)@%+",
+      "chanmodes": "beIq,k,l,imnstpRcC",
+      "mine": "@",
+      "theirs": "",
+      "isSelf": false,
+      "actions": [
+        "whois",
+        "message",
+        "ignore",
+        "voice",
+        "halfop",
+        "op",
+        "kick",
+        "mute",
+        "ban"
+      ]
+    },
+    {
+      "name": "nor does one with only ops and voice",
+      "prefix": "(ov)@+",
+      "chanmodes": "be,k,l,imnst",
+      "mine": "@",
+      "theirs": "",
+      "isSelf": false,
+      "actions": [
+        "whois",
+        "message",
+        "ignore",
+        "voice",
+        "op",
+        "kick",
+        "ban"
       ]
     }
   ],
@@ -403,6 +570,75 @@
       ],
       "rank": 0,
       "label": "Members"
+    }
+  ],
+  "$modes": "Which mode letter a network uses for a rung. The top one is `q` where a server has it and `x` on rIRCd, which keeps `q` for its quiet list — so a client that assumed `q` promoted people by silencing them.",
+  "modes": [
+    {
+      "name": "rIRCd calls the founder x",
+      "prefix": "(xaohv)^&@%+",
+      "rung": "founder",
+      "mode": "x"
+    },
+    {
+      "name": "and the admin a, like everybody",
+      "prefix": "(xaohv)^&@%+",
+      "rung": "admin",
+      "mode": "a"
+    },
+    {
+      "name": "the classic ladder calls the founder q",
+      "prefix": "(qaohv)~&@%+",
+      "rung": "founder",
+      "mode": "q"
+    },
+    {
+      "name": "operator is o wherever there is one",
+      "prefix": "(xaohv)^&@%+",
+      "rung": "op",
+      "mode": "o"
+    },
+    {
+      "name": "half-op",
+      "prefix": "(xaohv)^&@%+",
+      "rung": "halfop",
+      "mode": "h"
+    },
+    {
+      "name": "voice",
+      "prefix": "(xaohv)^&@%+",
+      "rung": "voice",
+      "mode": "v"
+    },
+    {
+      "name": "a network with no founder has none to name",
+      "prefix": "(ohv)@%+",
+      "rung": "founder",
+      "mode": null
+    },
+    {
+      "name": "nor an admin",
+      "prefix": "(ohv)@%+",
+      "rung": "admin",
+      "mode": null
+    },
+    {
+      "name": "nor a half-op, on a server with only ops and voice",
+      "prefix": "(ov)@+",
+      "rung": "halfop",
+      "mode": null
+    },
+    {
+      "name": "a top rung nobody has a word for is not a founder",
+      "prefix": "(yaohv)!&@%+",
+      "rung": "founder",
+      "mode": null
+    },
+    {
+      "name": "a server that says nothing has ops and voice",
+      "prefix": null,
+      "rung": "op",
+      "mode": "o"
     }
   ]
 }

@@ -1,4 +1,5 @@
 import { SectionHeader } from '../common/SectionHeader'
+import { ProfileCard } from '../user/ProfileCard'
 import { useState, useCallback, useEffect, useMemo } from 'react'
 import { useServerStore } from '../../stores/serverStore'
 import { useChannelStore } from '../../stores/channelStore'
@@ -13,6 +14,7 @@ import {
   quietMode,
   banMask,
   maskIsWeak,
+  modeForRole,
   type MemberAction
 } from '@shared/powers'
 import type { ChannelUser } from '@shared/types/channel'
@@ -67,6 +69,30 @@ export function UserList() {
     if (!activeServerId) return
     window.switchboard.invoke('user:whois', activeServerId, nick)
   }, [activeServerId])
+
+  /*
+   * Clicking somebody opens the card, not a modal.
+   *
+   * It used to fire a WHOIS and open a modal that covered the window, which is
+   * a heavy answer to "who is this" — and a different answer from the one you
+   * get by clicking the same person's name in a message. One card, opened the
+   * same way from both places.
+   */
+  const [card, setCard] = useState<{ nick: string; x: number; y: number } | null>(null)
+
+  const openCard = useCallback(
+    (nick: string, at: DOMRect) => {
+      if (!activeServerId) return
+      useUIStore.getState().setPopupWhoisNick(nick)
+      window.switchboard.invoke('user:whois', activeServerId, nick)
+      // Left of the list rather than under the name: the member list is the
+      // right-hand column, so a card anchored to its left edge has room
+      // Anchored to the row, then lifted only as far as it has to be: the card
+      // scrolls inside itself, so it never needs more room than the window has
+      setCard({ nick, x: Math.max(8, at.left - 296), y: Math.max(8, Math.min(at.top, window.innerHeight * 0.2)) })
+    },
+    [activeServerId]
+  )
 
   const handleMessage = useCallback((nick: string) => {
     if (!activeServerId) return
@@ -148,6 +174,13 @@ export function UserList() {
     const weak = maskIsWeak(target)
     const modeOf = (letter: string | null | undefined): string => letter || 'o'
 
+    // The letters for the two top rungs come off PREFIX: rIRCd spells its
+    // founder `x` and keeps `q` for the quiet list, so a table here would
+    // promote people by silencing them. `actionsFor` only offers these where
+    // the network has them, so the fallback is never reached.
+    const adminMode = modeForRole(tokens.PREFIX, 'admin') ?? 'a'
+    const founderMode = modeForRole(tokens.PREFIX, 'founder') ?? 'q'
+
     const label: Partial<Record<MemberAction, string>> = {
       whois: 'User info (WHOIS)',
       message: 'Message',
@@ -157,6 +190,12 @@ export function UserList() {
       dehalfop: 'Remove half-operator',
       op: 'Make operator',
       deop: 'Remove operator',
+      admin: 'Make admin',
+      deadmin: 'Remove admin',
+      // Named for what it does rather than for the rung: handing somebody the
+      // top rank is the one action here that gives away the channel.
+      founder: isSelf ? 'Step down as founder' : 'Make founder',
+      defounder: isSelf ? 'Step down as founder' : 'Remove founder',
       kick: 'Kick',
       // Says which mask it will use, because banning the nick is undone by
       // changing it and somebody should know that before pressing it.
@@ -177,6 +216,10 @@ export function UserList() {
       dehalfop: () => handleMode('-h', target.nick),
       op: () => handleMode('+o', target.nick),
       deop: () => handleMode('-o', target.nick),
+      admin: () => handleMode(`+${adminMode}`, target.nick),
+      deadmin: () => handleMode(`-${adminMode}`, target.nick),
+      founder: () => handleMode(`+${founderMode}`, target.nick),
+      defounder: () => handleMode(`-${founderMode}`, target.nick),
       kick: () => handleKick(target.nick),
       ban: () => handleMode('+b', mask),
       mute: () => handleMode(`+${modeOf(quiet)}`, mask),
@@ -193,7 +236,7 @@ export function UserList() {
       items.push({
         label: label[action] || action,
         onClick: run[action] || (() => {}),
-        danger: action === 'kick' || action === 'ban'
+        danger: action === 'kick' || action === 'ban' || action === 'founder'
       })
     }
     return items
@@ -231,7 +274,7 @@ export function UserList() {
               key={user.nick}
               user={user}
               onContextMenu={handleContextMenu}
-              onClick={handleWhois}
+              onClick={openCard}
             />
           ))}
         </div>
@@ -242,6 +285,21 @@ export function UserList() {
       )}
 
       {/* User context menu */}
+      {card && activeServerId && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setCard(null)} />
+          <div
+            className="fixed z-50 max-h-[80vh] w-72 overflow-y-auto rounded-lg border border-gray-700 bg-gray-800 p-3 shadow-xl"
+            style={{ left: card.x, top: card.y }}
+          >
+            <ProfileCard
+              nick={card.nick}
+              serverId={activeServerId}
+              onClose={() => setCard(null)}
+            />
+          </div>
+        </>
+      )}
       {contextMenu && (
         <ContextMenu
           x={contextMenu.x}
@@ -262,7 +320,7 @@ function UserItem({
 }: {
   user: ChannelUser
   onContextMenu: (e: React.MouseEvent, user: ChannelUser) => void
-  onClick: (nick: string) => void
+  onClick: (nick: string, at: DOMRect) => void
 }) {
   const activeServerId = useServerStore((s) => s.activeServerId)
   const userMetadata = useServerStore((s) => s.userMetadata)
@@ -285,7 +343,7 @@ function UserItem({
     <button
       type="button"
       className="group flex w-full items-center gap-2 rounded px-2 py-1 text-left transition-colors hover:bg-gray-700/50"
-      onClick={() => onClick(user.nick)}
+      onClick={(e) => onClick(user.nick, e.currentTarget.getBoundingClientRect())}
       onContextMenu={(e) => onContextMenu(e, user)}
       title={tooltipParts.join('\n')}
     >

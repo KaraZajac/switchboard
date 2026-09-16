@@ -859,6 +859,127 @@
       },
       "lines": [],
       "error": "Usage: /unignore <nick or mask>"
+    },
+    {
+      "name": "/founder on rIRCd sends the letter rIRCd uses",
+      "input": "/founder bob",
+      "target": "#chan",
+      "nick": "kara",
+      "isupport": {
+        "PREFIX": "(xaohv)^&@%+",
+        "CHANMODES": "beIq,k,fjlL,imnstpRcCMZNOTz",
+        "MODES": "4"
+      },
+      "lines": [
+        "MODE #chan +x bob"
+      ],
+      "$comment": "The bug this replaced: the letter came from a table that said `q`, and rIRCd keeps `q` for its quiet list — so the command for handing somebody the channel sent `MODE #chan +q bob` and silenced them instead."
+    },
+    {
+      "name": "/owner is the same command under the older name",
+      "input": "/owner bob",
+      "target": "#chan",
+      "nick": "kara",
+      "isupport": {
+        "PREFIX": "(xaohv)^&@%+",
+        "CHANMODES": "beIq,k,fjlL,imnstpRcCMZNOTz",
+        "MODES": "4"
+      },
+      "lines": [
+        "MODE #chan +x bob"
+      ]
+    },
+    {
+      "name": "/defounder takes it back",
+      "input": "/defounder bob",
+      "target": "#chan",
+      "nick": "kara",
+      "isupport": {
+        "PREFIX": "(xaohv)^&@%+",
+        "CHANMODES": "beIq,k,fjlL,imnstpRcCMZNOTz",
+        "MODES": "4"
+      },
+      "lines": [
+        "MODE #chan -x bob"
+      ]
+    },
+    {
+      "name": "/admin is a wherever there is one",
+      "input": "/admin bob",
+      "target": "#chan",
+      "nick": "kara",
+      "isupport": {
+        "PREFIX": "(xaohv)^&@%+",
+        "CHANMODES": "beIq,k,fjlL,imnstpRcCMZNOTz",
+        "MODES": "4"
+      },
+      "lines": [
+        "MODE #chan +a bob"
+      ]
+    },
+    {
+      "name": "/deadmin",
+      "input": "/deadmin bob",
+      "target": "#chan",
+      "nick": "kara",
+      "isupport": {
+        "PREFIX": "(xaohv)^&@%+",
+        "CHANMODES": "beIq,k,fjlL,imnstpRcCMZNOTz",
+        "MODES": "4"
+      },
+      "lines": [
+        "MODE #chan -a bob"
+      ]
+    },
+    {
+      "name": "/founder with no argument is about you",
+      "input": "/founder",
+      "target": "#chan",
+      "nick": "kara",
+      "isupport": {
+        "PREFIX": "(xaohv)^&@%+",
+        "CHANMODES": "beIq,k,fjlL,imnstpRcCMZNOTz",
+        "MODES": "4"
+      },
+      "lines": [
+        "MODE #chan +x kara"
+      ]
+    },
+    {
+      "name": "/founder on a network that has no such rank says so",
+      "input": "/founder bob",
+      "target": "#chan",
+      "nick": "kara",
+      "isupport": {
+        "PREFIX": "(ohv)@%+",
+        "CHANMODES": "eIbq,k,flj,CFLMPQScgimnprstz",
+        "MODES": "4"
+      },
+      "error": "This network has no founder role. It has Operators, Half-ops, Voiced."
+    },
+    {
+      "name": "and /admin likewise",
+      "input": "/admin bob",
+      "target": "#chan",
+      "nick": "kara",
+      "isupport": {
+        "PREFIX": "(ohv)@%+",
+        "CHANMODES": "eIbq,k,flj,CFLMPQScgimnprstz",
+        "MODES": "4"
+      },
+      "error": "This network has no admin role. It has Operators, Half-ops, Voiced."
+    },
+    {
+      "name": "/halfop on a network with only ops and voice",
+      "input": "/halfop bob",
+      "target": "#chan",
+      "nick": "kara",
+      "isupport": {
+        "PREFIX": "(ov)@+",
+        "CHANMODES": "be,k,l,imnst",
+        "MODES": "4"
+      },
+      "error": "This network has no halfop role. It has Operators, Voiced."
     }
   ],
   "$effects": "Three commands are not a line on the wire at all: clearing a view and keeping an ignore list both happen on the client's side of the socket. `effect` says what the command asked for, and `lines` stays empty — if either client sent something here it would be sending it to the channel."

@@ -21,7 +21,35 @@ object Powers {
     enum class Action {
         WHOIS, MESSAGE, IGNORE, UNIGNORE,
         VOICE, DEVOICE, HALFOP, DEHALFOP, OP, DEOP,
+        ADMIN, DEADMIN, FOUNDER, DEFOUNDER,
         KICK, BAN, MUTE, UNMUTE
+    }
+
+    /** The rungs a menu has words for, weakest first */
+    enum class Rung { VOICE, HALFOP, OP, ADMIN, FOUNDER }
+
+    /**
+     * The mode letter this network uses for a rung, or null where it has none.
+     *
+     * Asked by name rather than by position because position is not portable:
+     * the top rung is `q` on the servers that have one and `x` on rIRCd, which
+     * keeps `q` for its quiet list. A client that assumed `q` sent
+     * `MODE #chan +q nick` to promote somebody and silenced them instead.
+     *
+     * Only the letters a person has a word for. A network whose top prefix is
+     * some other letter has no founder as far as this is concerned — granting
+     * a mode nobody can name is worse than not offering to.
+     */
+    fun modeForRole(prefix: String?, rung: Rung): Char? {
+        val modes = parsePrefix(prefix).modes
+        val candidates = when (rung) {
+            Rung.FOUNDER -> listOf('q', 'x')
+            Rung.ADMIN -> listOf('a')
+            Rung.OP -> listOf('o')
+            Rung.HALFOP -> listOf('h')
+            Rung.VOICE -> listOf('v')
+        }
+        return candidates.firstOrNull { modes.contains(it) }
     }
 
     data class Scheme(val modes: String, val symbols: String)
@@ -159,9 +187,14 @@ object Powers {
         // it. Never against yourself, which would silence your own messages.
         if (!isSelf) actions.add(if (ignored) Action.UNIGNORE else Action.IGNORE)
 
-        val opRank = rankOfMode('o', scheme)
-        val halfopRank = rankOfMode('h', scheme)
-        val voiceRank = rankOfMode('v', scheme)
+        fun rungRank(rung: Rung): Int? =
+            modeForRole(prefix, rung)?.let { rankOfMode(it, scheme) }
+
+        val opRank = rungRank(Rung.OP)
+        val halfopRank = rungRank(Rung.HALFOP)
+        val voiceRank = rungRank(Rung.VOICE)
+        val adminRank = rungRank(Rung.ADMIN)
+        val founderRank = rungRank(Rung.FOUNDER)
 
         // No rank, nothing to offer: the one case we can be certain about, and
         // the one that had people pressing Kick and reading an error.
@@ -183,6 +216,24 @@ object Powers {
         if (amOp || amHalfop) offer(voiceRank, Action.VOICE, Action.DEVOICE)
         if (amOp) offer(halfopRank, Action.HALFOP, Action.DEHALFOP)
         if (amOp) offer(opRank, Action.OP, Action.DEOP)
+
+        /*
+         * And the rungs above operator, where the network has them.
+         *
+         * These were missing entirely, which on a network with founders meant
+         * the one person who could hand the channel on had no way to do it —
+         * the menu stopped at Make operator.
+         *
+         * You need the rung to grant it: only a founder makes a founder. That
+         * is what every ircd that has these does, and unlike kicking they
+         * agree about it, so this is the one place it is safe to be strict.
+         */
+        if (adminRank != null && myRank <= adminRank) {
+            offer(adminRank, Action.ADMIN, Action.DEADMIN)
+        }
+        if (founderRank != null && myRank <= founderRank) {
+            offer(founderRank, Action.FOUNDER, Action.DEFOUNDER)
+        }
 
         // Kicking is where the networks disagree: rIRCd wants op, InspIRCd and
         // UnrealIRCd let a halfop do it. Offered to halfops, because a network

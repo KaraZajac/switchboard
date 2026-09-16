@@ -354,15 +354,36 @@ object Commands {
             // and this one made you type `/mode #channel +o nick`, which is
             // the same thing with more to get wrong.
             "op", "deop", "voice", "devoice", "halfop", "dehalfop",
-            "owner", "deowner", "admin", "deadmin" -> {
-                val letters = mapOf("op" to "o", "voice" to "v", "halfop" to "h",
-                    "owner" to "q", "admin" to "a")
+            "owner", "deowner", "founder", "defounder", "admin", "deadmin" -> {
+                /*
+                 * The letter comes off `PREFIX`, not out of a table here.
+                 *
+                 * It used to be a table, with `owner` to `q` in it. rIRCd
+                 * spells the top rung `x` and keeps `q` for its quiet list —
+                 * so on rIRCd `/owner nick` sent `MODE #chan +q nick` and
+                 * silenced the person it was meant to hand the channel to.
+                 */
+                val rungs = mapOf(
+                    "op" to Powers.Rung.OP,
+                    "voice" to Powers.Rung.VOICE,
+                    "halfop" to Powers.Rung.HALFOP,
+                    "owner" to Powers.Rung.FOUNDER,
+                    "founder" to Powers.Rung.FOUNDER,
+                    "admin" to Powers.Rung.ADMIN
+                )
                 val adding = !name.startsWith("de")
-                val letter = letters[if (adding) name else name.drop(2)]!!
+                val rung = rungs[if (adding) name else name.drop(2)]!!
+                val letter = Powers.modeForRole(connection.state.isupport["PREFIX"], rung)
                 val words = args.toMutableList()
                 val channel = if (isChannel(words.firstOrNull().orEmpty())) words.removeAt(0) else target
 
-                if (!isChannel(channel)) Result(true, error = "/$name only works in a channel")
+                if (letter == null) {
+                    val modes = Powers.parsePrefix(connection.state.isupport["PREFIX"]).modes
+                    val has = if (modes.isNotEmpty())
+                        " It has " + modes.map { Powers.roleName(it) }.joinToString(", ") + "."
+                    else ""
+                    Result(true, error = "This network has no ${rung.name.lowercase()} role.$has")
+                } else if (!isChannel(channel)) Result(true, error = "/$name only works in a channel")
                 else {
                     val nicks = words.ifEmpty { listOf(connection.state.nick) }
                     // One MODE per MODES-worth: a server that takes four at a
@@ -371,7 +392,7 @@ object Commands {
                     nicks.chunked(perLine).forEach { batch ->
                         connection.setMode(
                             channel,
-                            (if (adding) "+" else "-") + letter.repeat(batch.size),
+                            (if (adding) "+" else "-") + letter.toString().repeat(batch.size),
                             *batch.toTypedArray()
                         )
                     }

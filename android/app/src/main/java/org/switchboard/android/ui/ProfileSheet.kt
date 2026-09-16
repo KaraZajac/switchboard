@@ -161,7 +161,13 @@ fun ProfileSheet(
                         it != Powers.Action.IGNORE && it != Powers.Action.UNIGNORE
                 }
 
-                if (offered.isNotEmpty()) {
+                // What they are in this room, named the way this network names
+                // it — the one fact here that changes from channel to channel.
+                // Nothing where they hold no rank, which is most people: a line
+                // reading "Members" carries no information.
+                val role = Powers.roleOf(them?.prefixes.orEmpty(), tokens["PREFIX"])
+
+                if (offered.isNotEmpty() || role.rank > 0) {
                     Spacer(Modifier.height(18.dp))
                     Text(
                         "IN ${channel.uppercase()}",
@@ -171,12 +177,26 @@ fun ProfileSheet(
                     )
                     Spacer(Modifier.height(6.dp))
 
+                    if (role.rank > 0) {
+                        Pill(role.label, Blue)
+                        Spacer(Modifier.height(10.dp))
+                    }
+
                     val mask = Powers.banMask(nick, them?.host)
                     val weak = Powers.maskIsWeak(them?.host)
                     val quiet = Powers.quietMode(
                         tokens["CHANMODES"],
                         Powers.parsePrefix(tokens["PREFIX"])
                     )
+
+                    // The letters for the two top rungs come off PREFIX: rIRCd
+                    // spells its founder `x` and keeps `q` for the quiet list,
+                    // so a table here would promote people by silencing them.
+                    // `actionsFor` only offers these where the network has
+                    // them, so the fallbacks are never reached.
+                    val adminMode = Powers.modeForRole(tokens["PREFIX"], Powers.Rung.ADMIN) ?: 'a'
+                    val founderMode =
+                        Powers.modeForRole(tokens["PREFIX"], Powers.Rung.FOUNDER) ?: 'q'
 
                     for (action in offered) {
                         val (label, colour) = when (action) {
@@ -186,6 +206,15 @@ fun ProfileSheet(
                             Powers.Action.DEHALFOP -> "Remove half-operator" to Subtext
                             Powers.Action.OP -> "Make operator" to Green
                             Powers.Action.DEOP -> "Remove operator" to Subtext
+                            Powers.Action.ADMIN -> "Make admin" to Green
+                            Powers.Action.DEADMIN -> "Remove admin" to Subtext
+                            // Named for what it does rather than for the rung:
+                            // handing somebody the top rank gives the channel
+                            // away, so it asks twice like a kick does.
+                            Powers.Action.FOUNDER ->
+                                (if (isSelf) "Step down as founder" else "Make founder") to Red
+                            Powers.Action.DEFOUNDER ->
+                                (if (isSelf) "Step down as founder" else "Remove founder") to Subtext
                             Powers.Action.KICK -> "Kick from $channel" to Red
                             // Names the mask, because banning a nick is undone
                             // by changing it and that is worth knowing before
@@ -197,8 +226,8 @@ fun ProfileSheet(
                             else -> continue
                         }
 
-                        val destructive =
-                            action == Powers.Action.KICK || action == Powers.Action.BAN
+                        val destructive = action == Powers.Action.KICK ||
+                            action == Powers.Action.BAN || action == Powers.Action.FOUNDER
                         var confirming by remember(nick, action) { mutableStateOf(false) }
 
                         // Kicking and banning are not undone by pressing again,
@@ -224,6 +253,14 @@ fun ProfileSheet(
                                     engine.setMemberMode(serverId, channel, "+o", nick)
                                 Powers.Action.DEOP ->
                                     engine.setMemberMode(serverId, channel, "-o", nick)
+                                Powers.Action.ADMIN ->
+                                    engine.setMemberMode(serverId, channel, "+$adminMode", nick)
+                                Powers.Action.DEADMIN ->
+                                    engine.setMemberMode(serverId, channel, "-$adminMode", nick)
+                                Powers.Action.FOUNDER ->
+                                    engine.setMemberMode(serverId, channel, "+$founderMode", nick)
+                                Powers.Action.DEFOUNDER ->
+                                    engine.setMemberMode(serverId, channel, "-$founderMode", nick)
                                 Powers.Action.KICK ->
                                     engine.kick(serverId, channel, nick, null)
                                 Powers.Action.BAN ->

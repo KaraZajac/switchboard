@@ -32,10 +32,45 @@ export type MemberAction =
   | 'dehalfop'
   | 'op'
   | 'deop'
+  | 'admin'
+  | 'deadmin'
+  | 'founder'
+  | 'defounder'
   | 'kick'
   | 'ban'
   | 'mute'
   | 'unmute'
+
+/** The rungs a menu has words for, weakest first */
+export type Rung = 'voice' | 'halfop' | 'op' | 'admin' | 'founder'
+
+/**
+ * The mode letter this network uses for a rung, or null where it has none.
+ *
+ * Asked by name rather than by position because position is not portable: the
+ * top rung is `q` on the servers that have one and `x` on rIRCd, which keeps
+ * `q` for its quiet list. A client that assumed `q` sent `MODE #chan +q nick`
+ * to promote somebody and silenced them instead.
+ *
+ * Only the letters a person has a word for. A network whose top prefix is some
+ * other letter has no founder as far as this is concerned, and nothing will be
+ * offered for it — which is the honest answer: granting a mode nobody can name
+ * is worse than not offering to.
+ */
+export function modeForRole(prefix: string | undefined | null, rung: Rung): string | null {
+  const { modes } = parsePrefix(prefix)
+  const candidates: Record<Rung, string[]> = {
+    founder: ['q', 'x'],
+    admin: ['a'],
+    op: ['o'],
+    halfop: ['h'],
+    voice: ['v']
+  }
+  for (const letter of candidates[rung]) {
+    if (modes.includes(letter)) return letter
+  }
+  return null
+}
 
 export interface PrefixScheme {
   /** Mode letters, most privileged first: `qaohv` */
@@ -228,9 +263,15 @@ export function actionsFor(question: PowerQuestion): MemberAction[] {
   // against yourself, which would silence your own messages.
   if (!question.isSelf) actions.push(question.ignored ? 'unignore' : 'ignore')
 
-  const opRank = rankOfMode('o', scheme)
-  const halfopRank = rankOfMode('h', scheme)
-  const voiceRank = rankOfMode('v', scheme)
+  const rungRank = (rung: Rung): number | null => {
+    const letter = modeForRole(question.prefix, rung)
+    return letter === null ? null : rankOfMode(letter, scheme)
+  }
+  const opRank = rungRank('op')
+  const halfopRank = rungRank('halfop')
+  const voiceRank = rungRank('voice')
+  const adminRank = rungRank('admin')
+  const founderRank = rungRank('founder')
 
   // No rank, nothing to offer. The one case we can be certain about, and the
   // one that had people pressing Kick and reading an error.
@@ -258,6 +299,21 @@ export function actionsFor(question: PowerQuestion): MemberAction[] {
   if (amOp || amHalfop) offer(voiceRank, 'voice', 'devoice')
   if (amOp) offer(halfopRank, 'halfop', 'dehalfop')
   if (amOp) offer(opRank, 'op', 'deop')
+
+  /*
+   * And the rungs above operator, where the network has them.
+   *
+   * These were missing entirely, which on a network with founders meant the
+   * one person who could hand the channel on had no way to do it — the menu
+   * stopped at Make operator. rIRCd has both, Unreal and InspIRCd have both,
+   * and `/owner` sent `+q` on all of them, which on rIRCd is the quiet list.
+   *
+   * You need the rung to grant it: only a founder makes a founder. That is
+   * what every ircd that has these does, and unlike kicking they agree about
+   * it — so this is the one place it is safe to be strict.
+   */
+  if (adminRank !== null && mine <= adminRank) offer(adminRank, 'admin', 'deadmin')
+  if (founderRank !== null && mine <= founderRank) offer(founderRank, 'founder', 'defounder')
 
   // Kicking is where the networks disagree: rIRCd wants op, InspIRCd and
   // UnrealIRCd let a halfop do it. Offered to halfops, because a network that

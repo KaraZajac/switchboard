@@ -1,23 +1,18 @@
 import {
   CornerUpLeft,
-  Loader2,
-  MessageSquare,
   Pencil,
   SmilePlus,
-  Trash2,
-  UserMinus,
-  UserPlus
+  Trash2
 } from 'lucide-react'
 import { ICON, IconButton } from '../common/IconButton'
 import { useState, useCallback, useRef, useEffect } from 'react'
 import type { ChatMessage } from '@shared/types/message'
-import { safeExternalUrl } from '@shared/links'
+import { ProfileCard } from '../user/ProfileCard'
 import { MessageContent } from './MessageContent'
 import { useMessageStore } from '../../stores/messageStore'
 import { useUIStore } from '../../stores/uiStore'
 import { useServerStore } from '../../stores/serverStore'
-import { useChannelStore } from '../../stores/channelStore'
-import { useUserStore, type MonitoredNick } from '../../stores/userStore'
+import { useUserStore } from '../../stores/userStore'
 import { canModerate } from '@shared/powers'
 import { nickStyle } from '../../utils/nickColor'
 import { displayNameFor, metadataColor } from '@shared/types/metadata'
@@ -578,16 +573,29 @@ function NickWithPopup({
   )
   const userMetadata = useServerStore((s) => s.userMetadata)
   const metadata = userMetadata[`${serverId}:${nick.toLowerCase()}`] ?? {}
-  const nickAvatarUrl = metadata.avatar ?? null
   const shownName = displayNameFor(nick, metadata)
   const nameColor = metadataColor(metadata.color)
   const [showPopup, setShowPopup] = useState(false)
+  // A card opened by clicking stays until it is dismissed; one that drifted
+  // open under the pointer goes when the pointer does
+  const [pinned, setPinned] = useState(false)
   const [popupStyle, setPopupStyle] = useState<React.CSSProperties>({})
   const [fetched, setFetched] = useState(false)
   const hoverTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
   const hideTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
   const popupRef = useRef<HTMLDivElement>(null)
   const nickRect = useRef<DOMRect | null>(null)
+
+  // A click anywhere else puts a pinned card away
+  useEffect(() => {
+    if (!pinned) return
+    const away = (): void => {
+      setShowPopup(false)
+      setPinned(false)
+    }
+    document.addEventListener('click', away)
+    return () => document.removeEventListener('click', away)
+  }, [pinned])
 
   // Reposition popup after it renders (and when content changes from loading → data)
   useEffect(() => {
@@ -640,6 +648,7 @@ function NickWithPopup({
       clearTimeout(hoverTimeout.current)
       hoverTimeout.current = null
     }
+    if (pinned) return
     hideTimeout.current = setTimeout(() => {
       setShowPopup(false)
     }, 300)
@@ -653,9 +662,40 @@ function NickWithPopup({
   }
 
   const handlePopupLeave = () => {
+    if (pinned) return
     hideTimeout.current = setTimeout(() => {
       setShowPopup(false)
     }, 200)
+  }
+
+  /*
+   * Clicking opens it too, and keeps it open.
+   *
+   * Hover alone is a discoverability problem — a card that only appears if you
+   * rest on a name for four hundred milliseconds is a card most people never
+   * see — and it is the wrong way round for the moderation actions, which you
+   * want to be able to read before pressing. A click cancels the hover's
+   * hide, so moving the pointer away no longer takes it with you.
+   */
+  const handleClick = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (hoverTimeout.current) {
+      clearTimeout(hoverTimeout.current)
+      hoverTimeout.current = null
+    }
+    if (hideTimeout.current) {
+      clearTimeout(hideTimeout.current)
+      hideTimeout.current = null
+    }
+    if (showPopup) {
+      setShowPopup(false)
+      return
+    }
+    nickRect.current = (e.currentTarget as HTMLElement).getBoundingClientRect()
+    setPopupStyle({ left: nickRect.current.left, top: nickRect.current.bottom + 4 })
+    setShowPopup(true)
+    setPinned(true)
+    fetchWhois()
   }
 
   return (
@@ -668,6 +708,7 @@ function NickWithPopup({
         title={shownName === nick ? nick : `${shownName} (${nick})`}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
+        onClick={handleClick}
       >
         {shownName}
       </span>
@@ -675,216 +716,23 @@ function NickWithPopup({
       {showPopup && (
         <div
           ref={popupRef}
-          className="fixed z-50 w-72 rounded-lg border border-gray-700 bg-gray-800 p-3 shadow-xl"
+          className="fixed z-50 max-h-[80vh] w-72 overflow-y-auto rounded-lg border border-gray-700 bg-gray-800 p-3 shadow-xl"
           style={popupStyle}
           onMouseEnter={handlePopupEnter}
           onMouseLeave={handlePopupLeave}
+          onClick={(e) => e.stopPropagation()}
         >
-          {popupWhoisData ? (
-            <div className="space-y-2">
-              <div className="flex items-center gap-3">
-                <WhoisAvatar nick={popupWhoisData.nick} avatarUrl={nickAvatarUrl} />
-                <div className="min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <span
-                      className="font-semibold text-gray-100"
-                      style={nameColor ? { color: nameColor } : undefined}
-                    >
-                      {shownName}
-                    </span>
-                    {metadata.pronouns && (
-                      <span className="text-xs text-gray-400">{metadata.pronouns}</span>
-                    )}
-                    {popupWhoisData.isOperator && (
-                      <span className="rounded bg-red-500/20 px-1 py-0.5 text-[10px] font-semibold text-red-400">
-                        OPER
-                      </span>
-                    )}
-                    {popupWhoisData.isBot && (
-                      <span className="rounded bg-indigo-500/20 px-1 py-0.5 text-[10px] font-semibold text-indigo-400">
-                        BOT
-                      </span>
-                    )}
-                  </div>
-                  {popupWhoisData.user && popupWhoisData.host && (
-                    <div className="truncate text-xs text-gray-500">
-                      {popupWhoisData.user}@{popupWhoisData.host}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {shownName !== popupWhoisData.nick && (
-                <div className="text-xs text-gray-500">also known as {popupWhoisData.nick}</div>
-              )}
-
-              {metadata.status && (
-                <div className="text-sm italic text-gray-300">{metadata.status}</div>
-              )}
-
-              {popupWhoisData.realname && (
-                <div className="text-sm text-gray-300">{popupWhoisData.realname}</div>
-              )}
-
-              {/*
-                A homepage comes from metadata, so a stranger chose the string.
-                Shown as text either way; only a link we would actually open
-                gets to be one — see `safeExternalUrl`.
-              */}
-              {metadata.homepage &&
-                (safeExternalUrl(metadata.homepage) ? (
-                  <a
-                    href={safeExternalUrl(metadata.homepage)!}
-                    target="_blank"
-                    rel="noreferrer noopener"
-                    className="block truncate text-xs text-indigo-400 hover:underline"
-                  >
-                    {metadata.homepage}
-                  </a>
-                ) : (
-                  <div className="block truncate text-xs text-gray-400">{metadata.homepage}</div>
-                ))}
-
-              <div className="space-y-1 border-t border-gray-700 pt-2 text-xs">
-                {popupWhoisData.account && (
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Account</span>
-                    <span className="text-gray-300">{popupWhoisData.account}</span>
-                  </div>
-                )}
-                {popupWhoisData.server && (
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Server</span>
-                    <span className="truncate ml-2 text-gray-300">{popupWhoisData.server}</span>
-                  </div>
-                )}
-                {popupWhoisData.idle && (
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Idle</span>
-                    <span className="text-gray-300">
-                      {formatIdleTime(parseInt(popupWhoisData.idle))}
-                    </span>
-                  </div>
-                )}
-                {popupWhoisData.channels && (
-                  <div>
-                    <span className="text-gray-500">Channels</span>
-                    <div className="mt-0.5 text-gray-300 break-words">
-                      {popupWhoisData.channels}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Action buttons */}
-              <PopupActions
-                nick={popupWhoisData.nick}
-                serverId={serverId}
-                onClose={() => setShowPopup(false)}
-              />
-            </div>
-          ) : (
-            <div className="flex items-center gap-2 text-sm text-gray-400">
-              <Loader2 size={ICON.sm} strokeWidth={2} className="animate-spin" aria-hidden="true" />
-              Loading...
-            </div>
-          )}
+          <ProfileCard
+            nick={nick}
+            serverId={serverId}
+            onClose={() => {
+              setShowPopup(false)
+              setPinned(false)
+            }}
+          />
         </div>
       )}
     </>
-  )
-}
-
-/** Action buttons in the nick popup: Message and Add/Remove Friend */
-function PopupActions({
-  nick,
-  serverId,
-  onClose
-}: {
-  nick: string
-  serverId: string
-  onClose: () => void
-}) {
-  const currentNick = useServerStore((s) => s.currentNick[serverId] ?? '')
-  const isOwnNick = currentNick.toLowerCase() === nick.toLowerCase()
-
-  const EMPTY_MONITOR: MonitoredNick[] = []
-  const monitoredNicks = useUserStore((s) => s.monitoredNicks[serverId] ?? EMPTY_MONITOR)
-  const isFriend = monitoredNicks.some((m) => m.nick.toLowerCase() === nick.toLowerCase())
-
-  if (isOwnNick) return null
-
-  const handleMessage = () => {
-    useChannelStore.getState().addChannel(serverId, nick)
-    useChannelStore.getState().setActiveChannel(serverId, nick)
-    useServerStore.getState().setActiveServer(serverId)
-    useUIStore.getState().setDmMode(false)
-    onClose()
-  }
-
-  const handleToggleFriend = () => {
-    if (isFriend) {
-      useUserStore.getState().removeMonitorNick(serverId, nick)
-      window.switchboard.invoke('monitor:remove', serverId, [nick])
-    } else {
-      useUserStore.getState().addMonitorNick(serverId, nick)
-      window.switchboard.invoke('monitor:add', serverId, [nick])
-    }
-  }
-
-  return (
-    <div className="flex gap-2 border-t border-gray-700 pt-2">
-      <button
-        onClick={handleMessage}
-        className="flex flex-1 items-center justify-center gap-1.5 rounded bg-indigo-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-400"
-      >
-        <MessageSquare size={ICON.sm} strokeWidth={2} aria-hidden="true" />
-        Message
-      </button>
-      <button
-        onClick={handleToggleFriend}
-        className={`flex flex-1 items-center justify-center gap-1.5 rounded px-3 py-1.5 text-xs font-medium ${
-          isFriend
-            ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30'
-            : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-        }`}
-      >
-        {isFriend ? (
-          <UserMinus size={ICON.sm} strokeWidth={2} aria-hidden="true" />
-        ) : (
-          <UserPlus size={ICON.sm} strokeWidth={2} aria-hidden="true" />
-        )}
-        {isFriend ? 'Unfriend' : 'Add Friend'}
-      </button>
-    </div>
-  )
-}
-
-function WhoisAvatar({ nick, avatarUrl }: { nick: string; avatarUrl: string | null }) {
-  const [failed, setFailed] = useState(false)
-  useEffect(() => {
-    setFailed(false)
-  }, [avatarUrl])
-
-  if (avatarUrl && !failed) {
-    return (
-      <img
-        src={avatarUrl}
-        alt={nick}
-        referrerPolicy="no-referrer"
-        crossOrigin="anonymous"
-        className="h-10 w-10 shrink-0 rounded-full object-cover"
-        onError={() => setFailed(true)}
-      />
-    )
-  }
-  return (
-    <div
-      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold"
-      style={nickStyle(nick)}
-    >
-      {nick.charAt(0).toUpperCase()}
-    </div>
   )
 }
 
@@ -997,12 +845,6 @@ function formatTimeFull(iso: string): string {
   }
 }
 
-function formatIdleTime(seconds: number): string {
-  if (seconds < 60) return `${seconds}s`
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m`
-  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`
-  return `${Math.floor(seconds / 86400)}d ${Math.floor((seconds % 86400) / 3600)}h`
-}
 
 function timeDiffMinutes(a: string, b: string): number {
   try {

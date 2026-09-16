@@ -852,6 +852,26 @@ class SharedCorpusTest {
         }
     }
 
+    /**
+     * Which letter a network spends on a rung.
+     *
+     * The top one is the trap: `q` on the servers that have it, `x` on rIRCd,
+     * which keeps `q` for its quiet list.
+     */
+    @Test
+    fun `names the same mode for a rung the desktop does`() {
+        for (case in load("powers.json")["modes"]!!.jsonArray) {
+            val c = case.jsonObject
+            val rung = Powers.Rung.valueOf(c["rung"]!!.jsonPrimitive.content.uppercase())
+            val mode = Powers.modeForRole((c["prefix"] as? JsonPrimitive)?.contentOrNull, rung)
+            assertEquals(
+                c["name"]!!.jsonPrimitive.content,
+                (c["mode"] as? JsonPrimitive)?.contentOrNull,
+                mode?.toString()
+            )
+        }
+    }
+
     /** Which group a member belongs in, and what the desktop calls it */
     @Test
     fun `groups members the way the desktop groups them`() {
