@@ -34,6 +34,24 @@ class Notifier(private val context: Context) {
     /** What we have shown per conversation, so a thread reads as a thread */
     private val threads = mutableMapOf<String, MutableList<Pair<String, String>>>()
 
+    /**
+     * The two channels, and why they are named the way they are.
+     *
+     * `IMPORTANCE_HIGH` buys a heads-up and a sound. It does **not** buy a
+     * vibration: a channel's `shouldVibrate` starts false and there is no
+     * importance that turns it on, so a phone that had never been told to
+     * buzz simply never buzzed. Nothing said so — the notification arrived,
+     * it made a noise, and the one signal you can feel in a pocket was the
+     * one missing.
+     *
+     * The ids carry a version because **a channel cannot be changed after it
+     * is created**. Importance, sound and vibration are the user's from that
+     * moment on, and `createNotificationChannel` on an existing id is a no-op
+     * for all three. So fixing this in code fixes nothing on a phone that has
+     * already run the app: the only way to ship a corrected channel is to
+     * ship a new one, and to take the old one away so it does not sit in the
+     * system settings looking like a second copy.
+     */
     fun createChannels() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
 
@@ -44,6 +62,11 @@ class Notifier(private val context: Context) {
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
                 description = "When someone says your name or messages you directly"
+                enableVibration(true)
+                // Two short pulses rather than one long one: long enough to
+                // feel through a coat, short enough not to read as a call.
+                vibrationPattern = longArrayOf(0, 180, 120, 180)
+                enableLights(true)
             }
         )
 
@@ -51,12 +74,20 @@ class Notifier(private val context: Context) {
             NotificationChannel(
                 MESSAGES,
                 "Channel messages",
-                // Quiet by default: a busy channel should not buzz all evening
+                // Quiet by default: a busy channel should not buzz all evening.
+                // The user can raise it in the system settings if they want to,
+                // which is the right place for that decision.
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
                 description = "Everything else said in channels you are in"
+                enableVibration(false)
             }
         )
+
+        // The versions these replaced. Left behind they would show up in the
+        // system's notification settings as duplicates, with the old
+        // behaviour, and whichever the user changed would be the wrong one.
+        for (old in RETIRED) runCatching { manager.deleteNotificationChannel(old) }
     }
 
     /**
@@ -166,8 +197,13 @@ class Notifier(private val context: Context) {
     }
 
     companion object {
-        const val MENTIONS = "switchboard-mentions"
-        const val MESSAGES = "switchboard-messages"
+        // Versioned, because a channel's settings are fixed at creation — see
+        // [createChannels]. Bump the suffix when one of them has to change.
+        const val MENTIONS = "switchboard-mentions-v2"
+        const val MESSAGES = "switchboard-messages-v2"
+
+        /** Ids that have been superseded, removed on the way past */
+        private val RETIRED = listOf("switchboard-mentions", "switchboard-messages")
         const val GROUP = "switchboard-conversations"
         const val EXTRA_SERVER = "server"
         const val EXTRA_CHANNEL = "channel"
