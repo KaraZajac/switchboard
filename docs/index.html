@@ -4,9 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Switchboard — A Modern IRC Client</title>
-  <meta name="description" content="A modern IRC client with a Discord-like interface. Multi-server, rich messaging, GIF picker, file uploads, themes, and full IRCv3 support.">
+  <meta name="description" content="One IRC client for your desktop, your phone and a box that never sleeps. One login, one nick, one conversation — with full IRCv3 support, bouncer support, and everything encrypted at rest.">
   <meta property="og:title" content="Switchboard — A Modern IRC Client">
-  <meta property="og:description" content="A modern IRC client with a Discord-like interface. Built with Electron and packed with IRCv3 support.">
+  <meta property="og:description" content="One IRC client for your desktop, your phone and a box that never sleeps. One login, one nick, one conversation, wherever you pick it up.">
   <meta property="og:image" content="https://raw.githubusercontent.com/KaraZajac/switchboard/main/images/screenshots/hero.png">
   <meta property="og:type" content="website">
   <link rel="icon" type="image/png" href="https://raw.githubusercontent.com/KaraZajac/switchboard/main/images/switchboard-icon-1024.png">
@@ -385,7 +385,7 @@
   <section class="hero">
     <img src="https://raw.githubusercontent.com/KaraZajac/switchboard/main/images/switchboard-icon-1024.png" alt="Switchboard" class="hero-icon">
     <h1>Switchboard</h1>
-    <p class="tagline">A modern IRC client with a familiar, Discord-like interface. Built with Electron and packed with IRCv3 support.</p>
+    <p class="tagline">One IRC client for your desktop, your phone and a box that never sleeps &mdash; one login, one nick, one conversation, wherever you pick it up.</p>
     <div class="hero-buttons">
       <a href="https://github.com/KaraZajac/switchboard/releases/latest" class="btn btn-primary">
         <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
@@ -398,7 +398,7 @@
     </div>
     <div class="badges">
       <img src="https://img.shields.io/badge/status-beta-yellow" alt="Status: Beta">
-      <img src="https://img.shields.io/badge/platform-linux%20%7C%20macos%20%7C%20windows-blue" alt="Platforms">
+      <img src="https://img.shields.io/badge/platform-linux%20%7C%20macos%20%7C%20windows%20%7C%20android-blue" alt="Platforms">
       <img src="https://img.shields.io/badge/license-BSD--3--Clause-blue" alt="License">
     </div>
   </section>
@@ -407,6 +407,37 @@
   <section class="screenshot-section">
     <div class="screenshot-wrapper">
       <img src="https://raw.githubusercontent.com/KaraZajac/switchboard/main/images/screenshots/hero.png" alt="Switchboard on a desktop and a phone, side by side" loading="lazy">
+    </div>
+  </section>
+
+  <!-- Three ways to run it -->
+  <section class="section">
+    <div class="container">
+      <h2 class="section-title">Three ways to run it</h2>
+      <p class="section-subtitle">The same program, the same login, the same conversation &mdash; wherever you happen to be</p>
+      <div class="features">
+        <div class="feature-card">
+          <div class="feature-icon">&#128187;</div>
+          <h3>On your desktop</h3>
+          <p>The full client for macOS, Linux and Windows. It holds the connections, keeps the history, and hands over to your phone when you close the lid.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">&#128241;</div>
+          <h3>On your phone</h3>
+          <p>An Android client with its own IRC engine &mdash; not a remote control. Pair it with a QR code and it takes over the connections when the desktop goes away, then gives them back.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">&#127760;</div>
+          <h3>On a box that never sleeps</h3>
+          <p>A headless build with no Electron and no window, running on a server or a Pi. It holds your connections around the clock and speaks IRC to your other clients, so it is your bouncer as well as your client.</p>
+        </div>
+      </div>
+      <p class="section-subtitle" style="margin-top:2rem">
+        Devices find each other over an encrypted peer-to-peer link: no ports to open, and nothing
+        of ours in the middle. They hole-punch straight to each other where the network allows it,
+        and fall back to a public relay that only ever carries bytes it cannot read. Your networks
+        and passwords travel between them in a vault sealed with one passphrase.
+      </p>
     </div>
   </section>
 
@@ -443,8 +474,8 @@
         </div>
         <div class="feature-card">
           <div class="feature-icon">&#128101;</div>
-          <h3>Friend List</h3>
-          <p>Track when your friends are online or offline using IRCv3 MONITOR. Persists across restarts.</p>
+          <h3>Friends</h3>
+          <p>One list across every network, written <code>nick@network</code>, so &ldquo;is anybody about?&rdquo; is one glance rather than a tour of your networks. Uses MONITOR, or WATCH on the networks that only speak that.</p>
         </div>
         <div class="feature-card">
           <div class="feature-icon">&#128100;</div>
@@ -458,8 +489,28 @@
         </div>
         <div class="feature-card">
           <div class="feature-icon">&#128270;</div>
-          <h3>Search</h3>
-          <p>Full-text search across all your messages. Quick channel switcher with <kbd>Ctrl+K</kbd>.</p>
+          <h3>Search everywhere</h3>
+          <p>Full-text search across every network at once &mdash; because what you remember is a phrase or a person, not which network they said it on. Quick channel switcher with <kbd>Ctrl+K</kbd>.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">&#128073;</div>
+          <h3>Mentions</h3>
+          <p>Every line that named you, from every network, newest first. A badge tells you something happened; this tells you what was said.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">&#128279;</div>
+          <h3>Go to the message</h3>
+          <p>A mention, a search result or a reply quote takes you to the line itself, with what was being said around it &mdash; fetching the conversation from the server if it is older than anything held locally.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">&#128225;</div>
+          <h3>Works with your bouncer</h3>
+          <p>Speaks <code>soju.im/bouncer-networks</code> to soju, and recognises ZNC &mdash; including the <code>user/network</code> login you already have. A bouncer holding five networks becomes five networks here, offered rather than hidden.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">&#128274;</div>
+          <h3>Encrypted at rest</h3>
+          <p>Every message, network and password in an encrypted SQLite database, with the key in your OS keychain. On Android, the device identity is sealed by the hardware keystore and kept out of backups.</p>
         </div>
         <div class="feature-card">
           <div class="feature-icon">&#128263;</div>
@@ -474,7 +525,7 @@
         <div class="feature-card">
           <div class="feature-icon">&#128187;</div>
           <h3>Cross-Platform</h3>
-          <p>Available for macOS (.dmg), Linux (.AppImage, .deb, .rpm), and Windows (.exe) with auto-updates.</p>
+          <p>macOS (.dmg), Linux (.AppImage, .deb, .rpm) and Windows (.exe) with auto-updates, plus an Android APK per architecture.</p>
         </div>
       </div>
     </div>
@@ -611,7 +662,7 @@
   <section class="section section-alt">
     <div class="container">
       <h2 class="section-title">IRCv3 Support</h2>
-      <p class="section-subtitle">One of the most comprehensive IRCv3 implementations in any client</p>
+      <p class="section-subtitle">One of the most comprehensive IRCv3 implementations in any client &mdash; implemented twice, once in TypeScript and once in Kotlin, both checked against the same shared corpus so the two clients cannot drift apart</p>
       <div class="spec-grid">
         <div class="spec-card">
           <h3>&#128274; Authentication</h3>
@@ -620,7 +671,8 @@
             <span class="spec-tag">SASL EXTERNAL</span>
             <span class="spec-tag">SCRAM-SHA-256</span>
             <span class="spec-tag">STS</span>
-            <span class="spec-tag">account-registration</span>
+            <span class="spec-tag">draft/account-registration</span>
+            <span class="spec-tag">CertFP</span>
           </div>
         </div>
         <div class="spec-card">
@@ -631,14 +683,20 @@
             <span class="spec-tag">server-time</span>
             <span class="spec-tag">echo-message</span>
             <span class="spec-tag">batch</span>
+            <span class="spec-tag">draft/client-batch</span>
             <span class="spec-tag">labeled-response</span>
             <span class="spec-tag">standard-replies</span>
             <span class="spec-tag">draft/chathistory</span>
+            <span class="spec-tag">draft/event-playback</span>
+            <span class="spec-tag">draft/search</span>
             <span class="spec-tag">draft/multiline</span>
             <span class="spec-tag">draft/message-redaction</span>
-            <span class="spec-tag">draft/edit</span>
+            <span class="spec-tag">draft/message-edit</span>
+            <span class="spec-tag">draft/relaymsg</span>
             <span class="spec-tag">+typing</span>
             <span class="spec-tag">+draft/react</span>
+            <span class="spec-tag">+draft/reply</span>
+            <span class="spec-tag">CTCP</span>
           </div>
         </div>
         <div class="spec-card">
@@ -655,8 +713,13 @@
             <span class="spec-tag">monitor</span>
             <span class="spec-tag">invite-notify</span>
             <span class="spec-tag">bot</span>
+            <span class="spec-tag">extended-monitor</span>
+            <span class="spec-tag">WATCH</span>
             <span class="spec-tag">WHOX</span>
+            <span class="spec-tag">draft/metadata-3</span>
             <span class="spec-tag">draft/metadata-2</span>
+            <span class="spec-tag">draft/oper-tag</span>
+            <span class="spec-tag">draft/pre-away</span>
           </div>
         </div>
         <div class="spec-card">
@@ -667,6 +730,21 @@
             <span class="spec-tag">+draft/channel-context</span>
             <span class="spec-tag">draft/network-icon</span>
             <span class="spec-tag">draft/filehost</span>
+            <span class="spec-tag">draft/auto-join</span>
+            <span class="spec-tag">draft/extended-isupport</span>
+            <span class="spec-tag">no-implicit-names</span>
+            <span class="spec-tag">cap-notify</span>
+          </div>
+        </div>
+        <div class="spec-card">
+          <h3>&#128225; Bouncers &amp; push</h3>
+          <div class="spec-tags">
+            <span class="spec-tag">soju.im/bouncer-networks</span>
+            <span class="spec-tag">soju.im/bouncer-networks-notify</span>
+            <span class="spec-tag">znc.in/self-message</span>
+            <span class="spec-tag">ZNC login</span>
+            <span class="spec-tag">draft/webpush</span>
+            <span class="spec-tag">soju.im/webpush</span>
           </div>
         </div>
       </div>
@@ -681,7 +759,7 @@
       <div class="tech-grid">
         <div class="tech-item">
           <div class="tech-label">Framework</div>
-          <div class="tech-value">Electron 33</div>
+          <div class="tech-value">Electron 44</div>
         </div>
         <div class="tech-item">
           <div class="tech-label">UI</div>
@@ -697,7 +775,19 @@
         </div>
         <div class="tech-item">
           <div class="tech-label">Database</div>
-          <div class="tech-value">sql.js (SQLite)</div>
+          <div class="tech-value">SQLite, encrypted</div>
+        </div>
+        <div class="tech-item">
+          <div class="tech-label">Android</div>
+          <div class="tech-value">Kotlin + Compose</div>
+        </div>
+        <div class="tech-item">
+          <div class="tech-label">Device link</div>
+          <div class="tech-value">iroh (QUIC)</div>
+        </div>
+        <div class="tech-item">
+          <div class="tech-label">Always-on build</div>
+          <div class="tech-value">Node, no Electron</div>
         </div>
         <div class="tech-item">
           <div class="tech-label">Build</div>
@@ -705,7 +795,7 @@
         </div>
         <div class="tech-item">
           <div class="tech-label">Tests</div>
-          <div class="tech-value">Vitest</div>
+          <div class="tech-value">Vitest + JUnit</div>
         </div>
         <div class="tech-item">
           <div class="tech-label">Language</div>
@@ -715,10 +805,47 @@
     </div>
   </section>
 
+  <!-- Docs -->
+  <section class="section section-alt">
+    <div class="container">
+      <h2 class="section-title">Read more</h2>
+      <p class="section-subtitle">The two documents behind the program</p>
+      <div class="features">
+        <div class="feature-card">
+          <div class="feature-icon">&#128421;</div>
+          <h3>Switchboard without a screen</h3>
+          <p>
+            Building and running the always-on version: giving it networks, attaching other IRC
+            clients to it, running it as a service, where the secrets live, and what to do if you
+            are coming from ZNC.
+            <br><br>
+            <a href="https://github.com/KaraZajac/switchboard/blob/main/docs/headless.md">Read the guide &rarr;</a>
+          </p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">&#128506;</div>
+          <h3>The roadmap</h3>
+          <p>
+            How the phone, the encryption and the always-on build were designed and why — the
+            transports considered, the Android background-execution problem, what the encryption
+            does and does not protect, and what is still open.
+            <br><br>
+            <a href="https://github.com/KaraZajac/switchboard/blob/main/docs/roadmap.md">Read the roadmap &rarr;</a>
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <!-- CTA -->
   <section class="cta">
     <h2>Ready to try Switchboard?</h2>
-    <p>Download the latest release or build from source.</p>
+    <p>
+      Desktop builds for macOS, Linux and Windows, and an Android APK &mdash; take
+      <code>arm64-v8a</code> for any phone made in the last decade, or the universal
+      APK if you would rather not think about it. The always-on build comes from source:
+      <code>npm run build:headless</code>.
+    </p>
     <div class="hero-buttons">
       <a href="https://github.com/KaraZajac/switchboard/releases/latest" class="btn btn-primary">
         <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>

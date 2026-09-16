@@ -1,22 +1,33 @@
-# Switchboard roadmap: Android companion + encryption at rest
+# Switchboard roadmap: one login, everywhere, encrypted
 
-Research notes and a proposed plan for two tracks:
+Research notes and a plan that began as two tracks and became three:
 
-- **Track A** — an Android client that pairs with the desktop app and proxies through it, so
-  there is one IRC login and one shared state, with no ports to open or firewalls to configure.
+- **Track A** — an Android client that pairs with the desktop app, so there is one IRC login and
+  one shared state, with no ports to open or firewalls to configure. It ended up with an IRC
+  engine of its own rather than proxying, which is what lets it stand in when the desktop is off.
 - **Track B** — encrypting everything Switchboard keeps on disk.
+- **Track C** — Switchboard with no screen, for a box that never sleeps: always-on, and a bouncer
+  other clients can attach to. Added once A and B were done, because a laptop cannot be always-on
+  and no amount of failover between two sleeping devices makes one.
 
-Written September 2026. Links to sources are at the bottom.
+Written September 2026, updated as each piece landed. Links to sources are at the bottom.
 
 ---
 
-## Status — what is built (9 September 2026)
+## Status — what is built (16 September 2026)
 
-Both tracks are working end to end, desktop and Android, against a live IRC
-network — including failover: the phone takes over the connection when the
-desktop goes away, and gives it back when it returns. What is left is A11's
-wire, which is blocked on the server, and file sharing, which is blocked on the
-same.
+Both tracks are working end to end, desktop and Android, against live IRC
+networks — including failover: the phone takes over the connection when the
+desktop goes away, and gives it back when it returns.
+
+Since then a third track has arrived that was not in the original plan, and it
+is the one that finishes the goal. **Track C** is Switchboard with no screen: a
+headless build that runs on a box that never sleeps, joins the same session as
+a third peer, and speaks IRC downstream so other clients can attach to it. It
+makes Switchboard a bouncer without embedding one, which is what the two
+original tracks were circling around.
+
+The only thing still blocked is A11's wire, and the block is in the server.
 
 | | |
 |---|---|
@@ -37,6 +48,15 @@ same.
 | **B2 · whole-database encryption** | done — real SQLite, encrypted page by page with a key the OS keychain holds; FTS5 search; migration from the sql.js file verified against a real one |
 | **B3 · Android at rest** | done — the device identity and pairing ticket sealed by the Android keystore, and out of backup |
 | **Profile metadata** | done — all six registry keys, published, subscribed and rendered on both clients |
+| **C1 · headless build** | done — `npm run build:headless`, one esbuild bundle Node runs with no Electron; priority 1000, above the desktop's 100, so it holds the connections whenever it is up |
+| **C2 · an IRC listener** | done — other clients attach to it over IRC, which is what makes it a bouncer rather than only an always-on client; no open ports needed for Switchboard's own devices, which still use the peer link |
+| **C3 · bouncer conformance** | done — `soju.im/bouncer-networks` answered the way soju answers it: LISTNETWORKS in a batch with no closing numeric, BIND refused after registration with `REGISTRATION_IS_COMPLETED`, every `FAIL` carrying its subcommand, and notify sending changes |
+| **C4 · ZNC arrivals** | done — `PASS user/network:password` accepted as a fallback, so somebody moving off ZNC does not have to re-learn how to log in |
+| **Bouncer client** | done — both clients speak `soju.im/bouncer-networks` upstream, recognise soju, ZNC and our own, read what a bouncer holds and offer to add each network as its own row, bound by `BOUNCER BIND` |
+| **Filehost** | done — `draft/filehost` end to end on both clients: upload, inline images and video, a download card for everything else, RFC 6266 filenames |
+| **CTCP** | done — `CLIENTINFO`, `PING`, `SOURCE`, `TIME`, `VERSION`, answered whether asked privately or of a channel, rate limited rather than withheld |
+| **People, not networks** | done — direct messages, mentions, friends and search are all one list across every network; a friend is `nick@network` and a search result `#channel@network` |
+| **Going to a message** | done — a mention, a search result or a reply quote lands on the line with its context, fetching `CHATHISTORY AROUND` when it is older than anything held locally |
 
 ### A11 · push wake-ups — where it stands
 
@@ -178,6 +198,14 @@ The phone's engine is a separate implementation and needed the same fixes, so
 the two are held together by `tests/fixtures/` — one corpus for the protocol,
 the capability list, the pairing payload, and the capability *values*, read by
 both test suites.
+
+That corpus is where the interesting bugs now turn up, because it is the one
+place the two clients have to agree out loud. It caught them answering CTCP
+`TIME` differently (JavaScript always prints milliseconds; Java omits them when
+they are zero), and it is how each new rule since has been settled once rather
+than twice: what counts as a mention, which device is holding the connections,
+whether an arriving line is unread, how a friend list is ordered, whether a
+jump can scroll or has to fetch.
 
 Those values were the next thing reading the wire found. A capability is not
 only a yes: `sasl=PLAIN,SCRAM-SHA-256`, `draft/multiline=max-bytes=4096,max-
@@ -552,15 +580,99 @@ Worth writing into the docs so nobody over-trusts it:
 
 ---
 
+## Track C — Switchboard without a screen
+
+Added after A and B were finished, because they did not finish the goal. The
+goal was one login and one nick everywhere, with your conversations carrying on
+while you are not looking. Failover between a laptop and a phone gets most of
+the way there and then stops at the obvious place: both of those devices sleep,
+and the one thing neither can be is always on.
+
+### Why not embed soju
+
+The obvious move is to bundle a bouncer. soju is excellent and it is AGPLv3;
+Switchboard is BSD-3-Clause, so embedding its code would relicense the whole
+program. Shipping the unmodified binary as a separate process is legally
+workable but means carrying a Go binary per platform and the AGPL obligations
+that come with it — for a program that is already, in every respect but one, a
+bouncer.
+
+Because it is. The desktop already holds connections, survives clients coming
+and going, stores and replays history, hands over on a heartbeat, and signs in
+once from a shared vault. The only thing it lacks is being always on, and
+embedding a bouncer into a laptop cannot fix that, because the laptop is what
+goes away.
+
+So: the same program, built without Electron, running wherever you keep things
+that do not sleep.
+
+### What it is
+
+`npm run build:headless` produces one esbuild bundle that Node runs — no
+window, no renderer, no Chromium. It joins the same session as your desktop and
+phone as a third peer, at priority 1000 against the desktop's 100 and the
+phone's 10, so it holds the connections whenever it is up and the others follow
+it. Everything else is the code the desktop runs.
+
+Two ways in:
+
+- **The peer link**, for your own devices. Same encrypted QUIC link the phone
+  and desktop already use, so there is nothing to forward and no port to open.
+- **An IRC listener**, for everything else. Point HexChat, WeeChat or irssi at
+  it and it answers as a bouncer: your networks, your scrollback, your nick.
+  This is a port you choose to open, and it is the only one.
+
+The second is what makes it a bouncer rather than an always-on client, and it
+is also how the desktop reaches it: a Switchboard attaching to a headless
+Switchboard is just an IRC client attaching to a bouncer, which meant the
+"desktop can only listen, never follow" gap never had to be closed.
+
+### Conformance, and why it matters
+
+A bouncer other clients attach to has to be a bouncer those clients recognise.
+`soju.im/bouncer-networks` is answered the way soju answers it, checked by
+firing every subcommand — including the wrong ones — at both and diffing the
+transcripts: LISTNETWORKS inside a batch with no closing numeric, BIND refused
+after registration with `REGISTRATION_IS_COMPLETED`, `state` and `error`
+read-only, every `FAIL` carrying its subcommand, and notify actually sending
+changes rather than waiting to be asked.
+
+Somebody arriving from ZNC brings a `user/network:password` login with them, so
+that is accepted as a fallback after the whole string fails as a password. The
+ZNC capabilities are recognised too — ZNC relays its upstream's ISUPPORT
+untouched, so there is no token to find, and it was invisible to us until we
+went looking for `znc.in/` instead.
+
+### The other direction
+
+The same work made Switchboard a bouncer *client*. Both the desktop and the
+phone speak `soju.im/bouncer-networks` upstream, read what a bouncer holds, and
+offer to add each of its networks as a row of its own bound with `BOUNCER
+BIND` — so a soju holding five networks becomes five networks here rather than
+one address you have to fold a network name into.
+
+---
+
 ## Decisions needed before starting
 
-1. Does the phone ever talk to IRC directly, or is the desktop the only path? (Determines whether we
-   need a second nick, and how much of the core the phone carries.)
-2. Are we willing to depend on n0's public relays for the fallback path, or do we self-host relays
-   from the start?
-3. Is a headless core in scope, or is "desktop must be awake" an accepted limitation of v1?
-4. Optional passphrase for the database, or OS-keystore only?
-5. Push: UnifiedPush only, or FCM as well for people who want zero setup?
+These were the open questions at the start. All but one have been answered by
+building the thing:
+
+1. ~~Does the phone ever talk to IRC directly, or is the desktop the only path?~~
+   **Directly.** The phone carries a full IRC engine in Kotlin, sharing a
+   protocol corpus with the desktop rather than sharing code. Proxying would
+   have meant the phone could do nothing while the desktop was off, which is
+   most of the time it is in your pocket.
+2. ~~Do we depend on n0's public relays, or self-host from the start?~~ **The
+   public ones, with a direct hole punch preferred** — first byte in 0.6s in
+   practice, and nothing to run.
+3. ~~Is a headless core in scope?~~ **In scope and built** — Track C above.
+4. ~~Optional passphrase for the database, or OS-keystore only?~~ **Keystore for
+   the database, passphrase for the shared vault.** The two protect different
+   things: the database is this machine's, the vault travels between devices.
+5. **Push: still open.** UnifiedPush is the answer for Android without Google,
+   and the encryption is done on both sides; what is missing is a server that
+   advertises its VAPID key and an account to register with. See A11 above.
 
 ---
 
