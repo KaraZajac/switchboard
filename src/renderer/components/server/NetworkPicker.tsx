@@ -55,7 +55,7 @@ export function NetworkPicker({
                 // Said out loud rather than left as an absence. A network with
                 // no encrypted port is a real choice somebody is making, and
                 // they can only make it if we tell them.
-                <span className="ml-1 font-sans text-amber-500/80">not encrypted</span>
+                <span className="ml-1 font-sans text-yellow-500/80">not encrypted</span>
               )}
             </div>
           </button>
@@ -71,7 +71,7 @@ export function NetworkPicker({
 
       <div className="flex items-center justify-between border-t border-gray-700 pt-3">
         <span className="text-xs text-gray-600">Checked {NETWORKS_CHECKED_AT}</span>
-        <button onClick={onByHand} className="text-sm text-indigo-400 hover:text-indigo-300">
+        <button onClick={onByHand} className="text-sm text-indigo-400 hover:text-indigo-500">
           I know the address — enter it myself
         </button>
       </div>

@@ -57,10 +57,10 @@ export function HoldingPill() {
 
   const tone =
     holder === 'live' || holder === 'bouncer'
-      ? 'bg-green-500/15 text-green-400'
+      ? 'bg-green-500/20 text-gray-100'
       : holder === 'desktop'
-        ? 'bg-indigo-500/15 text-indigo-300'
-        : 'bg-yellow-500/15 text-yellow-400'
+        ? 'bg-indigo-500/20 text-gray-100'
+        : 'bg-yellow-500/20 text-gray-100'
 
   return (
     <span

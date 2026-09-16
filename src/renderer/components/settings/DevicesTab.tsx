@@ -275,7 +275,7 @@ function AlwaysOn({
           ticket it printed and this desktop will follow it.{' '}
           <button
             onClick={() => setAdding(true)}
-            className="text-indigo-400 transition-colors hover:text-indigo-300"
+            className="text-indigo-400 transition-colors hover:text-indigo-500"
           >
             Add one
           </button>

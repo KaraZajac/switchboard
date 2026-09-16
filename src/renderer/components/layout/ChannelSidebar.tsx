@@ -156,7 +156,7 @@ export function ChannelSidebar() {
                   onContextMenu={(e) => handleContextMenu(e, ch.name, ch.muted)}
                   className={`mb-0.5 flex h-8 w-full items-center gap-2 rounded-md px-2 text-left transition-colors ${
                     isActive
-                      ? 'bg-gray-700 text-white'
+                      ? 'bg-gray-700 text-gray-100'
                       : hasUnread
                         ? 'text-gray-100 hover:bg-gray-700/40'
                         : ch.muted
@@ -378,7 +378,7 @@ function ServiceItems({ activeChannel, allChannels, seen, onChannelClick }: Serv
             onClick={() => onChannelClick(entry.name)}
             className={`mb-0.5 flex h-8 w-full items-center gap-2 rounded-md px-2 text-left transition-colors ${
               isActive
-                ? 'bg-gray-700 text-white'
+                ? 'bg-gray-700 text-gray-100'
                 : look === 'unread'
                   ? 'text-gray-100 hover:bg-gray-700/40'
                   : 'text-gray-400 hover:bg-gray-700/40 hover:text-gray-200'

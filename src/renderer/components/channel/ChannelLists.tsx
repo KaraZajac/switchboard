@@ -127,7 +127,7 @@ export function ChannelLists() {
               key={which}
               onClick={() => setTab(which)}
               className={`flex-1 rounded px-2 py-1 font-medium capitalize transition-colors ${
-                tab === which ? 'bg-gray-600 text-white' : 'text-gray-400 hover:text-gray-200'
+                tab === which ? 'bg-gray-600 text-gray-100' : 'text-gray-400 hover:text-gray-200'
               }`}
             >
               {which}
@@ -148,7 +148,7 @@ export function ChannelLists() {
               key={one.mode}
               onClick={() => setMode(one.mode)}
               className={`flex-1 rounded px-2 py-1 font-medium transition-colors ${
-                mode === one.mode ? 'bg-gray-600 text-white' : 'text-gray-400 hover:text-gray-200'
+                mode === one.mode ? 'bg-gray-600 text-gray-100' : 'text-gray-400 hover:text-gray-200'
               }`}
             >
               {one.label}
@@ -183,7 +183,7 @@ export function ChannelLists() {
                 {canChange && (
                   <button
                     onClick={() => void change(entry.mask, false)}
-                    className="shrink-0 rounded px-2 py-1 text-xs text-gray-400 hover:bg-gray-700 hover:text-red-300"
+                    className="shrink-0 rounded px-2 py-1 text-xs text-gray-400 hover:bg-gray-700 hover:text-red-400"
                   >
                     Lift
                   </button>
@@ -225,7 +225,7 @@ export function ChannelLists() {
         )}
 
         {error && (
-          <div className="rounded bg-red-900/50 px-2 py-1.5 text-xs text-red-300">{error}</div>
+          <div className="rounded bg-red-900/50 px-2 py-1.5 text-xs text-red-400">{error}</div>
         )}
         </div>
         )}

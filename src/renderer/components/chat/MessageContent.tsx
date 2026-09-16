@@ -251,7 +251,7 @@ function highlightMentions(text: string, nick: string): React.ReactNode {
   const testRegex = new RegExp(`^@?${escaped}\\b$`, 'i')
   return parts.map((part, i) =>
     testRegex.test(part) ? (
-      <span key={i} className="rounded bg-amber-500/20 px-0.5 font-semibold text-amber-300">
+      <span key={i} className="rounded bg-yellow-500/15 px-0.5 font-semibold text-gray-100">
         {part}
       </span>
     ) : (
@@ -325,7 +325,7 @@ function YouTubeEmbed({ videoId, url }: { videoId: string; url: string }) {
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
         <button
           onClick={(e) => { e.preventDefault(); e.stopPropagation(); setInline(true) }}
-          className="pointer-events-auto flex h-14 w-20 items-center justify-center rounded-xl bg-red-600 shadow-lg hover:bg-red-500 transition-colors"
+          className="pointer-events-auto flex h-14 w-20 items-center justify-center rounded-xl bg-red-500 shadow-lg hover:bg-red-400 transition-colors"
           title="Play inline"
         >
           <Play size={28} strokeWidth={2} fill="currentColor" className="ml-1 text-white" aria-hidden="true" />

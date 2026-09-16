@@ -128,7 +128,7 @@ export function DMSidebar() {
         onClick={() => useUIStore.getState().setFriendsOpen(true)}
         className={`mx-2 mt-2 flex items-center gap-2 rounded px-2 py-1.5 text-left transition-colors ${
           friendsOpen
-            ? 'bg-gray-700 text-white'
+            ? 'bg-gray-700 text-gray-100'
             : 'text-gray-400 hover:bg-gray-700/50 hover:text-gray-200'
         }`}
       >
@@ -159,7 +159,7 @@ export function DMSidebar() {
                 onClick={() => handleDMClick(dm.serverId, dm.nick)}
                 className={`mb-0.5 flex w-full items-center gap-2 rounded px-2 py-1.5 text-left transition-colors ${
                   isActive
-                    ? 'bg-gray-700 text-white'
+                    ? 'bg-gray-700 text-gray-100'
                     : hasUnread
                       ? 'text-gray-100 hover:bg-gray-700/50'
                       : 'text-gray-400 hover:bg-gray-700/50 hover:text-gray-200'

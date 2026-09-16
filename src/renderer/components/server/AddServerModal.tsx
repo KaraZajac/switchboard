@@ -300,7 +300,7 @@ export function AddServerModal({ editServer }: AddServerModalProps = {}) {
         <button
           type="button"
           onClick={() => setShowAdvanced(!showAdvanced)}
-          className="text-sm text-indigo-400 hover:text-indigo-300"
+          className="text-sm text-indigo-400 hover:text-indigo-500"
         >
           {showAdvanced ? 'Hide' : 'Show'} advanced settings
         </button>
@@ -473,7 +473,7 @@ export function AddServerModal({ editServer }: AddServerModalProps = {}) {
 
         {/* Error */}
         {error && (
-          <div className="rounded bg-red-900/50 px-3 py-2 text-sm text-red-300">{error}</div>
+          <div className="rounded bg-red-900/50 px-3 py-2 text-sm text-red-400">{error}</div>
         )}
 
         {/* Submit */}
@@ -552,13 +552,13 @@ function ClientCertificateField({
       />
 
       {problem ? (
-        <p className="mt-1 text-xs text-amber-400">{problem}</p>
+        <p className="mt-1 text-xs text-yellow-500">{problem}</p>
       ) : fingerprint ? (
         <div className="mt-2 rounded bg-gray-900/60 p-2">
           <p className="text-xs text-gray-400">
             Tell the network this is you, once you are connected and logged in:
           </p>
-          <code className="mt-1 block break-all font-mono text-xs text-emerald-300">
+          <code className="mt-1 block break-all font-mono text-xs text-green-400">
             /msg NickServ CERT ADD {fingerprint}
           </code>
         </div>

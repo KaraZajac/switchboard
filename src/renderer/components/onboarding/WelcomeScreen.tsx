@@ -8,7 +8,7 @@ export function WelcomeScreen() {
     <div className="flex h-full w-full flex-col items-center justify-center bg-gray-900 text-gray-100">
       <SwitchboardIcon fg="#818cf8" size={96} className="mb-6" />
 
-      <h1 className="mb-2 text-3xl font-bold text-white">Welcome to Switchboard</h1>
+      <h1 className="mb-2 text-3xl font-bold text-gray-100">Welcome to Switchboard</h1>
       <p className="mb-8 max-w-md text-center text-gray-400">
         A modern IRC client with full IRCv3 support. Pick a network to start
         on, or put in the address of one you already know.

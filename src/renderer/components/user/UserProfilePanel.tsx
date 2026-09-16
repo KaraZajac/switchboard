@@ -111,7 +111,7 @@ export function UserProfilePanel() {
         {/* Nick & status */}
         <div className="min-w-0 flex-1 text-left">
           <div className="truncate text-sm font-medium text-gray-100">{displayNick}</div>
-          <div className={`truncate text-xs ${isAway ? 'text-yellow-400' : 'text-gray-400'}`}>
+          <div className={`truncate text-xs ${isAway ? 'text-yellow-500' : 'text-gray-400'}`}>
             {isAway ? awayMessage : myMetadata.status || 'Online'}
           </div>
         </div>
@@ -381,7 +381,7 @@ function ProfileEditPopup({
                 onClick={() => setProfileScope(which)}
                 className={`flex-1 rounded px-2 py-1 font-medium transition-colors ${
                   profileScope === which
-                    ? 'bg-gray-600 text-white'
+                    ? 'bg-gray-600 text-gray-100'
                     : 'text-gray-400 hover:text-gray-200'
                 }`}
               >
@@ -411,7 +411,7 @@ function ProfileEditPopup({
                 useServerStore.getState().updateServer(serverId, { profile: {} })
                 setProfileScope('global')
               }}
-              className="text-xs text-indigo-400 hover:text-indigo-300"
+              className="text-xs text-indigo-400 hover:text-indigo-500"
             >
               Use my profile here instead
             </button>
@@ -452,7 +452,7 @@ function ProfileEditPopup({
               onClick={() => setIsAway(!isAway)}
               className={`rounded px-2 py-0.5 text-xs font-medium ${
                 isAway
-                  ? 'bg-yellow-600/20 text-yellow-400 hover:bg-yellow-600/30'
+                  ? 'bg-yellow-500/20 text-yellow-500 hover:bg-yellow-500/30'
                   : 'bg-green-600/20 text-green-400 hover:bg-green-600/30'
               }`}
             >
@@ -471,7 +471,7 @@ function ProfileEditPopup({
         </div>
 
         {error && (
-          <div className="rounded bg-red-900/50 px-2 py-1.5 text-xs text-red-300">{error}</div>
+          <div className="rounded bg-red-900/50 px-2 py-1.5 text-xs text-red-400">{error}</div>
         )}
 
         {/* Actions */}

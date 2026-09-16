@@ -95,7 +95,7 @@ export function WhoisModal() {
             )}
             <div className="flex gap-2">
               {data.isOperator && (
-                <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-xs font-semibold text-amber-400">
+                <span className="rounded bg-yellow-500/20 px-1.5 py-0.5 text-xs font-semibold text-gray-100">
                   IRC Operator
                 </span>
               )}

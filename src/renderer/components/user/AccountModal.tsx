@@ -370,7 +370,7 @@ export function AccountModal() {
         {outcome && (
           <div
             className={`rounded p-3 text-sm ${
-              outcome.failed ? 'bg-red-500/10 text-red-300' : 'bg-emerald-500/10 text-emerald-300'
+              outcome.failed ? 'bg-red-500/10 text-red-400' : 'bg-green-500/10 text-green-400'
             }`}
           >
             {outcome.text}
@@ -391,13 +391,13 @@ function Standing({
   account: string | null
   connected: boolean
 }) {
-  const colour = account ? 'bg-emerald-400' : connected ? 'bg-amber-400' : 'bg-gray-500'
+  const colour = account ? 'bg-green-400' : connected ? 'bg-yellow-500' : 'bg-gray-500'
   return (
     <div className="flex items-center gap-3">
       <span className={`h-2.5 w-2.5 rounded-full ${colour}`} />
       <div>
         <div className="font-semibold text-gray-100">{nick || 'Not connected'}</div>
-        <div className={`text-xs ${account ? 'text-emerald-400' : 'text-gray-400'}`}>
+        <div className={`text-xs ${account ? 'text-green-400' : 'text-gray-400'}`}>
           {account
             ? `Logged in as ${account}`
             : connected

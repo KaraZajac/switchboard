@@ -53,7 +53,7 @@ export function MessageItem({ message, prevMessage, onReply }: MessageItemProps)
     !isOwn &&
     message.type === 'privmsg' &&
     mentionsYou(message.content, currentNick, highlightWords)
-  const mentionBg = isMention ? 'bg-amber-500/8 border-l-2 border-amber-500/50' : ''
+  const mentionBg = isMention ? 'bg-yellow-500/8 border-l-2 border-yellow-500/50' : ''
 
   const handleEditStart = () => {
     setEditText(message.content)
@@ -263,7 +263,7 @@ export function MessageItem({ message, prevMessage, onReply }: MessageItemProps)
           <span className="text-xs text-gray-500">{formatTimeFull(message.timestamp)}</span>
           {message.oper !== null && message.oper !== undefined && (
             <span
-              className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-medium text-amber-300"
+              className="rounded bg-yellow-500/20 px-1.5 py-0.5 text-[10px] font-medium text-gray-100"
               title={
                 message.oper
                   ? `The server says this is a network operator (${message.oper})`
@@ -275,7 +275,7 @@ export function MessageItem({ message, prevMessage, onReply }: MessageItemProps)
           )}
           {message.relayedBy !== null && message.relayedBy !== undefined && (
             <span
-              className="rounded bg-sky-500/20 px-1.5 py-0.5 text-[10px] font-medium text-sky-300"
+              className="rounded bg-blue-400/20 px-1.5 py-0.5 text-[10px] font-medium text-gray-100"
               title={
                 message.relayedBy
                   ? `Carried in from somewhere else by ${message.relayedBy}`
@@ -516,7 +516,7 @@ function MessageActions({
                 handleRedact()
                 setShowDeleteConfirm(false)
               }}
-              className="rounded bg-red-600 px-3 py-1 text-xs text-white hover:bg-red-500"
+              className="rounded bg-red-500 px-3 py-1 text-xs text-white hover:bg-red-400"
             >
               Delete
             </button>
@@ -956,7 +956,7 @@ function Reactions({ message }: { message: ChatMessage }) {
             title={nicks.join(', ')}
           >
             <span>{emoji}</span>
-            <span className={`text-xs ${mine ? 'text-indigo-300' : 'text-gray-400'}`}>
+            <span className={`text-xs ${mine ? 'text-indigo-400' : 'text-gray-400'}`}>
               {nicks.length}
             </span>
           </button>

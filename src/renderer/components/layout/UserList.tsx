@@ -359,9 +359,20 @@ function UserAvatar({ nick, avatarUrl, away }: { nick: string; avatarUrl: string
   const [failed, setFailed] = useState(false)
   useEffect(() => { setFailed(false) }, [avatarUrl])
 
+  // The colour and the white initial belong to each other: `nickColor` is one
+  // of Tailwind's own shades and is the same under every theme, which is the
+  // only reason white is safe on it. The placeholder circle behind a picture
+  // that is still loading is a palette grey, and nothing is written on it.
+  const showing = avatarUrl && !failed
+  const circle = showing
+    ? 'bg-gray-600'
+    : `${nickColor(nick)} text-xs font-bold text-white`
+
   return (
-    <div className={`relative flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full ${avatarUrl && !failed ? 'bg-gray-600' : nickColor(nick)} text-xs font-bold text-white`}>
-      {avatarUrl && !failed ? (
+    <div
+      className={`relative flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full ${circle}`}
+    >
+      {showing ? (
         <img
           src={avatarUrl}
           alt={nick}

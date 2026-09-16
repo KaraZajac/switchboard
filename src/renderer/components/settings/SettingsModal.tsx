@@ -117,7 +117,7 @@ function ServersTab() {
               </button>
               <button
                 onClick={() => handleRemove(server.id)}
-                className="rounded px-2 py-1 text-xs text-red-400 hover:bg-red-500/10 hover:text-red-300"
+                className="rounded px-2 py-1 text-xs text-red-400 hover:bg-red-500/10 hover:text-red-500"
               >
                 Remove
               </button>
@@ -1007,7 +1007,7 @@ function IgnoredTab() {
       )}
 
       {error && (
-        <div className="rounded bg-red-900/50 px-2 py-1.5 text-xs text-red-300">{error}</div>
+        <div className="rounded bg-red-900/50 px-2 py-1.5 text-xs text-red-400">{error}</div>
       )}
 
       {list.length === 0 ? (
@@ -1151,7 +1151,7 @@ function AliasesTab() {
           </button>
         </div>
         {error && (
-          <div className="rounded bg-red-900/50 px-2 py-1.5 text-xs text-red-300">{error}</div>
+          <div className="rounded bg-red-900/50 px-2 py-1.5 text-xs text-red-400">{error}</div>
         )}
       </div>
 
@@ -1166,7 +1166,7 @@ function AliasesTab() {
                 key={alias.name}
                 className="flex items-center gap-2 rounded bg-gray-900/60 px-3 py-2 ring-1 ring-gray-800"
               >
-                <span className="shrink-0 font-mono text-sm text-indigo-300">/{alias.name}</span>
+                <span className="shrink-0 font-mono text-sm text-indigo-400">/{alias.name}</span>
                 <span className="min-w-0 flex-1 truncate font-mono text-xs text-gray-400">
                   {alias.expansion.split('\n').join(' ; ')}
                 </span>
