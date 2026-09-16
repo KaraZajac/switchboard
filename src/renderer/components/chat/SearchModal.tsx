@@ -7,6 +7,24 @@ import { useServerStore } from '../../stores/serverStore'
 import { useChannelStore } from '../../stores/channelStore'
 import { MessageContent } from './MessageContent'
 import type { ChatMessage } from '@shared/types/message'
+import { whereSaid, type Found } from '@shared/search'
+
+/**
+ * One network's result as a result from anywhere.
+ *
+ * The two searches that answer for a single network hand back messages, which
+ * carry no network — they never needed to, because there was only ever one.
+ */
+function found(message: ChatMessage, network: string): Found {
+  return {
+    serverId: message.serverId,
+    network,
+    channel: message.channel,
+    nick: message.nick,
+    content: message.content,
+    timestamp: message.timestamp
+  }
+}
 
 // Stable, for the same reason as the channel browser's empty list: a selector
 // must hand back the same value while nothing has changed, or React re-renders
@@ -17,6 +35,7 @@ const NO_CAPABILITIES: string[] = []
 export function SearchModal() {
   const closeModal = useUIStore((s) => s.closeModal)
   const activeServerId = useServerStore((s) => s.activeServerId)
+  const servers = useServerStore((s) => s.servers)
   const capabilities = useServerStore((s) =>
     activeServerId ? (s.capabilities[activeServerId] ?? NO_CAPABILITIES) : NO_CAPABILITIES
   )
@@ -26,9 +45,17 @@ export function SearchModal() {
   )
 
   const [query, setQuery] = useState('')
-  const [results, setResults] = useState<ChatMessage[]>([])
+  const [results, setResults] = useState<Found[]>([])
   const [searching, setSearching] = useState(false)
-  const [searchScope, setSearchScope] = useState<'channel' | 'server'>('channel')
+  /*
+   * Everywhere by default.
+   *
+   * This opens from the header as "find something somebody said", and the
+   * honest answer to that is not "on this network". Narrowing to the channel
+   * you are in is one click away and the click is obvious; remembering which
+   * of six networks a conversation happened on is neither.
+   */
+  const [searchScope, setSearchScope] = useState<'channel' | 'server' | 'everywhere'>('everywhere')
   const [searchSource, setSearchSource] = useState<'local' | 'server'>('local')
   const inputRef = useRef<HTMLInputElement>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -41,11 +68,12 @@ export function SearchModal() {
   useEffect(() => {
     if (!window.switchboard) return
     const cleanup = window.switchboard.on('irc:search-results', ({ messages }) => {
-      setResults(messages || [])
+      const network = useServerStore.getState().servers.find((s) => s.id === activeServerId)
+      setResults((messages || []).map((m) => found(m, network?.name ?? '')))
       setSearching(false)
     })
     return cleanup
-  }, [])
+  }, [activeServerId])
 
   const doSearch = useCallback(
     (q: string) => {
@@ -55,7 +83,19 @@ export function SearchModal() {
       }
 
       setSearching(true)
+
+      // Every network at once. Nothing to scope to a channel here: a channel
+      // belongs to one network, so asking for both is asking for the narrower.
+      if (searchScope === 'everywhere') {
+        window.switchboard
+          .invoke('search:everywhere', q.trim(), 100)
+          .then((found) => setResults(found || []))
+          .finally(() => setSearching(false))
+        return
+      }
+
       const channel = searchScope === 'channel' ? activeChannel ?? undefined : undefined
+      const network = servers.find((s) => s.id === activeServerId)?.name ?? ''
 
       if (searchSource === 'server' && hasServerSearch) {
         // Server-side search — results arrive via irc:search-results event
@@ -66,13 +106,11 @@ export function SearchModal() {
         // Local SQLite search
         window.switchboard
           .invoke('message:search', activeServerId, q.trim(), channel)
-          .then((msgs) => {
-            setResults(msgs || [])
-          })
+          .then((msgs) => setResults((msgs || []).map((m) => found(m, network))))
           .finally(() => setSearching(false))
       }
     },
-    [activeServerId, activeChannel, searchScope, searchSource, hasServerSearch]
+    [activeServerId, activeChannel, searchScope, searchSource, hasServerSearch, servers]
   )
 
   const handleQueryChange = useCallback(
@@ -85,10 +123,15 @@ export function SearchModal() {
   )
 
   const handleResultClick = useCallback(
-    (msg: ChatMessage) => {
-      if (!activeServerId) return
-      // Navigate to the message's channel
-      useChannelStore.getState().setActiveChannel(activeServerId, msg.channel)
+    (msg: Found) => {
+      // To the network it was said on, which is no longer the one on screen:
+      // a result from everywhere carries its own
+      const serverId = msg.serverId || activeServerId
+      if (!serverId) return
+      useUIStore.getState().setDmMode(false)
+      useServerStore.getState().setActiveServer(serverId)
+      useChannelStore.getState().addChannel(serverId, msg.channel)
+      useChannelStore.getState().setActiveChannel(serverId, msg.channel)
       closeModal()
     },
     [activeServerId, closeModal]
@@ -130,18 +173,32 @@ export function SearchModal() {
             </button>
             <button
               onClick={() => setSearchScope('server')}
-              className={`rounded-r px-3 py-2 text-xs ${
+              className={`px-3 py-2 text-xs ${
                 searchScope === 'server'
                   ? 'bg-gray-700 text-gray-100'
                   : 'text-gray-400 hover:text-gray-200'
               }`}
             >
-              Server
+              Network
+            </button>
+            <button
+              onClick={() => setSearchScope('everywhere')}
+              className={`rounded-r px-3 py-2 text-xs ${
+                searchScope === 'everywhere'
+                  ? 'bg-gray-700 text-gray-100'
+                  : 'text-gray-400 hover:text-gray-200'
+              }`}
+            >
+              Everywhere
             </button>
           </div>
 
-          {/* Source toggle — only show if server supports draft/search */}
-          {hasServerSearch && (
+          {/*
+            Local or the network's own — only where a network can answer, and
+            only when the question is about one. A server can search itself and
+            nothing else.
+          */}
+          {hasServerSearch && searchScope !== 'everywhere' && (
             <div className="flex rounded bg-gray-900 ring-1 ring-gray-700">
               <button
                 onClick={() => setSearchSource('local')}
@@ -181,16 +238,18 @@ export function SearchModal() {
             </div>
           )}
 
-          {results.map((msg) => (
+          {results.map((msg, at) => (
             <button
-              key={msg.id}
+              key={`${msg.serverId}:${msg.channel}:${msg.timestamp}:${at}`}
               onClick={() => handleResultClick(msg)}
               className="w-full rounded px-3 py-2 text-left hover:bg-gray-700/50"
             >
               <div className="flex items-baseline gap-2">
                 <span className="font-medium text-gray-200">{msg.nick}</span>
+                {/* `#channel@network`, the way a friend is `nick@network` —
+                    neither half means anything on its own */}
                 <span className="text-xs text-gray-500">
-                  in {msg.channel}
+                  in {servers.length > 1 ? whereSaid(msg.channel, msg.network) : msg.channel}
                 </span>
                 <span className="text-xs text-gray-600">
                   {formatSearchTime(msg.timestamp)}

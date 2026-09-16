@@ -9,6 +9,7 @@ import { isPrivateAddress } from '@shared/privateaddress'
 import type { BrowserWindow, IpcMainInvokeEvent } from 'electron'
 import { hasMetadata } from '@shared/metadata'
 import { whoIsHolding } from '@shared/holding'
+import { newestFirst } from '@shared/search'
 import { isBouncer } from '@shared/bouncer'
 import { SERVER_PRIORITY } from '../session/coordinator'
 import { transcript, transcriptFilename } from '@shared/transcript'
@@ -1268,6 +1269,37 @@ export function registerIPCHandlers(): void {
 
   handle('message:search', async (_event, serverId: string, query: string, channel?: string) => {
     return searchMessages(serverId, query, { channel, limit: 50 })
+  })
+
+  /**
+   * The same question, asked of every network at once.
+   *
+   * Search was the last thing here that made somebody name a network before
+   * they were allowed to ask — direct messages, mentions and friends had all
+   * stopped being per-network, because what people remember is a person or a
+   * phrase and not a place.
+   *
+   * Locally, always. A network that carries `draft/search` can answer for
+   * itself, but only for itself, and half a dozen servers replying at their own
+   * pace with their own idea of relevance is not one list — it is six lists
+   * arriving in the wrong order. Asking one network its own way stays where it
+   * was, on `message:search-server`.
+   */
+  handle('search:everywhere', async (_event, query: string, limit?: number) => {
+    const want = Math.min(limit ?? 100, 200)
+
+    const found = getAllServers().flatMap((server) =>
+      searchMessages(server.id, query, { limit: want }).map((message) => ({
+        serverId: server.id,
+        network: server.name,
+        channel: message.channel,
+        nick: message.nick,
+        content: message.content,
+        timestamp: message.timestamp
+      }))
+    )
+
+    return newestFirst(found).slice(0, want)
   })
 
   handle(

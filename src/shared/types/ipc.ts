@@ -12,6 +12,7 @@ import type { MaskEntry } from '../masklists'
 import type { IgnoreEntry, IgnoreScope } from '../ignore'
 import type { DccTransfer } from '../dcc'
 import type { Holder } from '../holding'
+import type { Found } from '../search'
 
 /**
  * One line that named you, with enough around it to show and to go to.
@@ -504,6 +505,8 @@ export interface RendererToMainInvocations {
   ) => Promise<ChatMessage[]>
   /** Everything that named you, across every network, newest first */
   'mentions:recent': (limit?: number) => Promise<Mention[]>
+  /** The same search, asked of every network at once — see `@shared/search` */
+  'search:everywhere': (query: string, limit?: number) => Promise<Found[]>
   'chathistory:request': (
     serverId: string,
     channel: string,

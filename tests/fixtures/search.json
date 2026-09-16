@@ -1,0 +1,100 @@
+{
+  "$comment": "Searching across every network at once. Search was the last thing in this client that made you name a network before you were allowed to ask a question. Shared by tests/shared/search.test.ts and the Android SharedCorpusTest.",
+  "$where": "Where a line was said, written the way a person would write it: #channel@network, the same shape as a friend's nick@network. #general is a different room on every network there is.",
+  "where": [
+    {
+      "name": "a channel and its network",
+      "channel": "#lounge",
+      "network": "netslum",
+      "label": "#lounge@netslum"
+    },
+    {
+      "name": "a conversation is a place too",
+      "channel": "rowan",
+      "network": "libera",
+      "label": "rowan@libera"
+    },
+    {
+      "name": "a network with no name leaves the channel alone",
+      "channel": "#lounge",
+      "network": "",
+      "label": "#lounge"
+    }
+  ],
+  "$order": "Newest first, because time is the only order that means anything across networks — each store has its own idea of how well a line matches and those numbers are not comparable. Ties broken by network then channel so a run of lines from one second does not shuffle between searches.",
+  "order": [
+    {
+      "name": "newest first, whichever network it is on",
+      "found": [
+        {
+          "serverId": "s1",
+          "network": "netslum",
+          "channel": "#lounge",
+          "nick": "sam",
+          "content": "older",
+          "timestamp": "2026-09-15T10:00:00.000Z"
+        },
+        {
+          "serverId": "s2",
+          "network": "libera",
+          "channel": "#rust",
+          "nick": "jo",
+          "content": "newest",
+          "timestamp": "2026-09-15T12:00:00.000Z"
+        },
+        {
+          "serverId": "s1",
+          "network": "netslum",
+          "channel": "#lounge",
+          "nick": "rowan",
+          "content": "middle",
+          "timestamp": "2026-09-15T11:00:00.000Z"
+        }
+      ],
+      "contents": [
+        "newest",
+        "middle",
+        "older"
+      ]
+    },
+    {
+      "name": "the same second is ordered by network, then channel",
+      "found": [
+        {
+          "serverId": "s2",
+          "network": "netslum",
+          "channel": "#zebra",
+          "nick": "a",
+          "content": "third",
+          "timestamp": "2026-09-15T10:00:00.000Z"
+        },
+        {
+          "serverId": "s1",
+          "network": "libera",
+          "channel": "#rust",
+          "nick": "b",
+          "content": "first",
+          "timestamp": "2026-09-15T10:00:00.000Z"
+        },
+        {
+          "serverId": "s2",
+          "network": "netslum",
+          "channel": "#apples",
+          "nick": "c",
+          "content": "second",
+          "timestamp": "2026-09-15T10:00:00.000Z"
+        }
+      ],
+      "contents": [
+        "first",
+        "second",
+        "third"
+      ]
+    },
+    {
+      "name": "nothing found anywhere",
+      "found": [],
+      "contents": []
+    }
+  ]
+}

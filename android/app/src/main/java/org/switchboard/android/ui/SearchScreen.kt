@@ -48,6 +48,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.switchboard.android.EngineMode
 import org.switchboard.android.SearchHit
+import org.switchboard.android.irc.Search
+import org.switchboard.android.searchEverywhere
 import org.switchboard.android.SwitchboardEngine
 import org.switchboard.android.searchMessages
 import java.time.Instant
@@ -70,26 +72,43 @@ fun SearchScreen(engine: SwitchboardEngine, onOpen: (String, String) -> Unit, on
     var results by remember { mutableStateOf<List<SearchHit>>(emptyList()) }
     var searched by remember { mutableStateOf(false) }
     var searching by remember { mutableStateOf(false) }
-    var thisChannelOnly by remember { mutableStateOf(false) }
+    /*
+     * Everywhere by default, and everywhere means every network.
+     *
+     * It used to mean "everywhere on this network", which is the question
+     * nobody has: you remember what somebody said, not which network they said
+     * it on. Narrowing is a tap away and the tap is obvious.
+     */
+    var scope by remember { mutableStateOf(Scope.EVERYWHERE) }
+    var everywhere by remember { mutableStateOf<List<Search.Found>>(emptyList()) }
 
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
 
     // Search as you type, once there is enough to be worth searching for, and
     // after a pause — every keystroke would be a round trip to the desktop.
-    LaunchedEffect(query, thisChannelOnly, serverId) {
-        if (serverId == null || query.trim().length < 2) {
+    LaunchedEffect(query, scope, serverId) {
+        if (query.trim().length < 2 || (scope != Scope.EVERYWHERE && serverId == null)) {
             results = emptyList()
+            everywhere = emptyList()
             searched = false
             return@LaunchedEffect
         }
         kotlinx.coroutines.delay(300)
         searching = true
-        results = engine.searchMessages(
-            serverId,
-            query,
-            if (thisChannelOnly) store.activeChannel else null
-        )
+
+        if (scope == Scope.EVERYWHERE) {
+            everywhere = engine.searchEverywhere(query)
+            results = emptyList()
+        } else {
+            results = engine.searchMessages(
+                serverId!!,
+                query,
+                if (scope == Scope.CHANNEL) store.activeChannel else null
+            )
+            everywhere = emptyList()
+        }
+
         searching = false
         searched = true
     }
@@ -130,9 +149,15 @@ fun SearchScreen(engine: SwitchboardEngine, onOpen: (String, String) -> Unit, on
             modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Toggle("Everywhere", !thisChannelOnly) { thisChannelOnly = false }
+            Toggle("Everywhere", scope == Scope.EVERYWHERE) { scope = Scope.EVERYWHERE }
             Spacer(Modifier.width(8.dp))
-            store.activeChannel?.let { Toggle(it, thisChannelOnly) { thisChannelOnly = true } }
+            store.servers[serverId]?.let { server ->
+                Toggle(server.name.ifBlank { server.host }, scope == Scope.NETWORK) {
+                    scope = Scope.NETWORK
+                }
+                Spacer(Modifier.width(8.dp))
+            }
+            store.activeChannel?.let { Toggle(it, scope == Scope.CHANNEL) { scope = Scope.CHANNEL } }
             Spacer(Modifier.weight(1f))
             Text(
                 if (engine.mode == EngineMode.HOLDING) "this session" else "full history",
@@ -141,16 +166,41 @@ fun SearchScreen(engine: SwitchboardEngine, onOpen: (String, String) -> Unit, on
             )
         }
 
+        val nothing = if (scope == Scope.EVERYWHERE) everywhere.isEmpty() else results.isEmpty()
+
         when {
             searching -> Note("Searching…")
             query.trim().length < 2 -> Note("Type at least two characters.")
-            searched && results.isEmpty() -> Note("Nothing matched “${query.trim()}”.")
+            searched && nothing -> Note("Nothing matched “${query.trim()}”.")
+            scope == Scope.EVERYWHERE ->
+                LazyColumn(modifier = Modifier.fillMaxSize().navigationBarsPadding()) {
+                    items(everywhere.size) { index ->
+                        val found = everywhere[index]
+                        // `#channel@network`, because the network is no longer
+                        // implied by what you have open
+                        Hit(
+                            engine = engine,
+                            serverId = found.serverId,
+                            where = Search.whereSaid(found.channel, found.network),
+                            nick = found.nick,
+                            content = found.content,
+                            timestamp = found.timestamp,
+                            term = query.trim()
+                        ) { onOpen(found.serverId, found.channel) }
+                    }
+                }
             else -> LazyColumn(modifier = Modifier.fillMaxSize().navigationBarsPadding()) {
                 items(results.size) { index ->
                     val hit = results[index]
-                    Hit(engine, hit, query.trim()) {
-                        serverId?.let { onOpen(it, hit.channel) }
-                    }
+                    Hit(
+                        engine = engine,
+                        serverId = serverId.orEmpty(),
+                        where = hit.channel,
+                        nick = hit.nick,
+                        content = hit.content,
+                        timestamp = hit.timestamp,
+                        term = query.trim()
+                    ) { serverId?.let { onOpen(it, hit.channel) } }
                 }
             }
         }
@@ -183,10 +233,18 @@ private fun Note(text: String) {
 
 /** One result: who said it, where, and the matched words picked out */
 @Composable
-private fun Hit(engine: SwitchboardEngine, hit: SearchHit, term: String, onClick: () -> Unit) {
-    val serverId = engine.store.activeServerId
-    val profile = serverId?.let { engine.store.metadataFor(it, hit.nick) }
-    val colour = metadataColor(profile?.color) ?: nickColor(hit.nick)
+private fun Hit(
+    engine: SwitchboardEngine,
+    serverId: String,
+    where: String,
+    nick: String,
+    content: String,
+    timestamp: String,
+    term: String,
+    onClick: () -> Unit
+) {
+    val profile = serverId.takeIf { it.isNotEmpty() }?.let { engine.store.metadataFor(it, nick) }
+    val colour = metadataColor(profile?.color) ?: nickColor(nick)
 
     Column(
         modifier = Modifier
@@ -195,22 +253,22 @@ private fun Hit(engine: SwitchboardEngine, hit: SearchHit, term: String, onClick
             .padding(horizontal = 16.dp, vertical = 10.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Avatar(hit.nick, 20.dp, colour, avatar = profile?.avatar)
+            Avatar(nick, 20.dp, colour, avatar = profile?.avatar)
             Spacer(Modifier.width(8.dp))
             Text(
-                profile?.displayName?.takeIf { it.isNotBlank() } ?: hit.nick,
+                profile?.displayName?.takeIf { it.isNotBlank() } ?: nick,
                 color = colour,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.SemiBold
             )
             Spacer(Modifier.width(8.dp))
-            Text(hit.channel, color = Overlay, fontSize = 12.sp)
+            Text(where, color = Overlay, fontSize = 12.sp)
             Spacer(Modifier.weight(1f))
-            Text(whenItWas(hit.timestamp), color = Overlay, fontSize = 11.sp)
+            Text(whenItWas(timestamp), color = Overlay, fontSize = 11.sp)
         }
         Spacer(Modifier.height(4.dp))
         Text(
-            highlighted(hit.content, term),
+            highlighted(content, term),
             color = Text0,
             fontSize = 14.sp,
             lineHeight = 19.sp,
@@ -246,3 +304,6 @@ private fun whenItWas(timestamp: String): String = runCatching {
     runCatching { Instant.parse(timestamp).atZone(ZoneId.systemDefault()).format(DAY_FORMAT) }
         .getOrDefault("")
 }.getOrDefault("")
+
+/** How wide a search is: one channel, one network, or all of them */
+private enum class Scope { CHANNEL, NETWORK, EVERYWHERE }

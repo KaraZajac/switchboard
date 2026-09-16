@@ -72,6 +72,7 @@ import org.switchboard.android.irc.Profile
 import org.switchboard.android.irc.Redact
 import org.switchboard.android.irc.Unread
 import org.switchboard.android.irc.ServerTime
+import org.switchboard.android.irc.Search
 import org.switchboard.android.irc.Services
 import org.switchboard.android.irc.Typing
 import org.switchboard.android.irc.LineLength
@@ -2263,6 +2264,47 @@ class SharedCorpusTest {
         assertEquals("#d2d2d2", Formatting.PALETTE[15])
         assertEquals("#ffffff", Formatting.PALETTE[98])
         assertNull("99 means the client's own colour", Formatting.paletteColour(99))
+    }
+
+    // ── searching every network at once ───────────────────────────────
+
+    @Test
+    fun `orders and labels search results the way the desktop does`() {
+        val corpus = load("search.json")
+
+        for (entry in corpus["where"]!!.jsonArray) {
+            val case = entry.jsonObject
+            assertEquals(
+                case["name"]!!.jsonPrimitive.content,
+                case["label"]!!.jsonPrimitive.content,
+                Search.whereSaid(
+                    case["channel"]!!.jsonPrimitive.content,
+                    case["network"]!!.jsonPrimitive.content
+                )
+            )
+        }
+
+        for (entry in corpus["order"]!!.jsonArray) {
+            val case = entry.jsonObject
+            val found = case["found"]!!.jsonArray.map {
+                val row = it.jsonObject
+                fun text(key: String) = row[key]!!.jsonPrimitive.content
+                Search.Found(
+                    serverId = text("serverId"),
+                    network = text("network"),
+                    channel = text("channel"),
+                    nick = text("nick"),
+                    content = text("content"),
+                    timestamp = text("timestamp")
+                )
+            }
+
+            assertEquals(
+                case["name"]!!.jsonPrimitive.content,
+                case["contents"]!!.jsonArray.map { it.jsonPrimitive.content },
+                Search.newestFirst(found).map { it.content }
+            )
+        }
     }
 
     // ── the friend list ───────────────────────────────────────────────

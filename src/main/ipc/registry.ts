@@ -79,6 +79,9 @@ export const REMOTE_ALLOWED = new Set([
   'chathistory:catchup',
   'chathistory:targets',
   'message:search',
+  // the same question of every network at once — a phone following a desktop
+  // is asking the device that has the whole history
+  'search:everywhere',
   'message:search-server',
   'read-marker:get',
   'read-marker:get-all',

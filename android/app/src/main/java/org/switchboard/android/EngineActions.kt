@@ -19,6 +19,7 @@ import kotlinx.serialization.json.put
 import org.switchboard.android.irc.Aliases
 import org.switchboard.android.irc.Ignore
 import org.switchboard.android.irc.Commands
+import org.switchboard.android.irc.Search
 import org.switchboard.android.irc.ServerConfig
 import java.time.Instant
 import android.content.ContentResolver
@@ -880,6 +881,59 @@ suspend fun SwitchboardEngine.recentMentions(limit: Int = 100): List<Mention> {
 
 /** [loadOlder] could not ask yet; ask again rather than concluding anything */
 const val NOT_YET = -1
+
+/**
+ * The same search, asked of every network at once.
+ *
+ * Search was the last thing here that made you name a network first — direct
+ * messages, mentions and friends had all stopped being per-network, because
+ * what somebody remembers is a person or a phrase and not a place.
+ *
+ * Following a desktop or a headless Switchboard, that device is asked: it has
+ * the whole history where a phone keeps a rolling window. Holding, the window
+ * is the answer, which is the same split [searchMessages] and [recentMentions]
+ * already make and the screen already says out loud.
+ *
+ * Never the network's own `draft/search`: a server can search itself and
+ * nothing else, so half a dozen of them answering at their own pace with their
+ * own idea of relevance is not one list.
+ */
+suspend fun SwitchboardEngine.searchEverywhere(query: String, limit: Int = 100): List<Search.Found> {
+    val term = query.trim()
+    if (term.isEmpty()) return emptyList()
+
+    if (remote.isLinked && !isHolding) {
+        val answer = ask("search:everywhere", JsonPrimitive(term), JsonPrimitive(limit)) as? JsonArray
+        if (answer != null) {
+            return answer.mapNotNull { entry ->
+                val row = entry as? JsonObject ?: return@mapNotNull null
+                Search.Found(
+                    serverId = row["serverId"].text() ?: return@mapNotNull null,
+                    network = row["network"].text().orEmpty(),
+                    channel = row["channel"].text() ?: return@mapNotNull null,
+                    nick = row["nick"].text().orEmpty(),
+                    content = row["content"].text().orEmpty(),
+                    timestamp = row["timestamp"].text().orEmpty()
+                )
+            }
+        }
+    }
+
+    val found = store.servers.values.flatMap { server ->
+        history.containing(server.id, listOf(term), limit).map {
+            Search.Found(
+                serverId = it.serverId,
+                network = server.name.ifBlank { server.host },
+                channel = it.channel,
+                nick = it.nick,
+                content = it.content,
+                timestamp = it.timestamp
+            )
+        }
+    }
+
+    return Search.newestFirst(found).take(limit)
+}
 
 /** One hit from a search, with enough context to jump to it */
 data class SearchHit(
