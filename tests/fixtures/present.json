@@ -1,0 +1,20 @@
+{
+  "$comment": "When to offer a way back to the newest message. Measured in screenfuls rather than messages: a message is three lines or thirty depending on what somebody said, so a count of them describes the scrollbar rather than the journey. The desktop used to offer it at a hundred pixels — about one line — which made it furniture; the phone did not offer it at all. Shared by tests/shared/present.test.ts and the Android SharedCorpusTest.",
+  "cases": [
+    { "name": "pinned to the newest message", "below": 0, "screen": 800, "older": false },
+    { "name": "a line or two up is still the present", "below": 100, "screen": 800, "older": false },
+    { "name": "half a screen up is still a glance away", "below": 400, "screen": 800, "older": false },
+    { "name": "exactly a screenful is not yet past it", "below": 800, "screen": 800, "older": false },
+    { "name": "a screenful and a line is", "below": 801, "screen": 800, "older": true },
+    { "name": "and several screens certainly are", "below": 4000, "screen": 800, "older": true },
+    { "name": "a short window asks less of the reader", "below": 350, "screen": 300, "older": true },
+    { "name": "and a tall one asks more", "below": 900, "screen": 1400, "older": false },
+    { "name": "a view with no height has not been laid out yet", "below": 500, "screen": 0, "older": false },
+    { "name": "nor has one with a negative height", "below": 500, "screen": -10, "older": false },
+    { "name": "past the end is not behind it", "below": -50, "screen": 800, "older": false }
+  ],
+  "words": {
+    "viewingOlder": "You're viewing older messages",
+    "jumpToPresent": "Jump to present"
+  }
+}

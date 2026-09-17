@@ -8,6 +8,7 @@ import { useUserStore } from '../../stores/userStore'
 import { useUIStore } from '../../stores/uiStore'
 import { MentionsView } from './MentionsView'
 import { jumpPlan } from '@shared/jump'
+import { viewingOlder, VIEWING_OLDER, JUMP_TO_PRESENT } from '@shared/present'
 import { FriendsView } from './FriendsView'
 import type { ChannelUser } from '@shared/types/channel'
 import { SwitchboardIcon } from '../common/SwitchboardIcon'
@@ -15,7 +16,15 @@ import { isChannelName } from '@shared/constants'
 import { speak } from '../../utils/speak'
 
 const STABLE_EMPTY_USERS: ChannelUser[] = []
-const STABLE_EMPTY_CHANNELS: { name: string; serverId: string; topic: string | null; topicSetBy: string | null; unreadCount: number; mentionCount: number; muted: boolean }[] = []
+const STABLE_EMPTY_CHANNELS: {
+  name: string
+  serverId: string
+  topic: string | null
+  topicSetBy: string | null
+  unreadCount: number
+  mentionCount: number
+  muted: boolean
+}[] = []
 import { MessageItem } from '../chat/MessageItem'
 import { MessageComposer } from '../chat/MessageComposer'
 import { TypingIndicator } from '../chat/TypingIndicator'
@@ -33,28 +42,29 @@ export function ChatArea() {
   const jumpTo = useUIStore((s) => s.jumpTo)
   const [flashing, setFlashing] = useState<string | null>(null)
   const activeChannel = useChannelStore((s) =>
-    activeServerId ? s.activeChannel[activeServerId] ?? null : null
+    activeServerId ? (s.activeChannel[activeServerId] ?? null) : null
   )
   const connectionStatus = useServerStore((s) =>
-    activeServerId ? s.connectionStatus[activeServerId] ?? 'disconnected' : 'disconnected'
+    activeServerId ? (s.connectionStatus[activeServerId] ?? 'disconnected') : 'disconnected'
   )
   const ourNick = useServerStore((s) =>
-    activeServerId ? s.currentNick[activeServerId] ?? null : null
+    activeServerId ? (s.currentNick[activeServerId] ?? null) : null
   )
 
-  const key = activeServerId && activeChannel
-    ? `${activeServerId}:${activeChannel.toLowerCase()}`
-    : null
-  const messages = useMessageStore((s) => (key ? s.messages[key] ?? EMPTY_MESSAGES : EMPTY_MESSAGES))
-  const typingNicks = useMessageStore((s) => (key ? s.typing[key] ?? EMPTY_NICKS : EMPTY_NICKS))
-  const replyTarget = useMessageStore((s) => (key ? s.replyTarget[key] ?? null : null))
-  const readMarkerTimestamp = useChannelStore((s) =>
-    key ? s.readMarkers[key] ?? null : null
+  const key =
+    activeServerId && activeChannel ? `${activeServerId}:${activeChannel.toLowerCase()}` : null
+  const messages = useMessageStore((s) =>
+    key ? (s.messages[key] ?? EMPTY_MESSAGES) : EMPTY_MESSAGES
   )
+  const typingNicks = useMessageStore((s) => (key ? (s.typing[key] ?? EMPTY_NICKS) : EMPTY_NICKS))
+  const replyTarget = useMessageStore((s) => (key ? (s.replyTarget[key] ?? null) : null))
+  const readMarkerTimestamp = useChannelStore((s) => (key ? (s.readMarkers[key] ?? null) : null))
 
-  const channelUsers = useUserStore((s) => (key ? s.users[key] ?? STABLE_EMPTY_USERS : STABLE_EMPTY_USERS))
+  const channelUsers = useUserStore((s) =>
+    key ? (s.users[key] ?? STABLE_EMPTY_USERS) : STABLE_EMPTY_USERS
+  )
   const serverChannelInfos = useChannelStore((s) =>
-    activeServerId ? s.channels[activeServerId] ?? STABLE_EMPTY_CHANNELS : STABLE_EMPTY_CHANNELS
+    activeServerId ? (s.channels[activeServerId] ?? STABLE_EMPTY_CHANNELS) : STABLE_EMPTY_CHANNELS
   )
   const serverChannels = useMemo(
     () => serverChannelInfos.map((ch) => ch.name),
@@ -63,6 +73,18 @@ export function ChatArea() {
 
   const scrollRef = useRef<HTMLDivElement>(null)
   const [autoScroll, setAutoScroll] = useState(true)
+
+  /*
+   * Two different questions, and they were one.
+   *
+   * `autoScroll` is "should the view follow what is being said", answered at a
+   * hundred pixels because a line arriving while you are almost at the bottom
+   * should still bring you along. Offering a way *back* is a different
+   * question with a different answer — a hundred pixels is one line, so the
+   * offer stood almost any time the view was not pinned, which makes it
+   * furniture rather than something somebody reaches for.
+   */
+  const [older, setOlder] = useState(false)
   const [loadingHistory, setLoadingHistory] = useState(false)
   const [historyExhausted, setHistoryExhausted] = useState(false)
   // Persist exhaustion across channel switches so we don't re-request
@@ -98,6 +120,12 @@ export function ChatArea() {
     }
 
     setHistoryExhausted(key ? exhaustedChannels.current.has(key) : false)
+
+    // A conversation just opened is not one somebody has scrolled back
+    // through. The scroll handler settles this a frame later either way, but
+    // it fires *after* the first paint — long enough for the offer to flash up
+    // on every channel switch.
+    setOlder(false)
 
     // Begin restoration mode — blocks auto-scroll effect until we're done
     isRestoringScroll.current = true
@@ -243,7 +271,11 @@ export function ChatArea() {
     try {
       // Try local DB first
       const localMessages = await window.switchboard.invoke(
-        'history:fetch', activeServerId, activeChannel, oldestTimestamp, 50
+        'history:fetch',
+        activeServerId,
+        activeChannel,
+        oldestTimestamp,
+        50
       )
 
       if (localMessages && localMessages.length > 0) {
@@ -260,7 +292,11 @@ export function ChatArea() {
       } else {
         // Try server-side chathistory
         await window.switchboard.invoke(
-          'chathistory:request', activeServerId, activeChannel, oldestTimestamp, 50
+          'chathistory:request',
+          activeServerId,
+          activeChannel,
+          oldestTimestamp,
+          50
         )
         // If no local messages were found, mark exhausted after a delay
         // (server response may arrive via irc:chathistory event)
@@ -291,7 +327,12 @@ export function ChatArea() {
       if (now - lastMarkreadSent.current > 2000) {
         lastMarkreadSent.current = now
         const lastMsg = messages[messages.length - 1]
-        window.switchboard.invoke('read-marker:set', activeServerId, activeChannel, lastMsg.timestamp)
+        window.switchboard.invoke(
+          'read-marker:set',
+          activeServerId,
+          activeChannel,
+          lastMsg.timestamp
+        )
         useChannelStore.getState().setReadMarker(activeServerId, activeChannel, lastMsg.timestamp)
         useChannelStore.getState().clearUnread(activeServerId, activeChannel)
       }
@@ -299,6 +340,9 @@ export function ChatArea() {
     }
 
     setAutoScroll(isAtBottom)
+    // A screenful behind the newest message — see `@shared/present`, which the
+    // phone follows too
+    setOlder(viewingOlder(scrollHeight - scrollTop - clientHeight, clientHeight))
 
     // Load older messages when scrolled near top
     if (scrollTop < 100 && !loadingHistory) {
@@ -408,117 +452,138 @@ export function ChatArea() {
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
-      {/* Messages */}
-      <div
-        ref={scrollRef}
-        onScroll={handleScroll}
-        className="chat-messages flex flex-1 flex-col overflow-y-auto px-4 py-2"
-      >
-        {/* mt-auto keeps a short conversation pinned to the bottom */}
-        <div ref={contentRef} className="mt-auto">
-        {/* Loading history indicator */}
-        {loadingHistory && (
-          <div className="flex justify-center py-2">
-            <span className="text-xs text-gray-500">Loading older messages...</span>
-          </div>
-        )}
+      {/*
+        Messages, in a wrapper that does not scroll.
 
-        {messages.length === 0 && (
-          <div className="flex items-end pb-4 pt-8">
-            <div>
-              {isChannelName(activeChannel) ? (
-                <>
-                  <h3 className="text-2xl font-bold text-gray-100">
-                    Welcome to {activeChannel}
-                  </h3>
-                  <p className="mt-1 text-gray-400">
-                    This is the start of the {activeChannel} channel.
-                  </p>
-                </>
-              ) : (
-                <>
-                  <div className="mb-2 flex h-16 w-16 items-center justify-center rounded-full bg-gray-600 text-2xl font-bold text-gray-200">
-                    {activeChannel.charAt(0).toUpperCase()}
-                  </div>
-                  <h3 className="text-2xl font-bold text-gray-100">
-                    {activeChannel}
-                  </h3>
-                  <p className="mt-1 text-gray-400">
-                    This is the beginning of your conversation with {activeChannel}.
-                  </p>
-                </>
-              )}
-            </div>
-          </div>
-        )}
-
-        {messages.map((msg, i) => {
-          const prev = i > 0 ? messages[i - 1] : null
-
-          // Show "New messages" divider — above the first line since the
-          // marker that somebody else wrote. A line we sent is not news to
-          // us, and the divider used to sit above it the moment it went out.
-          const showDivider = i > 0 && i === firstUnread
-
-          // A day boundary gets its own divider, and always starts a fresh
-          // message header rather than grouping onto yesterday's last line.
-          const startsNewDay = !prev || !isSameDay(prev.timestamp, msg.timestamp)
-
-          return (
-            /* `data-msgid` is how a jump finds the line it came for — see
-               `@shared/jump` and the effect above */
-            <div
-              key={msg.id}
-              data-msgid={msg.id}
-              className={
-                flashing === msg.id
-                  ? 'rounded bg-indigo-500/20 ring-1 ring-indigo-500/40 transition-colors duration-700'
-                  : 'transition-colors duration-700'
-              }
-            >
-              {startsNewDay && <DateDivider timestamp={msg.timestamp} />}
-              {showDivider && (
-                <div ref={newMessagesDividerRef} className="my-2 flex items-center gap-2">
-                  <div className="flex-1 border-t border-red-500/50" />
-                  <span className="text-xs font-medium text-red-400">New messages</span>
-                  <div className="flex-1 border-t border-red-500/50" />
-                </div>
-              )}
-              <MessageItem
-                message={msg}
-                prevMessage={startsNewDay ? null : prev}
-                onReply={handleReply}
-              />
-            </div>
-          )
-        })}
-        </div>
-      </div>
-
-      {/* Back to the newest messages after scrolling up */}
-      {!autoScroll && (
-        <button
-          onClick={() => {
-            const el = scrollRef.current
-            if (!el) return
-            el.scrollTop = el.scrollHeight
-            setAutoScroll(true)
-          }}
-          className="mx-4 mb-1 flex items-center justify-center gap-1.5 rounded-md bg-gray-700/90 py-1 text-xs font-medium text-gray-200 shadow-lg transition-colors hover:bg-gray-600"
+        The way back to the present floats over the conversation, and an
+        absolute child of the scrolling element would scroll away with it. It
+        anchors to this instead, which is why the wrapper exists — and why it
+        ends where the composer begins rather than at the bottom of the window.
+      */}
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        <div
+          ref={scrollRef}
+          onScroll={handleScroll}
+          className="chat-messages flex flex-1 flex-col overflow-y-auto px-4 py-2"
         >
-          <ChevronDown size={ICON.sm} strokeWidth={2} aria-hidden="true" />
-          Jump to present
-        </button>
-      )}
+          {/* mt-auto keeps a short conversation pinned to the bottom */}
+          <div ref={contentRef} className="mt-auto">
+            {/* Loading history indicator */}
+            {loadingHistory && (
+              <div className="flex justify-center py-2">
+                <span className="text-xs text-gray-500">Loading older messages...</span>
+              </div>
+            )}
+
+            {messages.length === 0 && (
+              <div className="flex items-end pb-4 pt-8">
+                <div>
+                  {isChannelName(activeChannel) ? (
+                    <>
+                      <h3 className="text-2xl font-bold text-gray-100">
+                        Welcome to {activeChannel}
+                      </h3>
+                      <p className="mt-1 text-gray-400">
+                        This is the start of the {activeChannel} channel.
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <div className="mb-2 flex h-16 w-16 items-center justify-center rounded-full bg-gray-600 text-2xl font-bold text-gray-200">
+                        {activeChannel.charAt(0).toUpperCase()}
+                      </div>
+                      <h3 className="text-2xl font-bold text-gray-100">{activeChannel}</h3>
+                      <p className="mt-1 text-gray-400">
+                        This is the beginning of your conversation with {activeChannel}.
+                      </p>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {messages.map((msg, i) => {
+              const prev = i > 0 ? messages[i - 1] : null
+
+              // Show "New messages" divider — above the first line since the
+              // marker that somebody else wrote. A line we sent is not news to
+              // us, and the divider used to sit above it the moment it went out.
+              const showDivider = i > 0 && i === firstUnread
+
+              // A day boundary gets its own divider, and always starts a fresh
+              // message header rather than grouping onto yesterday's last line.
+              const startsNewDay = !prev || !isSameDay(prev.timestamp, msg.timestamp)
+
+              return (
+                /* `data-msgid` is how a jump finds the line it came for — see
+               `@shared/jump` and the effect above */
+                <div
+                  key={msg.id}
+                  data-msgid={msg.id}
+                  className={
+                    flashing === msg.id
+                      ? 'rounded bg-indigo-500/20 ring-1 ring-indigo-500/40 transition-colors duration-700'
+                      : 'transition-colors duration-700'
+                  }
+                >
+                  {startsNewDay && <DateDivider timestamp={msg.timestamp} />}
+                  {showDivider && (
+                    <div ref={newMessagesDividerRef} className="my-2 flex items-center gap-2">
+                      <div className="flex-1 border-t border-red-500/50" />
+                      <span className="text-xs font-medium text-red-400">New messages</span>
+                      <div className="flex-1 border-t border-red-500/50" />
+                    </div>
+                  )}
+                  <MessageItem
+                    message={msg}
+                    prevMessage={startsNewDay ? null : prev}
+                    onReply={handleReply}
+                  />
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
+        {/*
+        Back to the newest messages, once there is a journey to save.
+
+        Floated over the conversation rather than wedged between it and the
+        composer: the strip took a line of the window away from the thing
+        somebody is reading, permanently, to say something only sometimes
+        worth saying.
+      */}
+        {older && (
+          <div className="pointer-events-none absolute inset-x-0 bottom-2 z-20 flex justify-center px-4">
+            <div className="pointer-events-auto flex items-center gap-2 rounded-full bg-gray-700/95 py-1 pr-1 pl-3.5 text-xs font-medium text-gray-200 shadow-lg ring-1 ring-gray-950/40 backdrop-blur-sm">
+              <span>{VIEWING_OLDER}</span>
+              <button
+                onClick={() => {
+                  const el = scrollRef.current
+                  if (!el) return
+                  el.scrollTop = el.scrollHeight
+                  setAutoScroll(true)
+                  setOlder(false)
+                }}
+                className="flex items-center gap-1 rounded-full bg-indigo-500 px-2.5 py-1 font-semibold text-gray-100 transition-colors hover:bg-indigo-400"
+              >
+                <ChevronDown size={ICON.sm} strokeWidth={2} aria-hidden="true" />
+                {JUMP_TO_PRESENT}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/*
         Files somebody is offering, in the conversation they offered them in.
         Only in a direct message: DCC is between two people, and an offer made
         to a channel is not how anybody sends a file to a person.
       */}
-      {activeServerId && activeChannel && !isChannelName(activeChannel) && activeChannel !== '*' && (
-        <Transfers serverId={activeServerId} peer={activeChannel} />
-      )}
+      {activeServerId &&
+        activeChannel &&
+        !isChannelName(activeChannel) &&
+        activeChannel !== '*' && <Transfers serverId={activeServerId} peer={activeChannel} />}
 
       {/* Typing indicator */}
       <TypingIndicator nicks={typingNicks} />
@@ -557,7 +622,10 @@ function ServerMessages({ serverId }: { serverId: string }) {
   const handleCommand = useCallback(() => {
     const text = command.trim()
     if (!text) return
-    speak(window.switchboard.invoke('message:send', serverId, '*', text), 'That command did not run')
+    speak(
+      window.switchboard.invoke('message:send', serverId, '*', text),
+      'That command did not run'
+    )
     setCommand('')
   }, [serverId, command])
 
@@ -599,7 +667,9 @@ function ServerMessages({ serverId }: { serverId: string }) {
           type="text"
           value={command}
           onChange={(e) => setCommand(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter') handleCommand() }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') handleCommand()
+          }}
           placeholder="Enter a /command..."
           className="w-full rounded-lg bg-gray-700 px-4 py-2.5 text-sm text-gray-100 placeholder-gray-400 outline-none focus:ring-1 focus:ring-indigo-500"
         />

@@ -38,6 +38,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.filter
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -63,6 +66,7 @@ import org.switchboard.android.Message
 import org.switchboard.android.JumpTarget
 import org.switchboard.android.SwitchboardStore
 import org.switchboard.android.irc.Editing
+import org.switchboard.android.irc.Present
 import org.switchboard.android.irc.Jump
 import org.switchboard.android.LinkPreview
 import org.switchboard.android.UserMetadata
@@ -246,9 +250,35 @@ fun MessageList(
         return
     }
 
+    /*
+     * Whether the newest message is a long way below.
+     *
+     * Estimated, because a `LazyColumn` only measures what it has drawn: the
+     * items past the fold have no height until they are one. The rows that
+     * *are* drawn give an average, and the count below the last of them gives
+     * the rest — which is close enough for a question whose answer is a
+     * screenful either way, and the same question the desktop asks in pixels
+     * it can read exactly. See [Present].
+     */
+    val behind by remember {
+        derivedStateOf {
+            val info = listState.layoutInfo
+            val drawn = info.visibleItemsInfo
+            if (drawn.isEmpty()) return@derivedStateOf false
+
+            val last = drawn.last()
+            val belowFold = (last.offset + last.size - info.viewportEndOffset).coerceAtLeast(0)
+            val unseen = info.totalItemsCount - 1 - last.index
+            val average = drawn.sumOf { it.size } / drawn.size
+
+            Present.viewingOlder(belowFold + unseen * average, info.viewportSize.height)
+        }
+    }
+
+    Box(modifier.fillMaxSize()) {
     LazyColumn(
         state = listState,
-        modifier = modifier.fillMaxSize().background(Base),
+        modifier = Modifier.fillMaxSize().background(Base),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 8.dp),
         // A conversation grows from the bottom. Filling from the top leaves the
         // newest message stranded at the far end of an empty screen, which is
@@ -281,6 +311,49 @@ fun MessageList(
                 marked = flashing == message.id
             )
         }
+    }
+
+    /*
+     * The way back, once there is a journey to save.
+     *
+     * Over the conversation rather than above it: a strip that took a row of
+     * the screen permanently, to say something only sometimes worth saying,
+     * would cost more than it gives on a phone.
+     */
+    androidx.compose.animation.AnimatedVisibility(
+        visible = behind,
+        modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 10.dp),
+        enter = androidx.compose.animation.fadeIn(),
+        exit = androidx.compose.animation.fadeOut()
+    ) {
+        val scope = rememberCoroutineScope()
+        Row(
+            modifier = Modifier
+                .clip(RoundedCornerShape(50))
+                .background(Surface1)
+                .clickable {
+                    scope.launch {
+                        val last = listState.layoutInfo.totalItemsCount - 1
+                        if (last >= 0) listState.scrollToItem(last)
+                    }
+                }
+                .padding(start = 14.dp, end = 6.dp, top = 5.dp, bottom = 5.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(Present.VIEWING_OLDER, color = Subtext, fontSize = 12.sp)
+            Spacer(Modifier.width(8.dp))
+            Text(
+                Present.JUMP_TO_PRESENT,
+                color = Crust,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(50))
+                    .background(Blue)
+                    .padding(horizontal = 10.dp, vertical = 4.dp)
+            )
+        }
+    }
     }
 }
 

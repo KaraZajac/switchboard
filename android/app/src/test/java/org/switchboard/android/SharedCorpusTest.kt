@@ -26,6 +26,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.switchboard.android.irc.About
 import org.switchboard.android.irc.Editing
+import org.switchboard.android.irc.Present
 import org.switchboard.android.irc.Aliases
 import org.switchboard.android.irc.AutoAway
 import org.switchboard.android.irc.ChanModes
@@ -2803,6 +2804,42 @@ class SharedCorpusTest {
         assertTrue(Editing.editsAllowed(listOf("message-edit")))
         assertFalse(Editing.editsAllowed(listOf("draft/message-editing")))
         assertFalse(Editing.editsAllowed(emptyList()))
+    }
+
+    // ── when to offer a way back to the newest message ────────────────
+
+    /**
+     * Measured in screenfuls rather than messages, because a message is three
+     * lines or thirty — see `src/shared/present.ts`.
+     */
+    @Test
+    fun `offers a way back at the same point the desktop does`() {
+        val corpus = load("present.json")
+
+        for (entry in corpus["cases"]!!.jsonArray) {
+            val case = entry.jsonObject
+            assertEquals(
+                case["name"]!!.jsonPrimitive.content,
+                case["older"]!!.jsonPrimitive.boolean,
+                Present.viewingOlder(
+                    case["below"]!!.jsonPrimitive.int,
+                    case["screen"]!!.jsonPrimitive.int
+                )
+            )
+        }
+    }
+
+    @Test
+    fun `and words it the same way`() {
+        val words = corpusWords()
+        assertEquals(words.first, Present.VIEWING_OLDER)
+        assertEquals(words.second, Present.JUMP_TO_PRESENT)
+    }
+
+    private fun corpusWords(): Pair<String, String> {
+        val words = load("present.json")["words"]!!.jsonObject
+        return words["viewingOlder"]!!.jsonPrimitive.content to
+            words["jumpToPresent"]!!.jsonPrimitive.content
     }
 
     // ── the date on the About page ────────────────────────────────────
