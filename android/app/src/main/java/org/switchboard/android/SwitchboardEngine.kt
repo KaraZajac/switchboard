@@ -660,6 +660,19 @@ class SwitchboardEngine(
         // Say so, so the desktop takes over at once instead of waiting
         coordinator.leave()
         releaseConnections()
+
+        // And let go of the link itself, or "switch off" leaves a phone still
+        // dialled in to a desktop it has just said goodbye to.
+        //
+        // After the goodbye rather than with it: the coordinator's transport
+        // launches its sends, so closing the connection in the same breath
+        // races the one frame that tells the desktop to take over now rather
+        // than in sixteen seconds. A moment covers it — this is a local write
+        // to a connection that is already up.
+        scope.launch {
+            delay(500)
+            runCatching { remote.close() }
+        }
     }
 
     /**
@@ -730,6 +743,18 @@ class SwitchboardEngine(
 
     /** Called after the link comes back, so the UI can refill from the desktop */
     var onRelinked: (() -> Unit)? = null
+
+    /**
+     * Somebody pressed "Switch off" on the notification.
+     *
+     * Set by the activity, which is the only thing that can close itself. Off
+     * has to mean the whole app and not just the service: a phone left showing
+     * a chat screen it is no longer connected behind is worse than one that
+     * simply went away, and leaving the activity up means reopening is a
+     * resume rather than a launch — so nothing runs again and it comes back
+     * connected to nothing.
+     */
+    var onSwitchOff: (() -> Unit)? = null
 
     /**
      * Unlock the shared config so the phone can stand in for the desktop.

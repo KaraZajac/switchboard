@@ -592,4 +592,77 @@ class SessionCoordinatorTest {
         assertEquals(SessionRole.PRIMARY, phone.state().role)
         phone.stop()
     }
+
+    // ── switching off on purpose ─────────────────────────────────────
+
+    /**
+     * "Switch off" on the notification, from the desktop's point of view.
+     *
+     * The phone leaving deliberately must not cost the user sixteen seconds of
+     * being connected to nothing while the desktop waits out a heartbeat that
+     * is never coming. The desktop's half of this is in
+     * `tests/main/session.test.ts`; this is the side that has to say it.
+     *
+     * Worth its own case now that something calls it: [SwitchboardEngine.stop]
+     * was written with the goodbye in it and was dead code until the
+     * notification grew somewhere to press.
+     */
+    @Test
+    fun `leaving says goodbye and stops beating`() {
+        val clock = FakeClock()
+        val sent = mutableListOf<SessionFrame>()
+        val coordinator = SessionCoordinator(
+            PHONE_PRIORITY,
+            object : CoordinatorTransport {
+                override fun send(frame: SessionFrame, peerId: String?) { sent.add(frame) }
+                override fun hasPeers(): Boolean = true
+            },
+            object : ConnectionControl {
+                override fun resume() {}
+                override fun release() {}
+                override fun vaultVersion(): Int = 1
+                override fun holding(): List<String> = emptyList()
+            },
+            clock
+        )
+        coordinator.start()
+        clock.advance(HEARTBEAT_INTERVAL_MS * 2)
+        assertTrue("beating while it is running", sent.any { it is SessionFrame.Heartbeat })
+
+        sent.clear()
+        coordinator.leave()
+
+        assertEquals(listOf(SessionFrame.Goodbye), sent.filterIsInstance<SessionFrame.Goodbye>())
+
+        // And nothing after it. A phone that has been switched off still
+        // beating is a desktop that goes on believing it is standing by.
+        sent.clear()
+        clock.advance(HEARTBEAT_INTERVAL_MS * 4)
+        assertTrue("silent once it has gone", sent.isEmpty())
+    }
+
+    @Test
+    fun `leaving before it ever started says nothing`() {
+        val sent = mutableListOf<SessionFrame>()
+        val coordinator = SessionCoordinator(
+            PHONE_PRIORITY,
+            object : CoordinatorTransport {
+                override fun send(frame: SessionFrame, peerId: String?) { sent.add(frame) }
+                override fun hasPeers(): Boolean = true
+            },
+            object : ConnectionControl {
+                override fun resume() {}
+                override fun release() {}
+                override fun vaultVersion(): Int = 1
+                override fun holding(): List<String> = emptyList()
+            },
+            FakeClock()
+        )
+
+        // Switching off something that was never on — the service stopping
+        // before the engine ever came up — is not a goodbye to anybody.
+        coordinator.leave()
+
+        assertTrue(sent.isEmpty())
+    }
 }

@@ -95,6 +95,13 @@ class MainActivity : ComponentActivity() {
         engine.isForeground = false
     }
 
+    override fun onDestroy() {
+        super.onDestroy()
+        // The engine outlives every screen, and this one holds a reference to
+        // this activity
+        engine.onSwitchOff = null
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         launchPairing = pairingFrom(intent)
@@ -111,6 +118,12 @@ class MainActivity : ComponentActivity() {
         ) {
             askNotifications.launch(android.Manifest.permission.POST_NOTIFICATIONS)
         }
+
+        // Off, from the notification. The service can stop itself and the
+        // engine; only the activity can close the activity, and a switch-off
+        // that leaves it open makes the next launch a resume — which runs
+        // none of the things that bring the app back up.
+        engine.onSwitchOff = { finishAndRemoveTask() }
 
         SwitchboardService.start(this)
 
