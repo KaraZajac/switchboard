@@ -161,6 +161,32 @@ export class IRCManager {
   }
 
   /**
+   * Leave a channel, and mean it.
+   *
+   * Wanting out of a channel is two things at once: a `PART` on the wire, and
+   * a decision about the list this device dials on every connection. Only the
+   * first needs a socket, and only the second lasts.
+   *
+   * It used to be only the first. The auto-join list was pruned as a *side
+   * effect* of the server echoing our own `PART` back, so leaving a channel
+   * while the network was down did nothing at all — the handler threw `Not
+   * connected`, the window took the channel out of its own list anyway, and
+   * the next connection dialled straight back into it. A channel you left
+   * while offline came back, which is the same complaint as every other
+   * "it came back" in this file, arriving by a different door.
+   *
+   * The config first, because that is the part that has to happen. Idempotent:
+   * the `part` event runs `forgetJoin` too, and it returns early once the
+   * channel is no longer listed.
+   */
+  leave(serverId: string, channel: string): void {
+    this.forgetJoin(serverId, channel)
+
+    const client = this.clients.get(serverId)
+    if (client?.connection.connected) client.part(channel)
+  }
+
+  /**
    * Disconnect from a server.
    */
   disconnect(serverId: string): void {

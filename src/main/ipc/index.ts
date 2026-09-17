@@ -423,10 +423,11 @@ export function registerIPCHandlers(): void {
     client.join(channel, key)
   })
 
+  // No `Not connected` to throw: leaving is mostly a decision about the
+  // auto-join list, and that has to be possible with the network down — see
+  // `ircManager.leave`.
   handle('channel:part', async (_event, serverId: string, channel: string) => {
-    const client = ircManager.getClient(serverId)
-    if (!client) throw new Error('Not connected')
-    client.part(channel)
+    ircManager.leave(serverId, channel)
   })
 
   handle('channel:topic', async (_event, serverId: string, channel: string, topic: string) => {

@@ -164,8 +164,46 @@ fun SwitchboardEngine.setTyping(serverId: String, target: String, typing: Boolea
 fun SwitchboardEngine.join(serverId: String, channel: String) =
     act(serverId, "channel:join", JsonPrimitive(channel)) { it.join(channel) }
 
-fun SwitchboardEngine.part(serverId: String, channel: String) =
-    act(serverId, "channel:part", JsonPrimitive(channel)) { it.part(channel) }
+/**
+ * Leave a channel, and mean it.
+ *
+ * Wanting out is two things at once: a `PART` on the wire, and a decision
+ * about the list this network dials on every connection. Only the first needs
+ * a socket, and only the second lasts.
+ *
+ * It used to be only the first. The auto-join list was pruned as a side effect
+ * of the server echoing our own `PART` back, so leaving a channel with nothing
+ * connected said "Not connected — that was not sent" and changed nothing: the
+ * channel stayed in the config and the next connection dialled into it again.
+ * A channel you left while offline came back.
+ *
+ * The config first, because that is the part that has to happen. Idempotent —
+ * the `part` event runs [forgetJoin] too, and it returns early once the
+ * channel is no longer listed.
+ */
+fun SwitchboardEngine.part(serverId: String, channel: String) {
+    /*
+     * Whether this decision is ours to write down.
+     *
+     * Holding the connection, it always was. Following a desktop, the desktop
+     * parts on our behalf and its own handler writes the config — writing it
+     * here as well would be two devices resealing the same change at once,
+     * which is the race "the holder records; everybody else reads" exists to
+     * stop. With nothing connected and no desktop, nobody else is going to,
+     * and that is the case that used to fall through the gap.
+     */
+    val nobodyElseWill = connections[serverId] == null && !remote.isLinked
+    forgetJoin(serverId, channel, ours = nobodyElseWill)
+
+    // And take it out of the list here, since offline there is no `PART` to
+    // come back and do it.
+    if (nobodyElseWill) store.closeConversation(serverId, channel)
+
+    // Quiet: the channel is gone from the list and the config either way, so
+    // "that was not sent" would be telling somebody their leaving failed when
+    // it did not.
+    act(serverId, "channel:part", JsonPrimitive(channel), quiet = true) { it.part(channel) }
+}
 
 fun SwitchboardEngine.setTopic(serverId: String, channel: String, topic: String) =
     act(serverId, "channel:topic", JsonPrimitive(channel), JsonPrimitive(topic)) {
@@ -1391,12 +1429,24 @@ internal fun SwitchboardEngine.rememberJoin(serverId: String, channel: String) {
     })
 }
 
-/** And that we are not, so the next connection does not walk back in */
-internal fun SwitchboardEngine.forgetJoin(serverId: String, channel: String) {
+/**
+ * And that we are not, so the next connection does not walk back in.
+ *
+ * [wherever] is somebody on this phone asking to leave, rather than a part
+ * arriving off a wire. That is a decision about the config and is written down
+ * whatever this device happens to be holding — including nothing at all, which
+ * is exactly when the old rule left the channel in the list and the next
+ * connection walked back into it. See [part].
+ */
+internal fun SwitchboardEngine.forgetJoin(
+    serverId: String,
+    channel: String,
+    ours: Boolean = false
+) {
     if (!vault.isUnlocked) return
     // The holder records; see [rememberJoin]. A part made here while following
     // is relayed, and the desktop writes it.
-    if (!holds(serverId)) return
+    if (!ours && !holds(serverId)) return
     val servers = vault.servers()
     val server = servers.find { it.id == serverId } ?: return
     if (server.autoJoin.none { it.equals(channel, ignoreCase = true) }) return

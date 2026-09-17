@@ -493,6 +493,21 @@ class SwitchboardStore {
     }
 
     /**
+     * And take one out of the list.
+     *
+     * The same thing `irc:part` does for a part that came off a wire. Needed
+     * separately because leaving with nothing connected produces no `PART` to
+     * come back and do it — see [org.switchboard.android.part].
+     */
+    fun closeConversation(serverId: String, name: String) {
+        val list = channels[serverId] ?: return
+        channels[serverId] = list.filterNot { it.name.equals(name, true) }
+        if (activeServerId == serverId && activeChannel.equals(name, true)) {
+            activeChannel = channels[serverId]?.firstOrNull()?.name
+        }
+    }
+
+    /**
      * Put back what an earlier run of this app heard.
      *
      * Read off the phone's own database at launch — see

@@ -895,6 +895,45 @@ class StoreTest {
         assertTrue(listsRestored("#default", null))
     }
 
+    // ── leaving with nothing connected ───────────────────────────────
+
+    /**
+     * Offline there is no `PART` coming back to take the channel out of the
+     * list, so leaving has to do it — see `SwitchboardEngine.part`.
+     */
+    @Test
+    fun `closing a conversation takes it out of the list`() {
+        store.openConversation(server, "#lounge2")
+
+        store.closeConversation(server, "#lounge2")
+
+        assertFalse(store.channelsFor(server).any { it.name == "#lounge2" })
+    }
+
+    @Test
+    fun `however the two spell the channel`() {
+        store.closeConversation(server, "#LOUNGE")
+
+        assertFalse(store.channelsFor(server).any { it.name.equals("#lounge", true) })
+    }
+
+    @Test
+    fun `and moves off it if it was the one being read`() {
+        store.openConversation(server, "#other")
+        store.activeChannel = "#lounge"
+
+        store.closeConversation(server, "#lounge")
+
+        assertEquals("#other", store.activeChannel)
+    }
+
+    @Test
+    fun `closing one that is not there changes nothing`() {
+        store.closeConversation(server, "#never")
+
+        assertEquals(listOf("#lounge"), store.channelsFor(server).map { it.name })
+    }
+
     private fun stored(id: String) =
         Message(id = id, nick = "someone", content = "hello", timestamp = "2026-09-17T10:00:00Z")
 }
