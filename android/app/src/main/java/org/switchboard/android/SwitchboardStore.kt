@@ -501,7 +501,12 @@ class SwitchboardStore {
      * the disk answers, and anything the desktop has since relayed is newer
      * than anything here.
      */
-    fun restore(serverId: String, channel: String, earlier: List<Message>) {
+    fun restore(
+        serverId: String,
+        channel: String,
+        earlier: List<Message>,
+        list: Boolean = true
+    ) {
         if (earlier.isEmpty()) return
 
         val conversation = key(serverId, channel)
@@ -512,12 +517,20 @@ class SwitchboardStore {
             .sortedBy { it.timestamp }
             .capped()
 
-        // And list it, whether it is a channel or a person. Without this the
-        // messages are on the phone and unreachable: the list is built from
-        // what the network says we are in, and offline the network says
-        // nothing — so a conversation kept precisely so it could be read on a
-        // train had no way to be opened.
-        openConversation(serverId, channel)
+        // And list it, if it is something we are in. Without this the messages
+        // are on the phone and unreachable: the list is built from what the
+        // network says we are in, and offline the network says nothing — so a
+        // conversation kept precisely so it could be read on a train had no way
+        // to be opened.
+        //
+        // But not *whatever* we have a page of. A channel we have left, or
+        // were put in once by a server that force-joins everybody, is not a
+        // channel we are in — and listing it said we were somewhere a `WHOIS`
+        // said we were not, with no way to leave it because there was nothing
+        // to leave. The caller decides, because the auto-join list is the
+        // engine's to read; see [SwitchboardEngine.restoreHistory] and the
+        // same rule in `applySnapshot`.
+        if (list) openConversation(serverId, channel)
     }
 
     private fun key(serverId: String, channel: String) = "$serverId:${channel.lowercase()}"

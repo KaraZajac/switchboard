@@ -809,6 +809,94 @@ class StoreTest {
         assertEquals(listOf("NickServ"), store.servicesOn(server))
     }
 
+    // ── what the launch restore may list ─────────────────────────────
+
+    /**
+     * A channel you are not in must not appear as one you are.
+     *
+     * Reported twice, and the second time it was this. `irc.d0ll.link`
+     * force-joins every connection to `#default`, so the phone ends up with a
+     * page of it in its own database. At launch every stored conversation is
+     * read back and listed, so `#default` was in the channel list on a phone
+     * that was not in it, was not going to join it, and whose auto-join list
+     * did not mention it — a `WHOIS` at the time showed the account in `#hax`
+     * and nothing else.
+     *
+     * The rule `applySnapshot` already keeps: a person is this phone's own
+     * business and is always listed; a channel is listed only where we are in
+     * it or mean to be.
+     */
+    @Test
+    fun `restores a channel that is joined on connect`() {
+        store.restore(server, "#lounge", listOf(stored("a")), list = true)
+
+        assertTrue(store.channelsFor(server).any { it.name == "#lounge" })
+        assertEquals(1, store.messagesFor(server, "#lounge").size)
+    }
+
+    @Test
+    fun `keeps what a channel said without listing one we have left`() {
+        store.restore(server, "#default", listOf(stored("b")), list = false)
+
+        assertFalse(
+            "a channel nobody is in is not a channel you are in",
+            store.channelsFor(server).any { it.name.equals("#default", true) }
+        )
+        // Still read back, so it costs nothing if a snapshot says we are in it
+        // after all — the page is already here.
+        assertEquals(1, store.messagesFor(server, "#default").size)
+    }
+
+    @Test
+    fun `always lists a conversation with a person`() {
+        // A direct message is not a channel and has no auto-join list to be
+        // absent from. Kept precisely so it can be read on a train.
+        store.restore(server, "alice", listOf(stored("c")), list = true)
+
+        assertTrue(store.channelsFor(server).any { it.name == "alice" })
+    }
+
+    // ── and what the engine decides to pass it ───────────────────────
+
+    @Test
+    fun `a channel on the join list is listed`() {
+        assertTrue(listsRestored("#hax", setOf("#hax")))
+    }
+
+    @Test
+    fun `a channel that is not is not`() {
+        assertFalse(listsRestored("#default", setOf("#hax")))
+    }
+
+    @Test
+    fun `however the two spell it`() {
+        assertTrue(listsRestored("#HaX", setOf("#hax")))
+        assertTrue(listsRestored("#hax", setOf("#HAX".lowercase())))
+    }
+
+    @Test
+    fun `a person is always listed, join list or not`() {
+        assertTrue(listsRestored("alice", setOf("#hax")))
+        assertTrue(listsRestored("alice", emptySet()))
+        assertTrue(listsRestored("NickServ", null))
+    }
+
+    @Test
+    fun `a network with nothing on its join list lists no channels`() {
+        assertFalse(listsRestored("#default", emptySet()))
+    }
+
+    @Test
+    fun `but a network we know nothing about lists them anyway`() {
+        // A locked vault has no server list to read, and "I cannot tell" is
+        // not "no" — hiding somebody's history because the vault happens to be
+        // shut is the worse of the two mistakes, and a snapshot corrects the
+        // list as soon as one arrives.
+        assertTrue(listsRestored("#default", null))
+    }
+
+    private fun stored(id: String) =
+        Message(id = id, nick = "someone", content = "hello", timestamp = "2026-09-17T10:00:00Z")
 }
 
 private fun kotlinx.serialization.json.JsonArrayBuilder.add(element: JsonElement) {

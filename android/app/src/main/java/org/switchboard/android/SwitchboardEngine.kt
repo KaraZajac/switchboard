@@ -75,6 +75,25 @@ import org.switchboard.android.push.offerPushEndpoint
  */
 enum class EngineMode { FOLLOWING, HOLDING, OFFLINE }
 
+/**
+ * Whether a conversation we have a page of belongs in the list.
+ *
+ * [joinsOnConnect] is the network's auto-join list, or null where this
+ * phone does not know it — a locked vault has no server list to read, and
+ * "I cannot tell" is not the same answer as "no". Unknown lists it, which
+ * is the older behaviour and the safe direction: hiding somebody's history
+ * because the vault happens to be shut would be the worse mistake of the
+ * two, and a snapshot corrects the list as soon as one arrives.
+ */
+internal fun listsRestored(channel: String, joinsOnConnect: Set<String>?): Boolean {
+    // A person is this phone's own business and has no auto-join list to
+    // be absent from. The whole reason a direct message is kept is so it
+    // can be read with no network.
+    if (!isChannel(channel)) return true
+    if (joinsOnConnect == null) return true
+    return joinsOnConnect.contains(channel.lowercase())
+}
+
 class SwitchboardEngine(
     internal val context: Context,
     internal val scope: CoroutineScope,
@@ -1094,10 +1113,31 @@ class SwitchboardEngine(
             var newest: Pair<String, String>? = null
             var newestAt = ""
 
+            /*
+             * What a page of history entitles a conversation to.
+             *
+             * A person is this phone's own business and is always listed: a
+             * direct message has no auto-join list to be absent from, and the
+             * whole reason it is kept is so it can be read with no network.
+             *
+             * A channel is listed only where we are in it or mean to be. A
+             * server that force-joins every connection somewhere leaves a page
+             * of that channel on the phone for good, and reading it back as a
+             * channel put `#default` in the list of a phone that was not in it,
+             * had not asked to be, and could not leave it — there was nothing
+             * to leave. The same rule `applySnapshot` keeps.
+             */
+            val wanted = vaultServers().associate { server ->
+                server.id to server.autoJoin.map { it.lowercase() }.toSet()
+            }
+
             for (conversation in history.conversations()) {
                 val earlier = history.recent(conversation.serverId, conversation.channel)
-                store.restore(conversation.serverId, conversation.channel, earlier)
+                val list = listsRestored(conversation.channel, wanted[conversation.serverId])
+                store.restore(conversation.serverId, conversation.channel, earlier, list)
 
+                // And nothing we are not showing is worth opening on
+                if (!list) continue
                 val last = earlier.lastOrNull()?.timestamp.orEmpty()
                 if (last > newestAt) {
                     newestAt = last
