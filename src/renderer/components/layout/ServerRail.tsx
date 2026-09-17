@@ -97,10 +97,10 @@ export function ServerRail() {
           className={`flex h-full w-full items-center justify-center transition-colors ${
             dmMode
               ? 'bg-indigo-500 text-white'
-              // Lighter than the server badges beneath it: at 30px the logo's
-              // detail disappears into a dark tile, and this is the one item on
-              // the rail that has no colour of its own to be found by.
-              : 'bg-gray-600 text-gray-200 group-hover:bg-indigo-500 group-hover:text-white'
+              : // Lighter than the server badges beneath it: at 30px the logo's
+                // detail disappears into a dark tile, and this is the one item on
+                // the rail that has no colour of its own to be found by.
+                'bg-gray-600 text-gray-200 group-hover:bg-indigo-500 group-hover:text-white'
           }`}
         >
           <SwitchboardIcon size={30} bg="transparent" fg="currentColor" />
@@ -283,9 +283,17 @@ function RailItem({
         onClick={onClick}
         onContextMenu={onContextMenu}
         aria-label={label}
-        className={`block h-12 w-12 overflow-hidden transition-[border-radius] duration-200 ${
-          active ? 'rounded-2xl' : 'rounded-[24px] group-hover:rounded-2xl'
-        }`}
+        /*
+         * One shape for everything on the rail.
+         *
+         * It used to be Discord's trick — a circle at rest that squares off
+         * when selected — which meant the rail was a column of circles most of
+         * the time, and the Messages and Mentions tiles at the top of it never
+         * looked like the networks underneath. This is a rounded-rectangle
+         * interface; selection is said by the pill on the left edge and by
+         * colour, both of which say it without changing what the thing is.
+         */
+        className="block h-12 w-12 overflow-hidden rounded-2xl"
       >
         {children}
       </button>

@@ -329,7 +329,8 @@ fun MessageList(
         val scope = rememberCoroutineScope()
         Row(
             modifier = Modifier
-                .clip(RoundedCornerShape(50))
+                // A rounded rectangle, like everything else here
+                .clip(RoundedCornerShape(10.dp))
                 .background(Surface1)
                 .clickable {
                     scope.launch {
@@ -348,7 +349,7 @@ fun MessageList(
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier
-                    .clip(RoundedCornerShape(50))
+                    .clip(RoundedCornerShape(6.dp))
                     .background(Blue)
                     .padding(horizontal = 10.dp, vertical = 4.dp)
             )

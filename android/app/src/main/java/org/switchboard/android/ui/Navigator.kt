@@ -80,6 +80,18 @@ import org.switchboard.android.isChannel
  * exactly the situation IRC users are in and the situation a flat list handles
  * worst.
  */
+/**
+ * One shape for everything on the rail.
+ *
+ * It used to be Discord's trick — a circle at rest that squares off when
+ * selected — which meant the rail was a column of circles most of the time,
+ * and the Messages and Mentions tiles at the top never looked like the
+ * networks underneath. This is a rounded-rectangle interface; which tile is
+ * selected is said by the marker on the left edge and by colour, both of which
+ * say it without changing what the thing is.
+ */
+private val RAIL_CORNER = 16.dp
+
 @Composable
 fun Navigator(
     store: SwitchboardStore,
@@ -225,7 +237,8 @@ private fun ServerRail(
                 Box(
                     modifier = Modifier
                         .size(48.dp)
-                        .clip(RoundedCornerShape(if (store.dmMode) 16.dp else 24.dp))
+                        // One shape for everything on the rail — see [RailTile]
+                        .clip(RoundedCornerShape(RAIL_CORNER))
                         .background(if (store.dmMode) Blue else Surface0)
                         .clickable { onOpenMessages() },
                     contentAlignment = Alignment.Center
@@ -259,7 +272,7 @@ private fun ServerRail(
             Box(
                 modifier = Modifier
                     .size(48.dp)
-                    .clip(RoundedCornerShape(24.dp))
+                    .clip(RoundedCornerShape(RAIL_CORNER))
                     .background(Surface0)
                     .clickable { onOpenMentions() },
                 contentAlignment = Alignment.Center
@@ -350,7 +363,7 @@ private fun ServerRail(
             Box(
                 modifier = Modifier
                     .size(48.dp)
-                    .clip(RoundedCornerShape(24.dp))
+                    .clip(RoundedCornerShape(RAIL_CORNER))
                     .background(Surface0)
                     .clickable(onClick = onManageServers),
                 contentAlignment = Alignment.Center
@@ -469,9 +482,7 @@ private fun ServerBadge(
         Box(
             modifier = Modifier
                 .size(48.dp)
-                // Discord's trick: the selected server squares off its corners,
-                // so selection is legible even without colour.
-                .clip(RoundedCornerShape(if (active) 16.dp else 24.dp))
+                .clip(RoundedCornerShape(RAIL_CORNER))
                 .background(if (active) Blue else Surface0)
                 .combinedClickable(
                     onClick = { onSelect(server.id) },

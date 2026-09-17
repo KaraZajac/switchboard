@@ -555,7 +555,7 @@ export function ChatArea() {
       */}
         {older && (
           <div className="pointer-events-none absolute inset-x-0 bottom-2 z-20 flex justify-center px-4">
-            <div className="pointer-events-auto flex items-center gap-2 rounded-full bg-gray-700/95 py-1 pr-1 pl-3.5 text-xs font-medium text-gray-200 shadow-lg ring-1 ring-gray-950/40 backdrop-blur-sm">
+            <div className="pointer-events-auto flex items-center gap-2 rounded-lg bg-gray-700/95 py-1 pr-1 pl-3 text-xs font-medium text-gray-200 shadow-lg ring-1 ring-gray-950/40 backdrop-blur-sm">
               <span>{VIEWING_OLDER}</span>
               <button
                 onClick={() => {
@@ -565,7 +565,7 @@ export function ChatArea() {
                   setAutoScroll(true)
                   setOlder(false)
                 }}
-                className="flex items-center gap-1 rounded-full bg-indigo-500 px-2.5 py-1 font-semibold text-gray-100 transition-colors hover:bg-indigo-400"
+                className="flex items-center gap-1 rounded-md bg-indigo-500 px-2.5 py-1 font-semibold text-gray-100 transition-colors hover:bg-indigo-400"
               >
                 <ChevronDown size={ICON.sm} strokeWidth={2} aria-hidden="true" />
                 {JUMP_TO_PRESENT}
