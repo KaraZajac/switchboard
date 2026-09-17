@@ -64,6 +64,14 @@ export type ToastAction =
    * and the only person who knows whether they want all of them is them.
    */
   | { kind: 'adopt-bouncer'; label: string; serverId: string }
+  /**
+   * Restart into the version that has already been downloaded.
+   *
+   * A button rather than something that happens on the way out: on a Linux
+   * package install this is a system password prompt, and one of those is
+   * only reasonable a click after somebody asked for it.
+   */
+  | { kind: 'update'; label: string }
 
 export interface Toast {
   id: string

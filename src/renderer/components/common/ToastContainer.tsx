@@ -57,6 +57,11 @@ export function ToastContainer() {
                       window.switchboard.invoke('bouncer:adopt', action.serverId),
                       'Those networks were not added'
                     )
+                  } else if (action.kind === 'update') {
+                    // Nothing comes back from this when it works — the app is
+                    // on its way out. When it does not, the main process says
+                    // so on `updater:error`, which raises its own toast.
+                    void window.switchboard.invoke('updater:install')
                   } else {
                     useUIStore.getState().showAccount(action.serverId)
                   }

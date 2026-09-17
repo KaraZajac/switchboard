@@ -2,6 +2,7 @@ import { useEffect, useCallback, Component, type ErrorInfo, type ReactNode } fro
 import { AppLayout } from './components/layout/AppLayout'
 import { ToastContainer } from './components/common/ToastContainer'
 import { useIRCEvents } from './hooks/useIRC'
+import { useUpdates } from './hooks/useUpdates'
 import { useServerStore } from './stores/serverStore'
 import { useChannelStore } from './stores/channelStore'
 import type { UserMetadata } from '@shared/types/metadata'
@@ -54,6 +55,9 @@ function AppInner() {
   // Set up all IPC event listeners
   useIRCEvents()
 
+  // A new version, once there is one to restart into
+  useUpdates()
+
   /**
    * Read the stored servers into the window.
    *
@@ -91,7 +95,10 @@ function AppInner() {
       // Seed avatar store from saved server configs
       for (const server of servers) {
         if (!server.nick) continue
-        const saved = { ...(server.avatarUrl ? { avatar: server.avatarUrl } : {}), ...server.profile }
+        const saved = {
+          ...(server.avatarUrl ? { avatar: server.avatarUrl } : {}),
+          ...server.profile
+        }
         for (const [key, value] of Object.entries(saved)) {
           if (value) useServerStore.getState().setUserMetadata(server.id, server.nick, key, value)
         }

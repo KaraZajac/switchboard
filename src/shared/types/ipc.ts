@@ -340,7 +340,13 @@ export interface MainToRendererEvents {
   'updater:available': { version: string }
   'updater:not-available': Record<string, never>
   'updater:progress': { percent: number }
-  'updater:ready': { version: string }
+  /**
+   * Downloaded and waiting. `needsRoot` is a Linux package install, where
+   * putting it in place is the system package manager's job and so needs a
+   * password — which is why it is offered rather than done on the way out.
+   */
+  'updater:ready': { version: string; needsRoot: boolean }
+  'updater:error': { message: string }
 }
 
 // ── Renderer → Main invocations ─────────────────────────────────────

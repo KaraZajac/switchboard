@@ -3,6 +3,7 @@ import {
   BrowserWindow,
   Menu,
   Tray,
+  screen,
   session,
   shell,
   nativeImage,
@@ -49,9 +50,60 @@ import { hasOverride, sameProfile, overrideFrom } from '@shared/profile'
 import { secretsBackendDescription } from './storage/secrets'
 import { watchIdleTime } from './irc/features/autoaway'
 import { onTransferChange } from './irc/features/dcc'
+import { bringOnScreen, type Rect } from './window/onscreen'
 
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
+
+/**
+ * Put the window in front of whoever asked for it.
+ *
+ * Every way back to the window goes through here — the tray, the dock, a
+ * second launch, an `irc://` link — because `show()` and `focus()` on their
+ * own are not a way back. Three things had to be true and were not:
+ *
+ *  - **There has to be a window.** On Linux and Windows closing one destroys
+ *    it, and `mainWindow` was left pointing at the wreckage rather than at
+ *    null, so the tray's own "Show Switchboard" called `show()` on a destroyed
+ *    object. That throws inside a menu handler, which swallows it: the icon is
+ *    there, clicking it does nothing, and nothing says why.
+ *  - **It has to be somewhere that exists.** A window remembers where it was;
+ *    a monitor does not have to still be there. See `./window/onscreen` — this
+ *    is the state where the app is running, the tray icon is in the panel, and
+ *    there is no window anywhere.
+ *  - **It has to be un-minimised first.** `show()` on a minimised window
+ *    leaves it minimised.
+ */
+function showMainWindow(): void {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    createWindow()
+    return
+  }
+
+  const home = whereItShouldBe(mainWindow)
+  if (home) mainWindow.setBounds(home)
+
+  if (mainWindow.isMinimized()) mainWindow.restore()
+  mainWindow.show()
+  mainWindow.focus()
+}
+
+/**
+ * Where a window ought to be moved to, or null if it is already fine.
+ *
+ * Work areas rather than whole displays: a window centred behind a panel is
+ * only half a rescue. The primary display goes first, because it is the screen
+ * somebody is looking at when they wonder where the window went.
+ */
+function whereItShouldBe(window: BrowserWindow): Rect | null {
+  const displays = screen.getAllDisplays()
+  const primary = screen.getPrimaryDisplay()
+  const ordered = [primary, ...displays.filter((d) => d.id !== primary.id)]
+  return bringOnScreen(
+    window.getBounds(),
+    ordered.map((d) => d.workArea)
+  )
+}
 
 function createWindow(): void {
   const appIcon = nativeImage.createFromPath(join(__dirname, '../../resources/icon.png'))
@@ -74,13 +126,45 @@ function createWindow(): void {
     }
   })
 
+  /**
+   * Show it, whatever happened to the first paint.
+   *
+   * `ready-to-show` is the window's only cue to appear, and it is not a
+   * promise: it fires when the renderer has painted, so a renderer that
+   * crashes on the way up, or a load that fails, simply never fires it. The
+   * app then runs with a tray icon and no window and no way to get one, which
+   * is indistinguishable from the app being broken in some other way.
+   *
+   * A blank window is a much better failure than no window: it can be closed,
+   * moved, reloaded, and complained about.
+   */
+  const reveal = (): void => {
+    if (!mainWindow || mainWindow.isDestroyed() || mainWindow.isVisible()) return
+    mainWindow.show()
+  }
+  const revealAnyway = setTimeout(reveal, 10_000)
+
   mainWindow.on('ready-to-show', () => {
-    mainWindow?.show()
+    clearTimeout(revealAnyway)
+    reveal()
     // SWITCHBOARD_NO_DEVTOOLS keeps the window clean when running an unpackaged
     // build to look at the UI itself.
     if (!app.isPackaged && !process.env['SWITCHBOARD_NO_DEVTOOLS']) {
       mainWindow?.webContents.openDevTools()
     }
+  })
+
+  // Said out loud rather than left to the blank window above. All three are
+  // the renderer failing to come up, and none of them reach a console anybody
+  // is looking at otherwise.
+  mainWindow.webContents.on('did-fail-load', (_event, code, description, url) => {
+    console.error(`The window could not load ${url}: ${description} (${code})`)
+  })
+  mainWindow.webContents.on('render-process-gone', (_event, details) => {
+    console.error(`The window's renderer went away: ${details.reason}`)
+  })
+  mainWindow.webContents.on('unresponsive', () => {
+    console.warn('The window has stopped responding')
   })
 
   // Minimize to tray on close (don't quit)
@@ -101,7 +185,13 @@ function createWindow(): void {
   const stopForwarding = ircManager.subscribe((channel, data) => {
     if (!window.isDestroyed()) window.webContents.send(channel, data)
   })
-  window.on('closed', stopForwarding)
+  window.on('closed', () => {
+    stopForwarding()
+    clearTimeout(revealAnyway)
+    // Let go of it. A destroyed window is not a window, and every `show()`
+    // through this variable throws once it is one — see [showMainWindow].
+    if (mainWindow === window) mainWindow = null
+  })
 
   // Load the renderer
   if (!app.isPackaged && process.env['ELECTRON_RENDERER_URL']) {
@@ -122,10 +212,7 @@ function createWindow(): void {
  * system is allowed near it, for the reasons written above
  * `web-contents-created`: an address in a message is a stranger's text.
  */
-function showContextMenu(
-  contents: Electron.WebContents,
-  params: Electron.ContextMenuParams
-): void {
+function showContextMenu(contents: Electron.WebContents, params: Electron.ContextMenuParams): void {
   const template = imageMenuTemplate(params, {
     save: () => contents.downloadURL(params.srcURL),
     copy: () => contents.copyImageAt(params.x, params.y),
@@ -245,10 +332,7 @@ function createTray(): void {
   const contextMenu = Menu.buildFromTemplate([
     {
       label: 'Show Switchboard',
-      click: () => {
-        mainWindow?.show()
-        mainWindow?.focus()
-      }
+      click: showMainWindow
     },
     { type: 'separator' },
     {
@@ -262,22 +346,52 @@ function createTray(): void {
 
   tray.setContextMenu(contextMenu)
 
-  tray.on('click', () => {
-    if (mainWindow?.isVisible()) {
-      mainWindow.focus()
-    } else {
-      mainWindow?.show()
-    }
-  })
+  // Always the full journey, never `focus()` alone. A window that reports
+  // itself visible can still be on a monitor that is no longer plugged in,
+  // and focusing it there focuses something nobody can see.
+  tray.on('click', showMainWindow)
 }
 
 // ── Auto-update ──────────────────────────────────────────────────────
+
+/**
+ * Whether installing an update here means asking for a root password.
+ *
+ * Everywhere else an update installs as the user: Windows runs the installer,
+ * macOS swaps the bundle, and an AppImage replaces its own file. A Linux
+ * package does not — it belongs to the system package manager, so the install
+ * is `dnf` or `apt` and that is `pkexec`.
+ *
+ * Which is fine when somebody asked for it, and alarming when nobody did. See
+ * [setupAutoUpdater].
+ */
+const installNeedsRoot = process.platform === 'linux' && !process.env['APPIMAGE']
 
 function setupAutoUpdater(): void {
   if (!app.isPackaged) return
 
   autoUpdater.autoDownload = true
-  autoUpdater.autoInstallOnAppQuit = true
+
+  /**
+   * Installing on quit, except where quitting would ask for a password.
+   *
+   * On a Linux package install this fired on the way out and ran
+   *
+   *     pkexec --disable-internal-agent /bin/bash -c 'dnf install --nogpgcheck -y …'
+   *
+   * so closing an IRC client put up a system dialog saying an application
+   * wanted to run a root shell — `/bin/bash`, in those words — attached to
+   * nothing the user had done and with no explanation from us. Worse, the spawn is synchronous
+   * and runs inside the quit handler: the app hangs, unresponsive and still on
+   * screen, for as long as the dialog is up — forty-seven seconds, the last
+   * time it happened here — and if the dialog is dismissed the install fails
+   * silently and the app has to be closed again to retry it.
+   *
+   * So on those builds the update waits to be asked for. The window offers it
+   * once it is downloaded, and the password prompt then arrives one click
+   * after a button that said it would.
+   */
+  autoUpdater.autoInstallOnAppQuit = !installNeedsRoot
 
   autoUpdater.on('checking-for-update', () => {
     sendToRenderer('updater:checking', {})
@@ -296,11 +410,20 @@ function setupAutoUpdater(): void {
   })
 
   autoUpdater.on('update-downloaded', (info) => {
-    sendToRenderer('updater:ready', { version: info.version })
+    sendToRenderer('updater:ready', { version: info.version, needsRoot: installNeedsRoot })
   })
 
+  /**
+   * Said where somebody can see it.
+   *
+   * This was a `console.error` and nothing else, which on a packaged build
+   * means the journal — so an update that could not install looked exactly
+   * like an update that had not happened yet, every time, with the app quite
+   * sure it was up to date.
+   */
   autoUpdater.on('error', (err) => {
     console.error('Auto-updater error:', err.message)
+    sendToRenderer('updater:error', { message: err.message })
   })
 
   // Rejects when a release has no updater metadata (or the network is down).
@@ -333,8 +456,7 @@ let isQuitting = false
 function openIrcLink(raw: string): void {
   const link = parseIrcUrl(raw)
   if (!link) return
-  mainWindow?.show()
-  mainWindow?.focus()
+  showMainWindow()
 
   // Host *and* port. Matching on the host alone put an `irc://host:6667` link
   // onto whichever network happened to be listed first at that address, which
@@ -375,15 +497,27 @@ function ircLinkIn(argv: string[]): string | undefined {
   return argv.find((arg) => /^ircs?:\/\//i.test(arg))
 }
 
-// One window per profile. A second launch — the way a browser hands over an
-// irc:// link on Linux and Windows — is passed to the one already running.
-if (!app.requestSingleInstanceLock()) {
+/**
+ * One window per profile. A second launch — the way a browser hands over an
+ * irc:// link on Linux and Windows — is passed to the one already running.
+ *
+ * `app.quit()` was the whole of it, and a quit is a request rather than an
+ * exit: `before-quit` below stops it to shut down tidily, and `whenReady`
+ * resolves long before that finishes. So the launch that lost the lock went on
+ * to run the entire startup anyway — a second connection to a database another
+ * process has open, a second unlock of the vault, a second window, and a
+ * second tray icon — and only then died, taking that icon down by way of
+ * `app.exit`, which is not how a tray icon is meant to be given back.
+ *
+ * Found by launching it twice: the loser logged "Checking for update", which
+ * only happens four statements after the window and the tray are built.
+ */
+const primaryInstance = app.requestSingleInstanceLock()
+if (!primaryInstance) {
   app.quit()
 } else {
   app.on('second-instance', (_event, argv) => {
-    if (mainWindow?.isMinimized()) mainWindow.restore()
-    mainWindow?.show()
-    mainWindow?.focus()
+    showMainWindow()
     const link = ircLinkIn(argv)
     if (link) openIrcLink(link)
   })
@@ -406,6 +540,10 @@ if (!app.requestSingleInstanceLock()) {
 app
   .whenReady()
   .then(async () => {
+    // The launch that lost the lock has already handed its arguments over and
+    // is on its way out. Nothing below is its business.
+    if (!primaryInstance) return
+
     // What a CTCP VERSION gets told, before anything can be asked. The
     // build-time version rather than `app.getVersion()`, which answers with
     // Electron's own when the app is not packaged.
@@ -571,6 +709,35 @@ app
     // Create tray icon
     createTray()
 
+    /**
+     * A monitor going away must not take the window with it.
+     *
+     * The window is on X11 — Electron's default on Linux, XWayland under a
+     * Wayland session — where its coordinates are real and stay where they
+     * were put. Unplug the screen they were on and the window is still open,
+     * still "visible", and nowhere.
+     *
+     * Settled first, because a display set that is being rebuilt reports its
+     * screens one at a time: a session coming back from sleep, or a
+     * compositor that has just told every app there are no outputs at all,
+     * passes through several arrangements on the way to the real one. Moving
+     * the window for each of them would fight whoever is plugging things in.
+     */
+    let settling: NodeJS.Timeout | undefined
+    const rescueWindow = (): void => {
+      clearTimeout(settling)
+      settling = setTimeout(() => {
+        if (!mainWindow || mainWindow.isDestroyed() || !mainWindow.isVisible()) return
+        const home = whereItShouldBe(mainWindow)
+        if (!home) return
+        console.info('The window was on a screen that is no longer there; bringing it back')
+        mainWindow.setBounds(home)
+      }, 1_500)
+    }
+    screen.on('display-removed', rescueWindow)
+    screen.on('display-added', rescueWindow)
+    screen.on('display-metrics-changed', rescueWindow)
+
     // Links on web pages: `irc://` and `ircs://` open here, the way they open
     // in every other desktop client
     for (const scheme of ['irc', 'ircs']) {
@@ -591,13 +758,7 @@ app
     // reports in, so a broken window still leaves the connections up.
     setTimeout(() => ircManager.autoConnectAll(), 5_000)
 
-    app.on('activate', () => {
-      if (BrowserWindow.getAllWindows().length === 0) {
-        createWindow()
-      } else {
-        mainWindow?.show()
-      }
-    })
+    app.on('activate', showMainWindow)
   })
   .catch((err) => {
     console.error('Switchboard could not finish starting:', err)
@@ -615,6 +776,9 @@ let shuttingDown = false
 
 app.on('before-quit', (event) => {
   if (shuttingDown) return
+  // Nothing was started, so there is nothing to put away, and delaying this
+  // quit only keeps a duplicate launch alive for longer than it should be.
+  if (!primaryInstance) return
   event.preventDefault()
   shuttingDown = true
   isQuitting = true
