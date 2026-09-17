@@ -1,3 +1,5 @@
+import java.time.Instant
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -15,6 +17,21 @@ android {
         targetSdk = 35
         versionCode = 20
         versionName = "2.8.2"
+
+        /*
+         * When this build was made, for the About screen.
+         *
+         * The date rather than the moment, and UTC, because the desktop reads
+         * the same field the same way — see `About` and `src/shared/about.ts`.
+         * A build downloaded from a release carries the date CI built that tag,
+         * which is the closest the app can get to "when did this version come
+         * out" without asking the network.
+         */
+        buildConfigField(
+            "String",
+            "BUILD_DATE",
+            "\"" + Instant.now().toString() + "\""
+        )
     }
 
     /**
@@ -65,9 +82,20 @@ android {
 
     buildFeatures {
         compose = true
-        // For the version in the User-Agent every image request carries
+        // For the version in the User-Agent every image request carries, and
+        // the build date on the About screen
         buildConfig = true
     }
+
+    /*
+     * The licence, shipped rather than retyped.
+     *
+     * The About screen shows the whole of it, and there is exactly one copy in
+     * the repository — at the root, where the desktop's bundler reads it too.
+     * Copying it into the assets at build time is what keeps the phone from
+     * quietly showing an older one.
+     */
+    sourceSets["main"].assets.srcDir(layout.buildDirectory.dir("generated/licence"))
 
     // One APK per ABI: the iroh native library is ~15 MB per architecture, and a
     // universal build ships all four to every phone.
@@ -172,3 +200,10 @@ dependencies {
     testImplementation("org.robolectric:robolectric:4.14.1")
     testImplementation("androidx.test:core:1.6.1")
 }
+
+val copyLicence by tasks.registering(Copy::class) {
+    from(rootProject.file("../LICENSE"))
+    into(layout.buildDirectory.dir("generated/licence"))
+}
+
+tasks.named("preBuild") { dependsOn(copyLicence) }

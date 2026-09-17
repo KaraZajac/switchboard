@@ -1,0 +1,22 @@
+{
+  "$comment": "The build date on the About page, in the one form both clients use. Every runtime has its own way of turning a moment into a readable date and no two agree, so the same build would otherwise show two different dates on the same person's two devices. The day is taken straight off the ISO string: a build date is not a timestamp anybody needs to the second, and no timezone arithmetic means no chance of the two landing on different days. Shared by tests/shared/about.test.ts and the Android SharedCorpusTest.",
+  "dates": [
+    { "name": "what the bundler writes", "iso": "2026-09-17T19:20:44.123Z", "said": "17 September 2026" },
+    { "name": "no fractional seconds", "iso": "2026-09-17T19:20:44Z", "said": "17 September 2026" },
+    { "name": "a date on its own", "iso": "2026-09-17", "said": "17 September 2026" },
+    { "name": "a space instead of the T", "iso": "2026-01-01 00:00:00", "said": "1 January 2026" },
+    { "name": "no leading zero on the day", "iso": "2026-12-05T00:00:00Z", "said": "5 December 2026" },
+    { "name": "the last month", "iso": "2026-12-31T23:59:59Z", "said": "31 December 2026" },
+    { "name": "the first", "iso": "2026-01-31T00:00:00Z", "said": "31 January 2026" },
+    { "name": "an offset rather than Z", "iso": "2026-06-09T12:00:00+02:00", "said": "9 June 2026" },
+    { "name": "surrounding space", "iso": "  2026-09-17T19:20:44Z  ", "said": "17 September 2026" },
+    { "name": "nothing at all", "iso": "", "said": "" },
+    { "name": "not a date", "iso": "unknown", "said": "" },
+    { "name": "a month that does not exist", "iso": "2026-13-01T00:00:00Z", "said": "" },
+    { "name": "a month of zero", "iso": "2026-00-09T00:00:00Z", "said": "" },
+    { "name": "a day of zero", "iso": "2026-09-00T00:00:00Z", "said": "" },
+    { "name": "a day past any month", "iso": "2026-09-32T00:00:00Z", "said": "" },
+    { "name": "a year too short to be one", "iso": "26-09-17", "said": "" },
+    { "name": "the token left unreplaced", "iso": "__BUILD_DATE__", "said": "" }
+  ]
+}

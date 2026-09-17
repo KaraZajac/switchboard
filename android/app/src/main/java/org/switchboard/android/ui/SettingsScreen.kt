@@ -20,6 +20,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
+import org.switchboard.android.BuildConfig
+import org.switchboard.android.irc.About
+import org.switchboard.android.irc.Links
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
@@ -75,6 +80,9 @@ import org.switchboard.android.push.Push
  * thing given room: the passphrase that unlocks the config both devices share,
  * and what the phone can and cannot do without it.
  */
+/** Where the source, the releases and the issue tracker live */
+private const val REPOSITORY = "https://github.com/KaraZajac/switchboard"
+
 @Composable
 fun SettingsScreen(
     engine: SwitchboardEngine,
@@ -202,7 +210,103 @@ fun SettingsScreen(
             }
         }
 
+        AboutCard()
+
         Spacer(Modifier.height(28.dp))
+    }
+}
+
+/**
+ * What this is, which version of it, and the terms it comes under.
+ *
+ * Last on the page on purpose: it is the one card nobody needs in a hurry, and
+ * it is where people look when they have been told to say which version they
+ * are on.
+ *
+ * The whole licence rather than a link to it. It is twenty-odd lines, it is
+ * the thing a person is actually agreeing to, and a link is no use on a phone
+ * with no signal — which, for an IRC client, is a state it is expected to be
+ * useful in. It is read from the assets, where `app/build.gradle.kts` copies
+ * the repository's one copy at build time, so this cannot drift from the
+ * licence that actually ships.
+ */
+@Composable
+private fun AboutCard() {
+    val context = LocalContext.current
+    val opener = LocalUriHandler.current
+
+    // Read once, not on every recomposition — and forgiving of not being
+    // there, because a missing asset is a build problem and not a reason for
+    // the settings screen to crash in somebody's hand.
+    val licence = remember {
+        runCatching {
+            context.assets.open("LICENSE").bufferedReader().use { it.readText() }.trim()
+        }.getOrDefault("")
+    }
+
+    val built = remember { About.buildDate(BuildConfig.BUILD_DATE) }
+
+    Spacer(Modifier.height(8.dp))
+    SectionLabel("About")
+    Card {
+        Text("Switchboard", color = Text0, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+        Text(
+            "A modern IRC client with a Discord-like interface, fully implementing IRCv3.",
+            color = Subtext,
+            fontSize = 13.sp,
+            lineHeight = 18.sp
+        )
+
+        Spacer(Modifier.height(12.dp))
+        Fact("Version", BuildConfig.VERSION_NAME)
+        if (built.isNotEmpty()) Fact("Built", built)
+        Fact("Platform", "Android")
+
+        Spacer(Modifier.height(12.dp))
+        Text(
+            "Source and releases",
+            color = Blue,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.clickable {
+                Links.safeExternal(REPOSITORY)?.let { runCatching { opener.openUri(it) } }
+            }
+        )
+
+        if (licence.isNotEmpty()) {
+            Spacer(Modifier.height(16.dp))
+            Text(
+                "Licence",
+                color = Subtext,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(Modifier.height(6.dp))
+            // The page already scrolls; a second scrolling box inside it is a
+            // gesture fight. The whole thing is shown and the page carries it.
+            Text(
+                licence,
+                color = Overlay,
+                fontSize = 11.sp,
+                lineHeight = 16.sp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Crust, RoundedCornerShape(8.dp))
+                    .padding(10.dp)
+            )
+        }
+    }
+}
+
+/** One name and one value, the way the rest of this screen lays them out */
+@Composable
+private fun Fact(name: String, value: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(name, color = Subtext, fontSize = 13.sp, modifier = Modifier.weight(1f))
+        Text(value, color = Text0, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
     }
 }
 

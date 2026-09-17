@@ -24,6 +24,7 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.switchboard.android.irc.About
 import org.switchboard.android.irc.Aliases
 import org.switchboard.android.irc.AutoAway
 import org.switchboard.android.irc.ChanModes
@@ -2765,6 +2766,41 @@ class SharedCorpusTest {
                 }
             )
         }
+    }
+
+    // ── the date on the About page ────────────────────────────────────
+
+    /**
+     * Every runtime formats a date its own way and no two agree, so the same
+     * build would show under two different dates on the same person's two
+     * devices — see `src/shared/about.ts`.
+     */
+    @Test
+    fun `says when this build was made the way the desktop does`() {
+        val corpus = load("about.json")
+
+        for (entry in corpus["dates"]!!.jsonArray) {
+            val case = entry.jsonObject
+            assertEquals(
+                case["name"]!!.jsonPrimitive.content,
+                case["said"]!!.jsonPrimitive.content,
+                About.buildDate(case["iso"]!!.jsonPrimitive.content)
+            )
+        }
+    }
+
+    @Test
+    fun `and spells every month the way it does`() {
+        val months = (1..12).map { About.buildDate("2026-%02d-01".format(it)) }
+
+        assertEquals(
+            listOf(
+                "1 January 2026", "1 February 2026", "1 March 2026", "1 April 2026",
+                "1 May 2026", "1 June 2026", "1 July 2026", "1 August 2026",
+                "1 September 2026", "1 October 2026", "1 November 2026", "1 December 2026"
+            ),
+            months
+        )
     }
 
     // ── which thing is holding the connections ────────────────────────

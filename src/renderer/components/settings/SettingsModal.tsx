@@ -14,6 +14,7 @@ import {
 } from '@shared/ignore'
 import { validAliasName, type Alias } from '@shared/aliases'
 import { DEFAULT_AWAY_MESSAGE } from '@shared/autoaway'
+import { buildDate } from '@shared/about'
 import { wording } from '../../utils/speak'
 
 type Tab =
@@ -26,6 +27,10 @@ type Tab =
   | 'network'
   | 'shortcuts'
   | 'behaviour'
+  | 'about'
+
+/** Where the source, the releases and the issue tracker live */
+const REPOSITORY = 'https://github.com/KaraZajac/switchboard'
 
 const TABS: { key: Tab; label: string }[] = [
   { key: 'servers', label: 'Servers' },
@@ -36,7 +41,8 @@ const TABS: { key: Tab; label: string }[] = [
   { key: 'aliases', label: 'Aliases' },
   { key: 'devices', label: 'Devices' },
   { key: 'network', label: 'Network' },
-  { key: 'shortcuts', label: 'Shortcuts' }
+  { key: 'shortcuts', label: 'Shortcuts' },
+  { key: 'about', label: 'About' }
 ]
 
 export function SettingsModal() {
@@ -76,6 +82,7 @@ export function SettingsModal() {
           {activeTab === 'devices' && <DevicesTab />}
           {activeTab === 'network' && <NetworkTab />}
           {activeTab === 'shortcuts' && <ShortcutsTab />}
+          {activeTab === 'about' && <AboutTab />}
         </div>
       </div>
     </Modal>
@@ -394,7 +401,6 @@ function NotificationsTab() {
 
   const removeWord = async (word: string) => save(words.filter((one) => one !== word))
 
-
   return (
     <div className="space-y-4">
       <h3 className="text-sm font-semibold text-gray-300">Notifications</h3>
@@ -630,7 +636,6 @@ function BehaviourTab() {
           }}
         />
       </div>
-
     </div>
   )
 }
@@ -1180,6 +1185,88 @@ function AliasesTab() {
             ))}
         </div>
       )}
+    </div>
+  )
+}
+
+/**
+ * What this is, which version of it, and the terms it comes under.
+ *
+ * All three facts are put in when the bundle is made rather than read at run
+ * time: `app.getVersion()` answers with Electron's own version from a build
+ * run out of the source tree, and the licence is a file at the repository root
+ * that is not shipped next to the renderer. See `electron.vite.config.ts`.
+ *
+ * The whole licence rather than a link to it. It is twenty-odd lines, it is
+ * the thing a person is actually agreeing to, and a link is no use to somebody
+ * reading this on a machine that is offline — which, for an IRC client, is a
+ * state it is expected to be useful in.
+ */
+function AboutTab() {
+  const built = buildDate(__BUILD_DATE__)
+
+  const facts: { label: string; value: string }[] = [
+    { label: 'Version', value: __APP_VERSION__ },
+    ...(built ? [{ label: 'Built', value: built }] : []),
+    { label: 'Platform', value: 'Desktop' }
+  ]
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h3 className="text-sm font-semibold text-gray-300">Switchboard</h3>
+        <p className="mt-0.5 text-sm text-gray-400">
+          A modern IRC client with a Discord-like interface, fully implementing IRCv3.
+        </p>
+      </div>
+
+      <div className="space-y-1">
+        {facts.map((fact) => (
+          <div key={fact.label} className="flex items-center justify-between rounded px-2 py-1.5">
+            <span className="text-sm text-gray-300">{fact.label}</span>
+            <span className="font-mono text-xs text-gray-400 select-text">{fact.value}</span>
+          </div>
+        ))}
+      </div>
+
+      <div className="flex gap-4 px-2">
+        {/*
+          Opened outside, by the window-open handler in the main process, which
+          refuses anything that is not an address it is willing to hand to the
+          browser — see `@shared/links`.
+        */}
+        <a
+          href={REPOSITORY}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-sm text-indigo-400 hover:underline"
+        >
+          Source and releases
+        </a>
+        <a
+          href={`${REPOSITORY}/issues`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-sm text-indigo-400 hover:underline"
+        >
+          Report a problem
+        </a>
+      </div>
+
+      <div>
+        <h4 className="px-2 text-xs font-semibold tracking-wide text-gray-400 uppercase">
+          Licence
+        </h4>
+        {/*
+          Not a scrolling box of its own. The modal body already scrolls, and
+          one scrolling region inside another is a wheel that stops working
+          when the pointer happens to be over the inner one. The page carries
+          it, the same way the phone's does.
+        */}
+        <pre className="mt-1.5 rounded bg-gray-900 p-3 text-[11px] leading-4 whitespace-pre-wrap text-gray-400 select-text">
+          {__LICENSE__.trim()}
+        </pre>
+      </div>
     </div>
   )
 }
