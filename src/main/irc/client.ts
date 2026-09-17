@@ -148,6 +148,22 @@ export type TypedEventEmitter = EventEmitter & {
  */
 export const NICK_RECOVERY_INTERVAL_MS = 20_000
 
+/**
+ * Why we are in a channel.
+ *
+ * A `JOIN` for ourselves says where we now are and nothing about how we got
+ * there, and the three ways are not the same thing at all:
+ *
+ *  - `user` — somebody asked for it: `/join`, a channel clicked in the list,
+ *    an `irc://` link, `/cycle`. A decision, and the only one worth writing
+ *    into the config that both devices read.
+ *  - `dial` — this connection carrying out a list it already had: the
+ *    auto-join at registration, a rejoin after a kick, a server's
+ *    `draft/auto-join` hint. Not news; the list is where it came from.
+ *  - `server` — nobody here asked at all. The server put us there.
+ */
+export type JoinReason = 'user' | 'dial' | 'server'
+
 export class IRCClient {
   readonly config: ServerConfig
   readonly connection: IRCConnection
@@ -156,6 +172,9 @@ export class IRCClient {
 
   /** Set while we are on a fallback nick and still want our real one back */
   private nickRecovery: ReturnType<typeof setInterval> | null = null
+
+  /** What we have sent a `JOIN` for and not yet seen come back — see [JoinReason] */
+  private readonly asked = new Map<string, JoinReason>()
 
   constructor(config: ServerConfig) {
     this.config = config
@@ -194,9 +213,39 @@ export class IRCClient {
   }
 
   /**
+   * We are about to ask to be somewhere, and why — see [JoinReason].
+   *
+   * Every path that sends a `JOIN` says which kind it is. A path that forgets
+   * to is read as the server having put us there, which is the safe way round:
+   * the cost is a channel somebody joined not being added to their auto-join
+   * list, against a config that grows by itself and cannot be pruned.
+   */
+  noteJoinRequest(channel: string, why: JoinReason): void {
+    this.asked.set(this.state.casemap(channel), why)
+  }
+
+  /**
+   * Why we are in this channel, asked once.
+   *
+   * `server` for a channel we never asked about: UnrealIRCd's `set::auto-join`,
+   * services rejoining you where your account usually is, an operator's
+   * `SAJOIN`, or a `+L` forward from a channel that was full.
+   */
+  takeJoinReason(channel: string): JoinReason {
+    const key = this.state.casemap(channel)
+    const why = this.asked.get(key)
+    this.asked.delete(key)
+    return why ?? 'server'
+  }
+
+  /**
    * Join a channel.
+   *
+   * The public one, which is to say the one every deliberate join goes
+   * through: the composer's `/join`, the channel list, an `irc://` link.
    */
   join(channel: string, key?: string): void {
+    this.noteJoinRequest(channel, 'user')
     if (key) {
       this.connection.send('JOIN', channel, key)
     } else {

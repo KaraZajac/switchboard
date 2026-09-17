@@ -369,6 +369,11 @@ internal fun registerChannelHandlers() {
     // draft/auto-join — the server telling us where we usually are
     Handlers.on("AUTOJOIN") { session, message ->
         val channels = message.params.lastOrNull()?.takeIf { it.isNotBlank() } ?: return@on
+        // The server's list, not ours. Following it is right; writing it into
+        // the config as though somebody chose it is not — see [JoinReason].
+        for (channel in channels.split(",")) {
+            if (channel.isNotBlank()) session.noteJoinRequest(channel, JoinReason.DIAL)
+        }
         session.send("JOIN", channels)
     }
 }

@@ -32,6 +32,16 @@ interface IrcSession {
     fun sendRaw(line: String)
 
     /**
+     * We are about to ask to be somewhere, and why — see [JoinReason].
+     *
+     * Empty by default so a test session need not know about it. That is the
+     * safe direction: a `JOIN` nobody claimed is read as the server having put
+     * us there, and the cost of being wrong is a channel not reaching an
+     * auto-join list rather than a config that grows by itself.
+     */
+    fun noteJoinRequest(channel: String, why: JoinReason) {}
+
+    /**
      * Drop this connection and come back over TLS on [port].
      *
      * Returns true when a reconnect is under way, so the caller stops talking

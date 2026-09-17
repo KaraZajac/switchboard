@@ -1,23 +1,31 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 /**
- * The channels that came back after the desktop was opened.
+ * Channels that came back by themselves.
  *
- * Reported from a phone: the shared config kept reverting to one that wanted
- * `#default` and `#hax` on a network the user had left them on, and only ever
- * after the desktop had been started.
+ * Reported twice from a phone: the shared config kept reverting to one that
+ * wanted `#default` as well as `#hax` on `irc.d0ll.link`. Take `#default` out,
+ * save, close the app, open it — and it is back.
  *
- * The desktop dials with the auto-join list it has — its own, possibly a week
- * old, because a config that changed while it was off has not reached it yet.
- * The `JOIN`s go out. Then the link comes up, the phone's newer config arrives
- * and is applied, and the auto-join list is now empty. *Then* the server's
- * acks land, one `JOIN` event each, and `rememberJoin` reads a config that no
- * longer lists them, concludes that somebody has just joined a new channel,
- * writes them back and reseals — at a version that beats the phone's.
+ * There are two ways a `JOIN` for ourselves can arrive that nobody decided on,
+ * and a join is written into the config that both devices read, so either of
+ * them grows a list that cannot be pruned:
  *
- * So the phone's decision is undone by the desktop carrying it out slowly.
- * It is the same bug as "leaving a channel on the phone did not stick", one
- * layer further in: that one was a stale *list*, this is a stale *dial*.
+ *  - **The server put us there.** `irc.d0ll.link` is UnrealIRCd with
+ *    `set::auto-join`. A bare socket that registers and asks for nothing at
+ *    all is sent `JOIN :#default` by the server. Services rejoining an account
+ *    where it usually is, an operator's `SAJOIN` and a `+L` forward out of a
+ *    full channel are the same shape.
+ *  - **A dial landed after the config moved on.** The desktop connects with
+ *    the auto-join list it has, possibly a week old. The link comes up, the
+ *    phone's newer config arrives and is applied, and the list is now empty.
+ *    *Then* the acks land, one `JOIN` each, against a config that no longer
+ *    lists them — so they are read as new and written back, at a vault version
+ *    that beats the phone's.
+ *
+ * The rule both clients keep: a join is worth recording only where somebody
+ * on this device asked for it, and asked for it as a decision rather than as
+ * this connection carrying out a list it already had.
  */
 const servers = vi.hoisted(() => ({
   list: [] as Array<{ id: string; autoConnect: boolean; autoJoin: string[] }>
@@ -46,6 +54,7 @@ vi.mock('../../src/main/vault/vault', () => ({
 }))
 
 const { IRCManager } = await import('../../src/main/irc/manager')
+const { IRCClient } = await import('../../src/main/irc/client')
 
 beforeEach(() => {
   servers.list = [{ id: 'doll', autoConnect: true, autoJoin: ['#default', '#hax'] }]
@@ -53,20 +62,31 @@ beforeEach(() => {
 })
 
 /**
- * A manager that has just finished registering one connection.
+ * A manager with one connection on it.
  *
- * `noteDial` is what registration does, and a test that skips it is testing a
- * client that never connected; `rememberJoin` is what the `join` event runs.
- * The events themselves are bound by `bindClientEvents`, which reaches the
- * database and is not what is being tested here.
+ * The real `IRCClient`, because the bookkeeping being tested lives on it — a
+ * stand-in would be testing the stand-in. `bindClientEvents` is not used: it
+ * reaches the database, and the two methods below are the whole of what the
+ * `join` event runs.
  */
-function connected(autoJoin: string[]) {
+function connected() {
   const manager = new IRCManager()
-  ;(
-    manager as unknown as { noteDial: (id: string, channels: readonly string[]) => void }
-  ).noteDial('doll', autoJoin)
+  const client = new IRCClient({
+    id: 'doll',
+    name: 'd0ll',
+    host: 'irc.d0ll.link',
+    port: 6697,
+    tls: true,
+    nick: 'kara',
+    autoJoin: [],
+    autoConnect: true
+  } as never)
+  ;(manager as unknown as { clients: Map<string, unknown> }).clients.set('doll', client)
 
   return {
+    client,
+    /** What registration does for each channel in the list it dialled with */
+    dial: (channel: string): void => client.noteJoinRequest(channel, 'dial'),
     /** The server acknowledging a join, as the read loop delivers it */
     join: (channel: string): void =>
       (manager as unknown as { rememberJoin: (id: string, channel: string) => void }).rememberJoin(
@@ -76,11 +96,37 @@ function connected(autoJoin: string[]) {
   }
 }
 
+describe('a join nobody on this device asked for', () => {
+  it('is not written into the config', () => {
+    const { join } = connected()
+
+    // No `JOIN` was ever sent for this. The server simply says we are in it.
+    join('#default')
+    join('#hax')
+
+    expect(servers.list[0].autoJoin).toEqual(['#default', '#hax'])
+    expect(vault.reseals, 'nothing to tell anybody').toBe(0)
+  })
+
+  it('and does not add a channel the list had been pruned of', () => {
+    // The shape of the report: `#default` taken out and saved, and the next
+    // connection to a server that force-joins it puts it back.
+    servers.list[0].autoJoin = ['#hax']
+    const { join } = connected()
+
+    join('#default')
+
+    expect(servers.list[0].autoJoin).toEqual(['#hax'])
+    expect(vault.reseals).toBe(0)
+  })
+})
 
 describe('a join that lands after the config moved on', () => {
   it('does not write the channel back', () => {
     // The desktop dials with the list it has, a week old
-    const { join } = connected(['#default', '#hax'])
+    const { dial, join } = connected()
+    dial('#default')
+    dial('#hax')
 
     // The phone's config arrives and is applied while the JOINs are in flight
     servers.list[0].autoJoin = []
@@ -93,19 +139,53 @@ describe('a join that lands after the config moved on', () => {
     expect(vault.reseals, 'nothing to tell anybody').toBe(0)
   })
 
-  it('still records a channel somebody actually joined', () => {
-    const { join } = connected(['#default', '#hax'])
+  it('leaves the question answered, so going back later is a decision', () => {
+    // A dial left sitting on the client would be spent by the *next* join of
+    // the same channel, which is a real one.
+    const { client, dial, join } = connected()
+    servers.list[0].autoJoin = []
+    dial('#hax')
+    join('#hax')
 
+    client.join('#hax')
+    join('#hax')
+
+    expect(servers.list[0].autoJoin).toEqual(['#hax'])
+    expect(vault.reseals).toBe(1)
+  })
+})
+
+describe('a join somebody asked for', () => {
+  it('is recorded, and the vault resealed', () => {
+    const { client, join } = connected()
+
+    client.join('#somewhere-new')
     join('#somewhere-new')
 
     expect(servers.list[0].autoJoin).toContain('#somewhere-new')
     expect(vault.reseals).toBe(1)
   })
 
-  it('and says nothing when the channel is already listed', () => {
-    connected(['#default', '#hax']).join('#default')
+  it('says nothing when the channel is already listed', () => {
+    const { client, join } = connected()
+
+    client.join('#default')
+    join('#default')
 
     expect(servers.list[0].autoJoin).toEqual(['#default', '#hax'])
     expect(vault.reseals).toBe(0)
+  })
+
+  it('is matched however the server spells it back', () => {
+    // Asked for in one case and acknowledged in another, which servers do.
+    // Recorded once, in the spelling the server used — that is the one the
+    // network will answer to.
+    const { client, join } = connected()
+
+    client.join('#SomeWhere')
+    join('#somewhere')
+
+    expect(servers.list[0].autoJoin).toEqual(['#default', '#hax', '#somewhere'])
+    expect(vault.reseals).toBe(1)
   })
 })

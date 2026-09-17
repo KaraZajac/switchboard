@@ -20,6 +20,7 @@ import org.switchboard.android.irc.Aliases
 import org.switchboard.android.irc.Ignore
 import org.switchboard.android.irc.Commands
 import org.switchboard.android.irc.Search
+import org.switchboard.android.irc.JoinReason
 import org.switchboard.android.irc.ServerConfig
 import java.time.Instant
 import android.content.ContentResolver
@@ -1363,6 +1364,24 @@ internal fun SwitchboardEngine.rememberJoin(serverId: String, channel: String) {
     // wrote the channels it had just left back into the shared config itself.
     // The holder records; everybody else reads.
     if (!holds(serverId)) return
+
+    /*
+     * And only what somebody here asked for — see [JoinReason].
+     *
+     * Asked first, before the "already listed" check below, because the
+     * question has to be taken off the connection either way: leave a DIAL
+     * sitting there and the *next* join of the same channel reads as one.
+     *
+     * `irc.d0ll.link` is UnrealIRCd with `set::auto-join`, so every connection
+     * that asks for nothing at all is joined to `#default` by the server —
+     * confirmed against it with a bare socket. That join was read as a
+     * decision and written into the shared config, so taking `#default` out of
+     * the auto-join list and saving worked, and the next connection put it
+     * straight back.
+     */
+    val why = connections[serverId]?.takeJoinReason(channel) ?: JoinReason.SERVER
+    if (why != JoinReason.USER) return
+
     val servers = vault.servers()
     val server = servers.find { it.id == serverId } ?: return
     if (server.autoJoin.any { it.equals(channel, ignoreCase = true) }) return

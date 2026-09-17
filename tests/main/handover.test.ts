@@ -52,10 +52,30 @@ function managerWithFakeClients(live: string[]) {
   const clients = (manager as unknown as { clients: Map<string, unknown> }).clients
   const connected: string[] = []
 
-  for (const id of live) clients.set(id, { destroy: () => {} })
+  /**
+   * A stand-in client that can say why it is in a channel.
+   *
+   * `rememberJoin` asks — a join nobody here asked for is the server having
+   * put us somewhere, and is not written into the config. See `JoinReason`.
+   */
+  const fake = () => {
+    const asked = new Map<string, string>()
+    return {
+      destroy: () => {},
+      noteJoinRequest: (channel: string, why: string) => asked.set(channel.toLowerCase(), why),
+      takeJoinReason: (channel: string) => {
+        const key = channel.toLowerCase()
+        const why = asked.get(key)
+        asked.delete(key)
+        return why ?? 'server'
+      }
+    }
+  }
+
+  for (const id of live) clients.set(id, fake())
   ;(manager as unknown as { connect: (c: { id: string }) => void }).connect = (config) => {
     connected.push(config.id)
-    clients.set(config.id, { destroy: () => {} })
+    clients.set(config.id, fake())
   }
   ;(manager as unknown as { send: () => void }).send = () => {}
 
@@ -170,8 +190,18 @@ describe('handing over a network both devices can share', () => {
  * some unrelated edit happened to carry it across.
  */
 describe('telling the other device about a channel', () => {
-  const joinFor = (manager: unknown, id: string, channel: string): void =>
-    (manager as { rememberJoin: (s: string, c: string) => void }).rememberJoin(id, channel)
+  /**
+   * Somebody here asking to go somewhere, and the server saying they are
+   * there. Both halves, because only the asking makes it a decision worth
+   * writing into a config the other device reads — see `JoinReason`.
+   */
+  const joinFor = (manager: unknown, id: string, channel: string): void => {
+    const clients = (
+      manager as { clients: Map<string, { noteJoinRequest: (c: string, w: string) => void }> }
+    ).clients
+    clients.get(id)?.noteJoinRequest(channel, 'user')
+    ;(manager as { rememberJoin: (s: string, c: string) => void }).rememberJoin(id, channel)
+  }
 
   const partFor = (manager: unknown, id: string, channel: string): void =>
     (manager as { forgetJoin: (s: string, c: string) => void }).forgetJoin(id, channel)
@@ -182,7 +212,7 @@ describe('telling the other device about a channel', () => {
   })
 
   it('reseals the shared config when a channel is joined', () => {
-    const { manager } = managerWithFakeClients([])
+    const { manager } = managerWithFakeClients(['a'])
 
     joinFor(manager, 'a', '#lobby')
 
@@ -191,7 +221,7 @@ describe('telling the other device about a channel', () => {
   })
 
   it('and when one is left', () => {
-    const { manager } = managerWithFakeClients([])
+    const { manager } = managerWithFakeClients(['a'])
 
     joinFor(manager, 'a', '#lobby')
     partFor(manager, 'a', '#lobby')
@@ -201,7 +231,7 @@ describe('telling the other device about a channel', () => {
   })
 
   it('says nothing when the channel is already listed', () => {
-    const { manager } = managerWithFakeClients([])
+    const { manager } = managerWithFakeClients(['a'])
 
     joinFor(manager, 'a', '#lobby')
     joinFor(manager, 'a', '#LOBBY')

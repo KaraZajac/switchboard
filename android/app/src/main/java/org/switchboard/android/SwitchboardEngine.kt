@@ -33,6 +33,7 @@ import org.switchboard.android.irc.Bouncer
 import org.switchboard.android.irc.AutoAway
 import org.switchboard.android.irc.ChatHistory
 import org.switchboard.android.irc.IrcConnection
+import org.switchboard.android.irc.JoinReason
 import org.switchboard.android.irc.Profile
 import org.switchboard.android.irc.Socks
 import org.switchboard.android.irc.Reconnect
@@ -1454,6 +1455,8 @@ class SwitchboardEngine(
             if (connection.state.channels.containsKey(connection.state.casemap(channel))) {
                 return@launch
             }
+            // Going back where we were, not deciding to go somewhere new
+            connection.noteJoinRequest(channel, JoinReason.DIAL)
             connection.send("JOIN", channel)
         }
     }

@@ -302,7 +302,11 @@ internal fun registerRegistrationHandlers() {
         // end of capability negotiation: with SASL the two are seconds apart,
         // and anything sent between comes back as 451 and is lost.
         Metadata.publishProfile(session)
-        for (channel in session.config.autoJoin) session.send("JOIN", channel)
+        for (channel in session.config.autoJoin) {
+            // Carrying out the list, not adding to it — see [JoinReason]
+            session.noteJoinRequest(channel, JoinReason.DIAL)
+            session.send("JOIN", channel)
+        }
 
         // Then whatever this network was told to run. After the joins rather
         // than before, so a `/mode` here lands with everything else in place.

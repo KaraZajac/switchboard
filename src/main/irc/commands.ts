@@ -424,6 +424,10 @@ export function runCommand(client: IRCClient, target: string, text: string): Com
       const channel = isChannel(args[0]) ? args[0] : target
       if (!isChannel(channel)) return { handled: true, error: `/${name} only works in a channel` }
       client.connection.send('PART', channel)
+      // Deliberate, and it has to be: the `PART` above has already taken the
+      // channel off the auto-join list, so a rejoin read as anything else
+      // would quietly drop it — see `JoinReason`
+      client.noteJoinRequest(channel, 'user')
       client.connection.send('JOIN', channel)
       return { handled: true }
     }

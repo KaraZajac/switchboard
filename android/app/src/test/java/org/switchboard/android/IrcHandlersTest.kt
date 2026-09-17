@@ -19,6 +19,7 @@ import org.switchboard.android.irc.ConnectionState
 import org.switchboard.android.irc.Handlers
 import org.switchboard.android.irc.Irc
 import org.switchboard.android.irc.IrcSession
+import org.switchboard.android.irc.JoinReason
 import org.switchboard.android.irc.ServerConfig
 import org.switchboard.android.irc.consumedByBatch
 
@@ -39,6 +40,13 @@ class IrcHandlersTest {
     ) : IrcSession {
         val sent = mutableListOf<String>()
         val events = mutableListOf<Pair<String, JsonObject>>()
+
+        /** What each `JOIN` this session sent claimed to be — see [JoinReason] */
+        val claimed = mutableMapOf<String, JoinReason>()
+
+        override fun noteJoinRequest(channel: String, why: JoinReason) {
+            claimed[channel.lowercase()] = why
+        }
 
         override fun send(command: String, vararg params: String) {
             sent.add(Irc.serialise(command, params.toList()))
@@ -1226,5 +1234,47 @@ class IrcHandlersTest {
         }
 
         assertFalse(session.state.batches.containsKey("h"))
+    }
+
+    // ── which joins are a decision ───────────────────────────────────
+
+    /**
+     * A `JOIN` for ourselves says where we are and not how we got there, and
+     * only one of the ways is worth writing into the config both devices read.
+     * Every path that sends one has to say which it is, or a channel nobody
+     * chose ends up in somebody's auto-join list — see [JoinReason] and
+     * `tests/main/rejoinrace.test.ts`.
+     */
+    @Test
+    fun `the auto-join list is carried out, not added to`() {
+        session = Session(config("#chan", "#other"), session.state)
+        feed(":irc.example.org 001 kara :Welcome")
+
+        assertEquals(JoinReason.DIAL, session.claimed["#chan"])
+        assertEquals(JoinReason.DIAL, session.claimed["#other"])
+    }
+
+    @Test
+    fun `a server telling us where we usually are is not somebody choosing`() {
+        register("draft/auto-join")
+
+        // draft/auto-join: the server's own list, which we follow and do not
+        // write down as though it were ours
+        feed(":irc.example.org AUTOJOIN #one,#two")
+
+        assertEquals(JoinReason.DIAL, session.claimed["#one"])
+        assertEquals(JoinReason.DIAL, session.claimed["#two"])
+        assertTrue("it is still followed", session.sent.any { it.startsWith("JOIN #one,#two") })
+    }
+
+    @Test
+    fun `a channel the server simply puts us in was claimed by nobody`() {
+        // irc.d0ll.link is UnrealIRCd with set::auto-join: a connection that
+        // asks for nothing at all is sent this. Nothing here sent a JOIN, so
+        // nothing here should call it a decision.
+        register()
+        feed(":kara!kara@host.example JOIN :#default")
+
+        assertNull(session.claimed["#default"])
     }
 }

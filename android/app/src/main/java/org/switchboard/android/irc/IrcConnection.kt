@@ -65,6 +65,32 @@ class IrcConnection(
 
     override val state = ConnectionState(config.id)
 
+    /** What we have sent a `JOIN` for and not yet seen come back — see [JoinReason] */
+    private val asked = java.util.concurrent.ConcurrentHashMap<String, JoinReason>()
+
+    /**
+     * We are about to ask to be somewhere, and why — see [JoinReason].
+     *
+     * Every path that sends a `JOIN` says which kind it is. A path that forgets
+     * to is read as the server having put us there, which is the safe way
+     * round: the cost is a channel somebody joined not reaching their
+     * auto-join list, against a config that grows by itself and cannot be
+     * pruned.
+     */
+    override fun noteJoinRequest(channel: String, why: JoinReason) {
+        asked[state.casemap(channel)] = why
+    }
+
+    /**
+     * Why we are in this channel, asked once.
+     *
+     * [JoinReason.SERVER] for a channel we never asked about: UnrealIRCd's
+     * `set::auto-join`, services rejoining an account where it usually is, an
+     * operator's `SAJOIN`, or a `+L` forward out of a channel that was full.
+     */
+    fun takeJoinReason(channel: String): JoinReason =
+        asked.remove(state.casemap(channel)) ?: JoinReason.SERVER
+
     private var socket: Socket? = null
     private var output: OutputStream? = null
     private var readJob: Job? = null
@@ -715,8 +741,16 @@ class IrcConnection(
         })
     }
 
-    override fun join(channel: String, key: String?) =
+    /**
+     * Join a channel.
+     *
+     * The public one, which is to say the one every deliberate join goes
+     * through: the composer's `/join`, the channel list, an `irc://` link.
+     */
+    override fun join(channel: String, key: String?) {
+        noteJoinRequest(channel, JoinReason.USER)
         if (key.isNullOrBlank()) send("JOIN", channel) else send("JOIN", channel, key)
+    }
 
     override fun part(channel: String, reason: String?) =
         if (reason.isNullOrBlank()) send("PART", channel) else send("PART", channel, reason)

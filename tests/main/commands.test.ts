@@ -31,6 +31,9 @@ const client = {
   mode: record('mode'),
   kick: record('kick'),
   disconnect: record('disconnect'),
+  // Why a command said it was joining — see `JoinReason`. `/cycle` is the one
+  // command that sends a raw `JOIN` of its own.
+  noteJoinRequest: record('noteJoinRequest'),
   connection: {
     send: record('send'),
     sendRaw: record('sendRaw')
@@ -232,9 +235,7 @@ describe('text the server would silently cut', () => {
  * is what comes out of it.
  */
 describe('the commands every client has', () => {
-  const corpus = JSON.parse(
-    readFileSync(join(__dirname, '../fixtures/commands.json'), 'utf8')
-  ) as {
+  const corpus = JSON.parse(readFileSync(join(__dirname, '../fixtures/commands.json'), 'utf8')) as {
     cases: {
       name: string
       input: string
@@ -267,7 +268,10 @@ describe('the commands every client has', () => {
         kick: (channel: string, nick: string, reason?: string) =>
           lines.push(serialise(['KICK', channel, nick, reason ?? nick])),
         join: (channel: string) => lines.push(serialise(['JOIN', channel])),
-        part: (channel: string) => lines.push(serialise(['PART', channel]))
+        part: (channel: string) => lines.push(serialise(['PART', channel])),
+        // Bookkeeping rather than a line: which joins were a decision — see
+        // `JoinReason`. `/cycle` is the one command that sends its own `JOIN`.
+        noteJoinRequest: () => {}
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
       } as any
 

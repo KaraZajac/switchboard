@@ -77,6 +77,9 @@ function createMockClient(
   // the calls rather than stubbing them away, so the tests can assert on them.
   const nickRecovery: string[] = []
 
+  /** Why each `JOIN` this client sent said it was there — see `JoinReason` */
+  const joinReasons: Record<string, string> = {}
+
   return {
     client: {
       state,
@@ -84,6 +87,9 @@ function createMockClient(
       connection,
       reconnect,
       config,
+      noteJoinRequest: (channel: string, why: string) => {
+        joinReasons[channel] = why
+      },
       startNickRecovery: () => nickRecovery.push('start'),
       stopNickRecovery: () => nickRecovery.push('stop')
     } as any,
@@ -91,6 +97,7 @@ function createMockClient(
     state,
     sentLines,
     nickRecovery,
+    joinReasons,
     reconnect
   }
 }
@@ -114,7 +121,7 @@ describe('Registration Handlers', () => {
 
   it('auto-joins channels on 001', () => {
     vi.useFakeTimers()
-    const { client, sentLines } = createMockClient({
+    const { client, sentLines, joinReasons } = createMockClient({
       autoJoin: ['#general', '#dev']
     })
 
@@ -125,6 +132,11 @@ describe('Registration Handlers', () => {
 
     expect(sentLines).toContain('JOIN #general')
     expect(sentLines).toContain('JOIN #dev')
+
+    // Carrying out the list, not adding to it. A dial that does not say so is
+    // read as a decision, and a config that has just been pruned grows the
+    // channels back — see `JoinReason` and `tests/main/rejoinrace.test.ts`.
+    expect(joinReasons).toEqual({ '#general': 'dial', '#dev': 'dial' })
     vi.useRealTimers()
   })
 

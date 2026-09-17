@@ -18,7 +18,10 @@ registerHandler('001', (client, msg) => {
   // We are called something, and it is not always what was asked for. Say so
   // now, once it is settled — being quietly renamed and left to notice is how
   // someone spends an evening wondering why nobody answers them.
-  if (client.state.desiredNick && client.state.casemap(nick) !== client.state.casemap(client.state.desiredNick)) {
+  if (
+    client.state.desiredNick &&
+    client.state.casemap(nick) !== client.state.casemap(client.state.desiredNick)
+  ) {
     client.events.emit('error', {
       code: '433',
       command: 'NICK',
@@ -46,6 +49,8 @@ registerHandler('001', (client, msg) => {
   if (client.config.autoJoin.length > 0) {
     setTimeout(() => {
       for (const channel of client.config.autoJoin) {
+        // Carrying out the list, not adding to it — see `JoinReason`
+        client.noteJoinRequest(channel, 'dial')
         client.connection.send('JOIN', channel)
       }
     }, joinDelay)
@@ -146,8 +151,10 @@ registerHandler('433', (client, msg) => {
   //
   // Whatever we asked for, we did not get it — forget it, so a later NICK for
   // somebody else who takes that name is not mistaken for ours.
-  if (client.state.pendingNick !== null &&
-    client.state.casemap(client.state.pendingNick) === client.state.casemap(msg.params[1] || '')) {
+  if (
+    client.state.pendingNick !== null &&
+    client.state.casemap(client.state.pendingNick) === client.state.casemap(msg.params[1] || '')
+  ) {
     client.state.pendingNick = null
   }
 
