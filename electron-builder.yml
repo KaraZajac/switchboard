@@ -80,6 +80,15 @@ nsis:
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true
+  # No spaces in the name, because two different things normalise them and
+  # they disagree. The default is `${productName} Setup ${version}.${ext}` —
+  # "Switchboard Setup 2.8.4.exe" — and `latest.yml`, which is what the Windows
+  # updater reads, gets the hyphenated spelling electron-builder's own uploader
+  # would have used. Uploading with `gh` instead turns the spaces into dots, so
+  # the manifest pointed at a file that did not exist and v2.8.4 shipped with
+  # no way for Windows to update itself. The mac and Linux artifacts never had
+  # the problem because their names never had spaces.
+  artifactName: ${productName}-Setup-${version}.${ext}
 publish:
   provider: github
   owner: KaraZajac

@@ -185,6 +185,24 @@ jobs:
           done
           [ -z "$missing" ] || { echo "::error::nothing matching:$missing"; exit 1; }
 
+          # And that the update manifests point at files that are actually
+          # here. `latest*.yml` names each artifact, and whoever uploads
+          # decides how the name is spelled: electron-builder's own publisher
+          # turned the spaces in "Switchboard Setup 2.8.4.exe" into hyphens,
+          # `gh` turns them into dots, and the manifest was written by the
+          # first. v2.8.4 shipped with a Windows manifest pointing at a file
+          # that did not exist — every asset present, every kind accounted for,
+          # and no way for Windows to update itself.
+          for manifest in artifacts/latest*.yml; do
+            [ -e "$manifest" ] || continue
+            named=$(sed -nE 's/^[[:space:]]*-[[:space:]]*url:[[:space:]]*(.*)$/\1/p; s/^path:[[:space:]]*(.*)$/\1/p' "$manifest" | sort -u)
+            for want in $named; do
+              grep -qxF "$want" <<<"$have" ||
+                missing="$missing $(basename "$manifest") wants $want;"
+            done
+          done
+          [ -z "$missing" ] || { echo "::error::$missing"; exit 1; }
+
       - name: Take it live
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
