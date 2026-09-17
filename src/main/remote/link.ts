@@ -865,8 +865,23 @@ async function handleConnection(connection: IrohConnection): Promise<void> {
     if (!stopping) console.error('Remote link stream error:', err)
   } finally {
     closed = true
-    if (peers.get(endpointId)?.send === send) peers.delete(endpointId)
-    session.peerGone(endpointId)
+    /*
+     * Only if this is still the connection for that device.
+     *
+     * A reconnecting peer arrives on a new stream and is accepted before the
+     * old one finishes unwinding — the accept path closes the old connection
+     * itself, which is what makes it unwind. So this block runs *after* the
+     * replacement has been registered and `session.peerConnected` has been
+     * called for it.
+     *
+     * The `peers` map already knew that. The coordinator did not: it was told
+     * the device had gone every single time it came back, moments after being
+     * told it was here. Guarded together, since they are one question.
+     */
+    if (peers.get(endpointId)?.send === send) {
+      peers.delete(endpointId)
+      session.peerGone(endpointId)
+    }
   }
 }
 

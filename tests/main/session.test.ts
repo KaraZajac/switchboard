@@ -7,6 +7,7 @@ import {
   HEARTBEAT_INTERVAL_MS,
   HEARTBEAT_TIMEOUT_MS,
   PHONE_PRIORITY,
+  TRANSPORT_GRACE_MS,
   SessionCoordinator,
   type SessionFrame
 } from '../../src/main/session/coordinator'
@@ -700,5 +701,119 @@ describe('three devices, only two of them paired to each other', () => {
 
     desktop.coordinator.stop()
     phone.coordinator.stop()
+  })
+})
+
+/**
+ * A phone's link does not stay up, and is not meant to.
+ *
+ * Android freezes a backgrounded process and the QUIC connection goes with it;
+ * the phone redials a second later. Reported as "the phone says live and the
+ * desktop says live and they are both paired", with the desktop's own log
+ * showing the cycle twenty times in twenty-six minutes:
+ *
+ *     Remote link stream error: ConnectionLost(LocallyClosed)
+ *     Paired device connected: XQ-CT62
+ *     Stored 1 message(s) handed over by a paired device
+ *
+ * Each one used to be an election. The peer was deleted the moment the socket
+ * went, so the phone concluded the desktop had gone and took the connections;
+ * the desktop's next heartbeat took them back. The heartbeat timeout exists to
+ * answer this question and was never asked.
+ */
+describe('a link that drops and comes straight back', () => {
+  const beat = (
+    coordinator: SessionCoordinator,
+    id: string,
+    priority: number,
+    role: 'primary' | 'follower' = 'primary'
+  ): void =>
+    coordinator.handleFrame(id, {
+      t: 'heartbeat',
+      role,
+      priority,
+      since: null,
+      vaultVersion: 1
+    })
+
+  /** A phone following a desktop, with the desktop's heartbeat received */
+  function following() {
+    const resumed: string[] = []
+    const coordinator = new SessionCoordinator(
+      PHONE_PRIORITY,
+      { send: () => {}, hasPeers: () => true },
+      {
+        resume: () => resumed.push('resumed'),
+        release: () => {},
+        vaultVersion: () => 1,
+        holding: () => []
+      }
+    )
+    coordinator.start()
+    // Beating the whole way through discovery, the way a desktop that is
+    // actually there does — one heartbeat and then twenty seconds of silence
+    // is a desktop that has gone.
+    for (let waited = 0; waited <= DISCOVERY_CAP_MS; waited += HEARTBEAT_INTERVAL_MS) {
+      beat(coordinator, 'desktop', DESKTOP_PRIORITY)
+      vi.advanceTimersByTime(HEARTBEAT_INTERVAL_MS)
+    }
+    expect(coordinator.state().role).toBe('follower')
+    return { coordinator, resumed }
+  }
+
+  it('does not make the phone take the connections', () => {
+    const { coordinator, resumed } = following()
+
+    // The socket goes, and the phone is back on the link a second later
+    coordinator.peerGone('desktop')
+    vi.advanceTimersByTime(1_000)
+    coordinator.peerConnected('desktop')
+    beat(coordinator, 'desktop', DESKTOP_PRIORITY)
+    vi.advanceTimersByTime(HEARTBEAT_INTERVAL_MS * 2)
+
+    expect(coordinator.state().role).toBe('follower')
+    expect(resumed, 'nothing changed hands').toEqual([])
+  })
+
+  it('survives it happening over and over', () => {
+    const { coordinator, resumed } = following()
+
+    // Twenty blips a minute apart, which is the reported shape
+    for (let i = 0; i < 20; i++) {
+      coordinator.peerGone('desktop')
+      vi.advanceTimersByTime(1_500)
+      coordinator.peerConnected('desktop')
+      // A minute of ordinary heartbeats before the next blip
+      for (let waited = 1_500; waited < 60_000; waited += HEARTBEAT_INTERVAL_MS) {
+        beat(coordinator, 'desktop', DESKTOP_PRIORITY)
+        vi.advanceTimersByTime(HEARTBEAT_INTERVAL_MS)
+      }
+    }
+
+    expect(coordinator.state().role).toBe('follower')
+    expect(resumed).toEqual([])
+  })
+
+  it('but still takes over when the desktop does not come back', () => {
+    const { coordinator, resumed } = following()
+
+    coordinator.peerGone('desktop')
+    // The grace, and then long enough for a tick to notice
+    vi.advanceTimersByTime(TRANSPORT_GRACE_MS + HEARTBEAT_INTERVAL_MS * 2)
+
+    expect(coordinator.state().role).toBe('primary')
+    expect(resumed).toEqual(['resumed'])
+  })
+
+  it('and does not wind a long-silent peer forward by losing its socket too', () => {
+    const { coordinator } = following()
+
+    // Quiet for longer than the grace already. Losing the socket on top of
+    // that must not buy it another few seconds.
+    vi.advanceTimersByTime(HEARTBEAT_TIMEOUT_MS - 1_000)
+    coordinator.peerGone('desktop')
+    vi.advanceTimersByTime(HEARTBEAT_INTERVAL_MS * 2)
+
+    expect(coordinator.state().role).toBe('primary')
   })
 })

@@ -15,6 +15,16 @@
 export type Holder =
   /** This device, straight to the networks */
   | 'live'
+  /**
+   * On the networks *beside* the device that is holding them.
+   *
+   * Not a contradiction and not a fault: a network whose account this device
+   * can log into on its own is deliberately held by both, because there is
+   * nothing to stand in for. But `LIVE` reads as "this is the connection",
+   * which is the one thing it is not — and a phone showing it next to a
+   * desktop showing it looks exactly like a hand-over that never happened.
+   */
+  | 'shared'
   /** A bouncer — an always-on Switchboard, a soju, a ZNC */
   | 'bouncer'
   /** Another Switchboard desktop, over the link */
@@ -28,6 +38,14 @@ export type Holder =
 export interface HoldingNow {
   /** Whether this device is holding rather than following */
   holding: boolean
+  /**
+   * Whether the connections it has are shared with the device that is holding.
+   *
+   * Only ever true while following, so it is asked before the bouncer question
+   * rather than after: a follower with its own sockets is sharing them,
+   * whatever they are reached through.
+   */
+  sharing: boolean
   /** Whether it is on its way there */
   connecting: boolean
   /**
@@ -62,6 +80,7 @@ export interface HoldingNow {
 }
 
 export function whoIsHolding(now: HoldingNow): Holder {
+  if (now.sharing) return 'shared'
   if (now.holding) return now.allThroughBouncer ? 'bouncer' : 'live'
   if (now.peerHolding && !now.connecting) {
     return now.followingAlwaysOn ? 'bouncer' : 'desktop'
@@ -80,6 +99,8 @@ export function holdingLabel(holder: Holder): string {
   switch (holder) {
     case 'live':
       return 'LIVE'
+    case 'shared':
+      return 'SHARED'
     case 'bouncer':
       return 'BOUNCER'
     case 'desktop':
@@ -104,6 +125,8 @@ export function holdingDetail(holder: Holder): string {
   switch (holder) {
     case 'live':
       return 'This device is connected to the networks'
+    case 'shared':
+      return 'On the same networks as the device holding them'
     case 'bouncer':
       return 'A bouncer is holding the connections'
     case 'desktop':

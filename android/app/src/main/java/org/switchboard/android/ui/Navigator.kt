@@ -86,6 +86,8 @@ fun Navigator(
     mode: EngineMode,
     modeDetail: String,
     takingOver: Boolean,
+    /** Following, and on the networks anyway — see [org.switchboard.android.irc.Holding] */
+    sharing: Boolean,
     pairedWithDesktop: Boolean,
     followingAlwaysOn: Boolean,
     allThroughBouncer: Boolean,
@@ -156,8 +158,9 @@ fun Navigator(
                 )
             }
             UserPanel(
-                store, mode, modeDetail, takingOver, pairedWithDesktop, followingAlwaysOn,
-                allThroughBouncer, vaultUnlocked, onOpenSettings, onEditProfile, onToggleAway
+                store, mode, modeDetail, takingOver, sharing, pairedWithDesktop,
+                followingAlwaysOn, allThroughBouncer, vaultUnlocked, onOpenSettings,
+                onEditProfile, onToggleAway
             )
         }
     }
@@ -1141,6 +1144,8 @@ private fun UserPanel(
     mode: EngineMode,
     modeDetail: String,
     takingOver: Boolean,
+    /** Following, and on the networks anyway — see [org.switchboard.android.irc.Holding] */
+    sharing: Boolean,
     pairedWithDesktop: Boolean,
     followingAlwaysOn: Boolean,
     allThroughBouncer: Boolean,
@@ -1198,7 +1203,10 @@ private fun UserPanel(
                 overflow = TextOverflow.Ellipsis
             )
             Row(verticalAlignment = Alignment.CenterVertically) {
-                ModePill(mode, takingOver, pairedWithDesktop, followingAlwaysOn, allThroughBouncer)
+                ModePill(
+                    mode, takingOver, sharing, pairedWithDesktop, followingAlwaysOn,
+                    allThroughBouncer
+                )
                 Spacer(Modifier.width(6.dp))
                 Text(
                     modeDetail,
@@ -1256,6 +1264,17 @@ fun ModePill(
     mode: EngineMode,
     takingOver: Boolean = false,
     /**
+     * Following, and on the networks anyway.
+     *
+     * A network whose account this phone can log into on its own is
+     * deliberately held by both devices. `LIVE` for that reads as "this phone
+     * is the connection", which is the one thing it is not — and beside a
+     * desktop also reading `LIVE` it looks exactly like a hand-over that never
+     * happened. The sentence next to the pill has always said the right thing;
+     * the pill contradicted it.
+     */
+    sharing: Boolean = false,
+    /**
      * Whether a desktop is part of this at all.
      *
      * "TAKING OVER" is a sentence about two devices. On a phone that has never
@@ -1277,6 +1296,7 @@ fun ModePill(
      */
     val holder = Holding.who(
         holding = mode == EngineMode.HOLDING,
+        sharing = sharing,
         connecting = takingOver,
         peerHolding = mode == EngineMode.FOLLOWING,
         followingAlwaysOn = followingAlwaysOn,
@@ -1286,6 +1306,9 @@ fun ModePill(
 
     val colour = when (holder) {
         Holding.Holder.LIVE -> Green
+        // Green too: both devices being on is a working arrangement, not a
+        // warning. The word is what distinguishes them.
+        Holding.Holder.SHARED -> Green
         // A bouncer holding it is as good as holding it yourself, which is the
         // point of one
         Holding.Holder.BOUNCER -> Green

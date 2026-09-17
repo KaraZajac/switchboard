@@ -16,6 +16,7 @@ import org.switchboard.android.session.SessionClock
 import org.switchboard.android.session.SessionCoordinator
 import org.switchboard.android.session.SessionFrame
 import org.switchboard.android.session.SessionRole
+import org.switchboard.android.session.TRANSPORT_GRACE_MS
 
 /**
  * The same scenarios as `tests/main/session.test.ts`, against the Kotlin port.
@@ -471,5 +472,124 @@ class SessionCoordinatorTest {
             assertEquals(SessionRole.PRIMARY, h.desktop.coordinator.state().role)
             assertEquals(0, h.phone.released)
         }
+    }
+
+    // ── a link that drops and comes straight back ────────────────────
+
+    /**
+     * This phone's link does not stay up, and is not meant to.
+     *
+     * Android freezes a backgrounded process and the QUIC connection goes with
+     * it; the reconnect ladder is back a second later. Reported as "the phone
+     * says live and the desktop says live and they are both paired", with the
+     * desktop's log showing that cycle twenty times in twenty-six minutes.
+     *
+     * Each one used to be an election. The same cases run on the desktop in
+     * `tests/main/session.test.ts`.
+     */
+    private fun beat(
+        coordinator: SessionCoordinator,
+        id: String,
+        priority: Int,
+        role: SessionRole = SessionRole.PRIMARY
+    ) = coordinator.handleFrame(
+        id,
+        SessionFrame.Heartbeat(role, priority, null, 1, emptyList(), null)
+    )
+
+    /** A phone following a desktop, past discovery, with the link up */
+    private fun followingPhone(clock: FakeClock, resumed: MutableList<String>): SessionCoordinator {
+        val coordinator = SessionCoordinator(
+            PHONE_PRIORITY,
+            object : CoordinatorTransport {
+                override fun send(frame: SessionFrame, peerId: String?) {}
+                override fun hasPeers(): Boolean = true
+            },
+            object : ConnectionControl {
+                override fun resume() { resumed.add("resumed") }
+                override fun release() {}
+                override fun vaultVersion(): Int = 1
+                override fun holding(): List<String> = emptyList()
+            },
+            clock
+        )
+        coordinator.start()
+        // Beating the whole way through discovery, the way a desktop that is
+        // really there does
+        var waited = 0L
+        while (waited <= DISCOVERY_MS * 4) {
+            beat(coordinator, "desktop", DESKTOP_PRIORITY)
+            clock.advance(HEARTBEAT_INTERVAL_MS)
+            waited += HEARTBEAT_INTERVAL_MS
+        }
+        assertEquals(SessionRole.FOLLOWER, coordinator.state().role)
+        return coordinator
+    }
+
+    @Test
+    fun `a link blip does not make the phone take the connections`() {
+        val clock = FakeClock()
+        val resumed = mutableListOf<String>()
+        val phone = followingPhone(clock, resumed)
+
+        phone.peerGone("desktop")
+        clock.advance(1_000)
+        phone.peerConnected("desktop")
+        beat(phone, "desktop", DESKTOP_PRIORITY)
+        clock.advance(HEARTBEAT_INTERVAL_MS * 2)
+
+        assertEquals(SessionRole.FOLLOWER, phone.state().role)
+        assertTrue("nothing changed hands", resumed.isEmpty())
+        phone.stop()
+    }
+
+    @Test
+    fun `nor does it happening twenty times`() {
+        val clock = FakeClock()
+        val resumed = mutableListOf<String>()
+        val phone = followingPhone(clock, resumed)
+
+        repeat(20) {
+            phone.peerGone("desktop")
+            clock.advance(1_500)
+            phone.peerConnected("desktop")
+            var waited = 1_500L
+            while (waited < 60_000) {
+                beat(phone, "desktop", DESKTOP_PRIORITY)
+                clock.advance(HEARTBEAT_INTERVAL_MS)
+                waited += HEARTBEAT_INTERVAL_MS
+            }
+        }
+
+        assertEquals(SessionRole.FOLLOWER, phone.state().role)
+        assertTrue(resumed.isEmpty())
+        phone.stop()
+    }
+
+    @Test
+    fun `but it does take over when the desktop does not come back`() {
+        val clock = FakeClock()
+        val resumed = mutableListOf<String>()
+        val phone = followingPhone(clock, resumed)
+
+        phone.peerGone("desktop")
+        clock.advance(TRANSPORT_GRACE_MS + HEARTBEAT_INTERVAL_MS * 2)
+
+        assertEquals(SessionRole.PRIMARY, phone.state().role)
+        assertEquals(listOf("resumed"), resumed)
+        phone.stop()
+    }
+
+    @Test
+    fun `and a long-silent peer is not wound forward by losing its socket too`() {
+        val clock = FakeClock()
+        val phone = followingPhone(clock, mutableListOf())
+
+        clock.advance(HEARTBEAT_TIMEOUT_MS - 1_000)
+        phone.peerGone("desktop")
+        clock.advance(HEARTBEAT_INTERVAL_MS * 2)
+
+        assertEquals(SessionRole.PRIMARY, phone.state().role)
+        phone.stop()
     }
 }

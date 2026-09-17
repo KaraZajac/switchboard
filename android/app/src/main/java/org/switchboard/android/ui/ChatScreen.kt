@@ -234,6 +234,7 @@ fun ChatScreen(
                                 mode = engine.mode,
                                 modeDetail = engine.modeDetail,
                                 takingOver = engine.isTakingOver,
+                                sharing = engine.sharingWithDesktop,
                                 pairedWithDesktop = engine.pairedWithDesktop,
                                 followingAlwaysOn = engine.followingAlwaysOn,
                                 allThroughBouncer = engine.allThroughBouncer,
@@ -880,6 +881,7 @@ private fun ChannelHeader(
                 ModePill(
                     engine.mode,
                     engine.isTakingOver,
+                    engine.sharingWithDesktop,
                     engine.pairedWithDesktop,
                     engine.followingAlwaysOn,
                     engine.allThroughBouncer

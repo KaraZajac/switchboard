@@ -2780,6 +2780,7 @@ class SharedCorpusTest {
 
             val holder = Holding.who(
                 holding = flag("holding"),
+                sharing = flag("sharing"),
                 connecting = flag("connecting"),
                 peerHolding = flag("peerHolding"),
                 followingAlwaysOn = flag("followingAlwaysOn"),

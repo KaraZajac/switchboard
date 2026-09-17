@@ -39,6 +39,16 @@ const val HEARTBEAT_TIMEOUT_MS = 16_000L
  */
 const val DISCOVERY_MS = 6_000L
 
+/**
+ * How long a peer whose transport dropped has to come back.
+ *
+ * This phone's link goes away every time Android freezes the process and comes
+ * back a second later; the reconnect ladder's first two rungs are one second
+ * and two. This covers those without covering a desktop that has actually gone
+ * — see [SessionCoordinator.peerGone].
+ */
+const val TRANSPORT_GRACE_MS = 6_000L
+
 data class PeerInfo(
     val role: SessionRole,
     val priority: Int,
@@ -219,10 +229,36 @@ class SessionCoordinator(
         tick()
     }
 
-    /** A peer disconnected from the link entirely */
+    /**
+     * The transport to a peer dropped.
+     *
+     * Which is not the same thing as the peer being gone, and treating it as
+     * though it were is what made both devices say they were holding the
+     * connections.
+     *
+     * This phone's link drops constantly and by design: Android freezes a
+     * backgrounded process and the QUIC connection goes with it, and the
+     * reconnect ladder is back a second later. The desktop's log showed that
+     * cycle twenty times in twenty-six minutes. Each one used to be an
+     * election — the peer was removed the moment the socket went, so the phone
+     * concluded the desktop had gone and took the connections, and the
+     * desktop's next heartbeat took them back.
+     *
+     * The heartbeat timeout already answers "is the other device still there",
+     * and answers it with three missed beats rather than one dropped socket.
+     * So a dropped transport decides nothing: it brings the peer's deadline
+     * forward to [TRANSPORT_GRACE_MS] from now and lets the ordinary expiry
+     * run. Come back inside that, and nothing happened.
+     */
     @Synchronized
     fun peerGone(peerId: String) {
-        if (peers.remove(peerId) != null) evaluate()
+        val peer = peers[peerId] ?: return
+
+        val deadline = clock.now() - HEARTBEAT_TIMEOUT_MS + TRANSPORT_GRACE_MS
+        // Only ever earlier. A peer that has been quiet for longer than the
+        // grace must not have its clock wound forward by losing a socket too.
+        if (peer.lastSeen > deadline) peers[peerId] = peer.copy(lastSeen = deadline)
+        emit()
     }
 
     /** Called by the transport each time a peer connects */

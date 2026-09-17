@@ -1,10 +1,11 @@
 {
-  "$comment": "Which thing is holding the connections, in one word. Both clients show it and both had their own idea of it — a phone said SERVER for what a desktop called nothing at all. `peerHolding` and `everPaired` are deliberately two facts: somebody else holding this right now, and being part of a pair at all, have different answers most of the time. Shared by tests/shared/holding.test.ts and the Android SharedCorpusTest.",
+  "$comment": "Which thing is holding the connections, in one word. Both clients show it and both had their own idea of it \u2014 a phone said SERVER for what a desktop called nothing at all. `sharing` is a follower that is on the networks anyway, which is deliberate wherever a network lets both devices log in \u2014 LIVE for that reads as \"this is the connection\". `peerHolding` and `everPaired` are deliberately two facts: somebody else holding this right now, and being part of a pair at all, have different answers most of the time. Shared by tests/shared/holding.test.ts and the Android SharedCorpusTest.",
   "cases": [
     {
       "name": "this device, straight to the networks",
       "now": {
         "holding": true,
+        "sharing": false,
         "connecting": false,
         "peerHolding": false,
         "followingAlwaysOn": false,
@@ -17,6 +18,7 @@
       "name": "this device, but everything it holds is behind a bouncer",
       "now": {
         "holding": true,
+        "sharing": false,
         "connecting": false,
         "peerHolding": false,
         "followingAlwaysOn": false,
@@ -29,6 +31,7 @@
       "name": "one through a bouncer and others not is still live",
       "now": {
         "holding": true,
+        "sharing": false,
         "connecting": false,
         "peerHolding": false,
         "followingAlwaysOn": false,
@@ -41,6 +44,7 @@
       "name": "following an always-on Switchboard",
       "now": {
         "holding": false,
+        "sharing": false,
         "connecting": false,
         "peerHolding": true,
         "followingAlwaysOn": true,
@@ -53,6 +57,7 @@
       "name": "following a desktop",
       "now": {
         "holding": false,
+        "sharing": false,
         "connecting": false,
         "peerHolding": true,
         "followingAlwaysOn": false,
@@ -65,6 +70,7 @@
       "name": "dialling, with a device to take over from",
       "now": {
         "holding": false,
+        "sharing": false,
         "connecting": true,
         "peerHolding": false,
         "followingAlwaysOn": false,
@@ -77,6 +83,7 @@
       "name": "dialling, on its own",
       "now": {
         "holding": false,
+        "sharing": false,
         "connecting": true,
         "peerHolding": false,
         "followingAlwaysOn": false,
@@ -89,6 +96,7 @@
       "name": "nothing at all",
       "now": {
         "holding": false,
+        "sharing": false,
         "connecting": false,
         "peerHolding": false,
         "followingAlwaysOn": false,
@@ -101,6 +109,7 @@
       "name": "holding beats connecting, because it already arrived",
       "now": {
         "holding": true,
+        "sharing": false,
         "connecting": true,
         "peerHolding": false,
         "followingAlwaysOn": false,
@@ -113,6 +122,7 @@
       "name": "paired with a desktop that is switched off, and not dialling",
       "now": {
         "holding": false,
+        "sharing": false,
         "connecting": false,
         "peerHolding": false,
         "followingAlwaysOn": false,
@@ -125,6 +135,7 @@
       "name": "claiming the session from the device that has it",
       "now": {
         "holding": false,
+        "sharing": false,
         "connecting": true,
         "peerHolding": true,
         "followingAlwaysOn": false,
@@ -132,6 +143,58 @@
         "allThroughBouncer": false
       },
       "holder": "taking-over"
+    },
+    {
+      "name": "following, and on the networks anyway",
+      "now": {
+        "holding": false,
+        "sharing": true,
+        "connecting": false,
+        "peerHolding": true,
+        "followingAlwaysOn": false,
+        "everPaired": true,
+        "allThroughBouncer": false
+      },
+      "holder": "shared"
+    },
+    {
+      "name": "sharing wins over holding, because only a follower shares",
+      "now": {
+        "holding": true,
+        "sharing": true,
+        "connecting": false,
+        "peerHolding": false,
+        "followingAlwaysOn": false,
+        "everPaired": true,
+        "allThroughBouncer": false
+      },
+      "holder": "shared"
+    },
+    {
+      "name": "and over the bouncer question, whatever they are reached through",
+      "now": {
+        "holding": true,
+        "sharing": true,
+        "connecting": false,
+        "peerHolding": false,
+        "followingAlwaysOn": false,
+        "everPaired": true,
+        "allThroughBouncer": true
+      },
+      "holder": "shared"
+    },
+    {
+      "name": "a follower with no sockets of its own still names the other device",
+      "now": {
+        "holding": false,
+        "sharing": false,
+        "connecting": false,
+        "peerHolding": true,
+        "followingAlwaysOn": false,
+        "everPaired": true,
+        "allThroughBouncer": false
+      },
+      "holder": "desktop"
     }
   ],
   "labels": {
@@ -140,6 +203,7 @@
     "desktop": "DESKTOP",
     "connecting": "CONNECTING",
     "taking-over": "TAKING OVER",
-    "offline": "OFFLINE"
+    "offline": "OFFLINE",
+    "shared": "SHARED"
   }
 }

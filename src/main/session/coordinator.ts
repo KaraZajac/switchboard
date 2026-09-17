@@ -81,6 +81,16 @@ export const PEER_GRACE_MS = 3_000
 /** The longest a device will hold off connecting while it looks around */
 export const DISCOVERY_CAP_MS = 20_000
 
+/**
+ * How long a peer whose transport dropped has to come back.
+ *
+ * A phone's link goes away every time Android freezes the process and comes
+ * back a second later; the reconnect ladder's first two rungs are one second
+ * and two. This covers those without covering a device that has actually gone
+ * — see [SessionCoordinator.peerGone].
+ */
+export const TRANSPORT_GRACE_MS = 6_000
+
 export interface SessionState {
   role: SessionRole
   priority: number
@@ -234,9 +244,43 @@ export class SessionCoordinator {
     }
   }
 
-  /** A peer disconnected from the link entirely */
+  /**
+   * The transport to a peer dropped.
+   *
+   * Which is not the same thing as the peer being gone, and treating it as
+   * though it were is what made two devices both say they were holding the
+   * connections.
+   *
+   * A phone's link drops constantly and by design: Android freezes a
+   * backgrounded process, and the QUIC connection goes with it. It redials a
+   * second later — the desktop's log shows that cycle twenty times in
+   * twenty-six minutes, each one a `ConnectionLost` followed immediately by
+   * the same device connecting again. This used to delete the peer and hold an
+   * election on the spot, so every one of those blips made the phone decide
+   * the desktop had gone and take the connections, and the desktop's next
+   * heartbeat handed them back. The pair spent the evening trading the network
+   * back and forth, a few seconds at a time.
+   *
+   * The heartbeat timeout already answers "is the other device still there",
+   * and answers it with three missed beats rather than one dropped socket. So
+   * a dropped transport does not decide anything: it brings the peer's
+   * deadline forward to [TRANSPORT_GRACE_MS] from now and lets the ordinary
+   * expiry run. Come back inside that, and nothing happened.
+   *
+   * The cost is that a desktop which really has gone is noticed a few seconds
+   * later than it used to be. That is the same few seconds the design already
+   * spends on a peer that stops talking without closing anything — a lid
+   * closing, a cable pulled — which is the more common way of the two.
+   */
   peerGone(peerId: string): void {
-    if (this.peers.delete(peerId)) this.evaluate()
+    const peer = this.peers.get(peerId)
+    if (!peer) return
+
+    const deadline = Date.now() - HEARTBEAT_TIMEOUT_MS + TRANSPORT_GRACE_MS
+    // Only ever earlier. A peer that has been quiet for longer than the grace
+    // must not have its clock wound forward by losing a socket as well.
+    if (peer.lastSeen > deadline) peer.lastSeen = deadline
+    this.emit()
   }
 
   handleFrame(peerId: string, frame: SessionFrame): void {

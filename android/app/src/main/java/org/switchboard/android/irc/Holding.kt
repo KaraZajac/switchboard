@@ -15,10 +15,15 @@ package org.switchboard.android.irc
  */
 object Holding {
 
-    enum class Holder { LIVE, BOUNCER, DESKTOP, CONNECTING, TAKING_OVER, OFFLINE }
+    enum class Holder { LIVE, SHARED, BOUNCER, DESKTOP, CONNECTING, TAKING_OVER, OFFLINE }
 
     /**
      * @param holding whether this device is holding rather than following
+     * @param sharing whether the connections it has are shared with the device
+     *   that is holding. Only ever true while following, so it is asked first:
+     *   a network whose account this phone can log into on its own is
+     *   deliberately held by both, and LIVE for that reads as "this is the
+     *   connection", which is the one thing it is not.
      * @param connecting whether it is on its way there
      * @param peerHolding whether another device is holding them right now.
      *   Separate from [everPaired] on purpose: somebody else holding this, and
@@ -38,12 +43,14 @@ object Holding {
      */
     fun who(
         holding: Boolean,
+        sharing: Boolean,
         connecting: Boolean,
         peerHolding: Boolean,
         followingAlwaysOn: Boolean,
         everPaired: Boolean,
         allThroughBouncer: Boolean
     ): Holder = when {
+        sharing -> Holder.SHARED
         holding -> if (allThroughBouncer) Holder.BOUNCER else Holder.LIVE
         peerHolding && !connecting -> if (followingAlwaysOn) Holder.BOUNCER else Holder.DESKTOP
         connecting -> if (everPaired) Holder.TAKING_OVER else Holder.CONNECTING
@@ -53,6 +60,7 @@ object Holding {
     /** The word itself, spelled the way the desktop spells it */
     fun label(holder: Holder): String = when (holder) {
         Holder.LIVE -> "LIVE"
+        Holder.SHARED -> "SHARED"
         Holder.BOUNCER -> "BOUNCER"
         Holder.DESKTOP -> "DESKTOP"
         Holder.CONNECTING -> "CONNECTING"

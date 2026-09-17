@@ -183,6 +183,15 @@ export function registerIPCHandlers(): void {
     return {
       holder: whoIsHolding({
         holding: session.role === 'primary' && live.length > 0,
+        /*
+         * Following, and on the networks anyway.
+         *
+         * A network this device can log into on its own is deliberately held
+         * by both — `canShareConnection` — so an always-on instance holding
+         * the session does not take this desktop off them. `LIVE` for that is
+         * the one word it must not be: it reads as "this is the connection".
+         */
+        sharing: session.role !== 'primary' && live.length > 0,
         // A client the manager still knows about but which is not connected is
         // dialling or waiting to redial; `disconnect` deletes it, so "none at
         // all" is somebody having switched every network off, not a slow start.
@@ -1183,20 +1192,22 @@ export function registerIPCHandlers(): void {
       const nick = ircManager.getClient(server.id)?.state.nick || server.nick
       if (!nick) return []
 
-      return mentionsOn(server.id, nick, words, want)
-        .filter((message) => isChannelName(message.channel))
-        // Your own line naming your own nick is not somebody talking to you
-        .filter((message) => foldCase(message.nick) !== foldCase(nick))
-        .map((message) => ({
-          id: message.id,
-          serverId: server.id,
-          serverName: server.name,
-          channel: message.channel,
-          nick: message.nick,
-          content: message.content,
-          type: message.type,
-          timestamp: message.timestamp
-        }))
+      return (
+        mentionsOn(server.id, nick, words, want)
+          .filter((message) => isChannelName(message.channel))
+          // Your own line naming your own nick is not somebody talking to you
+          .filter((message) => foldCase(message.nick) !== foldCase(nick))
+          .map((message) => ({
+            id: message.id,
+            serverId: server.id,
+            serverName: server.name,
+            channel: message.channel,
+            nick: message.nick,
+            content: message.content,
+            type: message.type,
+            timestamp: message.timestamp
+          }))
+      )
     })
 
     return found.sort((a, b) => b.timestamp.localeCompare(a.timestamp)).slice(0, want)
