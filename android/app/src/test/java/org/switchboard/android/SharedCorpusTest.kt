@@ -25,6 +25,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.switchboard.android.irc.About
+import org.switchboard.android.irc.Editing
 import org.switchboard.android.irc.Aliases
 import org.switchboard.android.irc.AutoAway
 import org.switchboard.android.irc.ChanModes
@@ -2766,6 +2767,42 @@ class SharedCorpusTest {
                 }
             )
         }
+    }
+
+    // ── which of your own messages you can still change ───────────────
+
+    /**
+     * Both clients offer an Edit action and both offered it in two places it
+     * does not work — see `src/shared/editing.ts`.
+     */
+    @Test
+    fun `decides what can be edited the way the desktop does`() {
+        val corpus = load("editing.json")
+
+        for (entry in corpus["cases"]!!.jsonArray) {
+            val case = entry.jsonObject
+            val caps = case["caps"]!!.jsonArray.map { it.jsonPrimitive.content }
+
+            assertEquals(
+                case["name"]!!.jsonPrimitive.content,
+                case["can"]!!.jsonPrimitive.boolean,
+                Editing.canEdit(
+                    type = case["type"]!!.jsonPrimitive.content,
+                    nick = case["nick"]!!.jsonPrimitive.content,
+                    deleted = case["deleted"]!!.jsonPrimitive.boolean,
+                    myNick = case["me"]!!.jsonPrimitive.content,
+                    capabilities = caps
+                )
+            )
+        }
+    }
+
+    @Test
+    fun `and whether the network carries edits at all`() {
+        assertTrue(Editing.editsAllowed(listOf("draft/message-edit")))
+        assertTrue(Editing.editsAllowed(listOf("message-edit")))
+        assertFalse(Editing.editsAllowed(listOf("draft/message-editing")))
+        assertFalse(Editing.editsAllowed(emptyList()))
     }
 
     // ── the date on the About page ────────────────────────────────────

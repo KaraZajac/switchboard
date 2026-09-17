@@ -1,0 +1,83 @@
+{
+  "$comment": "Which of your own messages you can still change. An edit is an ordinary PRIVMSG wearing a +draft/edit client tag, so a server without the capability relays it as a second message and leaves the original — worse than refusing. An action is CTCP-wrapped and the edit sends plain text, so amending one turns something you did into something you said. Both clients offer an Edit action and both got these wrong. Shared by tests/shared/editing.test.ts and the Android SharedCorpusTest.",
+  "caps": ["draft/message-edit", "server-time", "echo-message"],
+  "cases": [
+    { "name": "your own line, on a server that carries edits", "type": "privmsg", "nick": "kara", "deleted": false, "me": "kara", "caps": ["draft/message-edit"], "can": true },
+    { "name": "however the two spell the nick", "type": "privmsg", "nick": "KARA", "deleted": false, "me": "kara", "caps": ["draft/message-edit"], "can": true },
+    { "name": "the ratified capability name too", "type": "privmsg", "nick": "kara", "deleted": false, "me": "kara", "caps": ["message-edit"], "can": true },
+    { "name": "somebody else's line is not yours to amend", "type": "privmsg", "nick": "alice", "deleted": false, "me": "kara", "caps": ["draft/message-edit"], "can": false },
+    { "name": "a server that does not carry edits would post it again", "type": "privmsg", "nick": "kara", "deleted": false, "me": "kara", "caps": ["server-time"], "can": false },
+    { "name": "and one that says nothing at all", "type": "privmsg", "nick": "kara", "deleted": false, "me": "kara", "caps": [], "can": false },
+    { "name": "an action is CTCP, and the edit is not", "type": "action", "nick": "kara", "deleted": false, "me": "kara", "caps": ["draft/message-edit"], "can": false },
+    { "name": "a notice is not a message you send", "type": "notice", "nick": "kara", "deleted": false, "me": "kara", "caps": ["draft/message-edit"], "can": false },
+    { "name": "nor is a line the client wrote itself", "type": "system", "nick": "kara", "deleted": false, "me": "kara", "caps": ["draft/message-edit"], "can": false },
+    { "name": "one already taken back has nothing to amend", "type": "privmsg", "nick": "kara", "deleted": true, "me": "kara", "caps": ["draft/message-edit"], "can": false },
+    { "name": "with no nick of our own, nothing is ours", "type": "privmsg", "nick": "kara", "deleted": false, "me": "", "caps": ["draft/message-edit"], "can": false }
+  ],
+  "$lastComment": "And which one the desktop's Up key opens: the most recent that passes, walking back from the newest. Messages are oldest first.",
+  "last": [
+    {
+      "name": "the most recent of yours",
+      "me": "kara",
+      "caps": ["draft/message-edit"],
+      "messages": [
+        { "id": "a", "type": "privmsg", "nick": "kara" },
+        { "id": "b", "type": "privmsg", "nick": "alice" },
+        { "id": "c", "type": "privmsg", "nick": "kara" }
+      ],
+      "picked": "c"
+    },
+    {
+      "name": "skipping past what other people said since",
+      "me": "kara",
+      "caps": ["draft/message-edit"],
+      "messages": [
+        { "id": "a", "type": "privmsg", "nick": "kara" },
+        { "id": "b", "type": "privmsg", "nick": "alice" },
+        { "id": "c", "type": "privmsg", "nick": "bob" }
+      ],
+      "picked": "a"
+    },
+    {
+      "name": "and past an action of your own, which cannot be amended",
+      "me": "kara",
+      "caps": ["draft/message-edit"],
+      "messages": [
+        { "id": "a", "type": "privmsg", "nick": "kara" },
+        { "id": "b", "type": "action", "nick": "kara" }
+      ],
+      "picked": "a"
+    },
+    {
+      "name": "and past one you have already taken back",
+      "me": "kara",
+      "caps": ["draft/message-edit"],
+      "messages": [
+        { "id": "a", "type": "privmsg", "nick": "kara" },
+        { "id": "b", "type": "privmsg", "nick": "kara", "deleted": true }
+      ],
+      "picked": "a"
+    },
+    {
+      "name": "nothing in an empty conversation",
+      "me": "kara",
+      "caps": ["draft/message-edit"],
+      "messages": [],
+      "picked": null
+    },
+    {
+      "name": "nothing where you have not spoken",
+      "me": "kara",
+      "caps": ["draft/message-edit"],
+      "messages": [{ "id": "a", "type": "privmsg", "nick": "alice" }],
+      "picked": null
+    },
+    {
+      "name": "and nothing at all on a server that does not carry edits",
+      "me": "kara",
+      "caps": [],
+      "messages": [{ "id": "a", "type": "privmsg", "nick": "kara" }],
+      "picked": null
+    }
+  ]
+}

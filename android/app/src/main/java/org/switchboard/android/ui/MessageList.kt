@@ -62,6 +62,7 @@ import androidx.compose.ui.unit.sp
 import org.switchboard.android.Message
 import org.switchboard.android.JumpTarget
 import org.switchboard.android.SwitchboardStore
+import org.switchboard.android.irc.Editing
 import org.switchboard.android.irc.Jump
 import org.switchboard.android.LinkPreview
 import org.switchboard.android.UserMetadata
@@ -780,6 +781,15 @@ private fun MessageRow(
     if (showActions) {
         MessageActions(
             mine = myNick.isNotEmpty() && message.nick.equals(myNick, true),
+            // Whether it can be amended is a narrower question than whether it
+            // is yours — see [Editing] and `src/shared/editing.ts`
+            editable = Editing.canEdit(
+                type = message.type,
+                nick = message.nick,
+                deleted = message.redactedBy != null,
+                myNick = myNick,
+                capabilities = serverId?.let { store.capabilities[it] }.orEmpty()
+            ),
             onDismiss = { showActions = false },
             onPick = { action ->
                 showActions = false
@@ -861,6 +871,7 @@ private fun Reactions(message: Message, myNick: String, onTap: (String, Boolean)
 @Composable
 private fun MessageActions(
     mine: Boolean,
+    editable: Boolean,
     onDismiss: () -> Unit,
     onPick: (MessageAction) -> Unit
 ) {
@@ -873,10 +884,12 @@ private fun MessageActions(
                 add(MessageAction.Reply to "Reply")
                 add(MessageAction.React to "Add a reaction")
                 add(MessageAction.Copy to "Copy text")
-                if (mine) {
-                    add(MessageAction.Edit to "Edit")
-                    add(MessageAction.Redact to "Delete")
-                }
+                // Editing is narrower still: not on an action, whose CTCP
+                // wrapper the edit does not carry, and not on a network that
+                // does not carry edits at all, where the new text arrives as a
+                // second message and the first stays put.
+                if (editable) add(MessageAction.Edit to "Edit")
+                if (mine) add(MessageAction.Redact to "Delete")
             }
             for ((action, label) in actions) {
                 Text(

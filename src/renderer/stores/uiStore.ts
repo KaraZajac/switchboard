@@ -154,6 +154,18 @@ interface UIState {
    */
   lastDm: { serverId: string; nick: string } | null
   /** Nick being fetched for the hover popup (suppresses modal) */
+  /**
+   * The message the window is amending, if any.
+   *
+   * Held here rather than inside the message it belongs to, because the thing
+   * that starts an edit is usually somewhere else: the composer, when Up is
+   * pressed on an empty box. A message cannot be told to open its own editor
+   * by a component that does not contain it.
+   *
+   * One at a time — starting a second closes the first, which is what the
+   * single slot gets for free.
+   */
+  editingMessageId: string | null
   popupWhoisNick: string | null
   popupWhoisData: WhoisData | null
   toasts: Toast[]
@@ -180,6 +192,8 @@ interface UIState {
   ) => void
   rememberDm: (serverId: string, nick: string) => void
   setCompactMode: (compact: boolean) => void
+  /** Open a message for editing, or close whichever is open */
+  setEditingMessage: (msgid: string | null) => void
   setFontSize: (size: number) => void
   setTimeFormat: (format: TimeFormat) => void
   setNotificationsEnabled: (enabled: boolean) => void
@@ -247,6 +261,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   friendsOpen: false,
   jumpTo: null,
   lastDm: null,
+  editingMessageId: null,
   popupWhoisNick: null,
   popupWhoisData: null,
   toasts: [],
@@ -276,6 +291,8 @@ export const useUIStore = create<UIState>((set, get) => ({
   /** Open the account panel for one network */
   showAccount: (serverId) => set({ activeModal: 'account', accountServerId: serverId }),
   toggleUserList: () => set((state) => ({ showUserList: !state.showUserList })),
+  setEditingMessage: (msgid) => set({ editingMessageId: msgid }),
+
   setCompactMode: (compact) => {
     localStorage.setItem('switchboard-compact-mode', String(compact))
     set({ compactMode: compact })

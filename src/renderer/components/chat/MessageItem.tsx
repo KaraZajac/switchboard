@@ -1,12 +1,8 @@
-import {
-  CornerUpLeft,
-  Pencil,
-  SmilePlus,
-  Trash2
-} from 'lucide-react'
+import { CornerUpLeft, Pencil, SmilePlus, Trash2 } from 'lucide-react'
 import { ICON, IconButton } from '../common/IconButton'
 import { useState, useCallback, useRef, useEffect } from 'react'
 import type { ChatMessage } from '@shared/types/message'
+import { canEdit } from '@shared/editing'
 import { ProfileCard } from '../user/ProfileCard'
 import { MessageContent } from './MessageContent'
 import { useMessageStore } from '../../stores/messageStore'
@@ -31,8 +27,28 @@ export function MessageItem({ message, prevMessage, onReply }: MessageItemProps)
   const avatarUrl = senderMetadata?.avatar ?? null
   const currentNick = useServerStore((s) => s.currentNick[message.serverId] ?? '')
   const compactMode = useUIStore((s) => s.compactMode)
-  const [editing, setEditing] = useState(false)
+
+  /*
+   * Which message is being amended is the window's business, not this one's.
+   *
+   * The composer starts an edit when Up is pressed on an empty box, and it has
+   * no way to reach into the message it means. So the id lives in the store
+   * and each message asks whether it is the one — which also means starting a
+   * second edit closes the first, for free.
+   */
+  const editingMessageId = useUIStore((s) => s.editingMessageId)
+  const setEditingMessage = useUIStore((s) => s.setEditingMessage)
+  const editing = editingMessageId === message.id
   const [editText, setEditText] = useState('')
+
+  // Opened from somewhere else — the Up key — so the box has to be filled from
+  // here rather than by whoever asked.
+  useEffect(() => {
+    if (editing) setEditText(message.content)
+    // The content is deliberately not a dependency: an edit arriving from
+    // another device while you are typing must not wipe what you have written.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editing])
 
   const isAction = message.type === 'action'
   const isNotice = message.type === 'notice'
@@ -52,7 +68,7 @@ export function MessageItem({ message, prevMessage, onReply }: MessageItemProps)
 
   const handleEditStart = () => {
     setEditText(message.content)
-    setEditing(true)
+    setEditingMessage(message.id)
   }
 
   const handleEditSave = () => {
@@ -79,11 +95,11 @@ export function MessageItem({ message, prevMessage, onReply }: MessageItemProps)
         'That edit did not go'
       )
     }
-    setEditing(false)
+    setEditingMessage(null)
   }
 
   const handleEditCancel = () => {
-    setEditing(false)
+    setEditingMessage(null)
   }
 
   // Group messages from same nick within 5 minutes
@@ -187,7 +203,9 @@ export function MessageItem({ message, prevMessage, onReply }: MessageItemProps)
       <div
         className={`group relative flex items-start px-2 py-0.5 hover:bg-gray-700/25 ${mentionBg}`}
       >
-        <span className="mt-0.5 w-14 shrink-0 overflow-hidden pr-2 text-right text-[11px] leading-4 whitespace-nowrap text-gray-500">{time}</span>
+        <span className="mt-0.5 w-14 shrink-0 overflow-hidden pr-2 text-right text-[11px] leading-4 whitespace-nowrap text-gray-500">
+          {time}
+        </span>
         <div className="flex-1 overflow-hidden">
           {message.replyTo && (
             <ReplyPreview
@@ -324,10 +342,25 @@ function EditInput({
   onSave: () => void
   onCancel: () => void
 }) {
+  /*
+   * Focused, with the caret at the end.
+   *
+   * `autoFocus` alone leaves it at the start, which is the wrong end of a
+   * sentence you opened in order to fix its last word — and the Up key that
+   * opens this is pressed by people who have just noticed a typo.
+   */
+  const box = useRef<HTMLTextAreaElement>(null)
+  useEffect(() => {
+    const el = box.current
+    if (!el) return
+    el.focus()
+    el.setSelectionRange(el.value.length, el.value.length)
+  }, [])
+
   return (
     <div className="my-1">
       <textarea
-        autoFocus
+        ref={box}
         value={text}
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={(e) => {
@@ -398,7 +431,12 @@ function ReplyPreview({
       className="mb-1 flex w-full items-center gap-1.5 text-left text-xs hover:underline"
       title="Go to the message this replies to"
     >
-      <CornerUpLeft size={ICON.sm} strokeWidth={2} className="shrink-0 text-gray-500" aria-hidden="true" />
+      <CornerUpLeft
+        size={ICON.sm}
+        strokeWidth={2}
+        className="shrink-0 text-gray-500"
+        aria-hidden="true"
+      />
       {originalMsg ? (
         <>
           <span className="font-medium text-gray-300">{originalMsg.nick}</span>
@@ -453,6 +491,17 @@ function MessageActions({
       canModerate(prefixValue, user.prefixes.join(''))
   )
   const canRedact = Boolean(isOwn) || holdsOps
+
+  /*
+   * And whether this one can be amended — see `@shared/editing`.
+   *
+   * `isOwn` alone offered it on two things it does not work on: an action,
+   * whose CTCP wrapper the edit does not carry, and any message at all on a
+   * server without the capability, where the "edit" arrives as a second
+   * message and the first stays where it was.
+   */
+  const capabilities = useServerStore((s) => s.capabilities[message.serverId])
+  const editable = canEdit(message, currentNick, capabilities ?? [])
 
   useEffect(() => {
     if (!showEmojiPicker) return
@@ -521,7 +570,12 @@ function MessageActions({
 
       {/* React */}
       <div className="relative" ref={pickerRef}>
-        <IconButton icon={SmilePlus} label="Add reaction" surface="raised" onClick={() => setShowEmojiPicker(!showEmojiPicker)} />
+        <IconButton
+          icon={SmilePlus}
+          label="Add reaction"
+          surface="raised"
+          onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+        />
 
         {showEmojiPicker && (
           <div className="absolute -top-1 right-0 z-20 -translate-y-full rounded-lg border border-gray-700 bg-gray-800 p-2 shadow-xl">
@@ -542,17 +596,28 @@ function MessageActions({
 
       {/* Reply */}
       {onReply && (
-        <IconButton icon={CornerUpLeft} label="Reply" surface="raised" onClick={() => onReply(message)} />
+        <IconButton
+          icon={CornerUpLeft}
+          label="Reply"
+          surface="raised"
+          onClick={() => onReply(message)}
+        />
       )}
 
-      {/* Edit (own messages only) */}
-      {isOwn && onEdit && (
+      {/* Edit — see `editable` above for the two cases this excludes */}
+      {editable && onEdit && (
         <IconButton icon={Pencil} label="Edit message" surface="raised" onClick={onEdit} />
       )}
 
       {/* Delete (redact) — the author, or an operator */}
       {canRedact && (
-        <IconButton icon={Trash2} label="Delete message" surface="raised" danger onClick={() => setShowDeleteConfirm(true)} />
+        <IconButton
+          icon={Trash2}
+          label="Delete message"
+          surface="raised"
+          danger
+          onClick={() => setShowDeleteConfirm(true)}
+        />
       )}
     </div>
   )
@@ -844,7 +909,6 @@ function formatTimeFull(iso: string): string {
     return ''
   }
 }
-
 
 function timeDiffMinutes(a: string, b: string): number {
   try {

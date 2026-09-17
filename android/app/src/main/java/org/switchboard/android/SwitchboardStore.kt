@@ -670,6 +670,9 @@ class SwitchboardStore {
      */
     val capabilityValues = mutableStateMapOf<String, Map<String, String>>()
 
+    /** What each network agreed to carry, by server id — see the `irc:cap` event */
+    val capabilities = mutableStateMapOf<String, Set<String>>()
+
     /**
      * ISUPPORT, per network.
      *
@@ -738,6 +741,10 @@ class SwitchboardStore {
                 isupport[id] = values.mapValues { (_, value) ->
                     (value as? JsonPrimitive)?.contentOrNull.orEmpty()
                 }
+            }
+
+            live["capabilities"]?.jsonArray?.let { list ->
+                capabilities[id] = list.mapNotNull { it.str() }.toSet()
             }
 
             live["capabilityValues"]?.jsonObject?.let { values ->
@@ -899,6 +906,22 @@ class SwitchboardStore {
             "irc:network-icon" -> {
                 val url = data["url"]?.str() ?: return
                 servers[serverId] = (servers[serverId] ?: return).copy(icon = url)
+            }
+
+            /*
+             * What the network agreed to carry.
+             *
+             * The connection has always emitted this and nothing listened, so
+             * the only capabilities this phone knew were the ones a desktop
+             * snapshot brought — and holding its own connection it knew none.
+             * That is how it came to offer Edit on a server that does not
+             * carry edits, where the amended text arrives as a second message.
+             */
+            "irc:cap" -> {
+                capabilities[serverId] = data["capabilities"]?.jsonArray
+                    ?.mapNotNull { it.str() }
+                    ?.toSet()
+                    .orEmpty()
             }
 
             "irc:disconnected" -> {

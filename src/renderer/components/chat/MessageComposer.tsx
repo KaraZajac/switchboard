@@ -36,6 +36,8 @@ import {
   type EmojiEntry
 } from '@shared/emoji'
 import { useServerStore } from '../../stores/serverStore'
+import { useMessageStore } from '../../stores/messageStore'
+import { lastEditable } from '@shared/editing'
 import {
   completionSuffix,
   mentionQuery as mentionOf,
@@ -111,6 +113,20 @@ export function MessageComposer({
   // A file is being dragged over the box — see `uploadFile`
   const [dragging, setDragging] = useState(false)
   const hasFilehost = !!useServerStore((s) => s.filehostUrls[serverId])
+
+  /*
+   * Take the caret back when an edit finishes.
+   *
+   * The edit box steals focus when it opens, which is right; saving or
+   * cancelling leaves it on nothing at all, which is not. Somebody who pressed
+   * Up, fixed a word and pressed Enter should be able to carry on typing.
+   */
+  const editingMessageId = useUIStore((s) => s.editingMessageId)
+  const wasEditing = useRef(false)
+  useEffect(() => {
+    if (wasEditing.current && !editingMessageId) inputRef.current?.focus()
+    wasEditing.current = editingMessageId !== null
+  }, [editingMessageId])
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const lastTypingSent = useRef(0)
 
@@ -452,6 +468,41 @@ export function MessageComposer({
         e.preventDefault()
         handleTabCompletion(e.shiftKey)
         return
+      }
+
+      /*
+       * Up on an empty box: amend the last thing you said.
+       *
+       * What the history recalls is the line you sent, as text to send again —
+       * which on a network that carries edits is the long way round to what
+       * somebody pressing Up actually wants, which is to fix it. So the last
+       * message that can still be amended opens for editing instead, the way
+       * it does everywhere people expect this key to do something.
+       *
+       * Only on an empty box. With something half-written, Up is the caret's
+       * and then the history's, as before — losing a draft to a keystroke
+       * meant for a typo would be a poor trade.
+       *
+       * `lastEditable` answers for both the network and the message: a server
+       * without the capability, or a conversation where your last line was an
+       * action, falls through to the history below.
+       */
+      if (e.key === 'ArrowUp' && text === '') {
+        // Read now rather than closed over: this handler is memoised without
+        // the nick or the capabilities in its dependencies, and both change
+        // after it is first made — a nick on registration, the capabilities a
+        // moment before that.
+        const servers = useServerStore.getState()
+        const amend = lastEditable(
+          useMessageStore.getState().messages[key] ?? [],
+          servers.currentNick[serverId] ?? '',
+          servers.capabilities[serverId] ?? []
+        )
+        if (amend) {
+          e.preventDefault()
+          useUIStore.getState().setEditingMessage(amend.id)
+          return
+        }
       }
 
       /*
