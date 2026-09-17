@@ -110,3 +110,97 @@ describe('telling an address from a name', () => {
     expect(await destinationAllowed(new URL('http://localhost:9222/json'))).toBe(false)
   })
 })
+
+/**
+ * A link that turns out not to be a page.
+ *
+ * This used to answer null for anything that was not HTML, which is right for
+ * "there are no Open Graph tags here" and wrong as the whole answer: the
+ * headers have just said what the thing is and how big it is, and that is
+ * exactly what a file card needs. An APK linked in a channel rendered as a
+ * bare blue address because the one request that could have described it threw
+ * the description away.
+ *
+ * The body is still not read. Downloading forty megabytes to find out it is
+ * forty megabytes would be absurd.
+ */
+describe('a link that is not a page', () => {
+  const publicName = () => ({ lookup: async () => [{ address: '93.184.216.34' }] })
+
+  async function fetching(headers: Record<string, string>, body = 'ignored') {
+    vi.resetModules()
+    vi.doMock('electron', () => ({ net: { fetch: vi.fn() } }))
+    vi.doMock('dns/promises', () => publicName())
+
+    const read = vi.fn(async () => {})
+    const platform = await import('../../src/main/host')
+    platform.setHost({
+      ...platform.testHost('/tmp/switchboard-safefetch'),
+      // The fetch the module actually calls — see `host().fetch`, which is
+      // what makes the system proxy work in the app and a stand-in here
+      fetch: (async () => ({
+        ok: true,
+        status: 200,
+        headers: { get: (name: string) => headers[name.toLowerCase()] ?? null },
+        body: {
+          cancel: read,
+          // `readCapped` reads a page a chunk at a time so a huge one cannot
+          // be swallowed whole; one chunk is enough to stand in for that
+          getReader: () => {
+            let sent = false
+            return {
+              read: async () =>
+                sent
+                  ? { done: true, value: undefined }
+                  : ((sent = true), { done: false, value: new TextEncoder().encode(body) }),
+              cancel: async () => {},
+              releaseLock: () => {}
+            }
+          }
+        },
+        text: async () => body,
+        arrayBuffer: async () => new TextEncoder().encode(body).buffer
+      })) as unknown as typeof globalThis.fetch
+    })
+
+    const { fetchForPreview } = await import('../../src/main/net/safefetch')
+    return { page: await fetchForPreview('https://example.org/thing'), read }
+  }
+
+  it('says what it is and how big, rather than nothing', async () => {
+    const { page } = await fetching({
+      'content-type': 'application/vnd.android.package-archive',
+      'content-length': '40748810'
+    })
+
+    expect(page).not.toBeNull()
+    expect(page!.contentType).toBe('application/vnd.android.package-archive')
+    expect(page!.contentLength).toBe(40748810)
+    expect(page!.html, 'nothing was downloaded to say that').toBe('')
+  })
+
+  it('leaves the body alone', async () => {
+    const { read } = await fetching({ 'content-type': 'application/pdf' })
+    expect(read).toHaveBeenCalled()
+  })
+
+  it('leaves the size out where the server did not say', async () => {
+    const { page } = await fetching({ 'content-type': 'application/pdf' })
+    expect(page!.contentLength).toBe(null)
+  })
+
+  it('and out where it said something that is not a size', async () => {
+    const { page } = await fetching({ 'content-type': 'application/pdf', 'content-length': 'lots' })
+    expect(page!.contentLength).toBe(null)
+  })
+
+  it('still reads a page, and now says it was one', async () => {
+    const { page } = await fetching(
+      { 'content-type': 'text/html; charset=utf-8' },
+      '<html><title>hi</title></html>'
+    )
+
+    expect(page!.contentType).toBe('text/html; charset=utf-8')
+    expect(page!.html).toContain('<title>hi</title>')
+  })
+})

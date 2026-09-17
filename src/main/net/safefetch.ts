@@ -67,17 +67,25 @@ export async function destinationAllowed(url: URL): Promise<boolean> {
 }
 
 export interface FetchedPage {
-  /** The first [MAX_PREVIEW_BYTES] of the body, decoded */
+  /** The first [MAX_PREVIEW_BYTES] of the body, decoded. Empty for a file. */
   html: string
   /** Where it ended up, for resolving relative URLs against */
   url: string
+  /** What the server said this is, which is the answer to "what is this" */
+  contentType: string
+  /** How big it said it is, or null where it did not say */
+  contentLength: number | null
 }
 
 /**
- * Fetch a page for a preview, or refuse.
+ * Fetch a link to describe it, or refuse.
  *
- * Returns null for anything that is not HTML, and throws
- * [BlockedAddressError] for a destination we will not reach.
+ * Reads the body only for HTML, because that is the only thing with Open
+ * Graph tags in it. Everything else comes back headers-only — which is how a
+ * file gets a card: the server has just said what it is and how big, and
+ * downloading forty megabytes of APK to find that out would be absurd.
+ *
+ * Throws [BlockedAddressError] for a destination we will not reach.
  */
 export async function fetchForPreview(target: string): Promise<FetchedPage | null> {
   let url: URL
@@ -117,9 +125,23 @@ export async function fetchForPreview(target: string): Promise<FetchedPage | nul
     if (!response.ok) return null
 
     const contentType = response.headers.get('content-type') ?? ''
-    if (!contentType.toLowerCase().includes('text/html')) return null
+    const stated = response.headers.get('content-length')
+    const contentLength = stated === null ? null : Number(stated)
+    const length = Number.isFinite(contentLength) && (contentLength ?? -1) >= 0 ? contentLength : null
 
-    return { html: await readCapped(response), url: url.toString() }
+    // Only HTML is read. A file is described by what the headers already say,
+    // and its body is nobody's business here.
+    if (!contentType.toLowerCase().includes('text/html')) {
+      await response.body?.cancel().catch(() => {})
+      return { html: '', url: url.toString(), contentType, contentLength: length }
+    }
+
+    return {
+      html: await readCapped(response),
+      url: url.toString(),
+      contentType,
+      contentLength: length
+    }
   }
 
   // Round and round

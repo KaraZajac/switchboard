@@ -12,6 +12,7 @@ import {
 import { parseMessageContent, isImageUrl, isKlipyMediaUrl, isVideoUrl, isAudioUrl, getYouTubeVideoId, getFilenameFromUrl, getFileTypeInfo, type MessageSegment } from '../../utils/linkify'
 import { useServerStore } from '../../stores/serverStore'
 import type { LinkPreviewData } from '@shared/types/ipc'
+import { attachmentKind, humanSize } from '@shared/attachment'
 
 interface MessageContentProps {
   text: string
@@ -358,7 +359,21 @@ function LinkPreview({ url }: { url: string }) {
     return () => { cancelled = true }
   }, [url])
 
-  if (!preview || (!preview.title && !preview.description && !preview.image)) return null
+  if (!preview) return null
+
+  /*
+   * Not a page, so there is nothing to describe and everything to offer.
+   *
+   * A link to an APK, a PDF or a log used to render as a bare blue URL, which
+   * says nothing about what it is or how big it is — the two things somebody
+   * decides on before clicking a forty-megabyte download.
+   */
+  const kind = attachmentKind(url, preview.contentType)
+  if (kind !== 'page') {
+    return <FileCard url={url} knownSize={preview.contentLength} />
+  }
+
+  if (!preview.title && !preview.description && !preview.image) return null
 
   return (
     <div className="mt-1.5 max-w-md overflow-hidden rounded border-l-4 border-indigo-500 bg-gray-800/80">
@@ -409,13 +424,6 @@ function isFilehostUrl(url: string): boolean {
 }
 
 /** Format file size in human-readable form */
-function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(2)} KB`
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MB`
-  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`
-}
-
 /** Render filehost uploads — inline for media, file card for other types */
 function FilehostMedia({ url }: { url: string }) {
   // Images: render inline (clickable for full-size view)
@@ -558,12 +566,20 @@ function ImageLightbox({ url, onClose }: { url: string; onClose: () => void }) {
 }
 
 /** A download card for non-media file types */
-function FileCard({ url }: { url: string }) {
+function FileCard({ url, knownSize }: { url: string; knownSize?: number }) {
   const filename = getFilenameFromUrl(url)
   const typeInfo = getFileTypeInfo(filename)
-  const [fileSize, setFileSize] = useState<number | null>(null)
+  const [fileSize, setFileSize] = useState<number | null>(knownSize ?? null)
 
   useEffect(() => {
+    // Already known: a link preview asks the server what something is, and
+    // the same answer carries how big it is. Asking again would be a second
+    // round trip for a number already in hand.
+    if (knownSize !== undefined) {
+      setFileSize(knownSize)
+      return
+    }
+
     let cancelled = false
     // HEAD request to get file size
     fetch(url, { method: 'HEAD' })
@@ -575,7 +591,7 @@ function FileCard({ url }: { url: string }) {
       })
       .catch(() => {})
     return () => { cancelled = true }
-  }, [url])
+  }, [url, knownSize])
 
   return (
     <div className="mt-1.5 max-w-sm">
@@ -591,7 +607,7 @@ function FileCard({ url }: { url: string }) {
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-medium text-blue-400">{filename}</div>
           <div className="text-xs text-gray-400">
-            {fileSize !== null ? formatFileSize(fileSize) : typeInfo?.label || 'File'}
+            {fileSize !== null ? humanSize(fileSize) : typeInfo?.label || 'File'}
             {fileSize !== null && typeInfo ? ` · ${typeInfo.label}` : ''}
           </div>
         </div>

@@ -1,0 +1,158 @@
+{
+  "$comment": "What a link points at. Guessing from the extension gets pictures right and everything else wrong — a filehost URL is `/f/abc123` with no extension at all — so the server's Content-Type wins where anybody has asked for it. Shared by tests/shared/attachment.test.ts and the Android SharedCorpusTest.",
+  "$kinds": "`page` is the honest answer for \"not known yet\" as well as for a real web page: both are resolved by fetching, and both end up either described from their Open Graph tags or offered as a file.",
+  "kinds": [
+    {
+      "name": "a picture, by its extension",
+      "url": "https://example.org/cat.png",
+      "kind": "image"
+    },
+    {
+      "name": "and by what the server says about it",
+      "url": "https://example.org/f/abc123",
+      "contentType": "image/png",
+      "kind": "image"
+    },
+    {
+      "name": "a server that says so wins over an extension that disagrees",
+      "url": "https://example.org/notes.txt",
+      "contentType": "image/png",
+      "kind": "image"
+    },
+    {
+      "name": "a clip",
+      "url": "https://example.org/clip.mp4",
+      "kind": "video"
+    },
+    {
+      "name": "a clip a host describes",
+      "url": "https://example.org/f/xyz",
+      "contentType": "video/webm",
+      "kind": "video"
+    },
+    {
+      "name": "a sound",
+      "url": "https://example.org/track.flac",
+      "kind": "audio"
+    },
+    {
+      "name": "an APK from a filehost, which has no extension to go on",
+      "url": "https://irc.netslum.io/uploads/f/9k2",
+      "contentType": "application/vnd.android.package-archive",
+      "kind": "file"
+    },
+    {
+      "name": "a PDF",
+      "url": "https://example.org/paper.pdf",
+      "contentType": "application/pdf",
+      "kind": "file"
+    },
+    {
+      "name": "an archive",
+      "url": "https://example.org/logs.zip",
+      "contentType": "application/zip",
+      "kind": "file"
+    },
+    {
+      "name": "a page, which is the thing with Open Graph tags in it",
+      "url": "https://example.org/article",
+      "contentType": "text/html; charset=utf-8",
+      "kind": "page"
+    },
+    {
+      "name": "and XHTML is a page too",
+      "url": "https://example.org/old",
+      "contentType": "application/xhtml+xml",
+      "kind": "page"
+    },
+    {
+      "name": "a parameterised content type still reads as its type",
+      "url": "https://example.org/f/1",
+      "contentType": "image/jpeg; charset=binary",
+      "kind": "image"
+    },
+    {
+      "name": "nothing known and no extension is a link like any other",
+      "url": "https://example.org/article",
+      "kind": "page"
+    },
+    {
+      "name": "nor is a path that only looks like it has one",
+      "url": "https://example.org/v1.2/docs",
+      "kind": "page"
+    },
+    {
+      "name": "an unknown extension is not assumed to be a file",
+      "url": "https://example.org/index.php",
+      "kind": "page"
+    }
+  ],
+  "$names": "What to call it on the card: the last path segment, unescaped, without the query.",
+  "names": [
+    {
+      "name": "the last segment",
+      "url": "https://example.org/a/b/report.pdf",
+      "filename": "report.pdf"
+    },
+    {
+      "name": "a name somebody typed",
+      "url": "https://example.org/My%20Report.pdf",
+      "filename": "My Report.pdf"
+    },
+    {
+      "name": "the query is not part of the name",
+      "url": "https://example.org/x.apk?v=2",
+      "filename": "x.apk"
+    },
+    {
+      "name": "a trailing slash leaves the segment before it",
+      "url": "https://example.org/files/",
+      "filename": "files"
+    },
+    {
+      "name": "nothing but a host is the host",
+      "url": "https://example.org/",
+      "filename": "example.org"
+    },
+    {
+      "name": "a stray percent is a name, not an error",
+      "url": "https://example.org/100%.txt",
+      "filename": "100%.txt"
+    }
+  ],
+  "$sizes": "Powers of 1024 under the names everybody writes, which is what every file manager and chat client does. Null where the server did not say, so a card leaves the line out rather than printing a confident zero.",
+  "sizes": [
+    {
+      "bytes": 0,
+      "text": "0 B"
+    },
+    {
+      "bytes": 900,
+      "text": "900 B"
+    },
+    {
+      "bytes": 1024,
+      "text": "1.00 KB"
+    },
+    {
+      "bytes": 186163,
+      "text": "181.80 KB"
+    },
+    {
+      "bytes": 40748810,
+      "text": "38.86 MB"
+    },
+    {
+      "bytes": 5368709120,
+      "text": "5.00 GB"
+    },
+    {
+      "bytes": null,
+      "text": null
+    },
+    {
+      "bytes": -1,
+      "text": null
+    }
+  ]
+}

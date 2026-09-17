@@ -16,6 +16,7 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.long
+import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -57,6 +58,7 @@ import org.switchboard.android.irc.Isupport
 import org.switchboard.android.irc.Jump
 import org.switchboard.android.irc.Numerics
 import org.switchboard.android.irc.NickColour
+import org.switchboard.android.irc.Attachment
 import org.switchboard.android.irc.ReadMarker
 import org.switchboard.android.irc.Links
 import org.switchboard.android.irc.Klipy
@@ -2408,6 +2410,45 @@ class SharedCorpusTest {
             val case = entry.jsonObject
             val nick = case["nick"]!!.jsonPrimitive.content
             assertEquals(nick, case["colour"]!!.jsonPrimitive.content, hex(NickColour.of(nick)))
+        }
+    }
+
+    // ── what a link points at ─────────────────────────────────────────
+
+    @Test
+    fun `reads a link the same way the desktop does`() {
+        val corpus = load("attachment.json")
+
+        for (entry in corpus["kinds"]!!.jsonArray) {
+            val case = entry.jsonObject
+            val kind = Attachment.kind(
+                case["url"]!!.jsonPrimitive.content,
+                (case["contentType"] as? JsonPrimitive)?.contentOrNull
+            )
+            assertEquals(
+                case["name"]!!.jsonPrimitive.content,
+                case["kind"]!!.jsonPrimitive.content,
+                kind.name.lowercase()
+            )
+        }
+
+        for (entry in corpus["names"]!!.jsonArray) {
+            val case = entry.jsonObject
+            assertEquals(
+                case["name"]!!.jsonPrimitive.content,
+                case["filename"]!!.jsonPrimitive.content,
+                Attachment.name(case["url"]!!.jsonPrimitive.content)
+            )
+        }
+
+        for (entry in corpus["sizes"]!!.jsonArray) {
+            val case = entry.jsonObject
+            val bytes = (case["bytes"] as? JsonPrimitive)?.longOrNull
+            assertEquals(
+                "$bytes",
+                (case["text"] as? JsonPrimitive)?.contentOrNull,
+                Attachment.humanSize(bytes)
+            )
         }
     }
 

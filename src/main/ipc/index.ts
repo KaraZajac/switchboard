@@ -11,6 +11,7 @@ import { hasMetadata } from '@shared/metadata'
 import { whoIsHolding } from '@shared/holding'
 import { newestFirst } from '@shared/search'
 import { isBouncer } from '@shared/bouncer'
+import { attachmentKind } from '@shared/attachment'
 import { SERVER_PRIORITY } from '../session/coordinator'
 import { transcript, transcriptFilename } from '@shared/transcript'
 import { listTransfers, acceptTransfer, declineTransfer, offerFile } from '../irc/features/dcc'
@@ -1570,8 +1571,11 @@ export function registerIPCHandlers(): void {
     // Only fetch http/https URLs
     if (!/^https?:\/\//i.test(url)) return null
 
-    // Don't fetch previews for images/media — they're rendered inline
-    if (/\.(jpg|jpeg|png|gif|webp|svg|mp4|webm)(\?.*)?$/i.test(url)) return null
+    // Anything already known to be media is drawn inline without asking, so
+    // the round trip would buy nothing. Everything else is worth asking about
+    // — including a URL with no extension, which is the case a filehost link
+    // takes and the one the extension test could never answer.
+    if (attachmentKind(url) !== 'page') return null
 
     const cached = linkPreviewCache.get(url)
     if (cached && Date.now() - cached.ts < PREVIEW_CACHE_TTL) return cached.data
@@ -1591,6 +1595,20 @@ export function registerIPCHandlers(): void {
         linkPreviewCache.set(url, { data: null, ts: Date.now() })
         return null
       }
+
+      // Not a page, so there are no Open Graph tags to read and nothing was
+      // downloaded to look for them. What the headers said is the whole
+      // answer, and it is enough to offer the thing as a file.
+      if (attachmentKind(url, page.contentType) !== 'page') {
+        const described: import('@shared/types/ipc').LinkPreviewData = {
+          url,
+          contentType: page.contentType,
+          contentLength: page.contentLength ?? undefined
+        }
+        linkPreviewCache.set(url, { data: described, ts: Date.now() })
+        return described
+      }
+
       const html = page.html
 
       const get = (property: string): string | undefined => {
@@ -1684,7 +1702,9 @@ export function registerIPCHandlers(): void {
         // an image the renderer is told to load is a request this machine
         // makes, and `https://192.168.1.1/x.png` is a valid image URL.
         image: publicOnly(image),
-        favicon: publicOnly(favicon)
+        favicon: publicOnly(favicon),
+        contentType: page.contentType,
+        contentLength: page.contentLength ?? undefined
       }
       linkPreviewCache.set(url, { data, ts: Date.now() })
       return data

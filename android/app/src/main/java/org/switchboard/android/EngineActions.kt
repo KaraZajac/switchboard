@@ -34,6 +34,7 @@ import org.switchboard.android.irc.MaskLists
 import org.switchboard.android.irc.Profile
 import org.switchboard.android.irc.dialChanged
 import org.switchboard.android.irc.TrustedCertificate
+import kotlinx.serialization.json.longOrNull
 
 /**
  * Everything the app can be asked to do.
@@ -1307,7 +1308,17 @@ data class LinkPreview(
     val title: String?,
     val description: String?,
     val image: String?,
-    val siteName: String?
+    val siteName: String?,
+    /**
+     * What the server said the link is, where anybody asked it.
+     *
+     * The extension only ever answered for pictures and clips — a filehost URL
+     * is `/f/abc123` with nothing to go on — so this is what turns a link into
+     * a file card rather than a bare blue address. See [Attachment].
+     */
+    val contentType: String? = null,
+    /** How big the server said it is, for the card to say so */
+    val contentLength: Long? = null
 )
 
 suspend fun SwitchboardEngine.previewLink(url: String): LinkPreview? {
@@ -1316,7 +1327,9 @@ suspend fun SwitchboardEngine.previewLink(url: String): LinkPreview? {
         title = answer["title"].text(),
         description = answer["description"].text(),
         image = answer["image"].text(),
-        siteName = answer["siteName"].text()
+        siteName = answer["siteName"].text(),
+        contentType = answer["contentType"].text(),
+        contentLength = (answer["contentLength"] as? JsonPrimitive)?.longOrNull
     )
 }
 

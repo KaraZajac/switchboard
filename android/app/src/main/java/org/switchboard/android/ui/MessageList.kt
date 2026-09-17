@@ -74,6 +74,7 @@ import androidx.compose.ui.layout.ContentScale
 import coil.compose.AsyncImagePainter
 import coil.compose.SubcomposeAsyncImage
 import coil.compose.SubcomposeAsyncImageContent
+import org.switchboard.android.irc.Attachment
 
 /**
  * The conversation.
@@ -302,8 +303,18 @@ private fun LinkCard(url: String, fetch: suspend (String) -> LinkPreview?) {
     LaunchedEffect(url) { preview = fetch(url) }
 
     val shown = preview ?: return
-    val title = shown.title?.takeIf { it.isNotBlank() } ?: return
     val opener = LocalUriHandler.current
+
+    // Not a page, so there is nothing to describe and everything to offer. A
+    // link to an APK, a PDF or a log used to render as a bare blue address,
+    // which says neither what it is nor how big — the two things somebody
+    // decides on before tapping a forty-megabyte download on mobile data.
+    if (Attachment.kind(url, shown.contentType) != Attachment.Kind.PAGE) {
+        FileCard(url, shown.contentLength, opener)
+        return
+    }
+
+    val title = shown.title?.takeIf { it.isNotBlank() } ?: return
 
     Spacer(Modifier.height(6.dp))
     Row(
@@ -343,6 +354,60 @@ private fun LinkCard(url: String, fetch: suspend (String) -> LinkPreview?) {
                 )
             }
         }
+    }
+}
+
+/**
+ * A file, offered rather than described.
+ *
+ * What Discord draws for an attachment and what a bare link cannot say: what
+ * it is called, how big it is, and something to tap that means "get this".
+ * Both come off the URL and the server's own headers — see [Attachment] — so
+ * nothing is downloaded to draw it.
+ */
+@Composable
+private fun FileCard(url: String, bytes: Long?, opener: androidx.compose.ui.platform.UriHandler) {
+    val name = remember(url) { Attachment.name(url) }
+    val size = remember(bytes) { Attachment.humanSize(bytes) }
+
+    Spacer(Modifier.height(6.dp))
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(Mantle)
+            // Only a link we are willing to hand to Android — see
+            // [Links.safeExternal]. A download is opened by whatever app
+            // claims the scheme, and the string came off the wire.
+            .clickable { Links.safeExternal(url)?.let { safe -> runCatching { opener.openUri(safe) } } }
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier.size(40.dp).clip(RoundedCornerShape(8.dp)).background(Surface0),
+            contentAlignment = Alignment.Center
+        ) {
+            Text("\uD83D\uDCCE", fontSize = 18.sp)
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                name,
+                color = Blue,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            // Left out rather than printed as a confident zero where the
+            // server did not say how big it is
+            size?.let {
+                Spacer(Modifier.height(2.dp))
+                Text(it, color = Overlay, fontSize = 12.sp)
+            }
+        }
+        Spacer(Modifier.width(8.dp))
+        Text("\u2B07", color = Subtext, fontSize = 16.sp)
     }
 }
 

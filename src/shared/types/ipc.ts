@@ -567,4 +567,14 @@ export interface LinkPreviewData {
   siteName?: string
   image?: string
   favicon?: string
+  /**
+   * What the server said this is, where anybody asked.
+   *
+   * A link is one of four things and looks like one thing, and the extension
+   * only ever answered for the first two — a filehost URL is `/f/abc123` with
+   * nothing to go on. See `@shared/attachment`, which turns this into a kind.
+   */
+  contentType?: string
+  /** How big the server said it is, for a file card to say so */
+  contentLength?: number
 }
