@@ -122,7 +122,13 @@ object Attachment {
         return if (slash == -1) "" else afterHost.substring(slash)
     }
 
-    private fun hostOf(url: String): String? {
+    /**
+     * The host, read by hand.
+     *
+     * Also what a link card falls back to when a page sets no `og:site_name`,
+     * which plenty do not — see `LinkCard`.
+     */
+    fun hostOf(url: String): String? {
         val bare = url.substringBefore('#').substringBefore('?')
         val scheme = bare.indexOf("://")
         if (scheme == -1) return null

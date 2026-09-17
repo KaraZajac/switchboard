@@ -5,7 +5,7 @@ import { getMessagesSince } from '../storage/models/message'
 import { logsFolder } from '../logging'
 import { mkdir } from 'fs/promises'
 import { formatFingerprint } from '@shared/certificate'
-import { isPrivateAddress } from '@shared/privateaddress'
+import { publicAssetUrl } from '@shared/privateaddress'
 import type { BrowserWindow, IpcMainInvokeEvent } from 'electron'
 import { hasMetadata } from '@shared/metadata'
 import { whoIsHolding } from '@shared/holding'
@@ -1713,8 +1713,8 @@ export function registerIPCHandlers(): void {
         // The page chose these, so they get the same treatment the page did:
         // an image the renderer is told to load is a request this machine
         // makes, and `https://192.168.1.1/x.png` is a valid image URL.
-        image: publicOnly(image),
-        favicon: publicOnly(favicon),
+        image: publicAssetUrl(image),
+        favicon: publicAssetUrl(favicon),
         contentType: page.contentType,
         contentLength: page.contentLength ?? undefined
       }
@@ -1731,25 +1731,6 @@ export function registerIPCHandlers(): void {
       return null
     }
   })
-}
-
-/**
- * An asset URL we are willing to ask the window to load.
- *
- * Only the literal case is caught here — a name that resolves to something
- * private still resolves — because this runs while building a reply and has no
- * business doing DNS. It stops the obvious version, which is the one a page
- * would actually try.
- */
-function publicOnly(value: string | undefined): string | undefined {
-  if (!value) return undefined
-  try {
-    const parsed = new URL(value)
-    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return undefined
-    return isPrivateAddress(parsed.hostname) ? undefined : value
-  } catch {
-    return undefined
-  }
 }
 
 /** Escape IRC message tag values per IRCv3 spec — prevents tag injection */

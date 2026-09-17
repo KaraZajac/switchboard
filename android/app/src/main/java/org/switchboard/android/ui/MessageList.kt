@@ -317,6 +317,17 @@ private fun LinkCard(url: String, fetch: suspend (String) -> LinkPreview?) {
 
     val title = shown.title?.takeIf { it.isNotBlank() } ?: return
 
+    /*
+     * Whose page this is.
+     *
+     * Plenty of sites set `og:title` and never bother with `og:site_name` —
+     * Wikipedia is one — and the line reads as a card from nowhere without it.
+     * The host is what a person would have said anyway, minus the `www.`
+     * nobody says out loud. The desktop does the same.
+     */
+    val from = shown.siteName?.takeIf { it.isNotBlank() }
+        ?: Attachment.hostOf(url)?.removePrefix("www.")
+
     Spacer(Modifier.height(6.dp))
     Row(
         modifier = Modifier
@@ -331,7 +342,7 @@ private fun LinkCard(url: String, fetch: suspend (String) -> LinkPreview?) {
     ) {
         Box(Modifier.width(3.dp).fillMaxHeight().background(Blue))
         Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
-            shown.siteName?.takeIf { it.isNotBlank() }?.let {
+            from?.takeIf { it.isNotBlank() }?.let {
                 Text(it, color = Overlay, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(2.dp))
             }
@@ -353,6 +364,39 @@ private fun LinkCard(url: String, fetch: suspend (String) -> LinkPreview?) {
                     maxLines = 3,
                     overflow = TextOverflow.Ellipsis
                 )
+            }
+
+            /*
+             * And the picture, under the words.
+             *
+             * The card had none at all, so every link was three lines of text
+             * however much the page offered — which is the difference between
+             * a card and a quotation. Under the words because that is the
+             * order somebody reads one in, and the order the desktop uses.
+             *
+             * Quietly absent when it will not load: a broken image in a link
+             * preview is somebody else's server having a bad day, and a torn
+             * page icon in the middle of a conversation says nothing useful.
+             */
+            shown.image?.takeIf { it.isNotBlank() }?.let { picture ->
+                Spacer(Modifier.height(8.dp))
+                SubcomposeAsyncImage(
+                    model = picture,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .sizeIn(maxWidth = 300.dp, maxHeight = 200.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                ) {
+                    when (painter.state) {
+                        is AsyncImagePainter.State.Loading, AsyncImagePainter.State.Empty ->
+                            Box(Modifier.size(width = 300.dp, height = 150.dp).background(Surface0))
+
+                        is AsyncImagePainter.State.Error -> Unit
+
+                        else -> SubcomposeAsyncImageContent()
+                    }
+                }
             }
         }
     }

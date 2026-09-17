@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { readFileSync } from 'fs'
 import { join } from 'path'
-import { isPrivateAddress } from '../../src/shared/privateaddress'
+import { isPrivateAddress, publicAssetUrl } from '../../src/shared/privateaddress'
 
 /**
  * Fetching a URL somebody else chose.
@@ -202,5 +202,52 @@ describe('a link that is not a page', () => {
 
     expect(page!.contentType).toBe('text/html; charset=utf-8')
     expect(page!.html).toContain('<title>hi</title>')
+  })
+})
+
+/**
+ * And the two URLs the *page* chooses.
+ *
+ * A preview image and a favicon are picked by whatever is at the far end, so
+ * each is another address a stranger's link gets to point at this machine —
+ * and unlike the page itself, these are loaded by the window rather than
+ * fetched here.
+ *
+ * The order of the two questions is the whole of it. Asking "is this private"
+ * without first asking "is this an address" called every hostname on the
+ * internet private, and every preview image and favicon was dropped on the way
+ * to the window — for as long as the guard existed, on every site. It read as
+ * pages that simply had no picture.
+ */
+describe('an image the page asked us to show', () => {
+  it('lets an ordinary host through', () => {
+    expect(publicAssetUrl('https://thumb.wikimedia.org/a/b.jpg')).toBe(
+      'https://thumb.wikimedia.org/a/b.jpg'
+    )
+    expect(publicAssetUrl('https://torrentfreak.com/x.png')).toBe('https://torrentfreak.com/x.png')
+  })
+
+  it('and a public address written out as one', () => {
+    expect(publicAssetUrl('https://1.1.1.1/x.png')).toBe('https://1.1.1.1/x.png')
+  })
+
+  it('refuses an address inside the house', () => {
+    expect(publicAssetUrl('http://127.0.0.1:8080/x.png')).toBeUndefined()
+    expect(publicAssetUrl('http://192.168.1.1/x.png')).toBeUndefined()
+    expect(publicAssetUrl('http://10.0.0.5/x.png')).toBeUndefined()
+    expect(publicAssetUrl('http://169.254.169.254/latest/meta-data')).toBeUndefined()
+    expect(publicAssetUrl('http://[::1]/x.png')).toBeUndefined()
+  })
+
+  it('refuses a scheme a window has no business loading', () => {
+    expect(publicAssetUrl('file:///etc/passwd')).toBeUndefined()
+    expect(publicAssetUrl('data:image/png;base64,AAAA')).toBeUndefined()
+    expect(publicAssetUrl('javascript:alert(1)')).toBeUndefined()
+  })
+
+  it('and anything that is not a URL at all', () => {
+    expect(publicAssetUrl('')).toBeUndefined()
+    expect(publicAssetUrl(undefined)).toBeUndefined()
+    expect(publicAssetUrl('not a url')).toBeUndefined()
   })
 })

@@ -9,7 +9,17 @@ import {
   readableOnDark,
   type FormattingState
 } from '@shared/formatting'
-import { parseMessageContent, isImageUrl, isKlipyMediaUrl, isVideoUrl, isAudioUrl, getYouTubeVideoId, getFilenameFromUrl, getFileTypeInfo, type MessageSegment } from '../../utils/linkify'
+import {
+  parseMessageContent,
+  isImageUrl,
+  isKlipyMediaUrl,
+  isVideoUrl,
+  isAudioUrl,
+  getYouTubeVideoId,
+  getFilenameFromUrl,
+  getFileTypeInfo,
+  type MessageSegment
+} from '../../utils/linkify'
 import { useServerStore } from '../../stores/serverStore'
 import type { LinkPreviewData } from '@shared/types/ipc'
 import { attachmentKind, humanSize } from '@shared/attachment'
@@ -63,7 +73,9 @@ export function MessageContent({ text, highlightNick }: MessageContentProps) {
    * its place in the sentence — taking it out would leave a hole where a word
    * used to be, which is worse than a visible address.
    */
-  const said = segments.filter((segment) => !(segment.type === 'text' && segment.content.trim() === ''))
+  const said = segments.filter(
+    (segment) => !(segment.type === 'text' && segment.content.trim() === '')
+  )
   const only = said.length === 1 && said[0].type === 'link' ? said[0].url : null
   const addressless =
     only !== null &&
@@ -76,12 +88,7 @@ export function MessageContent({ text, highlightNick }: MessageContentProps) {
         // and rendered as ordinary text it was one long line with the breaks gone
         <span className="whitespace-pre-wrap break-words">
           {segments.map((segment, i) => (
-            <Segment
-              key={i}
-              segment={segment}
-              highlightNick={highlightNick}
-              carried={opening[i]}
-            />
+            <Segment key={i} segment={segment} highlightNick={highlightNick} carried={opening[i]} />
           ))}
         </span>
       )}
@@ -112,11 +119,7 @@ function Segment({
   switch (segment.type) {
     case 'text':
       return (
-        <FormattedText
-          text={segment.content}
-          highlightNick={highlightNick}
-          carried={carried}
-        />
+        <FormattedText text={segment.content} highlightNick={highlightNick} carried={carried} />
       )
 
     case 'link':
@@ -266,14 +269,7 @@ function KlipyMedia({ url }: { url: string }) {
   if (isVideoUrl(url)) {
     return (
       <div className="mt-1">
-        <video
-          src={url}
-          muted
-          loop
-          autoPlay
-          playsInline
-          className="max-h-64 max-w-md rounded"
-        />
+        <video src={url} muted loop autoPlay playsInline className="max-h-64 max-w-md rounded" />
       </div>
     )
   }
@@ -325,11 +321,21 @@ function YouTubeEmbed({ videoId, url }: { videoId: string; url: string }) {
       {/* Play inline button — centered */}
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
         <button
-          onClick={(e) => { e.preventDefault(); e.stopPropagation(); setInline(true) }}
+          onClick={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            setInline(true)
+          }}
           className="pointer-events-auto flex h-14 w-20 items-center justify-center rounded-xl bg-red-500 shadow-lg hover:bg-red-400 transition-colors"
           title="Play inline"
         >
-          <Play size={28} strokeWidth={2} fill="currentColor" className="ml-1 text-white" aria-hidden="true" />
+          <Play
+            size={28}
+            strokeWidth={2}
+            fill="currentColor"
+            className="ml-1 text-white"
+            aria-hidden="true"
+          />
         </button>
       </div>
       {/* Open in browser — bottom right */}
@@ -353,10 +359,15 @@ function LinkPreview({ url }: { url: string }) {
 
   useEffect(() => {
     let cancelled = false
-    window.switchboard.invoke('link-preview:fetch', url).then((data) => {
-      if (!cancelled && data) setPreview(data)
-    }).catch(() => {})
-    return () => { cancelled = true }
+    window.switchboard
+      .invoke('link-preview:fetch', url)
+      .then((data) => {
+        if (!cancelled && data) setPreview(data)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
   }, [url])
 
   if (!preview) return null
@@ -375,40 +386,76 @@ function LinkPreview({ url }: { url: string }) {
 
   if (!preview.title && !preview.description && !preview.image) return null
 
+  /*
+   * Whose page this is.
+   *
+   * Plenty of sites set `og:title` and never bother with `og:site_name` —
+   * Wikipedia is one — and the line reads as a card from nowhere without it.
+   * The host is what a person would have said anyway, minus the `www.` nobody
+   * says out loud.
+   */
+  let from = preview.siteName
+  if (!from) {
+    try {
+      from = new URL(url).hostname.replace(/^www\./, '')
+    } catch {
+      /* the link is what it is */
+    }
+  }
+
   return (
-    <div className="mt-1.5 max-w-md overflow-hidden rounded border-l-4 border-indigo-500 bg-gray-800/80">
-      <a href={url} target="_blank" rel="noopener noreferrer" className="block hover:bg-gray-700/50 transition-colors">
+    <div className="mt-1.5 max-w-md overflow-hidden rounded-md border-l-4 border-indigo-500 bg-gray-800/80">
+      <a
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="block px-3 py-2.5 transition-colors hover:bg-gray-700/50"
+      >
+        {from && (
+          <div className="flex items-center gap-1.5 text-[11px] text-gray-400">
+            {preview.favicon && (
+              <img
+                src={preview.favicon}
+                alt=""
+                className="h-3.5 w-3.5 rounded-[2px]"
+                referrerPolicy="no-referrer"
+                onError={(e) => {
+                  ;(e.target as HTMLImageElement).style.display = 'none'
+                }}
+              />
+            )}
+            {from}
+          </div>
+        )}
+        {preview.title && (
+          <div className="mt-0.5 text-sm leading-snug font-semibold text-blue-400">
+            {preview.title}
+          </div>
+        )}
+        {preview.description && (
+          <div className="mt-1 line-clamp-3 text-xs leading-relaxed text-gray-300">
+            {preview.description}
+          </div>
+        )}
+        {/*
+          The picture last, under the words, which is where every other client
+          puts it and the order somebody reads a card in: whose it is, what it
+          says, then what it looks like. It used to be first, above the site
+          name — though nobody ever saw that, because the image was thrown away
+          before it reached here. See `publicAssetUrl`.
+        */}
         {preview.image && (
           <img
             src={preview.image}
             alt=""
-            className="max-h-48 w-full object-cover"
+            className="mt-2 max-h-72 w-full rounded object-cover"
             loading="lazy"
             referrerPolicy="no-referrer"
-            onError={(e) => { ;(e.target as HTMLImageElement).style.display = 'none' }}
+            onError={(e) => {
+              ;(e.target as HTMLImageElement).style.display = 'none'
+            }}
           />
         )}
-        <div className="px-3 py-2">
-          {preview.siteName && (
-            <div className="flex items-center gap-1.5 text-[11px] text-gray-400">
-              {preview.favicon && (
-                <img
-                  src={preview.favicon}
-                  alt=""
-                  className="h-3.5 w-3.5"
-                  onError={(e) => { ;(e.target as HTMLImageElement).style.display = 'none' }}
-                />
-              )}
-              {preview.siteName}
-            </div>
-          )}
-          {preview.title && (
-            <div className="mt-0.5 text-sm font-medium text-blue-400">{preview.title}</div>
-          )}
-          {preview.description && (
-            <div className="mt-0.5 text-xs text-gray-400 line-clamp-2">{preview.description}</div>
-          )}
-        </div>
       </a>
     </div>
   )
@@ -435,12 +482,7 @@ function FilehostMedia({ url }: { url: string }) {
   if (isVideoUrl(url)) {
     return (
       <div className="mt-1">
-        <video
-          src={url}
-          controls
-          playsInline
-          className="max-h-80 max-w-md rounded"
-        />
+        <video src={url} controls playsInline className="max-h-80 max-w-md rounded" />
       </div>
     )
   }
@@ -459,7 +501,15 @@ function FilehostMedia({ url }: { url: string }) {
 }
 
 /** Clickable image thumbnail that opens a lightbox */
-function ClickableImage({ url, alt, referrerPolicy }: { url: string; alt?: string; referrerPolicy?: React.HTMLAttributeReferrerPolicy }) {
+function ClickableImage({
+  url,
+  alt,
+  referrerPolicy
+}: {
+  url: string
+  alt?: string
+  referrerPolicy?: React.HTMLAttributeReferrerPolicy
+}) {
   const [showLightbox, setShowLightbox] = useState(false)
   const [broken, setBroken] = useState(false)
 
@@ -509,9 +559,12 @@ function ClickableImage({ url, alt, referrerPolicy }: { url: string; alt?: strin
 
 /** Full-screen image lightbox with download button */
 function ImageLightbox({ url, onClose }: { url: string; onClose: () => void }) {
-  const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    if (e.key === 'Escape') onClose()
-  }, [onClose])
+  const handleKeyDown = useCallback(
+    (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    },
+    [onClose]
+  )
 
   useEffect(() => {
     document.addEventListener('keydown', handleKeyDown)
@@ -550,7 +603,12 @@ function ImageLightbox({ url, onClose }: { url: string; onClose: () => void }) {
         >
           <ExternalLink size={ICON.sm} strokeWidth={2} aria-hidden="true" />
         </a>
-        <IconButton icon={X} label="Close" className="bg-gray-800 text-gray-200" onClick={onClose} />
+        <IconButton
+          icon={X}
+          label="Close"
+          className="bg-gray-800 text-gray-200"
+          onClick={onClose}
+        />
       </div>
 
       {/* Image */}
@@ -590,7 +648,9 @@ function FileCard({ url, knownSize }: { url: string; knownSize?: number }) {
         }
       })
       .catch(() => {})
-    return () => { cancelled = true }
+    return () => {
+      cancelled = true
+    }
   }, [url, knownSize])
 
   return (
@@ -611,7 +671,12 @@ function FileCard({ url, knownSize }: { url: string; knownSize?: number }) {
             {fileSize !== null && typeInfo ? ` · ${typeInfo.label}` : ''}
           </div>
         </div>
-        <Download size={ICON.md} strokeWidth={2} className="shrink-0 text-gray-400" aria-hidden="true" />
+        <Download
+          size={ICON.md}
+          strokeWidth={2}
+          className="shrink-0 text-gray-400"
+          aria-hidden="true"
+        />
       </a>
     </div>
   )

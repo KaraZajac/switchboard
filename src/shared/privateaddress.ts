@@ -86,3 +86,36 @@ export function isIpLiteral(host: string): boolean {
   if (bare.includes(':')) return true
   return /^\d{1,3}(\.\d{1,3}){3}$/.test(bare)
 }
+
+/**
+ * An asset URL we are willing to ask a window to load.
+ *
+ * A page chooses its own preview image and its own favicon, so those are two
+ * more URLs a stranger's link gets to point at this machine — `https://
+ * 192.168.1.1/x.png` is a valid image URL, and a window told to load it makes
+ * the request.
+ *
+ * The two questions have to be asked in this order. [isPrivateAddress] answers
+ * about *addresses* and refuses anything it cannot read as one, which is right
+ * there and wrong for a name; asked on its own it called every hostname on the
+ * internet private, and the desktop dropped every preview image and every
+ * favicon on the way to the window for as long as that guard existed. Link
+ * previews were a title and a coloured line, and it read as sites that simply
+ * had no picture.
+ *
+ * Only the literal case is caught, because this runs while building a reply
+ * and has no business doing DNS. A name that resolves somewhere private still
+ * resolves — it stops the obvious version, which is the one a page would
+ * actually try.
+ */
+export function publicAssetUrl(value: string | undefined): string | undefined {
+  if (!value) return undefined
+  try {
+    const parsed = new URL(value)
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return undefined
+    if (isIpLiteral(parsed.hostname) && isPrivateAddress(parsed.hostname)) return undefined
+    return value
+  } catch {
+    return undefined
+  }
+}
