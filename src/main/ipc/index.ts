@@ -6,6 +6,7 @@ import { logsFolder } from '../logging'
 import { mkdir } from 'fs/promises'
 import { formatFingerprint } from '@shared/certificate'
 import { publicAssetUrl } from '@shared/privateaddress'
+import { loadAutoUpdater } from '../updater'
 import type { BrowserWindow, IpcMainInvokeEvent } from 'electron'
 import { hasMetadata } from '@shared/metadata'
 import { whoIsHolding } from '@shared/holding'
@@ -141,8 +142,7 @@ const channelListRequests = new Map<string, Promise<ChannelListEntry[]>>()
  * headless instance is never asked for them and so never loads it.
  */
 const electron = (): Promise<typeof import('electron')> => import('electron')
-const updater = async (): Promise<typeof import('electron-updater').autoUpdater> =>
-  (await import('electron-updater')).autoUpdater
+const updater = (): Promise<typeof import('electron-updater').autoUpdater> => loadAutoUpdater()
 
 export function registerIPCHandlers(): void {
   // ── Server management ────────────────────────────────────────────
