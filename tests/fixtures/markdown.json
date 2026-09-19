@@ -1,0 +1,302 @@
+{
+  "$comment": "The markdown people already type, turned into what IRC understands. Converted on the way out, so a message is bold for everybody rather than only for the two people running this client. The bytes are IRC's own: 0x02 bold, 0x1D italic, 0x1F underline, 0x1E strikethrough. Spoilers have no code to become and are left as text for each client to draw. Shared by tests/shared/markdown.test.ts and SharedCorpusTest.",
+  "marks": [
+    {
+      "name": "bold",
+      "typed": "**loud**",
+      "sent": "\u0002loud\u0002"
+    },
+    {
+      "name": "italics",
+      "typed": "*quiet*",
+      "sent": "\u001dquiet\u001d"
+    },
+    {
+      "name": "italics with an underscore",
+      "typed": "_quiet_",
+      "sent": "\u001dquiet\u001d"
+    },
+    {
+      "name": "both at once",
+      "typed": "***both***",
+      "sent": "\u0002\u001dboth\u0002\u001d"
+    },
+    {
+      "name": "underline",
+      "typed": "__under__",
+      "sent": "\u001funder\u001f"
+    },
+    {
+      "name": "strikethrough",
+      "typed": "~~gone~~",
+      "sent": "\u001egone\u001e"
+    },
+    {
+      "name": "a marked run inside a sentence",
+      "typed": "it was **very** loud",
+      "sent": "it was \u0002very\u0002 loud"
+    },
+    {
+      "name": "two runs",
+      "typed": "**a** and *b*",
+      "sent": "\u0002a\u0002 and \u001db\u001d"
+    },
+    {
+      "name": "bold wrapping italics",
+      "typed": "**very *very* loud**",
+      "sent": "\u0002very \u001dvery\u001d loud\u0002"
+    },
+    {
+      "name": "arithmetic is not italics",
+      "typed": "2 * 3 * 4",
+      "sent": "2 * 3 * 4"
+    },
+    {
+      "name": "nor is a lonely asterisk",
+      "typed": "wait *",
+      "sent": "wait *"
+    },
+    {
+      "name": "an unclosed mark is punctuation",
+      "typed": "**never closed",
+      "sent": "**never closed"
+    },
+    {
+      "name": "a name with underscores is a name",
+      "typed": "some_file_name",
+      "sent": "some_file_name"
+    },
+    {
+      "name": "a mask is a mask",
+      "typed": "*!*@host",
+      "sent": "*!*@host"
+    },
+    {
+      "name": "backticks mean what they say",
+      "typed": "`**not bold**`",
+      "sent": "`**not bold**`"
+    },
+    {
+      "name": "and a run around them still works",
+      "typed": "**see `*` here**",
+      "sent": "\u0002see `*` here\u0002"
+    },
+    {
+      "name": "a URL keeps its punctuation",
+      "typed": "https://e.org/a_b_c and *this*",
+      "sent": "https://e.org/a_b_c and \u001dthis\u001d"
+    },
+    {
+      "name": "a backslash spends itself",
+      "typed": "\\*not italics\\*",
+      "sent": "*not italics*"
+    },
+    {
+      "name": "spoilers are left for the client to draw",
+      "typed": "the answer is ||42||",
+      "sent": "the answer is ||42||"
+    },
+    {
+      "name": "and nothing inside one is marked up",
+      "typed": "||**secret**||",
+      "sent": "||**secret**||"
+    },
+    {
+      "name": "text the composer already marked is left alone",
+      "typed": "\u0002already bold\u0002 and **this**",
+      "sent": "\u0002already bold\u0002 and **this**"
+    },
+    {
+      "name": "plain text is untouched",
+      "typed": "just talking",
+      "sent": "just talking"
+    },
+    {
+      "name": "nothing at all",
+      "typed": "",
+      "sent": ""
+    }
+  ],
+  "$spoilerComment": "And how a line splits into what is covered and what is not.",
+  "spoilers": [
+    {
+      "name": "one spoiler in a sentence",
+      "text": "the answer is ||42|| ok",
+      "runs": [
+        [
+          "the answer is ",
+          false
+        ],
+        [
+          "42",
+          true
+        ],
+        [
+          " ok",
+          false
+        ]
+      ]
+    },
+    {
+      "name": "a whole line",
+      "text": "||everything||",
+      "runs": [
+        [
+          "everything",
+          true
+        ]
+      ]
+    },
+    {
+      "name": "two of them",
+      "text": "||a|| and ||b||",
+      "runs": [
+        [
+          "a",
+          true
+        ],
+        [
+          " and ",
+          false
+        ],
+        [
+          "b",
+          true
+        ]
+      ]
+    },
+    {
+      "name": "nothing covered",
+      "text": "just talking",
+      "runs": [
+        [
+          "just talking",
+          false
+        ]
+      ]
+    },
+    {
+      "name": "an unclosed one is punctuation",
+      "text": "||never closed",
+      "runs": [
+        [
+          "||never closed",
+          false
+        ]
+      ]
+    },
+    {
+      "name": "an empty one covers nothing",
+      "text": "a |||| b",
+      "runs": [
+        [
+          "a |||| b",
+          false
+        ]
+      ]
+    },
+    {
+      "name": "nothing at all",
+      "text": "",
+      "runs": []
+    },
+    {
+      "name": "a line of code is not a spoiler",
+      "text": "if (a || b || c) return",
+      "runs": [
+        [
+          "if (a || b || c) return",
+          false
+        ]
+      ]
+    },
+    {
+      "name": "a space before the closing bars",
+      "text": "||not quite ||",
+      "runs": [
+        [
+          "||not quite ||",
+          false
+        ]
+      ]
+    },
+    {
+      "name": "spaces inside are fine as long as the edges are not",
+      "text": "||the butler did it||",
+      "runs": [
+        [
+          "the butler did it",
+          true
+        ]
+      ]
+    }
+  ],
+  "$commandComment": "What the composer sends for a line that begins with a slash. Only the five commands whose catalogue usage ends in <message> or <action> carry prose, and only the prose is converted — a ban mask is not text somebody wrote. See markdownForSend.",
+  "commands": [
+    {
+      "name": "an emote formats",
+      "typed": "/me **waves**",
+      "sent": "/me \u0002waves\u0002"
+    },
+    {
+      "name": "say formats",
+      "typed": "/say *quietly*",
+      "sent": "/say \u001dquietly\u001d"
+    },
+    {
+      "name": "msg leaves the target alone",
+      "typed": "/msg nick_name **hi**",
+      "sent": "/msg nick_name \u0002hi\u0002"
+    },
+    {
+      "name": "query is msg by another name",
+      "typed": "/query kara ~~oops~~",
+      "sent": "/query kara \u001eoops\u001e"
+    },
+    {
+      "name": "notice leaves the target alone",
+      "typed": "/notice #chan __read this__",
+      "sent": "/notice #chan \u001fread this\u001f"
+    },
+    {
+      "name": "a ban mask is not italics",
+      "typed": "/mode #x +b *!*@host",
+      "sent": "/mode #x +b *!*@host"
+    },
+    {
+      "name": "a topic is left as typed",
+      "typed": "/topic **shouting**",
+      "sent": "/topic **shouting**"
+    },
+    {
+      "name": "an unknown command is left alone",
+      "typed": "/frobnicate **x**",
+      "sent": "/frobnicate **x**"
+    },
+    {
+      "name": "a command with no argument",
+      "typed": "/me",
+      "sent": "/me"
+    },
+    {
+      "name": "msg with a target and nothing else",
+      "typed": "/msg nick",
+      "sent": "/msg nick"
+    },
+    {
+      "name": "the spacing people typed is kept",
+      "typed": "/msg  nick   **hi**",
+      "sent": "/msg  nick   \u0002hi\u0002"
+    },
+    {
+      "name": "a spoiler in an emote stays text",
+      "typed": "/me hides ||behind||",
+      "sent": "/me hides ||behind||"
+    },
+    {
+      "name": "plain text is not a command",
+      "typed": "not /me **bold**",
+      "sent": "not /me \u0002bold\u0002"
+    }
+  ]
+}

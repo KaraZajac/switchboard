@@ -77,6 +77,7 @@ import org.switchboard.android.LinkPreview
 import org.switchboard.android.UserMetadata
 import org.switchboard.android.isChannel
 import org.switchboard.android.irc.Formatting
+import org.switchboard.android.irc.Markdown
 import org.switchboard.android.irc.Links
 import org.switchboard.android.mentionsYou
 import androidx.compose.foundation.layout.sizeIn
@@ -113,6 +114,38 @@ import org.switchboard.android.irc.Attachment
 private val WHOLE_LEADING = LineHeightStyle(
     alignment = LineHeightStyle.Alignment.Center,
     trim = LineHeightStyle.Trim.None
+)
+
+/** What somebody said */
+private val BODY = TextStyle(
+    color = Text0,
+    fontSize = 15.sp,
+    lineHeight = 21.sp,
+    lineHeightStyle = WHOLE_LEADING
+)
+
+/**
+ * What somebody did, in the third person.
+ *
+ * Drawn through the same pipeline as a line of speech rather than as plain
+ * text, which is what it used to be: `/me **waves** at ||everyone||` arrived
+ * with the bold byte in it and the bars intact, and the emote showed neither
+ * — no formatting, no covered run, and a link in an emote was not tappable.
+ */
+private val EMOTE = TextStyle(
+    color = Mauve,
+    fontSize = 15.sp,
+    fontStyle = FontStyle.Italic,
+    lineHeight = 21.sp,
+    lineHeightStyle = WHOLE_LEADING
+)
+
+/** A notice: quieter, and beside a bar rather than in the run of talk */
+private val NOTICE = TextStyle(
+    color = Subtext,
+    fontSize = 14.sp,
+    lineHeight = 20.sp,
+    lineHeightStyle = WHOLE_LEADING
 )
 
 @Composable
@@ -886,16 +919,15 @@ private fun MessageRow(
                 body.substring(links[0].start, links[0].end) == body.trim()
 
             when {
-                action -> Text(
-                    "$name $body",
-                    color = Mauve,
-                    fontSize = 15.sp,
-                    fontStyle = FontStyle.Italic,
-                    lineHeight = 21.sp,
-                    style = TextStyle(lineHeightStyle = WHOLE_LEADING)
-                )
+                action -> Linkified(
+                    body,
+                    message.editedAt != null,
+                    prefix = "$name ",
+                    look = EMOTE
+                ) { showActions = true }
 
-                message.type == "notice" -> NoticeBody(body)
+                message.type == "notice" ->
+                    NoticeBody(body, message.editedAt != null) { showActions = true }
 
                 message.redactedBy != null -> Text(
                     "Message removed by ${message.redactedBy}",
@@ -1103,7 +1135,7 @@ private fun MessageActions(
 
 /** A notice is the server talking, and it should not look like a person talking */
 @Composable
-private fun NoticeBody(text: String) {
+private fun NoticeBody(text: String, edited: Boolean, onLongPress: () -> Unit) {
     Row(modifier = Modifier.fillMaxWidth()) {
         Box(
             Modifier
@@ -1112,13 +1144,10 @@ private fun NoticeBody(text: String) {
                 .background(Yellow, RoundedCornerShape(2.dp))
         )
         Spacer(Modifier.width(8.dp))
-        Text(
-            text,
-            color = Subtext,
-            fontSize = 14.sp,
-            lineHeight = 20.sp,
-            style = TextStyle(lineHeightStyle = WHOLE_LEADING)
-        )
+        // Through the same pipeline as anything else somebody sent: services
+        // put links in notices constantly — a password reset, a web panel —
+        // and none of them could be tapped while this drew plain text.
+        Linkified(text, edited, look = NOTICE, onLongPress = onLongPress)
     }
 }
 
@@ -1175,19 +1204,72 @@ internal fun formatted(text: String) = buildAnnotatedString {
  * difference between following a link and not bothering.
  */
 @Composable
-private fun Linkified(text: String, edited: Boolean, onLongPress: () -> Unit) {
+private fun Linkified(
+    text: String,
+    edited: Boolean,
+    /**
+     * Drawn before the text in the same style — the nick an emote is about.
+     *
+     * Before the text rather than part of it, because every offset in here is
+     * measured against what the server sent: a spoiler's bars, a link's ends.
+     */
+    prefix: String = "",
+    /** How the line looks: an emote is italic and mauve, a notice is quieter */
+    look: TextStyle = BODY,
+    onLongPress: () -> Unit
+) {
     val uriHandler = LocalUriHandler.current
     val styled = formatted(text)
 
+    /*
+     * `||covered||`, which has no byte on the wire.
+     *
+     * Every other mark this client understands travels as a control code, so
+     * a bold line is bold in irssi too. There is no code for "hide this until
+     * asked", so the bars stay in the text and each client draws them — which
+     * degrades, where nobody does, to a convention people already read as a
+     * spoiler. See [Markdown] and `src/shared/markdown.ts`.
+     *
+     * The bars themselves are not shown. Slicing the already-styled text
+     * keeps whatever formatting was running through them: a bold line with a
+     * spoiler in the middle is bold on both sides of it.
+     */
+    val runs = remember(styled.text) { Markdown.spoilers(styled.text) }
+    var revealed by remember(text) { mutableStateOf(emptySet<Int>()) }
+
+    val uncovered = buildAnnotatedString {
+        var at = 0
+        runs.forEachIndexed { index, run ->
+            if (run.hidden) {
+                val from = length
+                append(styled.subSequence(at + 2, at + 2 + run.text.length))
+                if (index !in revealed) {
+                    addStyle(
+                        SpanStyle(background = Surface1, color = Color.Transparent),
+                        from,
+                        length
+                    )
+                }
+                addStringAnnotation("spoiler", index.toString(), from, length)
+                at += run.text.length + 4
+            } else {
+                append(styled.subSequence(at, at + run.text.length))
+                at += run.text.length
+            }
+        }
+    }
+
     val annotated = buildAnnotatedString {
-        append(styled)
-        for (link in Links.find(styled.text)) {
+        append(prefix)
+        val from = length
+        append(uncovered)
+        for (link in Links.find(uncovered.text)) {
             addStyle(
                 SpanStyle(color = Blue, textDecoration = TextDecoration.Underline),
-                link.start,
-                link.end
+                from + link.start,
+                from + link.end
             )
-            addStringAnnotation("url", link.url, link.start, link.end)
+            addStringAnnotation("url", link.url, from + link.start, from + link.end)
         }
         // Quiet, and attached to the text rather than floating beside it, so a
         // corrected message still reads as one thing
@@ -1203,18 +1285,25 @@ private fun Linkified(text: String, edited: Boolean, onLongPress: () -> Unit) {
 
     Text(
         text = annotated,
-        style = TextStyle(
-            color = Text0,
-            fontSize = 15.sp,
-            lineHeight = 21.sp,
-            lineHeightStyle = WHOLE_LEADING
-        ),
+        style = look,
         onTextLayout = { layout = it },
         modifier = Modifier.pointerInput(annotated) {
             detectTapGestures(
                 onLongPress = { onLongPress() },
                 onTap = { position ->
                     val offset = layout?.getOffsetForPosition(position) ?: return@detectTapGestures
+
+                    // A covered run answers the tap first: it is sitting on
+                    // top of whatever it covers, link included, and tapping a
+                    // spoiler to follow a link you cannot read is not a thing
+                    // anybody means to do.
+                    val cover = annotated.getStringAnnotations("spoiler", offset, offset).firstOrNull()
+                    if (cover != null) {
+                        val which = cover.item.toInt()
+                        revealed = if (which in revealed) revealed - which else revealed + which
+                        return@detectTapGestures
+                    }
+
                     annotated.getStringAnnotations("url", offset, offset).firstOrNull()?.let {
                         Links.safeExternal(it.item)?.let { safe ->
                             runCatching { uriHandler.openUri(safe) }

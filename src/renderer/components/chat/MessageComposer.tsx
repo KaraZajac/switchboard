@@ -38,6 +38,7 @@ import {
 import { useServerStore } from '../../stores/serverStore'
 import { useMessageStore } from '../../stores/messageStore'
 import { lastEditable } from '@shared/editing'
+import { markdownForSend } from '@shared/markdown'
 import {
   completionSuffix,
   mentionQuery as mentionOf,
@@ -440,9 +441,16 @@ export function MessageComposer({
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault()
         if (text.trim() && !disabled) {
-          // `:tada:` goes out as the party popper — see `@shared/emoji`. Not
-          // in a command, whose arguments mean what they say.
-          const said = text.startsWith('/') ? text.trim() : withShortcodesReplaced(text.trim())
+          /*
+           * `:tada:` goes out as the party popper, and `**loud**` goes out
+           * bold — see `@shared/emoji` and `@shared/markdown`.
+           *
+           * Neither in a command, whose arguments mean what they say: `/ban
+           * *!*@host` is a mask, and a client that read it as italics would
+           * ban somebody else entirely.
+           */
+          const typed = text.trim()
+          const said = markdownForSend(typed, withShortcodesReplaced)
           if (replyTarget && onSendReply) {
             onSendReply(said, replyTarget.id)
           } else {

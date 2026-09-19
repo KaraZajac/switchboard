@@ -6,6 +6,7 @@
  */
 
 import { findLinks } from '@shared/links'
+import { SPOILER, spoilers } from '@shared/markdown'
 
 export interface TextSegment {
   type: 'text'
@@ -24,10 +25,24 @@ export interface CodeSegment {
   inline: boolean
 }
 
+/**
+ * A run somebody asked to be covered until it is clicked.
+ *
+ * The only markup read on the way *in*. Bold, italics and the rest arrive as
+ * control bytes — see `@shared/markdown`, which converts what was typed on the
+ * way out so a message is bold for everybody rather than for this client
+ * alone. Reading them here as well used to *delete characters from what other
+ * people said*: `ban *!*@host` was drawn as `ban !@host` with the `!` in
+ * italics, `2 * 3 * 4 = 24` as `2  3  4 = 24`, and a line beginning `# 1 of 3`
+ * lost its `#` to a heading. A mask shown wrong is a ban placed wrong.
+ *
+ * `||…||` stays because IRC has no byte for it, so there is nothing else it
+ * could arrive as.
+ */
 export interface MarkdownSegment {
   type: 'markdown'
   content: string
-  style: 'bold' | 'italic' | 'boldItalic' | 'strikethrough' | 'spoiler' | 'heading'
+  style: 'spoiler'
 }
 
 export type MessageSegment = TextSegment | LinkSegment | CodeSegment | MarkdownSegment
@@ -56,9 +71,7 @@ export function parseMessageContent(text: string): MessageSegment[] {
   const inlineRegex = /`([^`\n]+)`/g
   while ((match = inlineRegex.exec(text)) !== null) {
     // Don't overlap with code blocks
-    const overlaps = codeBlocks.some(
-      (b) => match!.index >= b.start && match!.index < b.end
-    )
+    const overlaps = codeBlocks.some((b) => match!.index >= b.start && match!.index < b.end)
     if (!overlaps) {
       codeBlocks.push({
         start: match.index,
@@ -99,29 +112,14 @@ export function parseMessageContent(text: string): MessageSegment[] {
 }
 
 /**
- * Markdown-style patterns: order matters (longest delimiters first).
- * Each pattern matches opening delimiter + content + closing delimiter.
- */
-const MARKDOWN_PATTERNS: { regex: RegExp; style: MarkdownSegment['style'] }[] = [
-  { regex: /\*\*\*(.+?)\*\*\*/g, style: 'boldItalic' },
-  { regex: /\*\*(.+?)\*\*/g, style: 'bold' },
-  { regex: /\*(.+?)\*/g, style: 'italic' },
-  { regex: /~~(.+?)~~/g, style: 'strikethrough' },
-  { regex: /\|\|(.+?)\|\|/g, style: 'spoiler' },
-]
-
-const HEADING_REGEX = /^(#{1,3})\s+(.+)$/gm
-
-/**
  * Split text into text, link, and markdown segments.
  */
 function linkifyText(text: string): MessageSegment[] {
-  // First pass: find all markdown matches and URLs
+  // Links and spoilers, by position, so neither lands inside the other
   const tokens: { start: number; end: number; segment: MessageSegment }[] = []
 
   // Find URLs, by the same rule the phone uses — the two had their own
   // patterns and disagreed about where a link ends
-  let match: RegExpExecArray | null
   for (const link of findLinks(text)) {
     tokens.push({
       start: link.start,
@@ -134,32 +132,23 @@ function linkifyText(text: string): MessageSegment[] {
     })
   }
 
-  // Find headings (must be at start of line)
-  const headingRegex = new RegExp(HEADING_REGEX.source, 'gm')
-  while ((match = headingRegex.exec(text)) !== null) {
-    const overlaps = tokens.some((t) => match!.index < t.end && match!.index + match![0].length > t.start)
-    if (!overlaps) {
-      tokens.push({
-        start: match.index,
-        end: match.index + match[0].length,
-        segment: { type: 'markdown', content: match[2], style: 'heading' }
-      })
-    }
-  }
-
-  // Find markdown patterns
-  for (const { regex, style } of MARKDOWN_PATTERNS) {
-    const mdRegex = new RegExp(regex.source, 'g')
-    while ((match = mdRegex.exec(text)) !== null) {
-      const overlaps = tokens.some((t) => match!.index < t.end && match!.index + match![0].length > t.start)
+  // Find what is covered, by the rule the phone uses rather than a second
+  // one of this file's own — the two clients have to agree about where a
+  // spoiler starts or the same message reads differently on each.
+  let at = 0
+  for (const run of spoilers(text)) {
+    const width = run.hidden ? run.text.length + SPOILER.length * 2 : run.text.length
+    if (run.hidden) {
+      const overlaps = tokens.some((t) => at < t.end && at + width > t.start)
       if (!overlaps) {
         tokens.push({
-          start: match.index,
-          end: match.index + match[0].length,
-          segment: { type: 'markdown', content: match[1], style }
+          start: at,
+          end: at + width,
+          segment: { type: 'markdown', content: run.text, style: 'spoiler' }
         })
       }
     }
+    at += width
   }
 
   // Sort by position
@@ -227,7 +216,7 @@ const FILE_TYPE_INFO: Record<string, { icon: string; label: string }> = {
   '.log': { icon: '📄', label: 'Log' },
   '.json': { icon: '📄', label: 'JSON' },
   '.xml': { icon: '📄', label: 'XML' },
-  '.csv': { icon: '📊', label: 'CSV' },
+  '.csv': { icon: '📊', label: 'CSV' }
 }
 
 /**

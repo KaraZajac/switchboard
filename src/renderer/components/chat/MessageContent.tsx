@@ -152,40 +152,24 @@ function Segment({
       )
 
     case 'markdown':
-      return <MarkdownSpan style={segment.style} content={segment.content} />
+      return <MarkdownSpan content={segment.content} />
   }
 }
 
-function MarkdownSpan({ style, content }: { style: string; content: string }) {
+/** A run covered until it is clicked — the one thing read as markup on the way in */
+function MarkdownSpan({ content }: { content: string }) {
   const [revealed, setRevealed] = useState(false)
 
-  switch (style) {
-    case 'bold':
-      return <strong className="font-bold">{content}</strong>
-    case 'italic':
-      return <em className="italic">{content}</em>
-    case 'boldItalic':
-      return <strong className="font-bold italic">{content}</strong>
-    case 'strikethrough':
-      return <span className="line-through">{content}</span>
-    case 'spoiler':
-      return (
-        <span
-          onClick={() => setRevealed(!revealed)}
-          className={`cursor-pointer rounded px-0.5 transition-colors ${
-            revealed
-              ? 'bg-gray-700 text-gray-200'
-              : 'bg-gray-500 text-transparent hover:bg-gray-400'
-          }`}
-        >
-          {content}
-        </span>
-      )
-    case 'heading':
-      return <span className="text-lg font-bold text-gray-100">{content}</span>
-    default:
-      return <span>{content}</span>
-  }
+  return (
+    <span
+      onClick={() => setRevealed(!revealed)}
+      className={`cursor-pointer rounded px-0.5 transition-colors ${
+        revealed ? 'bg-gray-700 text-gray-200' : 'bg-gray-500 text-transparent hover:bg-gray-400'
+      }`}
+    >
+      {content}
+    </span>
+  )
 }
 
 export function FormattedText({

@@ -71,6 +71,7 @@ import kotlinx.coroutines.launch
 import androidx.compose.runtime.LaunchedEffect
 import org.switchboard.android.irc.Completion
 import org.switchboard.android.irc.Emoji
+import org.switchboard.android.irc.Markdown
 import org.switchboard.android.irc.Typing
 import org.switchboard.android.EngineMode
 import org.switchboard.android.Message
@@ -1120,9 +1121,16 @@ private fun Composer(
     fun send() {
         val text = draft.trim()
         if (text.isEmpty()) return
-        // `:tada:` goes out as the party popper — see [Emoji]. Not in a
-        // command, whose arguments mean what they say.
-        onSend(if (text.startsWith("/")) text else Emoji.replaceShortcodes(text))
+        /*
+         * `:tada:` goes out as the party popper, and `**loud**` goes out bold
+         * — see [Emoji] and [Markdown].
+         *
+         * Not in a command's arguments, which mean what they say: `/ban
+         * *!*@host` is a mask, and a client that read it as italics would ban
+         * somebody else entirely. `forSend` knows which commands end in
+         * something a person wrote, so `/me **waves**` still does.
+         */
+        onSend(Markdown.forSend(text) { Emoji.replaceShortcodes(it) })
         history = History.remember(history, text)
         histories[historyKey] = history
         field = TextFieldValue("")

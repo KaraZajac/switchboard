@@ -25,7 +25,9 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.switchboard.android.irc.About
+import org.switchboard.android.irc.CommandList
 import org.switchboard.android.irc.Editing
+import org.switchboard.android.irc.Markdown
 import org.switchboard.android.irc.Present
 import org.switchboard.android.irc.Aliases
 import org.switchboard.android.irc.AutoAway
@@ -2804,6 +2806,71 @@ class SharedCorpusTest {
         assertTrue(Editing.editsAllowed(listOf("message-edit")))
         assertFalse(Editing.editsAllowed(listOf("draft/message-editing")))
         assertFalse(Editing.editsAllowed(emptyList()))
+    }
+
+    // ── the markdown people already type ──────────────────────────────
+
+    /**
+     * Converted on the way out, so a message is bold for everybody rather
+     * than only for whoever runs this client — see `src/shared/markdown.ts`.
+     */
+    @Test
+    fun `turns markdown into the same bytes the desktop does`() {
+        val corpus = load("markdown.json")
+
+        for (entry in corpus["marks"]!!.jsonArray) {
+            val case = entry.jsonObject
+            assertEquals(
+                case["name"]!!.jsonPrimitive.content,
+                case["sent"]!!.jsonPrimitive.content,
+                Markdown.toIrc(case["typed"]!!.jsonPrimitive.content)
+            )
+        }
+    }
+
+    @Test
+    fun `and covers the same things`() {
+        val corpus = load("markdown.json")
+
+        for (entry in corpus["spoilers"]!!.jsonArray) {
+            val case = entry.jsonObject
+            val want = case["runs"]!!.jsonArray.map { run ->
+                val pair = run.jsonArray
+                Markdown.Run(pair[0].jsonPrimitive.content, pair[1].jsonPrimitive.boolean)
+            }
+            assertEquals(
+                case["name"]!!.jsonPrimitive.content,
+                want,
+                Markdown.spoilers(case["text"]!!.jsonPrimitive.content)
+            )
+        }
+    }
+
+    /**
+     * A slash command's arguments are not prose — except for the five whose
+     * last one is, and `/me **waves**` is the whole reason this exists.
+     */
+    @Test
+    fun `formats the prose in a command and nothing else`() {
+        val corpus = load("markdown.json")
+
+        for (entry in corpus["commands"]!!.jsonArray) {
+            val case = entry.jsonObject
+            assertEquals(
+                case["name"]!!.jsonPrimitive.content,
+                case["sent"]!!.jsonPrimitive.content,
+                Markdown.forSend(case["typed"]!!.jsonPrimitive.content)
+            )
+        }
+
+        // The guard that matters: every command the catalogue does not call
+        // prose comes back byte for byte, whatever punctuation is in it.
+        for (command in CommandList.COMMANDS) {
+            val usage = command.usage
+            if (usage != null && Regex("""<(message|action)>$""").containsMatchIn(usage)) continue
+            val typed = "/${command.name} #x +b *!*@host **loud** _quiet_"
+            assertEquals(command.name, typed, Markdown.forSend(typed))
+        }
     }
 
     // ── when to offer a way back to the newest message ────────────────

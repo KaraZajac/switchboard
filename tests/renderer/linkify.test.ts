@@ -11,10 +11,12 @@ describe('parseMessageContent', () => {
     const segments = parseMessageContent('Check out https://example.com for more')
     expect(segments).toHaveLength(3)
     expect(segments[0]).toEqual({ type: 'text', content: 'Check out ' })
-    expect(segments[1]).toEqual(expect.objectContaining({
-      type: 'link',
-      url: 'https://example.com'
-    }))
+    expect(segments[1]).toEqual(
+      expect.objectContaining({
+        type: 'link',
+        url: 'https://example.com'
+      })
+    )
     expect(segments[2]).toEqual({ type: 'text', content: ' for more' })
   })
 
@@ -114,5 +116,51 @@ describe('empty favicon data URIs', () => {
   it('leaves a real icon alone', () => {
     expect(isEmptyDataUri('https://example.com/favicon.ico')).toBe(false)
     expect(isEmptyDataUri('data:image/png;base64,iVBORw0KGgo=')).toBe(false)
+  })
+})
+
+describe('what is read as markup on the way in', () => {
+  const joined = (text: string): string =>
+    parseMessageContent(text)
+      .map((s) =>
+        s.type === 'link' ? s.url : s.type === 'markdown' ? `||${s.content}||` : s.content
+      )
+      .join('')
+
+  /**
+   * The whole message comes back, always.
+   *
+   * This file used to read `**bold**`, `*italics*`, `~~struck~~` and `# head`
+   * out of what other people sent, which meant deleting the delimiters from
+   * their text: `ban *!*@host` was drawn as `ban !@host`, which is a different
+   * mask. Formatting arrives as control bytes now — converted on the way out
+   * by `@shared/markdown` — so nothing here needs to guess.
+   */
+  for (const said of [
+    'ban *!*@host please',
+    '2 * 3 * 4 = 24',
+    '# 1 of 3',
+    '**not bold on the wire**',
+    '~~not struck~~',
+    'see some_file_name.txt',
+    'if (a || b || c) return',
+    'the answer is ||42|| ok'
+  ]) {
+    it(`keeps every character of ${JSON.stringify(said)}`, () => {
+      expect(joined(said)).toBe(said)
+    })
+  }
+
+  it('still covers a spoiler', () => {
+    const segments = parseMessageContent('the answer is ||42|| ok')
+    expect(segments.filter((s) => s.type === 'markdown')).toEqual([
+      { type: 'markdown', content: '42', style: 'spoiler' }
+    ])
+  })
+
+  it('leaves alone the bars in a line of code', () => {
+    expect(parseMessageContent('if (a || b || c) return').some((s) => s.type === 'markdown')).toBe(
+      false
+    )
   })
 })
