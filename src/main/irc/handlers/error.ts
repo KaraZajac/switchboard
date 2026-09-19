@@ -182,53 +182,54 @@ registerHandler('482', (client, msg) => {
   })
 })
 
-/** ERR_BANNEDFROMCHAN (474) */
-registerHandler('474', (client, msg) => {
-  client.events.emit('error', {
-    code: '474',
-    command: msg.params[1] || '',
-    message: msg.params[2] || 'Cannot join channel (+b)'
-  })
-})
+/**
+ * A join that failed, reported only if somebody here asked for it.
+ *
+ * `irc.d0ll.link` has `set::auto-join "#default"`, so every connection is put
+ * into a channel it never asked about — and that channel bans the people it
+ * force-joins, which is a fight between two server settings rather than
+ * anything this client did. Reporting it meant a "Cannot join channel (+b)"
+ * toast on every single connect, naming a channel the user has never heard
+ * of and cannot act on.
+ *
+ * `takeJoinReason` already knows the difference: `server` means nobody here
+ * sent the `JOIN`. Those are logged and dropped. Everything else — `/join`,
+ * a channel clicked in the list, the auto-join list this client keeps — is a
+ * request somebody made and is owed an answer.
+ */
+function joinFailed(code: string, fallback: string): void {
+  registerHandler(code, (client, msg) => {
+    const channel = msg.params[1] || ''
+    const message = msg.params[2] || fallback
 
-/** ERR_INVITEONLYCHAN (473) */
-registerHandler('473', (client, msg) => {
-  client.events.emit('error', {
-    code: '473',
-    command: msg.params[1] || '',
-    message: msg.params[2] || 'Cannot join channel (+i)'
-  })
-})
+    if (channel && client.takeJoinReason(channel) === 'server') {
+      console.log(
+        `${client.config.name}: ${channel} refused a join nobody here asked for — ${message}`
+      )
+      return
+    }
 
-/** ERR_BADCHANNELKEY (475) */
-registerHandler('475', (client, msg) => {
-  client.events.emit('error', {
-    code: '475',
-    command: msg.params[1] || '',
-    message: msg.params[2] || 'Cannot join channel (+k)'
+    client.events.emit('error', { code, command: channel, message })
   })
-})
+}
+
+/** ERR_BANNEDFROMCHAN */
+joinFailed('474', 'Cannot join channel (+b)')
+
+/** ERR_INVITEONLYCHAN */
+joinFailed('473', 'Cannot join channel (+i)')
+
+/** ERR_BADCHANNELKEY */
+joinFailed('475', 'Cannot join channel (+k)')
 
 /**
- * ERR_NEEDREGGEDNICK (477) — the channel wants you logged in.
+ * ERR_NEEDREGGEDNICK — the channel wants you logged in.
  *
  * On rIRCd that is what creating a channel takes, so somebody joining a
  * channel that does not exist yet was refused — and nothing was listening,
  * so the join simply did not happen: no channel, no error, nothing to press.
  */
-registerHandler('477', (client, msg) => {
-  client.events.emit('error', {
-    code: '477',
-    command: msg.params[1] || '',
-    message: msg.params[2] || 'You need to be logged in to an account to join that channel'
-  })
-})
+joinFailed('477', 'You need to be logged in to an account to join that channel')
 
-/** ERR_CHANNELISFULL (471) */
-registerHandler('471', (client, msg) => {
-  client.events.emit('error', {
-    code: '471',
-    command: msg.params[1] || '',
-    message: msg.params[2] || 'Cannot join channel (+l)'
-  })
-})
+/** ERR_CHANNELISFULL */
+joinFailed('471', 'Cannot join channel (+l)')

@@ -65,6 +65,7 @@ function createMockClient(
   }
 
   const config = {
+    name: 'Test Network',
     nick: overrides.nick || 'TestUser',
     autoJoin: overrides.autoJoin || [],
     saslMechanism: null,
@@ -89,6 +90,13 @@ function createMockClient(
       config,
       noteJoinRequest: (channel: string, why: string) => {
         joinReasons[channel] = why
+      },
+      // As the real one does: asked once, and `server` for a channel this
+      // client never sent a JOIN for
+      takeJoinReason: (channel: string) => {
+        const why = joinReasons[channel]
+        delete joinReasons[channel]
+        return why ?? 'server'
       },
       startNickRecovery: () => nickRecovery.push('start'),
       stopNickRecovery: () => nickRecovery.push('stop')
@@ -1673,5 +1681,76 @@ describe('an edit, however the server spells the tag', () => {
 
   it('and the ratified one', () => {
     expect(editOf('@+edit=abc :alice!u@h PRIVMSG #chan :fixed')).toBe('abc')
+  })
+})
+
+describe('a join that failed', () => {
+  /**
+   * `irc.d0ll.link` has `set::auto-join "#default"` and `#default` bans the
+   * people it force-joins, so every connection was answered with a 474 for a
+   * channel the user had never heard of — and every connection raised a
+   * toast about it. Proven with a bare socket that sent only NICK and USER:
+   * `:irc.d0ll.link 474 probe9735 #default :Cannot join channel (+b)`.
+   */
+  it('says nothing when nobody here asked to be there', () => {
+    const { client, events } = createMockClient()
+    const errors = vi.fn()
+    events.on('error', errors)
+
+    dispatchMessage(client, parseMessage(':srv 474 me #default :Cannot join channel (+b)')!)
+
+    expect(errors).not.toHaveBeenCalled()
+  })
+
+  it('still reports one somebody asked for', () => {
+    const { client, events } = createMockClient()
+    const errors = vi.fn()
+    events.on('error', errors)
+
+    // What `/join #locked` does before the server answers
+    client.noteJoinRequest('#locked', 'user')
+    dispatchMessage(client, parseMessage(':srv 474 me #locked :Cannot join channel (+b)')!)
+
+    expect(errors).toHaveBeenCalledWith({
+      code: '474',
+      command: '#locked',
+      message: 'Cannot join channel (+b)'
+    })
+  })
+
+  it('reports one this connection asked for from the auto-join list', () => {
+    const { client, events } = createMockClient()
+    const errors = vi.fn()
+    events.on('error', errors)
+
+    client.noteJoinRequest('#mine', 'dial')
+    dispatchMessage(client, parseMessage(':srv 475 me #mine :Cannot join channel (+k)')!)
+
+    expect(errors).toHaveBeenCalledWith({
+      code: '475',
+      command: '#mine',
+      message: 'Cannot join channel (+k)'
+    })
+  })
+
+  it('keeps quiet across every kind of refusal', () => {
+    for (const [code, text] of [
+      ['471', 'Cannot join channel (+l)'],
+      ['473', 'Cannot join channel (+i)'],
+      ['474', 'Cannot join channel (+b)'],
+      ['475', 'Cannot join channel (+k)'],
+      ['477', 'You need to be logged in']
+    ]) {
+      const { client, events } = createMockClient()
+      const errors = vi.fn()
+      events.on('error', errors)
+
+      dispatchMessage(client, parseMessage(`:srv ${code} me #default :${text}`)!)
+      expect(errors, code).not.toHaveBeenCalled()
+
+      client.noteJoinRequest('#default', 'user')
+      dispatchMessage(client, parseMessage(`:srv ${code} me #default :${text}`)!)
+      expect(errors, code).toHaveBeenCalledTimes(1)
+    }
   })
 })
