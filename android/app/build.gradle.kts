@@ -15,8 +15,8 @@ android {
         applicationId = "org.switchboard.android"
         minSdk = 26
         targetSdk = 35
-        versionCode = 23
-        versionName = "2.8.5"
+        versionCode = 24
+        versionName = "2.8.6"
 
         /*
          * When this build was made, for the About screen.
