@@ -3,6 +3,7 @@ import { IconButton } from '../common/IconButton'
 import { useState, useCallback, useRef, useEffect } from 'react'
 import type { ChatMessage } from '@shared/types/message'
 import { canEdit } from '@shared/editing'
+import { joinsRun } from '@shared/grouping'
 import { ProfileCard } from '../user/ProfileCard'
 import { MessageContent } from './MessageContent'
 import { useMessageStore } from '../../stores/messageStore'
@@ -102,15 +103,11 @@ export function MessageItem({ message, prevMessage, onReply }: MessageItemProps)
     setEditingMessage(null)
   }
 
-  // Group messages from same nick within 5 minutes
-  const isGrouped =
-    prevMessage &&
-    prevMessage.nick === message.nick &&
-    prevMessage.type === message.type &&
-    !isAction &&
-    !isSystem &&
-    !message.replyTo &&
-    timeDiffMinutes(prevMessage.timestamp, message.timestamp) < 5
+  // One avatar and one name per run from one person — by the rule the phone
+  // uses rather than a second one of this file's own. The two had drifted:
+  // the phone grouped replies, and this grouped across midnight.
+  // See `@shared/grouping`.
+  const isGrouped = joinsRun(prevMessage, message, sameLocalDay(prevMessage, message))
 
   const time = formatTime(message.timestamp)
 
@@ -982,10 +979,15 @@ function formatTimeFull(iso: string): string {
   }
 }
 
-function timeDiffMinutes(a: string, b: string): number {
-  try {
-    return (new Date(b).getTime() - new Date(a).getTime()) / 60000
-  } catch {
-    return Infinity
-  }
+/**
+ * Whether two messages fall on the same day *here*, which is the one part of
+ * the grouping rule that cannot be shared: it depends on the reader's
+ * timezone, so each client answers it locally and hands the answer over.
+ */
+function sameLocalDay(previous: ChatMessage | null | undefined, message: ChatMessage): boolean {
+  if (!previous) return false
+  const first = new Date(previous.timestamp)
+  const second = new Date(message.timestamp)
+  if (Number.isNaN(first.getTime()) || Number.isNaN(second.getTime())) return false
+  return first.toDateString() === second.toDateString()
 }

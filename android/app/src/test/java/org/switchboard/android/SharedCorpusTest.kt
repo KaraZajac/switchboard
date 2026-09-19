@@ -27,6 +27,7 @@ import org.junit.Test
 import org.switchboard.android.irc.About
 import org.switchboard.android.irc.CommandList
 import org.switchboard.android.irc.Editing
+import org.switchboard.android.irc.Grouping
 import org.switchboard.android.irc.Markdown
 import org.switchboard.android.irc.Present
 import org.switchboard.android.irc.Aliases
@@ -2870,6 +2871,41 @@ class SharedCorpusTest {
             if (usage != null && Regex("""<(message|action)>$""").containsMatchIn(usage)) continue
             val typed = "/${command.name} #x +b *!*@host **loud** _quiet_"
             assertEquals(command.name, typed, Markdown.forSend(typed))
+        }
+    }
+
+    // ── one avatar and one name per run ───────────────────────────────
+
+    /**
+     * A reply drew no avatar and no name here, so the quoted line above it
+     * had nothing underneath saying who was answering — see
+     * `src/shared/grouping.ts`.
+     */
+    @Test
+    fun `breaks a run where the desktop breaks it`() {
+        val corpus = load("grouping.json")
+
+        fun runnable(value: JsonElement?): Grouping.Runnable? {
+            val o = (value as? JsonObject) ?: return null
+            return Grouping.Runnable(
+                nick = o["nick"]!!.jsonPrimitive.content,
+                type = o["type"]!!.jsonPrimitive.content,
+                timestamp = o["timestamp"]!!.jsonPrimitive.content,
+                replyTo = o["replyTo"]?.jsonPrimitive?.content
+            )
+        }
+
+        for (entry in corpus["cases"]!!.jsonArray) {
+            val case = entry.jsonObject
+            assertEquals(
+                case["name"]!!.jsonPrimitive.content,
+                case["joins"]!!.jsonPrimitive.boolean,
+                Grouping.joinsRun(
+                    runnable(case["previous"]),
+                    runnable(case["message"])!!,
+                    case["sameDay"]!!.jsonPrimitive.boolean
+                )
+            )
         }
     }
 

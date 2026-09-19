@@ -1,0 +1,214 @@
+{
+  "$comment": "When a message joins the run above it rather than starting its own, with its own avatar and name. One rule, two clients — see src/shared/grouping.ts and Grouping.kt. sameDay is the caller's answer because which day a timestamp falls on depends on the reader's timezone.",
+  "cases": [
+    {
+      "name": "nothing above it starts a run",
+      "previous": null,
+      "message": {
+        "nick": "kara",
+        "type": "message",
+        "timestamp": "2026-09-18T23:46:00Z"
+      },
+      "sameDay": true,
+      "joins": false
+    },
+    {
+      "name": "the same person a moment later joins",
+      "previous": {
+        "nick": "kara",
+        "type": "message",
+        "timestamp": "2026-09-18T23:46:00Z"
+      },
+      "message": {
+        "nick": "kara",
+        "type": "message",
+        "timestamp": "2026-09-18T23:46:30Z"
+      },
+      "sameDay": true,
+      "joins": true
+    },
+    {
+      "name": "somebody else starts a run",
+      "previous": {
+        "nick": "coco",
+        "type": "message",
+        "timestamp": "2026-09-18T23:46:00Z"
+      },
+      "message": {
+        "nick": "kara",
+        "type": "message",
+        "timestamp": "2026-09-18T23:46:00Z"
+      },
+      "sameDay": true,
+      "joins": false
+    },
+    {
+      "name": "more than five minutes later starts a run",
+      "previous": {
+        "nick": "kara",
+        "type": "message",
+        "timestamp": "2026-09-18T23:40:00Z"
+      },
+      "message": {
+        "nick": "kara",
+        "type": "message",
+        "timestamp": "2026-09-18T23:46:00Z"
+      },
+      "sameDay": true,
+      "joins": false
+    },
+    {
+      "name": "exactly five minutes starts a run",
+      "previous": {
+        "nick": "kara",
+        "type": "message",
+        "timestamp": "2026-09-18T23:41:00Z"
+      },
+      "message": {
+        "nick": "kara",
+        "type": "message",
+        "timestamp": "2026-09-18T23:46:00Z"
+      },
+      "sameDay": true,
+      "joins": false
+    },
+    {
+      "name": "a different kind starts a run",
+      "previous": {
+        "nick": "kara",
+        "type": "notice",
+        "timestamp": "2026-09-18T23:46:00Z"
+      },
+      "message": {
+        "nick": "kara",
+        "type": "message",
+        "timestamp": "2026-09-18T23:46:00Z"
+      },
+      "sameDay": true,
+      "joins": false
+    },
+    {
+      "name": "an emote never joins",
+      "previous": {
+        "nick": "kara",
+        "type": "action",
+        "timestamp": "2026-09-18T23:46:00Z"
+      },
+      "message": {
+        "nick": "kara",
+        "type": "action",
+        "timestamp": "2026-09-18T23:46:10Z"
+      },
+      "sameDay": true,
+      "joins": false
+    },
+    {
+      "name": "a system line never joins",
+      "previous": {
+        "nick": "kara",
+        "type": "system",
+        "timestamp": "2026-09-18T23:46:00Z"
+      },
+      "message": {
+        "nick": "kara",
+        "type": "system",
+        "timestamp": "2026-09-18T23:46:10Z"
+      },
+      "sameDay": true,
+      "joins": false
+    },
+    {
+      "name": "a reply never joins, even from the same person a second later",
+      "previous": {
+        "nick": "kara",
+        "type": "message",
+        "timestamp": "2026-09-18T23:46:00Z"
+      },
+      "message": {
+        "nick": "kara",
+        "type": "message",
+        "timestamp": "2026-09-18T23:46:01Z",
+        "replyTo": "m17"
+      },
+      "sameDay": true,
+      "joins": false
+    },
+    {
+      "name": "a message after a reply joins the reply",
+      "previous": {
+        "nick": "kara",
+        "type": "message",
+        "timestamp": "2026-09-18T23:46:01Z",
+        "replyTo": "m17"
+      },
+      "message": {
+        "nick": "kara",
+        "type": "message",
+        "timestamp": "2026-09-18T23:46:20Z"
+      },
+      "sameDay": true,
+      "joins": true
+    },
+    {
+      "name": "across midnight starts a run",
+      "previous": {
+        "nick": "kara",
+        "type": "message",
+        "timestamp": "2026-09-18T23:59:00Z"
+      },
+      "message": {
+        "nick": "kara",
+        "type": "message",
+        "timestamp": "2026-09-19T00:01:00Z"
+      },
+      "sameDay": false,
+      "joins": false
+    },
+    {
+      "name": "out of order still joins",
+      "previous": {
+        "nick": "kara",
+        "type": "message",
+        "timestamp": "2026-09-18T23:46:30Z"
+      },
+      "message": {
+        "nick": "kara",
+        "type": "message",
+        "timestamp": "2026-09-18T23:46:00Z"
+      },
+      "sameDay": true,
+      "joins": true
+    },
+    {
+      "name": "a timestamp nobody can read starts a run",
+      "previous": {
+        "nick": "kara",
+        "type": "message",
+        "timestamp": "not a time"
+      },
+      "message": {
+        "nick": "kara",
+        "type": "message",
+        "timestamp": "2026-09-18T23:46:00Z"
+      },
+      "sameDay": true,
+      "joins": false
+    },
+    {
+      "name": "an empty replyTo is not a reply",
+      "previous": {
+        "nick": "kara",
+        "type": "message",
+        "timestamp": "2026-09-18T23:46:00Z"
+      },
+      "message": {
+        "nick": "kara",
+        "type": "message",
+        "timestamp": "2026-09-18T23:46:10Z",
+        "replyTo": ""
+      },
+      "sameDay": true,
+      "joins": true
+    }
+  ]
+}

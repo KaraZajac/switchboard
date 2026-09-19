@@ -70,6 +70,7 @@ import androidx.compose.ui.unit.sp
 import org.switchboard.android.Message
 import org.switchboard.android.JumpTarget
 import org.switchboard.android.SwitchboardStore
+import org.switchboard.android.irc.Grouping
 import org.switchboard.android.irc.Editing
 import org.switchboard.android.irc.Present
 import org.switchboard.android.irc.Jump
@@ -350,10 +351,11 @@ fun MessageList(
         indexed(messages) { index, message ->
             val previous = messages.getOrNull(index - 1)
             val newDay = previous == null || !sameDay(previous.timestamp, message.timestamp)
-            val grouped = !newDay &&
-                previous?.nick == message.nick &&
-                previous.type == message.type &&
-                withinFiveMinutes(previous.timestamp, message.timestamp)
+            val grouped = Grouping.joinsRun(
+                previous?.let { Grouping.Runnable(it.nick, it.type, it.timestamp, it.replyTo) },
+                Grouping.Runnable(message.nick, message.type, message.timestamp, message.replyTo),
+                sameDay = !newDay
+            )
 
             // The first message you had not seen when you opened this. A day
             // divider says when; this says where you left off, which after a
