@@ -57,6 +57,10 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
@@ -950,6 +954,19 @@ private fun MessageRow(
 private fun ReplyPreview(store: SwitchboardStore, serverId: String?, parent: Message) {
     val profile = serverId?.let { store.metadataFor(it, parent.nick) }
     val name = profile?.displayName?.takeIf { it.isNotBlank() } ?: parent.nick
+    val colour = metadataColor(profile?.color) ?: nickColor(parent.nick)
+
+    /*
+     * The line that joins the quote to the reply.
+     *
+     * A bare vertical tick said "something is above this" and nothing about
+     * what it belonged to. The elbow starts in the avatar column of the
+     * message below, rises, and turns right into the quote — so the eye is
+     * told, before it reads a word, that these two rows are one thing. It is
+     * what every client that does threading properly draws, and what Kara
+     * asked for by pointing at one.
+     */
+    val spine = Surface1
 
     Row(
         modifier = Modifier
@@ -962,27 +979,60 @@ private fun ReplyPreview(store: SwitchboardStore, serverId: String?, parent: Mes
                     store.jumpTo = JumpTarget(serverId, store.activeChannel.orEmpty(), parent.id, parent.timestamp)
                 }
             }
-            .padding(start = (GUTTER + Sizes.gutter), end = 16.dp, top = 8.dp),
+            .padding(start = Sizes.gutter, end = 16.dp, top = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(Modifier.width(2.dp).height(14.dp).background(Surface1, RoundedCornerShape(1.dp)))
-        Spacer(Modifier.width(8.dp))
+        /*
+         * Drawn rather than composed, because it is a corner: a vertical run
+         * up the avatar column and a turn to the right, with the curve where
+         * they meet. Half the height, because the bottom half belongs to the
+         * message row below — the line carries on behind it to the avatar.
+         */
+        Canvas(Modifier.width(ELBOW_WIDTH).height(REPLY_ROW)) {
+            val stroke = 2.dp.toPx()
+            val radius = 8.dp.toPx()
+            val x = 20.dp.toPx()
+            val path = Path().apply {
+                moveTo(x, size.height)
+                lineTo(x, size.height / 2 + radius)
+                quadraticBezierTo(x, size.height / 2, x + radius, size.height / 2)
+                lineTo(size.width, size.height / 2)
+            }
+            drawPath(path, spine, style = Stroke(width = stroke, cap = StrokeCap.Round))
+        }
+
+        Avatar(parent.nick, 16.dp, colour, avatar = profile?.avatar)
+        Spacer(Modifier.width(6.dp))
         Text(
             name,
-            color = metadataColor(profile?.color) ?: nickColor(parent.nick),
-            fontSize = 12.sp,
-            fontWeight = FontWeight.SemiBold
+            color = colour,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
         Spacer(Modifier.width(6.dp))
         Text(
+            // Newlines become spaces: a quote is one thought, however many
+            // lines it was said over.
             parent.content.replace('\n', ' '),
-            color = Overlay,
-            fontSize = 12.sp,
+            color = Subtext,
+            fontSize = 13.sp,
+            // One line. Two of them turn this into a block the name has to be
+            // centred against, and a name floating beside its own quote reads
+            // worse than a quote cut short — a quote is a reminder of what is
+            // being answered, not a second copy of it.
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
     }
 }
+
+/** How far right the elbow reaches before the quote begins */
+private val ELBOW_WIDTH = 34.dp
+
+/** The elbow's box, tall enough for the turn to have somewhere to happen */
+private val REPLY_ROW = 22.dp
 
 /** Emoji people have added, with a count once more than one person agrees */
 @Composable

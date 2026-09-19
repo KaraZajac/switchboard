@@ -110,9 +110,18 @@ registerHandler('PRIVMSG', (client, msg) => {
   // A tag we are willing to store, or now — see `@shared/servertime`
   const time = serverTimeOf(msg.tags['time'] as string | undefined, () => new Date().toISOString())
   const account = typeof msg.tags['account'] === 'string' ? msg.tags['account'] : undefined
-  const replyTo = typeof msg.tags['+reply'] === 'string' ? msg.tags['+reply'] : undefined
+  // Both spellings, for the same reason the reaction tags below take both:
+  // these specs are drafts, implementations differ on the prefix, and a reply
+  // whose link silently does not arrive is indistinguishable from a message
+  // nobody was answering. This path took `+reply` only, so a server sending
+  // the draft spelling — which is the spelling this client itself sends —
+  // dropped the quote and the message arrived looking like a new thought.
+  // `?? undefined` so absent stays absent: `tagValue` answers with null, and
+  // the difference travels — null survives a trip through JSON to the window
+  // and undefined does not.
+  const replyTo = tagValue(msg.tags, '+draft/reply', '+reply') ?? undefined
   const label = typeof msg.tags['label'] === 'string' ? msg.tags['label'] : undefined
-  const editOf = typeof msg.tags['+draft/edit'] === 'string' ? msg.tags['+draft/edit'] : undefined
+  const editOf = tagValue(msg.tags, '+draft/edit', '+edit') ?? undefined
   const oper = operFrom(msg.tags)
   const relayed = relayedBy(msg.tags)
 

@@ -1619,3 +1619,59 @@ describe('leaving a channel the server says is not there', () => {
     expect(state.channels.size).toBe(0)
   })
 })
+
+/**
+ * Which spelling of a tag a server happens to use.
+ *
+ * These specs are drafts and implementations differ on the prefix. The
+ * reaction tags have always taken both, with a comment beside them saying why
+ * — a reaction that silently does not arrive looks exactly like one nobody
+ * sent. A reply is the same: its link going missing makes the message arrive
+ * as a new thought, with nothing to say it was answering anything.
+ *
+ * The ordinary message path took `+reply` only, which is not even the spelling
+ * this client sends.
+ */
+describe('a reply, however the server spells the tag', () => {
+  const replyOf = (line: string): string | undefined => {
+    const { client, events } = createMockClient()
+    let seen: string | undefined
+    events.on('privmsg', (m: { replyTo?: string }) => {
+      seen = m.replyTo
+    })
+    dispatchMessage(client, parseMessage(line))
+    return seen
+  }
+
+  it('takes the draft spelling, which is the one we send', () => {
+    expect(replyOf('@+draft/reply=abc :alice!u@h PRIVMSG #chan :answering')).toBe('abc')
+  })
+
+  it('and the ratified one', () => {
+    expect(replyOf('@+reply=abc :alice!u@h PRIVMSG #chan :answering')).toBe('abc')
+  })
+
+  it('and a message answering nothing replies to nothing', () => {
+    expect(replyOf(':alice!u@h PRIVMSG #chan :just talking')).toBeUndefined()
+  })
+})
+
+describe('an edit, however the server spells the tag', () => {
+  const editOf = (line: string): string | undefined => {
+    const { client, events } = createMockClient()
+    let seen: string | undefined
+    events.on('privmsg', (m: { editOf?: string }) => {
+      seen = m.editOf
+    })
+    dispatchMessage(client, parseMessage(line))
+    return seen
+  }
+
+  it('takes the draft spelling', () => {
+    expect(editOf('@+draft/edit=abc :alice!u@h PRIVMSG #chan :fixed')).toBe('abc')
+  })
+
+  it('and the ratified one', () => {
+    expect(editOf('@+edit=abc :alice!u@h PRIVMSG #chan :fixed')).toBe('abc')
+  })
+})

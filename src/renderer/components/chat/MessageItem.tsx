@@ -1,5 +1,5 @@
 import { CornerUpLeft, Pencil, SmilePlus, Trash2 } from 'lucide-react'
-import { ICON, IconButton } from '../common/IconButton'
+import { IconButton } from '../common/IconButton'
 import { useState, useCallback, useRef, useEffect } from 'react'
 import type { ChatMessage } from '@shared/types/message'
 import { canEdit } from '@shared/editing'
@@ -220,6 +220,7 @@ export function MessageItem({ message, prevMessage, onReply }: MessageItemProps)
               channel={message.channel}
               msgid={message.replyTo}
               at={message.timestamp}
+              compact
             />
           )}
           <span>
@@ -264,80 +265,88 @@ export function MessageItem({ message, prevMessage, onReply }: MessageItemProps)
         run and the grouped lines under it are the same distance apart as two
         lines of a wrap. See the grouped branch above.
       */
-      className={`group relative mt-3 flex items-start px-2 pt-0.5 first:mt-0 hover:bg-gray-700/25 ${mentionBg}`}
+      className={`group relative mt-3 flex flex-col px-2 pt-0.5 first:mt-0 hover:bg-gray-700/25 ${mentionBg}`}
     >
-      {/* Avatar */}
-      <MessageAvatar nick={message.nick} avatarUrl={avatarUrl} />
-
-      <div className="flex-1 overflow-hidden">
-        {/* Reply preview */}
-        {message.replyTo && (
-          <ReplyPreview
-            serverId={message.serverId}
-            channel={message.channel}
-            msgid={message.replyTo}
-            at={message.timestamp}
-          />
-        )}
-
-        <div className="flex items-baseline gap-2">
-          <NickWithPopup
-            nick={message.nick}
-            serverId={message.serverId}
-            className="font-medium text-gray-100 hover:underline cursor-pointer"
-          />
-          <span className="text-xs text-gray-500">{formatTimeFull(message.timestamp)}</span>
-          {message.oper !== null && message.oper !== undefined && (
-            <span
-              className="rounded bg-yellow-500/20 px-1.5 py-0.5 text-[10px] font-medium text-gray-100"
-              title={
-                message.oper
-                  ? `The server says this is a network operator (${message.oper})`
-                  : 'The server says this is a network operator'
-              }
-            >
-              operator
-            </span>
-          )}
-          {message.relayedBy !== null && message.relayedBy !== undefined && (
-            <span
-              className="rounded bg-blue-400/20 px-1.5 py-0.5 text-[10px] font-medium text-gray-100"
-              title={
-                message.relayedBy
-                  ? `Carried in from somewhere else by ${message.relayedBy}`
-                  : 'Carried in from somewhere else'
-              }
-            >
-              bridged
-            </span>
-          )}
-          {message.channelContext && (
-            <span className="rounded bg-gray-700/50 px-1.5 py-0.5 text-[10px] text-gray-400">
-              from {message.channelContext}
-            </span>
-          )}
-          {message.pending && <span className="text-xs text-gray-600">sending...</span>}
-        </div>
-        {editing ? (
-          <EditInput
-            text={editText}
-            onChange={setEditText}
-            onSave={handleEditSave}
-            onCancel={handleEditCancel}
-          />
-        ) : (
-          <div className={isNotice ? 'text-gray-400' : 'text-gray-200'}>
-            <MessageContent text={message.content} highlightNick={currentNick} />
-            {isEdited && <span className="ml-1 text-[10px] text-gray-500">(edited)</span>}
-          </div>
-        )}
-        {Object.keys(message.reactions).length > 0 && <Reactions message={message} />}
-        <MessageActions
-          message={message}
-          onReply={onReply}
-          isOwn={isOwn}
-          onEdit={handleEditStart}
+      {/*
+        The quote is a row of its own, above the avatar rather than beside it.
+        Inside the content column its corner had nothing to turn out of — it
+        floated in the middle of the line with the avatar stranded to its left.
+        Out here it starts in the avatar's own column and turns right, which is
+        the whole point of drawing a corner.
+      */}
+      {message.replyTo && (
+        <ReplyPreview
+          serverId={message.serverId}
+          channel={message.channel}
+          msgid={message.replyTo}
+          at={message.timestamp}
         />
+      )}
+
+      <div className="flex items-start">
+        {/* Avatar */}
+        <MessageAvatar nick={message.nick} avatarUrl={avatarUrl} />
+
+        <div className="flex-1 overflow-hidden">
+          <div className="flex items-baseline gap-2">
+            <NickWithPopup
+              nick={message.nick}
+              serverId={message.serverId}
+              className="font-medium text-gray-100 hover:underline cursor-pointer"
+            />
+            <span className="text-xs text-gray-500">{formatTimeFull(message.timestamp)}</span>
+            {message.oper !== null && message.oper !== undefined && (
+              <span
+                className="rounded bg-yellow-500/20 px-1.5 py-0.5 text-[10px] font-medium text-gray-100"
+                title={
+                  message.oper
+                    ? `The server says this is a network operator (${message.oper})`
+                    : 'The server says this is a network operator'
+                }
+              >
+                operator
+              </span>
+            )}
+            {message.relayedBy !== null && message.relayedBy !== undefined && (
+              <span
+                className="rounded bg-blue-400/20 px-1.5 py-0.5 text-[10px] font-medium text-gray-100"
+                title={
+                  message.relayedBy
+                    ? `Carried in from somewhere else by ${message.relayedBy}`
+                    : 'Carried in from somewhere else'
+                }
+              >
+                bridged
+              </span>
+            )}
+            {message.channelContext && (
+              <span className="rounded bg-gray-700/50 px-1.5 py-0.5 text-[10px] text-gray-400">
+                from {message.channelContext}
+              </span>
+            )}
+            {message.pending && <span className="text-xs text-gray-600">sending...</span>}
+          </div>
+          {editing ? (
+            <EditInput
+              text={editText}
+              onChange={setEditText}
+              onSave={handleEditSave}
+              onCancel={handleEditCancel}
+            />
+          ) : (
+            <div className={isNotice ? 'text-gray-400' : 'text-gray-200'}>
+              <MessageContent text={message.content} highlightNick={currentNick} />
+              {isEdited && <span className="ml-1 text-[10px] text-gray-500">(edited)</span>}
+            </div>
+          )}
+          {Object.keys(message.reactions).length > 0 && <Reactions message={message} />}
+          <MessageActions
+            message={message}
+            onReply={onReply}
+            isOwn={isOwn}
+            onEdit={handleEditStart}
+          />
+        </div>
       </div>
     </div>
   )
@@ -409,13 +418,23 @@ function ReplyPreview({
   serverId,
   channel,
   msgid,
-  at
+  at,
+  compact
 }: {
   serverId: string
   channel: string
   msgid: string
   /** When the reply was said, as somewhere to fetch around when the original is not here */
   at?: string
+  /**
+   * The dense view, which has a time column where the avatar would be.
+   *
+   * The corner rises out of the avatar's own column, and in compact mode
+   * there is no avatar to rise out of — so it would be a corner turning out of
+   * a timestamp. A short rule is enough there: the quote is still a row above
+   * the line, which is what says it is attached.
+   */
+  compact?: boolean
 }) {
   const originalMsg = useMessageStore((s) => s.getMessageById(serverId, channel, msgid))
 
@@ -438,25 +457,65 @@ function ReplyPreview({
     })
   }
 
+  const nick = originalMsg?.nick ?? ''
+  const metadata = useServerStore((s) => s.userMetadata[`${serverId}:${nick.toLowerCase()}`])
+  const shownName = metadata?.['display-name']?.trim() || nick
+
   return (
     <button
       onClick={go}
-      className="mb-1 flex w-full items-center gap-1.5 text-left text-xs hover:underline"
+      className="group/reply mb-0.5 flex w-full items-center gap-1.5 text-left text-xs"
       title="Go to the message this replies to"
     >
-      <CornerUpLeft
-        size={ICON.sm}
-        strokeWidth={2}
-        className="shrink-0 text-gray-500"
+      {/*
+        The line that joins the quote to the reply.
+        
+        An arrow glyph said "this is a reply" and nothing about what it was
+        attached to. A corner — up the avatar column, then right into the quote
+        — says before a word is read that these two rows are one thing. Drawn
+        with two borders and a rounded corner, which is all a corner is.
+      */}
+      <span
+        className={
+          compact
+            ? 'mb-1 h-0 w-5 shrink-0 self-end border-t-2 border-gray-600'
+            : 'mb-0.5 ml-5 h-2.5 w-9 shrink-0 self-end rounded-tl-md border-t-2 border-l-2 border-gray-600'
+        }
         aria-hidden="true"
       />
       {originalMsg ? (
         <>
-          <span className="font-medium text-gray-300">{originalMsg.nick}</span>
-          <span className="truncate text-gray-500">{originalMsg.content.slice(0, 100)}</span>
+          {metadata?.avatar ? (
+            <img
+              src={metadata.avatar}
+              alt=""
+              referrerPolicy="no-referrer"
+              crossOrigin="anonymous"
+              className="h-4 w-4 shrink-0 rounded-full object-cover"
+            />
+          ) : (
+            <span
+              className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[9px] font-bold"
+              style={nickStyle(nick)}
+            >
+              {nick.charAt(0).toUpperCase()}
+            </span>
+          )}
+          {/* Their colour, the same one their name has on the message itself */}
+          <span className="shrink-0 font-medium" style={{ color: nickStyle(nick).backgroundColor }}>
+            {shownName}
+          </span>
+          {/*
+            One line, ellipsis. A quote is a reminder of what is being answered,
+            not a second copy of it — and newlines become spaces, because a
+            quote is one thought however many lines it was said over.
+          */}
+          <span className="truncate text-gray-400 group-hover/reply:text-gray-300">
+            {originalMsg.content.replace(/\s*\n\s*/g, ' ')}
+          </span>
         </>
       ) : (
-        <span className="italic text-gray-600">Go to the message this replies to</span>
+        <span className="text-gray-600 italic">Go to the message this replies to</span>
       )}
     </button>
   )
