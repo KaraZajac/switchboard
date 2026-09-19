@@ -166,9 +166,16 @@ export function MessageItem({ message, prevMessage, onReply }: MessageItemProps)
 
   if (isGrouped) {
     return (
-      <div
-        className={`group relative flex items-start px-2 py-0.5 hover:bg-gray-700/25 ${mentionBg}`}
-      >
+      /*
+        No padding of its own, so a run from one person is evenly spaced.
+        A line box already carries the leading, so `py-0.5` added four pixels
+        *between* messages that a wrap does not get between its own lines —
+        measured here as 25px from one message to the next against 21px inside
+        a wrapped one. Small, and enough to make the wrapped message look like
+        it belongs to something else. The phone had the same fault the other
+        way round, for a different reason.
+      */
+      <div className={`group relative flex items-start px-2 hover:bg-gray-700/25 ${mentionBg}`}>
         <span className="mt-0.5 w-14 shrink-0 overflow-hidden pr-2 text-right text-[11px] leading-4 whitespace-nowrap text-gray-500 opacity-0 group-hover:opacity-100">
           {time}
         </span>
@@ -251,7 +258,13 @@ export function MessageItem({ message, prevMessage, onReply }: MessageItemProps)
 
   return (
     <div
-      className={`group relative mt-3 flex items-start px-2 py-0.5 first:mt-0 hover:bg-gray-700/25 ${mentionBg}`}
+      /*
+        `mt-3` separates this person from the last one, and `pt-0.5` sits the
+        name row off the top of it — but nothing below, so the first line of a
+        run and the grouped lines under it are the same distance apart as two
+        lines of a wrap. See the grouped branch above.
+      */
+      className={`group relative mt-3 flex items-start px-2 pt-0.5 first:mt-0 hover:bg-gray-700/25 ${mentionBg}`}
     >
       {/* Avatar */}
       <MessageAvatar nick={message.nick} avatarUrl={avatarUrl} />

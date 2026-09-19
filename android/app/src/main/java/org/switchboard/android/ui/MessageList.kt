@@ -57,6 +57,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.style.TextOverflow
@@ -88,6 +89,28 @@ import org.switchboard.android.irc.Attachment
  * the same person — because IRC's raw shape (a nick on every single line) wastes
  * most of a phone screen on repeating what the reader already knows.
  */
+/**
+ * Every line of a message carries its own leading.
+ *
+ * Compose trims the extra leading off the top of a Text's first line and the
+ * bottom of its last, so a one-line message is exactly as tall as its glyphs
+ * and a wrapped one gets the full `lineHeight` between its two lines. In a run
+ * of messages from the same person — which is drawn as one block on purpose —
+ * that made the wrapped one visibly airier than its neighbours: measured on a
+ * phone, 56px between the two halves of a wrapped message against 50px between
+ * two whole ones.
+ *
+ * Keeping the leading on every line makes each Text exactly `lineHeight` tall
+ * per line, so a wrap and a message boundary are the same distance and the run
+ * reads as one block. The padding between grouped rows goes with it — the
+ * leading *is* the gap now, and adding to it would put the difference back the
+ * other way round.
+ */
+private val WHOLE_LEADING = LineHeightStyle(
+    alignment = LineHeightStyle.Alignment.Center,
+    trim = LineHeightStyle.Trim.None
+)
+
 @Composable
 fun MessageList(
     store: SwitchboardStore,
@@ -793,7 +816,10 @@ private fun MessageRow(
                 onClick = {},
                 onLongClick = { showActions = true }
             )
-            .padding(start = 16.dp, end = 16.dp, top = if (grouped) 1.dp else 10.dp)
+            // No gap of its own between grouped rows: the leading each line
+            // now carries is the gap, and adding to it would put the
+            // difference back the other way round — see [WHOLE_LEADING].
+            .padding(start = 16.dp, end = 16.dp, top = if (grouped) 0.dp else 10.dp)
     ) {
         if (grouped) {
             Spacer(Modifier.width(GUTTER))
@@ -861,7 +887,8 @@ private fun MessageRow(
                     color = Mauve,
                     fontSize = 15.sp,
                     fontStyle = FontStyle.Italic,
-                    lineHeight = 21.sp
+                    lineHeight = 21.sp,
+                    style = TextStyle(lineHeightStyle = WHOLE_LEADING)
                 )
 
                 message.type == "notice" -> NoticeBody(body)
@@ -1035,7 +1062,13 @@ private fun NoticeBody(text: String) {
                 .background(Yellow, RoundedCornerShape(2.dp))
         )
         Spacer(Modifier.width(8.dp))
-        Text(text, color = Subtext, fontSize = 14.sp, lineHeight = 20.sp)
+        Text(
+            text,
+            color = Subtext,
+            fontSize = 14.sp,
+            lineHeight = 20.sp,
+            style = TextStyle(lineHeightStyle = WHOLE_LEADING)
+        )
     }
 }
 
@@ -1120,7 +1153,12 @@ private fun Linkified(text: String, edited: Boolean, onLongPress: () -> Unit) {
 
     Text(
         text = annotated,
-        style = TextStyle(color = Text0, fontSize = 15.sp, lineHeight = 21.sp),
+        style = TextStyle(
+            color = Text0,
+            fontSize = 15.sp,
+            lineHeight = 21.sp,
+            lineHeightStyle = WHOLE_LEADING
+        ),
         onTextLayout = { layout = it },
         modifier = Modifier.pointerInput(annotated) {
             detectTapGestures(
