@@ -15,11 +15,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.PlatformTextStyle
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.LineHeightStyle
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.material3.LocalTextStyle
-import androidx.compose.ui.text.PlatformTextStyle
-import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.unit.dp
 import org.switchboard.android.irc.NickColour
 import org.switchboard.android.irc.Unread
@@ -162,7 +164,27 @@ fun Avatar(
             // twelve palettes and light on the thirteenth
             color = nickInk(color),
             fontSize = (size.value * 0.42f).sp,
-            fontWeight = FontWeight.Bold
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center,
+            /*
+             * No font padding, and the leading shared evenly.
+             *
+             * Android's legacy font padding adds space above a line based on a
+             * metric above the ascent, and nothing matching below — so the
+             * glyph sits low inside its own box, and centring the box centres
+             * the space rather than the letter. Invisible on a large avatar,
+             * where it is a fraction of a pixel, and plainly wrong on a small
+             * one: the initial in a 16dp reply avatar measured a pixel and a
+             * half below centre in a 42px circle, which is the sort of thing
+             * that reads as sloppy without being nameable.
+             */
+            style = TextStyle(
+                platformStyle = PlatformTextStyle(includeFontPadding = false),
+                lineHeightStyle = LineHeightStyle(
+                    alignment = LineHeightStyle.Alignment.Center,
+                    trim = LineHeightStyle.Trim.Both
+                )
+            )
         )
 
         if (url != null) {
